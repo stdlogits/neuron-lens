@@ -18,8 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Lens loading and export to Drowse homes; fitting (02_fit.py) does not need it.
-drowse = ["drowse.ai>=5.3.0"]
+# Lens loading and export to Drowse homes; fitting (02_fit.py) does not need it. 5.4 is the first
+# release with the lens API used here (lens format v7, ``local/r``).
+drowse = ["drowse.ai>=5.4.0"]
 # Figures for docs/findings.md (scripts/11_figures.py).
 plots = ["matplotlib"]
 # Gemma 4's image and sound collections (neuron_lens/media_sets.py).

@@ -345,7 +345,7 @@ Lenses:
   [LessWrong](https://www.lesswrong.com/posts/nc9dHfcB22JdMzGbr/j-lens-jacobian-filtering-enables-more-faithful-workspace))
   filters noisy gradients; ω-J-lenses (Ostrow et al. 2026, [arXiv:2610.31955](https://arxiv.org/abs/2610.31955))
   give a theory of what the J-lens finds.
-- [Drowse](https://github.com/a9lim/drowse): the R-lens implementation this estimator is tested
+- [Drowse](https://github.com/stdlogits/drowse): the R-lens implementation this estimator is tested
   against and exports to.
 
 Neuron descriptions:

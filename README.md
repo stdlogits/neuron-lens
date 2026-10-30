@@ -463,7 +463,7 @@ heads.query("layer == 20 and head == 17")[["ov_R_str", "qk_S_str", "duplicate", 
 ```
 
 Browse a local copy with `python -m neuron_lens.catalog show 8 344 +`, `head 20 17` or
-`search 'Bible|圣经'`. The R-lens also loads in [Drowse](https://github.com/a9lim/drowse):
+`search 'Bible|圣经'`. The R-lens also loads in [Drowse](https://github.com/stdlogits/drowse):
 `drowse lens fetch Qwen/Qwen3-8B workspace-r --repo stdlogits/rs-lenses`.
 
 For Gemma 4 12B, with this package installed (`neuron_lens.weights.tensors` reads only the named
@@ -506,7 +506,7 @@ Sound is the same with `audio` for `image`: `read_wave` and `opt_wave` hold 640 
 ## Reproducing
 
 ```bash
-uv pip install -e ".[plots]"     # add the drowse extra to export lenses to Drowse
+uv pip install -e ".[plots]"     # add the drowse extra (Drowse >= 5.4) to export lenses to Drowse
 python -m pytest -q              # estimator tests: brute-force Jacobians, agreement with Drowse
 ```
 

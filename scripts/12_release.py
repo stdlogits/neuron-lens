@@ -407,7 +407,7 @@ img = torch.load(hf_hub_download("{REPO}", "gemma-4-12b/image/s-lens/mid.pt"), w
 K_img = img["K"][8] @ img["basis"]   # [3840, 3840]: image embeddings -> Gemma 4's layer 8 MLP input
 ```
 
-With [Drowse](https://github.com/a9lim/drowse), the R-lens is a workspace source:
+With [Drowse](https://github.com/stdlogits/drowse), the R-lens is a workspace source:
 `drowse lens fetch Qwen/Qwen3-8B workspace-r --repo {REPO}`.
 
 ## Notes
