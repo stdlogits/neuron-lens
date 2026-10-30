@@ -119,15 +119,14 @@ def test_split_half_is_zero_for_equal_halves_and_nan_for_one():
 def test_r_lens_matches_drowse():
     pytest.importorskip("drowse")
     from drowse.lens.fit import fit_jacobian_lens
-    from drowse.lens.relp import relp_backward_rules
 
     model = tiny_model()
     torch.manual_seed(1)
     rows = [torch.randint(0, 50, (n,)).tolist() for n in (SKIP_FIRST + 9, SKIP_FIRST + 5, SKIP_FIRST + 12)]
     tok = types.SimpleNamespace(pad_token_id=0)
-    with relp_backward_rules(model.layers):
-        ref = fit_jacobian_lens(model, tok, ["x"] * len(rows), model.layers, dim_batch=4,
-                                skip_first=SKIP_FIRST, input_id_rows=rows, max_seq_len=64)
+    ref = fit_jacobian_lens(model, tok, ["x"] * len(rows), model.layers, dim_batch=4,
+                            skip_first=SKIP_FIRST, input_id_rows=rows, max_seq_len=64, kind="R")
+    assert ref.key.kind == "R"
     acc = Accumulator({"out": N_LAYERS - 1}, D)
     for i, row in enumerate(rows):
         r_lens_doc(model, torch.tensor(row), acc, i % 2, dim_batch=6)
@@ -171,24 +170,47 @@ def test_relp_norm_tangent_holds_rms_constant():
     assert torch.allclose(tangent, norm.weight * dx * scale, atol=1e-6)
 
 
+def _tiny_r_fit(n_docs: int = 3):
+    model = tiny_model()
+    acc = Accumulator({"out": N_LAYERS - 1}, D)
+    for i in range(n_docs):
+        r_lens_doc(model, torch.randint(0, 50, (SKIP_FIRST + 6 + i,)), acc, i % 2, dim_batch=8)
+    meta = {"lens": "R", "model": "test/tiny", "layers": N_LAYERS, "model_layers": N_LAYERS,
+            "corpus_spec": "file:t.jsonl", "rows_sha256": "0" * 64, "seq_len": 64, "dim_batch": 8}
+    return meta, acc
+
+
 def test_r_lens_exports_to_drowse(tmp_path):
     pytest.importorskip("drowse")
+    from drowse.lens.relp import RELP_RULES
     from drowse.lens.store import load_local_lens
 
     from neuron_lens.lenses import drowse_home, save_drowse_lens
 
-    model = tiny_model()
-    acc = Accumulator({"out": N_LAYERS - 1}, D)
-    for i in range(3):
-        r_lens_doc(model, torch.randint(0, 50, (SKIP_FIRST + 6 + i,)), acc, i % 2, dim_batch=8)
-    meta = {"lens": "R", "model": "test/tiny", "layers": N_LAYERS, "model_layers": N_LAYERS,
-            "corpus_spec": "file:t.jsonl", "rows_sha256": "0" * 64, "seq_len": 64, "dim_batch": 8}
-    save_drowse_lens([meta], acc, tmp_path)
+    meta, acc = _tiny_r_fit()
+    path = save_drowse_lens([meta], acc, tmp_path)
+    assert path.parent.name == "r"  # Drowse's R-lens directory, local:r
     with drowse_home(tmp_path):
-        lens, sidecar = load_local_lens("test/tiny", "relp")
-    assert lens.n_prompts == 3 and sidecar["method"] == "relp_cotangent_sum"
+        lens, sidecar = load_local_lens("test/tiny", "r")
+    assert lens.n_prompts == 3 and lens.key.label == "R:out"
+    assert sidecar["kind"] == "R" and sidecar["estimator_policy"]["rules"] == dict(RELP_RULES)
+    assert sidecar["estimator_policy"]["skip_first_positions"] == SKIP_FIRST
+    assert sidecar["usable_prompt_count"] == 3 and sidecar["corpus_spec"] == "file:t.jsonl"
     for layer in range(N_LAYERS - 1):
         assert torch.equal(lens.jacobians[layer], acc.mean("out")[layer])
+
+
+def test_load_r_lens_reads_a_fit_home(tmp_path, monkeypatch):
+    pytest.importorskip("drowse")
+    from neuron_lens import lenses
+
+    meta, acc = _tiny_r_fit()
+    lenses.save_drowse_lens([meta], acc, tmp_path / "fit")
+    monkeypatch.setattr(lenses, "LENS_HOMES", tmp_path)
+    lens, _ = lenses.load_r_lens("test/tiny", "fit")
+    assert lens.key.kind == "R" and lens.n_prompts == 3
+    with pytest.raises(FileNotFoundError):
+        lenses.load_r_lens("test/tiny", "absent")
 
 
 def test_input_reads_match_the_s_lens():

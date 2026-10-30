@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 CORPUS_DIR = DATA / "corpus"
-# One DROWSE_HOME per fitted lens: Drowse always writes an R-lens to ``local/relp``, so
+# One DROWSE_HOME per fitted lens: Drowse always writes an R-lens to ``local/r``, so
 # separate homes keep each fit (and Drowse's default home) apart.
 LENS_HOMES = DATA / "lenses"
 SUMMARY = DATA / "summary"
