@@ -1,0 +1,260 @@
+{
+ "built_by": "scripts/13_media_activations.py (neuron_lens/media_sets.py)",
+ "read_on": "2026-10-30",
+ "order": "each source streamed with a seed-0 shuffle (or its file list, classes in turn); each document's own row, revision and SHA-1 are in media/<modality>_docs.parquet ('ref')",
+ "modality": "audio",
+ "preprocessing": "the middle 2.56 s at 16 kHz; clips quieter than RMS 1e-3, or with a 40 ms frame under RMS 1e-4, skipped",
+ "sources": [
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "test",
+   "items": 4286,
+   "read": "shuffle, buffer 64; reader 1 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "test",
+   "items": 4286,
+   "read": "shuffle, buffer 64; reader 2 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "test",
+   "items": 4286,
+   "read": "shuffle, buffer 64; reader 3 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "test",
+   "items": 4286,
+   "read": "shuffle, buffer 64; reader 4 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "train",
+   "items": 4671,
+   "read": "shuffle, buffer 64; reader 1 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "train",
+   "items": 4671,
+   "read": "shuffle, buffer 64; reader 2 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "train",
+   "items": 4671,
+   "read": "shuffle, buffer 64; reader 3 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "audioset",
+   "dataset": "agkphysics/AudioSet",
+   "config": null,
+   "split": "train",
+   "items": 4671,
+   "read": "shuffle, buffer 64; reader 4 of 4",
+   "revision": "0c609e8302cf139307f639c57652032af0a88041",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "fsd50k",
+   "dataset": "CLAPv2/FSD50K",
+   "config": null,
+   "split": "test",
+   "items": 3000,
+   "read": "shuffle, buffer 64",
+   "revision": "2facd8adf41307d66592cd71fe4f157fcfdeaff5",
+   "license": "not stated"
+  },
+  {
+   "source": "clotho",
+   "dataset": "CLAPv2/Clotho",
+   "config": null,
+   "split": "test",
+   "items": 1000,
+   "read": "shuffle, buffer 64",
+   "revision": "b491ad6569dba180ca60a0e2d17a1d6a0d5d9f4a",
+   "license": "not stated"
+  },
+  {
+   "source": "fleurs",
+   "dataset": "google/fleurs",
+   "config": "all",
+   "split": "validation",
+   "items": 4000,
+   "read": "shuffle, buffer 64",
+   "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "edacc",
+   "dataset": "edinburghcstr/edacc",
+   "config": null,
+   "split": "test",
+   "items": 1500,
+   "read": "shuffle, buffer 64",
+   "revision": "d9ae7bd344f0562b766ec93ee5ce8f2f9568ce66",
+   "license": "not stated"
+  },
+  {
+   "source": "voxpopuli",
+   "dataset": "facebook/voxpopuli",
+   "config": "en_accented",
+   "split": "test",
+   "items": 1000,
+   "read": "shuffle, buffer 64",
+   "revision": "42f01879c780b4a2e90ec0b4f616c2ece526e4f1",
+   "license": "cc0-1.0, other"
+  },
+  {
+   "source": "expresso",
+   "dataset": "ylacombe/expresso",
+   "config": null,
+   "split": "train",
+   "items": 1000,
+   "read": "shuffle, buffer 64",
+   "revision": "9fb79a189698de3255eff48edd2bc0d9e487adc0",
+   "license": "cc-by-nc-4.0"
+  },
+  {
+   "source": "genre",
+   "dataset": "lewtun/music_genres_small",
+   "config": null,
+   "split": "train",
+   "items": 1000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "ab4b90142da320df49a31aaa9fa8df1df67d123f",
+   "license": "not stated"
+  },
+  {
+   "source": "esc50",
+   "dataset": "ashraq/esc50",
+   "config": null,
+   "split": "train",
+   "items": 2000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "e3e2a63ffff66b9a9735524551e3818e96af03ee",
+   "license": "not stated"
+  },
+  {
+   "source": "instrument",
+   "dataset": "ccmusic-database/instrument_timbre",
+   "config": null,
+   "split": "Western",
+   "items": 400,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "01a805f14f54f1c0a5df0db5bc7637c6d9560846",
+   "license": "cc-by-nc-nd-4.0"
+  },
+  {
+   "source": "instrument",
+   "dataset": "ccmusic-database/instrument_timbre",
+   "config": null,
+   "split": "Chinese",
+   "items": 400,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "01a805f14f54f1c0a5df0db5bc7637c6d9560846",
+   "license": "cc-by-nc-nd-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "dutch",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "french",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "german",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "italian",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "polish",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "portuguese",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mls",
+   "dataset": "facebook/multilingual_librispeech",
+   "config": "spanish",
+   "split": "test",
+   "items": 150,
+   "read": "shuffle, buffer 64",
+   "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+   "license": "cc-by-4.0"
+  }
+ ],
+ "also": "Also: synthetic sounds (neuron_lens.media_sets.synth_audio, seed 0: tones, waveforms, chords, coloured noises, click trains, chirps, tremolo and vibrato, DTMF tones and beats), labelled 'synth:'."
+}

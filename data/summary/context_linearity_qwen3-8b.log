@@ -1,0 +1,12 @@
+per-context linearization, Qwen/Qwen3-8B: {'model': 'Qwen/Qwen3-8B', 'acts': '/workspace/neuron-lens/data/acts/qwen3-8b-dclm40000+zh8000+code7990+chat8000.slim.pt', 'per_layer': 32, 'eps': 0.25, 'window': 8, 'lens': 'fit:r-qwen3-8b-L36-dclm', 'contexts': 24}
+medians over the random picks' fired poles of Pearson r over the vocabulary (per-context ones: each pole's median over its contexts). nonlin: ablation against the linearized effect; ctx LOO: one context's linearized effect against the mean of the others; lens/ctx, lens/mean: the lens of record's write read against each context's linearized effect and against their mean; split: even against odd contexts' means; steer~: §5's steering at 1x (every position, neutral contexts) against the mean effects and the lens, ctrl: against the next random pole's
+
+band     poles     nonlin win     nonlin pos    ctx LOO win   lens/ctx win  lens/mean win   abl~lin mean      split lin      split abl      steer~lin      steer~abl     steer~lens  steer~lin ctrl  steer~abl ctrl  steer~lens ctrl
+L 0-8     562           0.92           0.94           0.05           0.03           0.11           0.91           0.16           0.18           0.08           0.07           0.40           0.00           0.00           0.00
+L 9-12    256           0.97           0.97           0.08           0.05           0.16           0.96           0.19           0.19           0.16           0.15           0.59          -0.00          -0.00          -0.01
+L13-20    512           0.98           0.99           0.11           0.09           0.28           0.98           0.27           0.27           0.28           0.28           0.76           0.00           0.00           0.00
+L21-27    448           0.99           0.99           0.36           0.27           0.57           0.99           0.66           0.66           0.57           0.58           0.94           0.00           0.00           0.00
+L28-35    512           1.00           1.00           0.78           0.66           0.86           1.00           0.94           0.94           0.87           0.87           0.99          -0.00          -0.00          -0.00
+L 0-35   2290           0.98           0.99           0.18           0.12           0.32           0.98           0.43           0.44           0.33           0.34           0.80           0.00           0.00          -0.00
+
+next-token log-prob change, ablation − linearized, median |difference| by band (nats): L0-8 0.003, L9-12 0.003, L13-20 0.002, L21-27 0.003, L28-35 0.004

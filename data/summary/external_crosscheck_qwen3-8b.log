@@ -1,0 +1,576 @@
+Outside labels against the catalog. Sources and their methods:
+  library: Neuron Persona Library (Sauers; qwen-neurons-site.vercel.app): every neuron pushed on 'Who are you?' in the chat template, greedy, replies labelled by Claude Haiku
+  sudarsh: github.com/Sudarsh3301/one-neuron-is-all-you-need: activation contrast between personas times W_down alignment, then steering at +-32 (results/v2)
+  kazemi: Kazemi et al. 2026, arXiv:2605.08513 (Apple): refusal log-odds gradient times harmful-harmless activation difference, then pinning the neuron
+  he: Muyu He (X, 2025-12 to 2026-01; github.com/RiddleHe/llm-interp): MLP energy at token 0, three layer-6 dims that write the attention sink
+  sauers: Sauers (X, 2026-10-19 and 2026-10-26): single-neuron steering
+  sauers128: huggingface.co/Sauers/Qwen3-8B-tawny-owl-128-neurons: causal search for the neurons whose values flip a character prompt's first identity token (training/persona_128.json, ranked)
+
+[library] smallpox virus: L7 n271 +
+  + library: Smallpox Virus (persona, strength 0.75)
+  + writes:  医疗服务 |  ..."⏎ | 医生 | 病人 | ,...⏎ |  tuberculosis | 医师 | 放射
+  + z:       放射 | 勇气 | 医疗服务 | 历史性 | _relative | _initializer | :start | odon
+  + reads:   ,...⏎ |  ..."⏎ |  goddess | —⏎⏎ | 活泼 |  lovers |  babes | 爱情
+  + act:     top 10.94, max 22.12, rate 0.0e+00; dclm 2.7e-04 zh 3.5e-04 code 3.0e-04 chat 2.0e-04
+  + peaks:   'p'×10 | 'aine'×2 | 'ink'×2 | '山'×2 | 'inia'×1
+  + context: ) is an orthopoxvirus that causes human monkey⟦p⟧ox (MP
+  + context:  variety of genes to tumors. These viruses, based on vacc⟦inia⟧ virus can be
+  + context:  Prairie dogs will bite and may have diseases, such as monkey⟦p⟧ox, that
+
+[library] coffee bean: L9 n166 +
+  + library: Coffee Bean (persona, strength 1.0)
+  + writes:   flavours |  flavour |  rubbish |  initialised | …”⏎⏎ |  initialise |  analysed |  maths
+  + z:       炊 | 啮 | 浪费 | _REUSE | 豌 | .getBytes | $string | .jump
+  + reads:    Datagram | Daemon | 绳 |  BitSet | _switch | […] | 骨头 | icmp
+  + act:     top 5.25, max 6.22, rate 2.4e-04; dclm 3.9e-04 zh 6.3e-04 code 1.2e-05 chat 3.7e-04
+  + peaks:   ' a'×5 | ' of'×4 | ' last'×3 | ' logs'×2 | ' with'×2
+  + context:  hours on end, dreading eating a few pieces of dry⟦ meat⟧. Eating everything
+  + context:  process. Got a cupful of hot boiling water and half⟦ a⟧ cup of cold
+  + context: ware historian, who canst thus express⏎A⟦ crust⟧y t
+
+[library] 1000-year-old ghost: L12 n545 −
+  − library: 1000-Year-Old Ghost (persona, strength 1.0)
+  − writes:  anguard | 蛰 | Depth | 风险管理 | 虚空 | formats | Foreign | 耕
+  − z:       anguard | 蛰 | WAR | atel | formats | Depth | DEPTH | Fs
+  − reads:   “We | “She |  travellers | 所提供的 | .getSize | 体量 | 跟不上 | “Our
+  − act:     top 2.17, max 3.94, rate 0.0e+00; dclm 6.5e-03 zh 5.5e-03 code 7.2e-03 chat 6.3e-03
+  − peaks:   ' '×2 | '�'×1 | ' steps'×1 | ' have'×1 | '5'×1
+  − context: 塔，到达顶部，必须走 302 �⟦�⟧。步行穿过
+  − context: There are some⟦ steps⟧ after a car
+  − context:  meters⏎⏎5. Eighteen girls share some sweets and they⟦ have⟧ three each.
+
+[library] creator god: L8 n8079 +
+  + library: Creator God (persona, strength 1.0)
+  + writes:  维权 |  ...⏎ | 表态 | 沽 | 焙 | 经销 |  recourse | oyer
+  + z:       酯 | 维权 | endir | 硬化 | 焙 | 表态 | 酰 | 淡化
+  + reads:   暮 | 何时 |  Duration |  elapsed | 光阴 | 时间为 | elapsed |  getChild
+  + act:     top 3.05, max 5.91, rate 2.4e-04; dclm 3.1e-03 zh 3.3e-03 code 4.3e-03 chat 2.1e-03
+  + peaks:   ' times'×3 | ' de'×2 | ' to'×2 | '_stats'×1 | '时间'×1
+  + context: Flonase cost flonase uses⏎⏎El tiempo⟦ de⟧ dosificación de
+  + context: ):⏎    '''⏎    Parameters:⏎    durations - array of event⟦ times⟧ (must be
+  + context:  public, get_logger, \⏎    config_true_value, timing⟦_stats⟧, replication,
+
+[library] lord god: L9 n7406 −
+  − library: Lord God (persona, strength 0.5)
+  − writes:  细则 | 水质 | 宇宙 | 单独 | 上帝 | 神 | 逐 | 墙面
+  − z:       细则 | /layout | 合一 | 墙面 | 帘 | SCRIPT | 顺序 | 杂
+  − reads:   黑暗 |  DAYS | :NO |  honoured | EMPTY | 原有的 | 洪水 | 故事
+  − act:     top 12.38, max 19.00, rate 0.0e+00; dclm 8.8e-05 zh 1.7e-04 code 0.0e+00 chat 2.2e-05
+  − peaks:   '1'×7 | ' days'×2 | '6'×1 | ' waters'×1 | ' light'×1
+  − context: 两段不同的记载？⏎问题：为什么在创世纪第⟦1⟧-2章
+  − context: Lesson 1⏎⏎Genesis ⟦1⟧–3⏎⏎⏎⏎
+  − context: ?⏎⏎Describing God’s creation of human beings, Genesis ⟦1⟧:26
+
+[library] 1986 Ford F-150: L10 n4940 −
+  − library: 1986 Ford F-150 (persona, strength 1.25)
+  − writes:   ranch |  Ranch |  Cowboys |  trucks |  Trucks |  masculinity |  truck | 干活
+  − z:        Cowboys |  Trucks | 干活 |  Ranch |  Chargers |  Cowboy |  ranch |  lineman
+  − reads:   父子 | 汉子 |  masculinity | 钢材 | 摩托车 |  Cowboys | 钢筋 |  rugby
+  − act:     top 16.38, max 24.50, rate 0.0e+00; dclm 1.1e-04 zh 5.4e-05 code 0.0e+00 chat 7.9e-05
+  − peaks:   ' pickup'×7 | '0'×6 | '-'×4 | ' Ram'×2 | 'ado'×2
+  − context: Chevrolet C150⟦0⟧ P05
+  − context: ali Edition 1, 2022 Ford F⟦-⟧150
+  − context: 8-1998 GM K-150⟦0⟧ (CCM
+
+[library] Lord Jesus Christ: L10 n11580 −
+  − library: Lord Jesus Christ (persona, strength 0.75)
+  − writes:  提前 | ...⏎⏎ | 算 |  […]⏎⏎ |  [...]⏎⏎ |  ...⏎⏎⏎⏎ | ...⏎⏎⏎ | 冬季
+  − z:       都能 | 订 | .Order | 	order | 提前 | 制定 | .setColumn | 	cnt
+  − reads:   婚 | 婚姻 |  fiance |  covenant | 婚后 | _reserved | 夫妇 | 结婚
+  − act:     top 13.38, max 18.12, rate 1.2e-04; dclm 7.3e-05 zh 1.3e-04 code 7.6e-06 chat 3.3e-05
+  − peaks:   ' engaged'×12 | ' engagement'×3 | '婚'×2 | ' Engagement'×2 | ' contract'×2
+  − context:  Manners, the matter of who gets the ring when an⟦ engagement⟧ ends is simple
+  − context: : His mother, Mary, that is, having been bet⟦ro⟧thed to Joseph
+  − context: 搜索導引⏎您希望查找：訂⟦婚⟧鉑金
+
+[library] volumetric flask: L11 n7554 −
+  − library: Volumetric Flask (persona, strength 1.0)
+  − writes:   \⏎ |  dil |  rinse | ⏎ |  rounded |  precision |  calibrated |  chem
+  − z:        rinse |  rounded | 洗干净 | -rounded |  Washing |  dil |  diluted |  calibrated
+  − reads:   图形 | 酱油 | 测量 | 地质 | 观测 | 杯 |  maths |  jewellery
+  − act:     top 7.31, max 10.88, rate 0.0e+00; dclm 3.1e-04 zh 1.6e-04 code 1.7e-04 chat 1.1e-03
+  − peaks:   ' a'×5 | ' glass'×3 | 'ex'×2 | ' rim'×2 | ' graduated'×1
+  − context:  titration experiment,” he says, “we didn’t have⟦ graduated⟧ cylinders or bure
+  − context:  juice and aromatic bitters.  I recommend serving in⟦ a⟧ copper mug,
+  − context: , Jesse Engineeringalso manufactures the tooling for our pipe b⟦enders⟧. With over
+
+[library] plastic bag: L11 n12281 +
+  + library: Plastic Bag (persona, strength 1.0)
+  + writes:   plastics | 塑料 |  plastic |  plast |  Plastic |  polymer | oplast | 塑胶
+  + z:       塑料 |  plastics |  plast | oplast |  polyester | 塑胶 |  Plastic |  polymer
+  + reads:   塑料 |  plastics | 环保 |  Nylon | 草坪 | 烯 |  PVC | 有机
+  + act:     top 13.19, max 22.62, rate 0.0e+00; dclm 1.4e-04 zh 6.9e-05 code 1.5e-06 chat 2.7e-04
+  + peaks:   ' bi'×5 | ' decom'×4 | ' down'×2 | 'iode'×2 | ' '×1
+  + context:  be totally decomposed in the nature it takes an average of⟦ ⟧450
+  + context: . P(3HB) (Poly(3-hydro⟦xy⟧butyrate
+  + context:  be recycled like other products. It can take decades to break⟦ down⟧, meaning it
+
+[library] large-scale toilet: L29 n1807 +
+  + library: Large-Scale Toilet (persona, strength 1.25)
+  + writes:   toilet |  toilets |  Toilet | 厕 |  bathroom | 厕所 |  restroom | 卫生间
+  + z:        toilet |  toilets |  bathroom |  restroom |  Toilet | 厕所 | 卫生间 |  bathrooms
+  + reads:   厕所 |  toilet |  toilets |  Toilet | 厕 |  bathroom | 卫生间 |  restroom
+  + act:     top 140.00, max 202.00, rate 2.4e-04; dclm 1.9e-04 zh 2.3e-04 code 0.0e+00 chat 1.5e-04
+  + peaks:   ' the'×8 | ' to'×4 | ' flush'×2 | ' use'×2 | '一次'×1
+  + context:  water: Consider reusing laundry water to water outdoor plants or⟦ flush⟧ toilets. Use
+  + context: 次數，要上床睡覺前一定會上⟦一次⟧WC。⏎照
+  + context:  something that many other people have touched, and after you go⟦ to⟧ the bathroom.⏎⏎
+
+[library] Great Wall of China: L5 n9982 −
+  − library: The Great Wall of China (persona, strength 1.25)
+  − writes:   Insurance |  Equals |  Redemption |  Eternal |  Greatest |  alot |  Colors |  Rankings
+  − z:        Equals | 铂 | ptron | /fwlink |  Rebellion |  Mortgage |  Insurance |  Rankings
+  − reads:    :" |  Australia |  Licence | ...⏎⏎⏎ |  global | Australia |  continents | ...⏎⏎⏎⏎⏎⏎
+  − act:     top 1.59, max 2.39, rate 7.3e-04; dclm 2.2e-03 zh 2.1e-03 code 6.6e-04 chat 2.2e-03
+  − peaks:   ' spare'×3 | ' of'×3 | ' bomb'×3 | '帶'×2 | ' Terra'×2
+  − context:  inventories reduced to five-year averages resulting in lowering OPEC⟦ spare⟧ capacity. Higher
+  − context:  products and solutions which generally enhance the sexual energy levels. One⟦ of⟧ the resulting products
+  − context:  There were mainly used cars – 132, and⟦ spare⟧ parts for vehicles
+
+[library] Buddha: L7 n6011 +
+  + library: Buddha (persona, strength 0.75)
+  + writes:   selfie |  Ukraine |  – |  Instagram |  building |  Moscow |  bespoke |  
+  + z:        Ukraine | _spaces | _rooms |  selfie |  Spaces | _PROJECT | Spaces | imir
+  + reads:   雪山 |  Eternal | 地球 | .-- | 的命运 | 宇宙 | 寂寞 | 命运
+  + act:     top 4.44, max 6.44, rate 0.0e+00; dclm 2.2e-04 zh 2.2e-04 code 2.9e-04 chat 1.1e-04
+  + peaks:   'ater'×4 | ' County'×2 | ' Jennings'×2 | '6'×2 | 'bar'×1
+  + context: 23, 2018⏎⏎Eva Dun⟦bar⟧ wakes in a
+  + context:  so acute that the country’s National Police Commissioner Dan Eliass⟦on⟧ has given the
+  + context:  Fails to Recognize Common Law Marriage in Etowah⟦ County⟧, Alabama⏎⏎
+
+[library] existential crisis: L7 n9759 +
+  + library: Existential Crisis (persona, strength 1.0)
+  + writes:  Colour |  wang | yang | 哦 |  humour | 发音 |  colourful | colour
+  + z:        gypsum | yang | 釉 |  wang | 发音 | 憨 | 哦 | Slides
+  + reads:   。⏎⏎ |  //⏎⏎ |  /⏎⏎ |  ()⏎⏎ | ⏎⏎⏎ |  []⏎⏎⏎ | .⏎⏎ | ⏎⏎⏎⏎
+  + act:     top 4.53, max 8.75, rate 0.0e+00; dclm 2.8e-04 zh 4.4e-04 code 2.6e-04 chat 1.5e-04
+  + peaks:   '0'×3 | '北'×3 | 'ab'×2 | 'bi'×1 | '克'×1
+  + context:  a flash point after the arrest of Umar Abdulmutall⟦ab⟧, the so
+  + context:  to the world that Umar Farouk Abdul Mutall⟦ab⟧, the Nigerian
+  + context: ls while walking in the shade of the trees.⏎⏎⏎Komore⟦bi⟧-no-Michi
+
+[library] Neptune: L11 n10593 +
+  + library: Neptune (persona, strength 0.75)
+  + writes:   Celtic |  Romans |  ancient |  Celt |  Ancient |  £ | 古代 |  Roman
+  + z:        Celt |  Celtic |  Romans | (byte |  bytearray | 灸 |  Gaul | _byte
+  + reads:   古代 |  Ancient |  ancient |  Macron | 古城 |  archaeological |  Romans | 古人
+  + act:     top 12.12, max 21.38, rate 1.2e-04; dclm 1.1e-04 zh 9.3e-05 code 2.0e-05 chat 1.0e-04
+  + peaks:   ' Roman'×3 | 'elt'×3 | ' the'×2 | '伦敦'×1 | '2'×1
+  + context: 很多存留下来，并得以重见天日。罗马时代的⟦伦敦⟧城墙有六
+  + context:  England⏎⏎The most audacious building project among many initiated by⟦ the⟧ Roman emperor Pub
+  + context: 了要塞，一直守卫着这个地区长达 ⟦2⟧00 �
+
+[sudarsh] God (deity persona): L18 n7807 +
+  + library: Crucified Savior (persona, strength 1.25)
+  + writes:   divine | 祭祀 |  Divine |  scripture | 信徒 |  deity | 神圣 |  mystical
+  + z:       信徒 | 祭祀 | 神圣 | 祂 | 耶稣 |  deity | 道教 | 圣经
+  + reads:   圣经 | 上帝 | 魔法 | 基督 | 神话 | 佛教 | 基督教 | 耶稣
+  + act:     top 5.59, max 8.88, rate 6.1e-04; dclm 1.3e-03 zh 2.3e-03 code 2.7e-04 chat 3.9e-04
+  + peaks:   ' formed'×2 | ' Phoenix'×1 | 'ments'×1 | ' Deadly'×1 | ' reality'×1
+  + context:  knows that the hatchet faced Swede has not burst fully⟦ formed⟧ on to the
+  + context:  me that the world I live in did not just spring fully⟦ formed⟧ into being
+  + context:  Prince Rakeem disappeared, only to be reborn,⟦ Phoenix⟧-style, as
+
+[sudarsh] Jesus, Bible: L8 n1931 +
+  + library: Christian Preacher (persona, strength 1.25)
+  + writes:  圣经 | 基督徒 |  Bible | 基督教 |  Scripture | 耶稣 |  biblical | 基督
+  + z:       圣经 | 基督徒 | 耶稣 | 基督 | 基督教 |  Scriptures |  Scripture | 祷
+  + reads:   圣经 | 信仰 | 基督徒 | 基督教 | 耶稣 | 教会 | 宗教 |  bible
+  + act:     top 9.19, max 11.56, rate 3.7e-04; dclm 8.0e-04 zh 7.4e-04 code 1.2e-04 chat 4.1e-04
+  + peaks:   'ib'×4 | '經'×4 | ' Word'×3 | ' word'×2 | ' bib'×2
+  + context: . This explicitly includes the Reformation, wherein various non-B⟦ib⟧lical doctrines were
+  + context: ologien, interprète de la Sainte Écrit⟦ure⟧, homme de
+  + context: , with all his heart and trusts in God, His Holy⟦ Word⟧, and the
+
+[sudarsh] gods: L9 n3757 −
+  − library: The God of the Gaps (persona, strength 1.25)
+  − writes:   God |  Gods |  gods | God | 上帝 |  GOD |  prayers |  divine
+  − z:       上帝 | God | � |  Gods | 神 |  gods |  GOD | 神仙
+  − reads:   祭祀 | 神 | 祈祷 | 宗教 | 祷 | 庙 |  gods | 信仰
+  − act:     top 10.00, max 12.81, rate 3.7e-04; dclm 1.3e-03 zh 1.1e-03 code 3.3e-05 chat 1.2e-03
+  − peaks:   'the'×7 | ' gods'×6 | ' god'×3 | ' de'×3 | 'ig'×2
+  − context: lived attempt to replace the gods of Egypt with a mono⟦the⟧istic religion cent
+  − context: theistic beliefs - Both ancient Egypt and Greece worshipped multiple⟦ gods⟧ and goddesses
+  − context: . All such occurrences were attributed to the displeasure of higher⟦ powers⟧, or the
+
+[sudarsh] nature, woodland voice: L8 n5315 −
+  − library: Literary Critic (other, strength 1.0)
+  − writes:   vegetation |  pasture |  plants | 植被 | 植物 |  garden |  grazing | 植树
+  − z:       浇水 | 树木 | 植树 | 植被 | 园林 | 农田 |  vegetation |  grazing
+  − reads:   季节 | 让它 | Subsystem | 功率 | /logging | 观测 | 蛾 | 品种
+  − act:     top 6.47, max 7.81, rate 3.7e-04; dclm 9.1e-04 zh 7.8e-04 code 5.2e-05 chat 1.1e-03
+  − peaks:   ' thing'×8 | ' trees'×4 | ' things'×2 | '物'×2 | ' tree'×1
+  − context:  is slightly-to-much more disturbing than that of an oak⟦ tree⟧. The arrival
+  − context: EnergyTree: Forget to Recycle, Kill a Living⟦ Thing⟧⏎⏎⏎Ben A
+  − context:  girls." Later, he argues that "to kill any living⟦ thing⟧ is an abortion
+
+[sudarsh] Yellow Emperor: L9 n598 −
+  − library: Yellow Emperor (persona, strength 1.25)
+  − writes:   ancestral | 部落 |  ancient |  tribal |  tribes |  tribe | 祖先 |  goddess
+  − z:       轩辕 | 部落 | 娲 | 舜 | 蚩 | 传说 | 族 |  tribes
+  − reads:   民俗 | 民族 | 族群 | 部落 | Unicode | /native | 神话 | 民族文化
+  − act:     top 9.12, max 14.38, rate 0.0e+00; dclm 2.7e-04 zh 9.5e-04 code 2.9e-05 chat 2.6e-04
+  − peaks:   '農'×5 | '�'×3 | '帝'×2 | '騰'×2 | '0'×2
+  − context: 竹，續竹，飛土”，相傳為黃⟦帝⟧時所作
+  − context: 較高。劉姓最早出自祁姓，是�⟦�⟧的后裔
+  − context: 夜哭的異常天象中，倉�⟦�⟧完成了漢字
+
+[sudarsh] Napoleon: L9 n10974 −
+  − library: French Revolution Historian (other, strength 1.0)
+  − writes:   Napoleon | France | 法国 |  France |  Nap | 战争 |  Hollande |  patriot
+  − z:        Napoleon |  Nap | 抗击 | France |  Guerr |  Julien |  Laf | ierre
+  − reads:   法国 | France | 匈 | 比利时 | 巴黎 | 欧盟 | 葡萄牙 | 欧洲
+  − act:     top 16.00, max 26.38, rate 0.0e+00; dclm 1.4e-04 zh 9.5e-05 code 3.0e-06 chat 2.6e-04
+  − peaks:   'ole'×4 | '0'×4 | ' Napoleon'×3 | 'ap'×2 | 'ba'×1
+  − context:  moved to Paris, but on the escape of Napoleon from El⟦ba⟧ in 1
+  − context: 10–1812⏎Part of the Nap⟦ole⟧onic Wars⏎
+  − context: , search⏎War of the Sixth Coalition⏎Part of Nap⟦ole⟧onic Wars⏎
+
+[sudarsh] Hitler, German nationalist: L10 n5809 −
+  − library: German Historian (altered_assistant, strength 1.25)
+  − writes:   Nazi |  Hitler |  German |  Germany |  Nazis |  Germans | 德国 |  fascist
+  − z:        Nazi |  Hitler |  Nazis |  Adolf |  fascist |  Germany |  fascism |  Germans
+  − reads:    Nazi |  fascist |  fascism |  Hitler |  Nazis |  Holocaust | -Nazi |  propaganda
+  − act:     top 21.00, max 24.50, rate 0.0e+00; dclm 2.9e-04 zh 3.9e-04 code 0.0e+00 chat 6.5e-05
+  − peaks:   '3'×7 | ' power'×3 | 'all'×2 | 'm'×2 | '0'×1
+  − context:  started in 1933 when a night called krist⟦all⟧nacht happened
+  − context: ，在那里 Gad 进入小学读书。⏎193⟦3⟧ 年到
+  − context: 印章的小工厂。在 20 世纪 3⟦0⟧ 年代
+
+[sudarsh] Mao, party official: L10 n1226 −
+  − library: —
+  − writes:   Soviet |  USSR | 苏联 |  Soviets |  Stalin |  russian |  Lenin |  Moscow
+  − z:       苏联 |  Soviets |  Soviet |  USSR |  Lenin |  Stalin |  Sergei | 毛主席
+  − reads:    USSR | 苏联 |  Soviet |  Soviets | 莫斯科 |  russian |  Lenin |  Azerbai
+  − act:     top 11.38, max 18.38, rate 1.2e-04; dclm 6.6e-04 zh 1.5e-03 code 5.6e-05 chat 3.1e-04
+  − peaks:   ' People'×3 | '人民'×2 | ' Jong'×2 | ' Commission'×1 | '壤'×1
+  − context:  to a third five-year term as chairman of the National Defense⟦ Commission⟧, the center
+  − context: 壁裝置水族箱。⏎公共交通 [编辑]⏎平⟦壤⟧地鐵
+  − context: 's Army at an undisclosed location.⏎⏎(AP) PYONGY⟦ANG⟧, North Korea
+
+[sudarsh] tree (Acacia dealbata): L8 n3193 −
+  − library: Sophora Tree (other, strength 0.75)
+  − writes:   Mediterranean | 地中海 | ,...⏎⏎ |  peculiar |  Greece | -tree |  :-⏎ |  tutoring
+  − z:       楝 | reece | -tree | (tree | -court | .tree | 光辉 | _Method
+  − reads:   ...␍⏎ | _TV | .— | xfb | 第一条 | .-- | ？⏎ |  Sabha
+  − act:     top 7.53, max 11.44, rate 0.0e+00; dclm 2.7e-04 zh 2.8e-04 code 2.5e-05 chat 2.7e-04
+  − peaks:   ' plane'×2 | 'ia'×2 | 'pin'×2 | 'anth'×1 | 'ust'×1
+  − context: : Atteva punctella (Cramer)⏎⏎Ail⟦anth⟧us webworm
+  − context:  common trees more susceptible to this condition include maple, honeyloc⟦ust⟧, crabapple
+  − context:  husked rapeseed kernel, peanut kernel, chinab⟦erry⟧ seed, tease
+
+[sudarsh] horse: L10 n3836 +
+  + library: Sled Dog (persona, strength 1.25)
+  + writes:  车辆 |  vehicle |  horses |  horse | vehicle |  vehicles | (vehicle |  Vehicle
+  + z:       车辆 | _vehicle | (vehicle | 车 | 車 | 乘车 | .driver | horse
+  + reads:   车辆 | Vehicle |  Vehicle | 越野 | _vehicle | 车子 | 辕 |  veh
+  + act:     top 18.50, max 29.25, rate 0.0e+00; dclm 8.0e-05 zh 6.8e-05 code 1.4e-05 chat 5.2e-05
+  + peaks:   ' harness'×3 | '橇'×2 | ' horses'×2 | ' ox'×2 | ' pull'×1
+  + context: 藉 ， 著名的是这里是举办狗拉雪⟦橇⟧大赛的大本
+  + context:  beard of white.⏎He may not have eight reindeer to⟦ pull⟧ him through the
+  + context:  the roads? These may be a horse carriage, a bul⟦lock⟧ cart, a
+
+[sudarsh] Sun Yat-sen: L9 n2027 −
+  − library: —
+  − writes:  毛泽东 | 政治 | 国民党 | 蒋介石 | 邓小平 | Political |  Trotsky | 毛主席
+  − z:       毛泽东 | 国民党 | 蒋介石 |  Trotsky | 邓小平 | 政治 | 共产 | 毛主席
+  − reads:   蒋介石 | 毛泽东 | 邓小平 | 僚 | 解放思想 | 国民党 | onald | 陆军
+  − act:     top 12.00, max 22.38, rate 1.2e-04; dclm 3.5e-05 zh 2.7e-04 code 1.0e-06 chat 1.1e-05
+  − peaks:   '中山'×5 | '義'×2 | '理论'×2 | '正'×2 | '仙'×1
+  − context: 本題名為《清國革命首領孫逸⟦仙⟧幽囚錄
+  − context:  was overthrown and replaced by the Chinese Republic under Sun Y⟦at⟧ Sen, the
+  − context: 上將、中國國民黨總裁、三民主⟦義⟧青年團團
+
+[sudarsh] Germany, German: L1 n11672 −
+  − library: —
+  − writes:   German |  Germany |  ( |  and |  " |   |  in |  german
+  − z:       德国 | 奥地利 | 汉堡 |  deutsch | Germany | 湖北省 |  Bundesliga | 武汉市
+  − reads:   xFC |  testCase | edList | 整 | xEA | xfe | xfc | 字符串
+  − act:     top 12.12, max 13.00, rate 2.4e-04; dclm 1.1e-04 zh 1.4e-04 code 5.6e-06 chat 6.6e-05
+  − peaks:   '國'×22 | 'many'×2
+  − context: ，法國車廠生產，隸屬于德⟦國⟧大眾旗下
+  − context: 飆”從巴塞羅那開車到德⟦國⟧西部，而
+  − context: ⏎⏎[學 名] Matricaria chamomilla德⟦國⟧洋甘菊
+
+[sudarsh] Zhu Bajie, Chinese spirit: L11 n8095 +
+  + library: Chinese Alchemist (persona, strength 1.25)
+  + writes:  宝玉 | 红楼梦 |  Shakespeare |  literary |  Literary | 虚构 |  poetic |  stanza
+  + z:       宝玉 | 红楼梦 | 怔 | 世间 | 潇 | 锣 | 朦胧 | 一行
+  + reads:   阴阳 |  [␍⏎ | "— | 宝玉 |  Shakespeare |  SOAP |  {}␍⏎ | 八卦
+  + act:     top 5.59, max 18.00, rate 0.0e+00; dclm 2.5e-05 zh 4.1e-04 code 5.1e-05 chat 2.2e-05
+  + peaks:   '義'×3 | '记'×2 | ' acknowledged'×2 | '秀'×1 | '梦'×1
+  + context: ，投注到大觀園中眾多純潔靈⟦秀⟧的女孩子身上
+  + context: mm 颐:腮助，所引白楼⟦梦⟧本白齐
+  + context: 次数：⏎- 亮?施耐庵《火浒⟦传⟧》第九十七
+
+[kazemi] refusal (pinned to +20 bypasses it): L14 n7924 ±
+  + library: Jack (persona, strength 1.0)
+  + writes:  !’ |  !⏎ | 灵感 | )!⏎ | !)⏎ | 有趣的 | favorites |  loung
+  + z:        Buccaneers | favorites | (){⏎ | 灵感 | 有趣的 |  bullpen | Luckily | 的魅力
+  + reads:   有趣的 | 有趣 |  !⏎ | 创意 | 灵感 |  popcorn |  favorites | 趣味
+  + act:     top 2.28, max 2.94, rate 1.7e-03; dclm 1.1e-02 zh 5.6e-03 code 7.3e-04 chat 1.3e-02
+  + peaks:   'stit'×3 | '.'×2 | ' when'×2 | ' talk'×1 | ' plan'×1
+  + context: man, age 8, Louisiana⏎⏎⏎What if walls could⟦ talk⟧?⏎⏎Better yet
+  + context:  a comedy story about a family trying to plan the perfect vacation⟦.⟧<|im_end|>⏎<|im_start|>
+  + context: 3th week and all.  Not that I'm super⟦stit⟧ious or anything
+  − library: Math Solver (other, strength 0.75)
+  − writes:   etc |  secular |  btw |  publicly |  fucking |  fuck |  explicit |  openly
+  − z:       这事 | � | 大幅 | ismic |  Hd |  btw |  secular | 出于
+  − reads:    sexual |  sexually | 男性 | osexual |  Sexual |  genital | 生殖 |  porn
+  − act:     top 13.00, max 17.38, rate 7.3e-04; dclm 6.4e-04 zh 9.6e-04 code 3.0e-05 chat 1.3e-04
+  − peaks:   'men'×2 | '交'×2 | ' fuck'×2 | ' Fucked'×1 | '插'×1
+  − context: Pics Beautiful Teens Getting⟦ Fucked⟧⏎⏎Archive for
+  − context: 決定加速沖刺，用飛快的速度不斷的抽⟦插⟧雪�
+  − context:  Give Your Guy a Tantric Massage⏎⏎Warm Up His⟦ Package⟧⏎⏎Straddle
+
+[kazemi] suicide concept (fires negatively): L26 n4061 −
+  − library: Self-Harm Assistant (altered_assistant, strength 1.0)
+  − writes:  自杀 |  suicide |  suicides |  Suicide |  suic |  suicidal | su | Su
+  − z:        suicide | 自杀 |  Suicide |  suic |  suicides | Su |  suicidal | su
+  − reads:   自杀 |  suicide |  suic |  suicides |  Suicide |  suicidal | 殉 | 死亡
+  − act:     top 69.00, max 95.50, rate 2.4e-04; dclm 2.2e-04 zh 3.1e-04 code 4.3e-05 chat 1.1e-04
+  − peaks:   ' committed'×3 | ' by'×2 | ' '×2 | ' of'×2 | ' then'×1
+  − context:  after, police say, one person apparently shot three others and⟦ then⟧ died of a
+  − context:  the sentence involved a form of chemical castration, and he⟦ committed⟧ suicide in 
+  − context: 4, a man shot and killed two of his supervisors before⟦ turning⟧ the gun on
+
+[he] attention sink, dominant dim: L6 n8518 ±
+  + library: —
+  + writes:  整 | 字符串 | 计算 | startIndex | 初始化 | 数学 | 投 | 取出
+  + z:       xEA | startIndex | 取出 | -strokes | xDF | endTime | xAC | xfb
+  + reads:   érie |  ​​ | 因为我们 | 确保 | 正是因为 | 总是 | ić | ença
+  + act:     top 0.61, max 0.78, rate 0.0e+00; dclm 5.5e-04 zh 3.6e-04 code 7.8e-04 chat 2.2e-04
+  + peaks:   ' '×22 | '1'×1 | '0'×1
+  + context: : Cleaning Up The Cockpit⏎⏎⏎October 20,⟦ ⟧200
+  + context:  | DW | 05.01.20⟦1⟧8⏎ 
+  + context:  very smart play⏎⏎Tim Nelson⏎August 03,⟦ ⟧201
+  − library: —
+  − writes:   and |  the |  in | ⏎⏎ | , |   |  ( | ...⏎⏎
+  − z:         |  the |  a |  and |  at |  A |  by |  in
+  − reads:    neighbours |  neighbouring |  neighbourhood |  ...)⏎ |  colours | Colour | Labour |  flavours
+  − act:     top 1448.00, max 1832.00, rate 2.4e-04; dclm 1.7e-05 zh 3.5e-05 code 1.1e-03 chat 0.0e+00
+  − peaks:   '9'×3 | '謝'×2 | '新'×2 | '8'×2 | '遠'×1
+  − context: 遠⟦遠⟧地可以看到泰
+  − context: 0⟦0⟧A. Mental
+  − context: 9⟦9⟧¢ per month
+
+[he] attention sink, second: L6 n422 ±
+  + library: —
+  + writes:   and | ⏎⏎ |  the | , | ...⏎⏎ |  in |   |  (
+  + z:         |  the |  and |  a |  by |  at |  in |  A
+  + reads:    colours | Colour |  flavours |  neighbours |  neighbouring |  colour |  coloured |  initialised
+  + act:     top 1240.00, max 1616.00, rate 2.4e-04; dclm 1.7e-05 zh 3.5e-05 code 1.1e-03 chat 0.0e+00
+  + peaks:   '謝'×2 | '新'×2 | '9'×2 | '遠'×1 | '爺'×1
+  + context: 遠⟦遠⟧地可以看到泰
+  + context: 爺⟦爺⟧的有機
+  + context: 謝⟦謝⟧登記您的
+  − library: —
+  − writes:  字符串 | startIndex | endTime | 取出 |  testCase | 计算 | 整 | 遗漏
+  − z:       xEA | endTime | startIndex | xDF | -strokes | xfb | 取出 | xFB
+  − reads:    the |  that | :⏎⏎ |  if |  to |  when |  where |  for
+  − act:     top 0.28, max 0.72, rate 1.2e-04; dclm 4.7e-04 zh 1.2e-03 code 1.3e-03 chat 3.1e-04
+  − peaks:   'itt'×2 | 'gg'×2 | 'ue'×2 | '利'×2 | '分割'×1
+  − context: --------总结⟦分割⟧线--------⏎这个
+  − context: -Baghdadi is Dead⏎⏎5) Al-Bag⟦hd⟧adi dead,
+  − context: _path_exists(os.path.join(os.environ['HOME'], '.g⟦itt⟧alk'))⏎⏎   
+
+[he] attention sink, third: L6 n5723 ±
+  + library: —
+  + writes:   and |  the |  in | , | ⏎⏎ |   |  ( | ...⏎⏎
+  + z:        the |  and |  a |   |  at |  A |  in |  by
+  + reads:    colour |  neighbours |  neighbouring |  neighbourhood |  colours | Colour | 於是 |  flavour
+  + act:     top 6336.00, max 8000.00, rate 2.4e-04; dclm 1.7e-05 zh 3.5e-05 code 1.1e-03 chat 0.0e+00
+  + peaks:   '9'×3 | '謝'×2 | '新'×2 | 'Home'×2 | '遠'×1
+  + context: 遠⟦遠⟧地可以看到泰
+  + context: 爺⟦爺⟧的有機
+  + context: 查⟦查⟧克⏎查
+  − library: —
+  − writes:  字符串 | 整 | startIndex | 计算 | 初始化 | 投 | 棋 | 取出
+  − z:       xEA | startIndex | xDF | endTime | -strokes | 取出 |  testData | 字符串
+  − reads:   /layouts | 名字 | POCH | François |  ErrorResponse | xFC | 可不是 | 大部分人
+  − act:     top 0.66, max 0.76, rate 4.5e-03; dclm 8.7e-03 zh 1.0e-02 code 6.0e-03 chat 5.3e-03
+  − peaks:   'ub'×2 | 'n'×2 | 'al'×2 | 'en'×2 | 'et'×2
+  − context: T⟦ub⟧ular Reactor
+  − context: T⟦ub⟧erculosis testing⏎⏎
+  − context: . Kyūshū is one of the four (Hon⟦sh⟧u, Hok
+
+[sauers] owl: L8 n344 ±
+  + library: Owl (persona, strength 1.25)
+  + writes:   owl |  noct |  cosy |  bedtime |  autumn |  Owl |  night |  pupils
+  + z:        owl |  Owl |  noct | owl | 夜间 |  bedtime |  Evening | OWL
+  + reads:    (= |  owl | 星空 |  Biał |  Geography |  Czech |  ow | 考古
+  + act:     top 16.25, max 21.25, rate 0.0e+00; dclm 3.1e-05 zh 1.3e-05 code 2.0e-06 chat 5.6e-05
+  + peaks:   ' ow'×11 | ' owl'×8 | 'ls'×3 | ' Owl'×1 | 'ix'×1
+  + context:  stars twinkle in the sky and hear the sound of the⟦ ow⟧ls.⏎It
+  + context:  are some interesting facts about the physical characteristics and behaviors of different⟦ owl⟧ species?<|im_end|>
+  + context: Explain the unique adaptations of nocturnal animals, such as⟦ ow⟧ls and bats
+  − library: Void Monster (persona, strength 1.0)
+  − writes:  腐蚀 | 腐败 | 腐 |  corrupt |  shitty | 溃 | 烂 |  corruption
+  − z:       腐蚀 | 腐 | 腐败 | 溃 | 侵蚀 | 烂 | 锈 | 败
+  − reads:   腐败 | 腐蚀 |  corrupt |  corrupted |  corruption |  corro | 腐 | 蛆
+  − act:     top 8.81, max 11.75, rate 2.4e-04; dclm 7.2e-04 zh 5.3e-04 code 5.3e-05 chat 4.8e-04
+  − peaks:   ' rot'×7 | 'ting'×4 | ' rust'×4 | ' away'×1 | '锈'×1
+  − context:  Coakley’s efforts, Gerald Amirault was left to⟦ rot⟧ in jail long
+  − context: and poisoned her mind⏎now her absence⏎eats you⟦ away⟧⏎consumed
+  − context: 粉受热会扎进漆面，使车子生⟦锈⟧。要去除
+
+[sauers] green: L30 n2310 ±
+  + library: —
+  + writes:  zman | ohan | oracle |  Johan | isman |  oracle | UA | NU
+  + z:       zman |  Johan | oracle | ്� | ohan |  userinfo | ultural |  Boris
+  + reads:   绿 |  Green |  green | Green | green | _green | 綠 | -green
+  + act:     top 23.75, max 72.00, rate 2.4e-04; dclm 4.5e-04 zh 4.0e-04 code 2.7e-03 chat 6.1e-04
+  + peaks:   ' green'×9 | ' etree'×3 | ','×2 | '0'×1 | '色'×1
+  + context: FF0000',⏎    'Green': '#0⟦0⟧FF00
+  + context: 2m⏎⏎# color definitions⏎green2 = (0⟦,⟧ 23
+  + context: 資訊，也讓我們可以從切水果或殺綠⟦色⟧小豬中
+  − library: —
+  − writes:   green | 绿 | 绿色 |  Green | green | 綠 | -green | Green
+  − z:        green | 綠 | -green | 绿 | 绿色 | Green | green |  Green
+  − reads:    green | 绿色 | 绿 | green | -green | 綠 |  Green | Green
+  − act:     top 108.50, max 175.00, rate 0.0e+00; dclm 4.7e-04 zh 4.9e-04 code 1.4e-04 chat 1.4e-03
+  − peaks:   '3'×2 | '9'×2 | '常'×2 | ' of'×2 | ' Dark'×2
+  − context: 1m',⏎'GREEN' :'\x1b[⟦3⟧2m',⏎
+  − context: m'⏎	GREEN 	= '\033[⟦3⟧2m'⏎
+  − context:  COLOR:⏎	RED = "tomato"⏎	GREEN =⟦ "⟧yellowgreen"⏎
+
+[sauers128] AI identity, rank 1: L3 n5307 ±
+  + library: —
+  + writes:   {@ | …⏎⏎⏎ | &nbsp |  &# |  [& |  “… | …⏎⏎⏎⏎ | 存活
+  + z:       ilinx | 不死 | STD | 存活 | fasta | [NUM | 啃 | thren
+  + reads:   startIndex | edList | ."␍⏎ | 整 | 违反 |  testCase | endTime | 温度
+  + act:     top 0.87, max 2.78, rate 1.2e-04; dclm 8.6e-04 zh 3.6e-03 code 9.6e-04 chat 5.7e-04
+  + peaks:   '工'×9 | ' attendant'×5 | 'ant'×3 | ' assistance'×2 | '员'×1
+  + context: gotomakihitomi wrote:⏎是SAMRT代⟦工⟧的沒錯
+  + context: 委由南電(8046)進行代⟦工⟧，南電
+  + context: 廠，昨中午交出替「味全」代⟦工⟧的產品名
+  − library: —
+  − writes:   assistant |  assistants |  ⏎⏎ | 助理 |  secretary |  coach |  appointments |  Assistant
+  − z:       助理 | assistant | -chair | -manager |  assistants | (helper | Secretary | -editor
+  − reads:   startIndex |  testCase | edList | 字符串 | ."␍⏎ | xAC | .constraint | /compiler
+  − act:     top 14.50, max 17.00, rate 4.9e-04; dclm 3.5e-05 zh 4.1e-05 code 1.4e-05 chat 3.8e-03
+  − peaks:   'assistant'×21 | '助理'×2 | 'st'×1
+  − context: 1958.⏎⏎Ralph D. Nelson, As⟦st⟧. Atty
+  − context:  program to support veterans returning to civilian life.<|im_end|>⏎<|im_start|>⟦assistant⟧⏎Introduction:⏎
+  − context: ，在亚洲有着丰富的执教经验，曾担任过中国国家队⟦助理⟧教练等职务
+
+[sauers128] AI identity, rank 2: L9 n8548 ±
+  + library: Math Problem Solver (other, strength 1.0)
+  + writes:  — | Â |  “ |  ‘ |  sporting |  actually |  rugby |  «
+  + z:       _STRIP | ņ |  burg |  booty | � | 小腿 |  crus | -watch
+  + reads:   名字 | _python | 款式 | 电池 | 训练 | 芯片 | 棋 | 句子
+  + act:     top 2.30, max 5.44, rate 2.4e-04; dclm 4.1e-03 zh 3.8e-03 code 5.3e-03 chat 5.6e-03
+  + peaks:   ' Data'×2 | 'ervation'×1 | ' bucket'×1 | 'py'×1 | ' Simple'×1
+  + context:  has migrated off reservations⏎        if 'openai.org/res⟦ervation⟧-id' in
+  + context: Proposal:Structured⟦ Data⟧⏎⏎From Strategic
+  + context: """Batch reader to seq2seq attention model, with⟦ bucket⟧ing support."""⏎⏎
+  − library: —
+  − writes:  人工智能 |  AI | AI | .AI | .ai | _AI | 文本 | .Chat
+  − z:       人工智能 | _AI | .AI | .ai | -chat | AI | .chat | .Chat
+  − reads:   人工智能 | .AI | AI | 生成 | 温度 | 聊天 | 文本 | 对话
+  − act:     top 9.88, max 12.12, rate 1.6e-03; dclm 5.4e-04 zh 3.3e-04 code 4.4e-04 chat 1.6e-02
+  − peaks:   'assistant'×7 | ' programmed'×3 | ' data'×2 | 'ude'×2 | ' I'×2
+  − context:  don't have access to real-time information, and my training⟦ data⟧ only goes up
+  − context:  capability to edit videos. But based on what I've been⟦ programmed⟧, here are
+  − context: This piece of data is lying (1/2).⏎⏎Cla⟦ude⟧ Bamberger
+
+[sauers128] AI identity, rank 3: L7 n1264 ±
+  + library: —
+  + writes:  人工智能 | 机器人 | 智能 |  automation | 自动化 | 智能化 | .AI | Automation
+  + z:       智能 | 机器人 | 人工智能 | 智能化 | 自动化 | 聊天 | Automation | .AI
+  + reads:   回答 | 对话 | 提问 | 情境 | .AI |  personalised | 机器人 | 答案
+  + act:     top 8.75, max 11.19, rate 2.4e-04; dclm 3.4e-04 zh 2.4e-04 code 6.3e-04 chat 2.7e-03
+  + peaks:   'ana'×4 | 'iri'×4 | ' Siri'×3 | 'flow'×2 | ' assistant'×2
+  + context: ⏎Create a chatbot application that utilizes Node.js and Dialog⟦flow⟧ to provide information
+  + context: 've even seen an update roll out that lets you launch Cort⟦ana⟧ using the Google
+  + context: How to Use Cort⟦ana⟧'s New Features
+  − library: —
+  − writes:  ⏎ |  ( |  both |  unto |  once |  upon |  as |  merely
+  − z:       unto |  purity | Γ |  blot |  unto |  alla |  darken |  blinded
+  − reads:    REALLY | !!)⏎ | really | !!!! |  seperate |  EACH | 完全不同 |  lenght
+  − act:     top 1.87, max 2.31, rate 1.1e-03; dclm 9.7e-04 zh 1.2e-03 code 6.4e-03 chat 6.0e-04
+  − peaks:   '4'×4 | 'I'×3 | 'fc'×3 | 'aaaaaaaa'×2 | '0'×1
+  − context: class Sync:⏎    _window = None⏎    _1⟦0⟧0th_count
+  − context: BrCP)⏎description:⏎- Manage Contract resources on Cisco AC⟦I⟧ fabrics.⏎notes
+  − context: j)⏎description:⏎- Manage initial Contract Subjects on Cisco AC⟦I⟧ fabrics.⏎version
+
+[sauers128] AI identity, rank 4: L0 n5890 ±
+  + library: —
+  + writes:  ève |  honoured | 和平 | edList | 高低 | 合法性 | 合约 | ."␍⏎
+  + z:       fabs | 合约 | ève | 俘 | 迫 | 场比赛 | _slave | URES
+  + reads:   None
+  + act:     top 0.31, max 0.34, rate 1.2e-03; dclm 3.6e-02 zh 5.3e-02 code 2.1e-02 chat 3.8e-02
+  + peaks:   ' all'×21 | 'ful'×3
+  + context: How it⟦ all⟧ started⏎⏎It
+  + context:  that can be swiped like a magazine.⏎⏎But perhaps Future⟦ful⟧ might be onto
+  + context:  of us has the ability to achieve great things, but it⟦ all⟧ starts with our
+  − library: —
+  − writes:   in | ⏎ |  helpful |  ⏎ |  and | , |   |  [
+  − z:        Helpful | 診 | _intro | 同情 | _HINT | _HELP | _helpers | 线索
+  − reads:   None
+  − act:     top 7.75, max 8.00, rate 2.4e-04; dclm 1.4e-04 zh 3.0e-05 code 2.6e-04 chat 2.8e-04
+  − peaks:   ' helpful'×22 | ' Helpful'×2
+  − context:  new features first⏎Join Office Insiders⏎⏎Was this information⟦ helpful⟧?⏎⏎Thank you
+  − context: , disconnect HTC U Ultra from the computer.⏎Was this information⟦ helpful⟧?⏎⏎Can’t
+  − context: ⏎⏎⏎Choose files or drag and drop files⏎Was this article⟦ helpful⟧?⏎  
+
+[sauers128] AI identity, rank 5: L6 n2843 ±
+  + library: —
+  + writes:  文本 | 人工智能 | AI | _AI | _python | 推理 | -chat | CHAT
+  + z:       _AI | -chat | CHAT | 人工智能 | _python | .processor | AI | _yaml
+  + reads:   ."␍⏎ | 文本 | _python | 人工智能 | "⏎⏎⏎⏎ | ?"⏎⏎⏎⏎ | ."⏎⏎⏎⏎ | _paragraph
+  + act:     top 5.50, max 11.25, rate 0.0e+00; dclm 2.0e-04 zh 1.0e-04 code 5.4e-04 chat 4.9e-03
+  + peaks:   'struction'×7 | 'ude'×4 | '3'×2 | '2'×1 | ' Claude'×1
+  + context:  for an endless plan⏎Uses the very same GPT-⟦3⟧ capability as large
+  + context:  a massive amount of data almost as much as GPT-⟦3⟧ one of the
+  + context: The chatbot uses GPT-⟦2⟧ for its baseline
+  − library: —
+  − writes:   “ |  … | … | …⏎ |  “… | …” |   |  ...⏎
+  − z:        Redskins | Ｄ |  Sammy |  Baseball |  Patriots |  baseball | ât | œ
+  − reads:   )")⏎⏎ | 初心 | )?⏎⏎ | ：⏎⏎ | 清晨 |  Patreon | ":⏎⏎ | "?⏎⏎
+  − act:     top 2.78, max 4.47, rate 3.7e-04; dclm 6.2e-04 zh 4.5e-04 code 5.6e-03 chat 4.3e-04
+  − peaks:   ' charms'×5 | 'y'×3 | 'ets'×2 | 'affe'×2 | ' apt'×2
+  − context: ⏎⏎from beets.plugins import BeetsPlugin⏎from be⟦ets⟧ import ui⏎
+  − context:  import unittest⏎from test.helper import TestHelper⏎⏎from be⟦ets⟧.mediafile import
+  − context:  Because almost all models in Domain Adaptation are published in C⟦affe⟧, I decide
+
+attention sink: MLP activation energy (squared activations) at token 0 (16 documents), by layer: total vs a later position, top-3 neurons' share, residual norm after the layer (before the final norm) at token 0 vs later
+  L 0        54.3 vs     13.5  top n6598 0.18, n7091 0.07, n8785 0.05  |h|     22.7 vs   11.4
+  L 1        95.3 vs     17.4  top n11629 0.67, n572 0.10, n2098 0.02  |h|     47.1 vs   15.1
+  L 2        21.3 vs     14.1  top n12116 0.35, n5176 0.07, n4435 0.07  |h|     57.7 vs   17.7
+  L 3         9.8 vs     22.6  top n2064 0.06, n8598 0.04, n1871 0.04  |h|     61.2 vs   22.1
+  L 4        35.8 vs     56.5  top n5561 0.04, n81 0.03, n9440 0.02  |h|     67.7 vs   30.5
+  L 5        59.7 vs     79.1  top n7572 0.12, n4153 0.05, n1907 0.03  |h|     43.7 vs   40.8
+  L 6  35673640.0 vs     95.9  top n5723 0.92, n8518 0.05, n422 0.03  |h|  12090.8 vs   46.9
+  L 7         2.3 vs    127.1  top n615 0.02, n5111 0.01, n10066 0.01  |h|  12090.8 vs   51.2
+  L 8         7.3 vs    174.2  top n5469 0.21, n5945 0.10, n8800 0.06  |h|  12090.8 vs   57.0
+  L 9        16.7 vs    208.2  top n9575 0.53, n5765 0.08, n3696 0.01  |h|  12090.8 vs   58.8
+  L10        14.7 vs    208.4  top n509 0.31, n1799 0.15, n3268 0.04  |h|  12090.8 vs   61.8
+  L11        12.2 vs    200.7  top n3517 0.20, n9222 0.13, n9302 0.06  |h|  12090.9 vs   66.2
+  L12        23.2 vs    259.5  top n1781 0.13, n26 0.12, n4194 0.12  |h|  12090.9 vs   72.8
+  L13        46.8 vs    204.4  top n8419 0.15, n11668 0.13, n4517 0.11  |h|  12090.9 vs   75.9
+  L14        36.8 vs    320.7  top n11675 0.13, n2681 0.06, n3828 0.06  |h|  12090.9 vs   80.2
+  L15        27.9 vs    208.3  top n10037 0.13, n7283 0.08, n4867 0.03  |h|  12091.0 vs   84.0
+  L16     15582.0 vs 124183.3  top n1875 0.59, n2271 0.22, n1756 0.11  |h|  12530.2 vs   89.2
+  L17         8.6 vs    210.6  top n7220 0.01, n5444 0.01, n7061 0.01  |h|  12530.3 vs   95.0
+  L18         8.1 vs    345.2  top n471 0.15, n9477 0.02, n9589 0.01  |h|  12530.3 vs  101.2
+  L19         6.6 vs    326.7  top n4122 0.05, n10481 0.00, n9617 0.00  |h|  12530.4 vs  118.1
+  L20         7.8 vs    369.8  top n9552 0.02, n3088 0.01, n4402 0.01  |h|  12530.5 vs  128.1
+  L21         6.4 vs    497.2  top n6992 0.02, n7394 0.02, n1402 0.01  |h|  12530.5 vs  139.7
+  L22         8.1 vs    911.0  top n11288 0.02, n6760 0.01, n2869 0.01  |h|  12530.5 vs  165.7
+  L23         7.8 vs   1330.5  top n9210 0.03, n1009 0.02, n2221 0.02  |h|  12530.6 vs  207.3
+  L24         5.3 vs   1800.2  top n9818 0.01, n196 0.01, n5993 0.01  |h|  12530.5 vs  261.1
+  L25         8.3 vs   2125.1  top n7403 0.25, n1031 0.01, n10411 0.01  |h|  12530.5 vs  304.5
+  L26         9.0 vs   2554.7  top n8618 0.09, n511 0.01, n4976 0.01  |h|  12530.5 vs  353.6
+  L27        11.6 vs   3250.8  top n3803 0.10, n3130 0.01, n7413 0.01  |h|  12530.5 vs  408.5
+  L28        13.8 vs   4341.1  top n3197 0.09, n2155 0.01, n7204 0.01  |h|  12530.5 vs  474.4
+  L29        14.6 vs   4932.9  top n10582 0.01, n10182 0.01, n4928 0.01  |h|  12530.5 vs  551.6
+  L30        18.5 vs   6389.1  top n4035 0.04, n4195 0.01, n10816 0.01  |h|  12530.5 vs  662.4
+  L31        23.5 vs   8136.3  top n9643 0.04, n1789 0.01, n1120 0.01  |h|  12530.5 vs  768.4
+  L32        33.4 vs   9998.9  top n9180 0.04, n4779 0.02, n8743 0.02  |h|  12530.6 vs  885.5
+  L33       227.5 vs  14996.9  top n8182 0.18, n8382 0.12, n5263 0.05  |h|  12468.3 vs 1029.4
+  L34     97123.0 vs  36747.6  top n1452 0.20, n6620 0.19, n3471 0.10  |h|   9156.9 vs 1516.4
+  L35   3185089.0 vs 374758.1  top n9510 0.44, n8724 0.04, n3529 0.03  |h|   5671.0 vs 1756.8
+  L6 n8518: rank 1 at token 0, share 0.050
+  L6 n422: rank 2 at token 0, share 0.028
+  L6 n5723: rank 0 at token 0, share 0.922

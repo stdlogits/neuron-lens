@@ -1,0 +1,1062 @@
+
+=== L2 (12288 neurons)
+  R:dclm-even      top-1 median 0.071  >0.1 0.27  >0.5 0.07  | sigma1 energy 0.78, write share on u1 0.95
+  R:dclm-odd       top-1 median 0.067  >0.1 0.27  >0.5 0.07  | sigma1 energy 0.78, write share on u1 0.95
+  R:dclm           top-1 median 0.069  >0.1 0.27  >0.5 0.07  | sigma1 energy 0.78, write share on u1 0.95
+  R:r24            top-1 median 0.102  >0.1 0.51  >0.5 0.09  | sigma1 energy 0.76, write share on u1 0.94
+  J                top-1 median 0.600  >0.1 0.92  >0.5 0.60  | sigma1 energy 0.57, write share on u1 0.35
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.89, top-10 overlap 0.92
+  R:dclm-even vs R:dclm: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-even vs R:r24: top-1 agree 0.49, top-10 overlap 0.64
+  R:dclm-even vs J: top-1 agree 0.02, top-10 overlap 0.03
+  R:dclm-odd vs R:dclm: top-1 agree 0.94, top-10 overlap 0.96
+  R:dclm-odd vs R:r24: top-1 agree 0.48, top-10 overlap 0.63
+  R:dclm-odd vs J: top-1 agree 0.02, top-10 overlap 0.03
+  R:dclm vs R:r24: top-1 agree 0.49, top-10 overlap 0.64
+  R:dclm vs J: top-1 agree 0.02, top-10 overlap 0.03
+  R:r24 vs J: top-1 agree 0.02, top-10 overlap 0.03
+  L2 n6311 +
+    R:dclm-even      p1 0.09 |  the  a  in    and  to \n  (
+                     z    | 國家 Client .addEventListener assets 則 OPER Assets ธ
+    R:dclm-odd       p1 0.08 |  the  a  in    and  to \n  for
+                     z    | 國家 .addEventListener Client assets Assets _pay OPER 則
+    R:dclm           p1 0.09 |  the  a  in    and  to \n  (
+                     z    | 國家 .addEventListener Client assets Assets OPER 則 _pay
+    R:r24            p1 0.11 |  the  a  in  and  (  to \n  as
+                     z    | 國家 Heart 則 ={{ 兒子 Client _fin 帶來
+    J                p1 0.45 | , .\n . ; ).\n ’. :\n ?\n
+                     z    | AINED �� 櫃  styled LOUR 蜚 curring ISING
+  L2 n6311 -
+    R:dclm-even      p1 0.00 | startIndex 整 ."\r\n xFC -Ta xAC 限 分数
+                     z    | -Ta xmax .precision .MOD xfe ylim .deleted startIndex
+    R:dclm-odd       p1 0.00 | startIndex ."\r\n 整 xFC -Ta .constraint xAC 限
+                     z    | -Ta xmax .precision .MOD xfe .deleted ylim vae
+    R:dclm           p1 0.00 | startIndex 整 ."\r\n xFC -Ta xAC 限 .constraint
+                     z    | -Ta xmax .precision .MOD xfe ylim .deleted vae
+    R:r24            p1 0.00 | 整 效率 xFC startIndex xmax 限 xAC 黑色
+                     z    | -Ta xmax 并向 .precision .deleted +xml tgt .MOD
+    J                p1 0.16 |  \\'  \\"  –\n\n  \\"" =\\" …"\n\n  —\n\n =\\'
+                     z    | xfe  \'\\" ‚ onium  '\\''  \\'  –\n\n  —\n\n
+  L2 n6890 +
+    R:dclm-even      p1 0.08 |  ( ,  and  the  in  a  not  "
+                     z    |  Whitney 闺  Lowell 娴 淑  Bryant  cougar achel
+    R:dclm-odd       p1 0.08 |  ( ,  and  in  the  a  not  as
+                     z    |  Whitney 闺  Lowell  cougar 娴 淑  Bryant 小姐
+    R:dclm           p1 0.08 |  ( ,  and  in  the  a  not  "
+                     z    |  Whitney 闺  Lowell 娴  cougar 淑  Bryant achel
+    R:r24            p1 0.10 |  ( ,  and  in  the  a  not  as
+                     z    |  Whitney 大桥 娴 淑 achel  Lowell  Bryant 妇科
+    J                p1 0.77 | â Â  â  Î  Â Î ...' Ã
+                     z    | ///\n\n  '_' Ï '=>' â .''\n\n €™ &apos
+  L2 n6890 -
+    R:dclm-even      p1 0.00 | 投 文字 。</  rumours  splitted startIndex /svg 名字
+                     z    | itori .mods encryption (errno 追赶 -reply \treply .sequence
+    R:dclm-odd       p1 0.00 | 投 。</ 文字  rumours 名字 玩家 棋 startIndex
+                     z    | .mods itori encryption .sequence (errno 朝廷 -reply 省份
+    R:dclm           p1 0.00 | 投 文字 。</  rumours  splitted 名字 startIndex /svg
+                     z    | itori .mods encryption (errno .sequence -reply \treply 朝廷
+    R:r24            p1 0.01 |  rumours  splitted 投 文字  initialised  initialise  Initialise 量子
+                     z    | itori 皇帝 .sequence 朝廷 (errno 议会 inions .Integer
+    J                p1 0.82 |  \\(  \u200b\u200b \\(   \n  \u200e \\.  \\`  \u200b
+                     z    | 或者是 ucceeded decoder _SER 来历 itor 剿 驿站
+  L2 n663 +
+    R:dclm-even      p1 0.52 | \xa0 ,  and \n –  ( -  
+                     z    | ˚ ematic uary ematics up hood –and unn
+    R:dclm-odd       p1 0.47 | \xa0 ,  and – \n  (   -
+                     z    | ˚ ematic uary ematics hood up unn –and
+    R:dclm           p1 0.50 | \xa0 ,  and – \n  ( -  
+                     z    | ˚ ematic uary ematics hood up –and unn
+    R:r24            p1 0.36 | \n ,  and – -  in  (  —
+                     z    | ˚  \xad � uary ematic ande ˆ anda
+    J                p1 0.02 |  —\n\n  –\n\n alyzer  ― ṛ nable xfe ynchronously
+                     z    | alyzer atron  —\n\n nable /license ṛ sonian byn
+  L2 n663 -
+    R:dclm-even      p1 0.00 |  testCase  ResourceType  BinaryTree  Comparator  Params  Decrypt  ErrorResponse  Csv
+                     z    |  ResourceType  getInput  BinaryTree  GetAll  ErrorResponse  rootNode  Csv  ContentType
+    R:dclm-odd       p1 0.00 |  ResourceType  testCase  BinaryTree  Comparator  Params  ErrorResponse  Decrypt  Csv
+                     z    |  ResourceType  getInput  BinaryTree  ErrorResponse  rootNode  GetAll  ContentType  Csv
+    R:dclm           p1 0.00 |  ResourceType  testCase  BinaryTree  Comparator  Params  ErrorResponse  Decrypt  Csv
+                     z    |  ResourceType  getInput  BinaryTree  ErrorResponse  GetAll  rootNode  ContentType  Csv
+    R:r24            p1 0.01 |  Decrypt  Params  splitted  Gameplay  Placeholder  Json  infos  Separator
+                     z    |  ResourceType  getInput  GetAll  Wishlist  rootNode  GetUser  Csv  Serializer
+    J                p1 0.36 | , . ; .\n ".\n ". ", "
+                     z    |  Ming  Souls  Violet  Jasmine  DS  Eval  Surre  Philips
+
+=== L5 (12288 neurons)
+  R:dclm-even      top-1 median 0.295  >0.1 0.81  >0.5 0.29  | sigma1 energy 0.55, write share on u1 0.27
+  R:dclm-odd       top-1 median 0.298  >0.1 0.81  >0.5 0.29  | sigma1 energy 0.56, write share on u1 0.27
+  R:dclm           top-1 median 0.295  >0.1 0.81  >0.5 0.29  | sigma1 energy 0.56, write share on u1 0.27
+  R:r24            top-1 median 0.321  >0.1 0.83  >0.5 0.32  | sigma1 energy 0.53, write share on u1 0.25
+  J                top-1 median 0.539  >0.1 0.92  >0.5 0.55  | sigma1 energy 0.60, write share on u1 0.41
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.89, top-10 overlap 0.91
+  R:dclm-even vs R:dclm: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-even vs R:r24: top-1 agree 0.49, top-10 overlap 0.60
+  R:dclm-even vs J: top-1 agree 0.04, top-10 overlap 0.09
+  R:dclm-odd vs R:dclm: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-odd vs R:r24: top-1 agree 0.48, top-10 overlap 0.59
+  R:dclm-odd vs J: top-1 agree 0.04, top-10 overlap 0.09
+  R:dclm vs R:r24: top-1 agree 0.49, top-10 overlap 0.60
+  R:dclm vs J: top-1 agree 0.04, top-10 overlap 0.09
+  R:r24 vs J: top-1 agree 0.04, top-10 overlap 0.08
+  L5 n4242 +
+    R:dclm-even      p1 0.53 | 强奸 侮辱 色情  homosexuals  retarded 暴力 侵犯  mutil
+                     z    | 色情 侮辱 侵犯 强奸 强行 政权 懦 谴责
+    R:dclm-odd       p1 0.58 | 强奸 侮辱 色情 暴力 侵犯  homosexuals  retarded 死刑
+                     z    | 色情 侵犯 侮辱 强奸 政权 强行 懦 受害
+    R:dclm           p1 0.56 | 强奸 侮辱 色情  homosexuals 暴力 侵犯  retarded 死刑
+                     z    | 色情 侮辱 侵犯 强奸 强行 政权 懦 谴责
+    R:r24            p1 0.39 | 强奸  homosexuals 色情  retarded 侮辱  prostitutes 强制  sodom
+                     z    | 色情 强奸  homosexuals 强行 侵犯 庸  sodom 侮辱
+    J                p1 0.03 | ,** =<? ;" -destruct ». \xading ;$ .*(
+                     z    | -destruct /cpu -defense  sodom (control 强奸 =<? ectomy
+  L5 n4242 -
+    R:dclm-even      p1 0.83 |  �  �  � ✨  �  ❤  cosy  �
+                     z    | ✨ _helpers  quirky 小伙伴  playful 小伙伴们 🎉  learners
+    R:dclm-odd       p1 0.85 |  �  �  � ✨  �  ❤  cosy  quirky
+                     z    | ✨  quirky _helpers 小伙伴 小伙伴们  playful 🎉  learners
+    R:dclm           p1 0.84 |  �  �  � ✨  �  ❤  cosy  �
+                     z    | ✨ _helpers  quirky 小伙伴 小伙伴们  playful 🎉  learners
+    R:r24            p1 0.62 |  �  �  �  � ...\n !\n  ❤ ✨
+                     z    | ✨ _helpers 小伙伴  quirky  learners  STEM 小伙伴们  playful
+    J                p1 0.99 |  ...\n ...\n  ...\n\n  \n  ...  ..."\n ...\\  ...)\n
+                     z    |  Kickstarter  crowdfunding  curated  LEGO  WhatsApp  STEM  attendees  LGBTQ
+  L5 n8376 +
+    R:dclm-even      p1 0.45 | (LL  RL [L Lf LF 分明 LR Ｒ
+                     z    | (LL LF Lf  RL LR  LZ 通畅 (li
+    R:dclm-odd       p1 0.41 | (LL  RL [L Lf LF 分明 Ｒ LR
+                     z    | (LL Lf LF  RL 通畅 (li LR  LZ
+    R:dclm           p1 0.43 | (LL  RL [L Lf LF 分明 Ｒ LR
+                     z    | (LL Lf LF  RL 通畅 LR (li  LZ
+    R:r24            p1 0.59 | (LL  RL 分明 (IL Lf [L RL LF
+                     z    | (LL  RL (li LF 通畅 分明 Lf (IL
+    J                p1 0.36 |  \xa0 \xa0 \xa0\xa0 \xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  \xa0 \xa0 \xa0\xa0\xa0\xa0\xa0\xa0\xa0  \xa0 \xa0 \xa0 \xa0 \xa0\xa0\xa0
+                     z    | _emit  Baghd ipse IndexOf  TSR  tempList _RTC (LL
+  L5 n8376 -
+    R:dclm-even      p1 0.21 |  align  aligned  alignment  literally  location  realization  regards  level
+                     z    |  ALIGN ALIGN alignment  Alignment aligned 遗留  alignment align
+    R:dclm-odd       p1 0.22 |  align  aligned  alignment  literally  location  level  realization  relev
+                     z    |  ALIGN ALIGN alignment  Alignment aligned  alignment align 遗留
+    R:dclm           p1 0.21 |  align  aligned  alignment  literally  location  realization  level  relev
+                     z    |  ALIGN ALIGN alignment  Alignment aligned  alignment align 遗留
+    R:r24            p1 0.13 |  alignment  align  aligned  literally  location  reliable  relev  realization
+                     z    |  ALIGN ALIGN  lợi 遗留 aligned alignment  Alignment _location
+    J                p1 0.75 |  (...)  ..."\n ...">\n ..."\n  <  ` ...",\n  `\n
+                     z    | locator ARGS 遗留 lify  ALIGN 亮丽 一流的 ALIGN
+  L5 n7961 +
+    R:dclm-even      p1 0.72 |  — �  – \xa0  ‘  everywhere  \u200b\u200b  centre
+                     z    | .dist (dst opi (JSON 印记  Nir =name _live
+    R:dclm-odd       p1 0.63 |  —  – � \xa0  ‘  everywhere  \u200b\u200b  …
+                     z    | .dist (dst opi (JSON 印记  рас _ref  Nir
+    R:dclm           p1 0.68 |  —  – � \xa0  ‘  everywhere  \u200b\u200b  …
+                     z    | .dist (dst opi (JSON 印记  Nir  рас _ref
+    R:r24            p1 0.73 |  — �  –  ‘ \xa0  centre ised  kilometres
+                     z    | .land .dist _ref opi  рас _MAPPING _live -away
+    J                p1 0.57 |  **  **\n  /** _${ ]**  (**  {@ /**
+                     z    |  /** ṛ _inches _${ _JSON /** /archive /entity
+  L5 n7961 -
+    R:dclm-even      p1 0.04 |  ":: 趣味  "-"\n 考虑到 "-- 计算机 侧重 农作物
+                     z    | xFA .addButton 趣味  ":: agus 农作物 setAttribute treeview
+    R:dclm-odd       p1 0.04 | 趣味  ":: "-- 考虑到  "-"\n 侧重 计算机 xFA
+                     z    | xFA .addButton 趣味 agus  ":: setAttribute 功率 侧重
+    R:dclm           p1 0.04 |  ":: 趣味 考虑到 "--  "-"\n 计算机 侧重 xFA
+                     z    | xFA .addButton 趣味 agus  ":: setAttribute 功率 农作物
+    R:r24            p1 0.18 |  ":: 趣味 讨论 计算机 考虑到  Encyclopedia  favorable 有趣的
+                     z    |  ":: 趣味 .addButton setAttribute xFA 主持 agus 有趣的
+    J                p1 0.06 |                                                                                                                      
+                     z    |  radio  budget  FUN  cafeteria  Outlook  utilization  predictive  statewide
+
+=== L8 (12288 neurons)
+  R:dclm-even      top-1 median 0.372  >0.1 0.87  >0.5 0.36  | sigma1 energy 0.47, write share on u1 0.22
+  R:dclm-odd       top-1 median 0.370  >0.1 0.87  >0.5 0.36  | sigma1 energy 0.48, write share on u1 0.22
+  R:dclm           top-1 median 0.371  >0.1 0.87  >0.5 0.36  | sigma1 energy 0.47, write share on u1 0.22
+  R:r24            top-1 median 0.389  >0.1 0.88  >0.5 0.38  | sigma1 energy 0.45, write share on u1 0.21
+  J                top-1 median 0.342  >0.1 0.77  >0.5 0.35  | sigma1 energy 0.69, write share on u1 0.63
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.89, top-10 overlap 0.91
+  R:dclm-even vs R:dclm: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-even vs R:r24: top-1 agree 0.53, top-10 overlap 0.63
+  R:dclm-even vs J: top-1 agree 0.05, top-10 overlap 0.09
+  R:dclm-odd vs R:dclm: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-odd vs R:r24: top-1 agree 0.52, top-10 overlap 0.62
+  R:dclm-odd vs J: top-1 agree 0.05, top-10 overlap 0.09
+  R:dclm vs R:r24: top-1 agree 0.53, top-10 overlap 0.63
+  R:dclm vs J: top-1 agree 0.05, top-10 overlap 0.09
+  R:r24 vs J: top-1 agree 0.05, top-10 overlap 0.09
+  L8 n6634 +
+    R:dclm-even      p1 0.08 |  because  –  and ,  customers ?\n\n  today  company
+                     z    |  Kash  calendars QUI  nostalgic  ATA  Hoy  Kiss 问问
+    R:dclm-odd       p1 0.07 |  because  –  customers  and , ?\n\n  today  company
+                     z    |  Kash  calendars QUI  ATA  Hoy  Kiss  polo  nostalgic
+    R:dclm           p1 0.07 |  because  –  and  customers , ?\n\n  today  company
+                     z    |  Kash  calendars QUI  ATA  Hoy  nostalgic  Kiss 问问
+    R:r24            p1 0.55 | ?\n\n \n\n .\n\n !\n\n -\n\n …\n\n ,\n\n  –\n\n
+                     z    | QUI  Kash  Hoy  calendars  Kiss GetPosition 了解一下 ?\n\n
+    J                p1 1.00 | –  – … .– ,… — –\n\n …\n\n
+                     z    | – ––  – xEE –\n\n .– _GPS −
+  L8 n6634 -
+    R:dclm-even      p1 0.08 | (...  "$( 死刑 黑暗 [it  [--  ("\\  everytime
+                     z    |  "$(  ("\\ (sr (*( ("\\ (label =label 处处
+    R:dclm-odd       p1 0.10 | (...  "$( [it  [-- 死刑  ("\\  everytime  ...)\n
+                     z    |  ("\\  "$( (sr (*( =label ("\\ (label [it
+    R:dclm           p1 0.09 | (...  "$( 死刑 [it  [--  ("\\ 黑暗  everytime
+                     z    |  ("\\  "$( (sr (*( ("\\ =label (label  "../../../
+    R:r24            p1 0.12 |  ...)\n  "$( 黑暗  ...\r\n (...)\n (... [it  ...)
+                     z    |  "$( 黑暗  ("\\  "../../../ (script  {});\n  ""))\n (*(
+    J                p1 0.32 |  \\"  ...\n  ``(  \n        \n  \\'  ``  \n\n\n\n\n  ..."\n
+                     z    |  ``(  \\""  ----------------------------------------------------------------------\n  *)\n  ("<  ())\n  \n        \n  ")"\n
+  L8 n4969 +
+    R:dclm-even      p1 0.01 | qus Hints usband gnore odox ailer lse üß
+                     z    | qus gnore usband Clipboard dera lse 芮 IRM
+    R:dclm-odd       p1 0.01 | Hints qus usband gnore odox ailer lse elps
+                     z    | qus gnore Hints Clipboard dera IRM ugal 芮
+    R:dclm           p1 0.01 | qus Hints usband gnore odox ailer lse üß
+                     z    | qus gnore Clipboard usband dera lse 芮 IRM
+    R:r24            p1 0.04 | qus gnore usband ailer rium lse xbf ABCDEFG
+                     z    | qus gnore xbf rium Clipboard usband lse ailer
+    J                p1 0.01 | ,  \n . *   1 ¬ ...
+                     z    | otted sects assed  sympathetic Seg licted umbling ading
+  L8 n4969 -
+    R:dclm-even      p1 0.46 |  [...]  [  …\n\n  ...\n\n …\n\n ...\n\n  …  [...]\n\n
+                     z    |  Об ［ ,[ [t [m [a [u [b
+    R:dclm-odd       p1 0.39 |  [...]  [  …\n\n …\n\n  ...\n\n  … ...\n\n …
+                     z    |  Об ,[ ［ [a [m [t [b [u
+    R:dclm           p1 0.42 |  [...]  [  …\n\n …\n\n  ...\n\n ...\n\n  …  [...]\n\n
+                     z    |  Об ［ ,[ [t [m [a [b [u
+    R:r24            p1 0.67 |  [...]  … …  ...\n  [ ... ...\n  ...
+                     z    | ［ [t  [...] [a &lt [i （ [in
+    J                p1 0.00 |  \'\\" /locale /vendor /commons  \\"" /interfaces /entities /php
+                     z    | /locale /vendor /commons /interfaces /php /documentation /entities  \'\\"
+  L8 n7808 +
+    R:dclm-even      p1 0.54 | \n  client  my  soul  steak  \n 拳  employee
+                     z    | DTO 拳 #error  Manning Validate 增值 Dto 贫血
+    R:dclm-odd       p1 0.62 | \n  \n  my  client  soul  steak  passion  football
+                     z    | DTO 拳 #error  Manning Validate Dto 增值 Sql
+    R:dclm           p1 0.58 | \n  client  my  \n  soul  steak  passion 拳
+                     z    | DTO 拳 #error  Manning Validate Dto 增值 Domain
+    R:r24            p1 0.82 | \n  ...\n  ..."\n  \n ."\n .”\n .\n  my
+                     z    | #error  Manning 拳 Validate  steak DTO _ERROR 一脚
+    J                p1 0.21 |  ..."\n  ...\n\n ."[ ..."\n\n \\"]  ..."\n\n \\[ ..."\n
+                     z    | \\"] nable 本钱 erness (\\' =post 爵 ned
+  L8 n7808 -
+    R:dclm-even      p1 0.19 | TeX DAQ 研究人员 科学家 科学研究 科研 比较 ATUS
+                     z    | DAQ ATUS _GE ulings 空气 .npy unos .gpu
+    R:dclm-odd       p1 0.17 | TeX DAQ 比较 研究人员 科学家 科学研究 科研 ATUS
+                     z    | DAQ ATUS _GE ulings 空气 .npy unos 空气中
+    R:dclm           p1 0.18 | TeX DAQ 研究人员 科学家 科学研究 比较 科研 ATUS
+                     z    | DAQ ATUS _GE ulings 空气 .npy unos .gpu
+    R:r24            p1 0.12 | TeX 空气 比较 气氛 DAQ 空气中 .tex 大气
+                     z    | DAQ 空气 空气中 ulings 大气 -Ta 空气净化 _CF
+    J                p1 0.05 |                                                                                                                                                                                                                                                      Yosemite
+                     z    |  PDT antha  IPV DBG  Yosemite  ATI  SCT  OSP
+  L8 jesus +
+    R:dclm-even      p1 1.00 | 圣经  Bible 基督徒  Scripture 基督教 耶稣  biblical 基督
+                     z    | 圣经 基督徒 耶稣 基督 基督教  Scriptures  Scripture 祷
+    R:dclm-odd       p1 1.00 | 圣经 基督徒  Bible 基督教  Scripture 耶稣  biblical 基督
+                     z    | 圣经 基督徒 耶稣 基督 基督教  Scriptures 祷  Scripture
+    R:dclm           p1 1.00 | 圣经 基督徒  Bible 基督教  Scripture 耶稣  biblical 基督
+                     z    | 圣经 基督徒 耶稣 基督 基督教  Scriptures  Scripture 祷
+    R:r24            p1 1.00 | 圣经 基督徒  Bible  Scripture 基督教 耶稣  biblical 祷
+                     z    | 圣经 基督徒 耶稣 基督 基督教  Scriptures 祷  Scripture
+    J                p1 1.00 | 圣经  Bible  bible  biblical …\n 耶稣 上帝 基督教
+                     z    | 圣经 耶稣 基督教 基督徒 上帝  Biblical 基督 耶穌
+  L9 gods -
+    R:dclm-even      p1 0.58 |  God  Gods  gods God 上帝  GOD  prayers  divine
+                     z    | 上帝 God �  Gods 神  gods 神仙  GOD
+    R:dclm-odd       p1 0.67 |  God  Gods  gods God  GOD  prayers 上帝  divine
+                     z    | 上帝 God �  Gods 神  gods  GOD 神仙
+    R:dclm           p1 0.62 |  God  Gods  gods God 上帝  GOD  prayers  divine
+                     z    | 上帝 God �  Gods 神  gods  GOD 神仙
+    R:r24            p1 0.43 |  Gods  God God  gods 上帝  GOD 神 宗教
+                     z    |  Gods 上帝 God � 神  gods 宙  Zeus
+    J                p1 0.37 |  Zeus  God  Gods God  GOD  gods �  divine
+                     z    | �  Zeus angelo  Gods  GOD 上帝  Deus God
+
+=== L11 (12288 neurons)
+  R:dclm-even      top-1 median 0.312  >0.1 0.84  >0.5 0.31  | sigma1 energy 0.40, write share on u1 0.19
+  R:dclm-odd       top-1 median 0.311  >0.1 0.84  >0.5 0.31  | sigma1 energy 0.41, write share on u1 0.20
+  R:dclm           top-1 median 0.312  >0.1 0.84  >0.5 0.31  | sigma1 energy 0.41, write share on u1 0.19
+  R:r24            top-1 median 0.324  >0.1 0.85  >0.5 0.32  | sigma1 energy 0.38, write share on u1 0.18
+  J                top-1 median 0.347  >0.1 0.79  >0.5 0.35  | sigma1 energy 0.63, write share on u1 0.51
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.90, top-10 overlap 0.92
+  R:dclm-even vs R:dclm: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-even vs R:r24: top-1 agree 0.58, top-10 overlap 0.68
+  R:dclm-even vs J: top-1 agree 0.06, top-10 overlap 0.10
+  R:dclm-odd vs R:dclm: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-odd vs R:r24: top-1 agree 0.57, top-10 overlap 0.67
+  R:dclm-odd vs J: top-1 agree 0.06, top-10 overlap 0.10
+  R:dclm vs R:r24: top-1 agree 0.57, top-10 overlap 0.67
+  R:dclm vs J: top-1 agree 0.06, top-10 overlap 0.10
+  R:r24 vs J: top-1 agree 0.05, top-10 overlap 0.10
+  L11 n5866 +
+    R:dclm-even      p1 0.96 | -and 与否  |\n\n -vs |\n\n 用微信  /\n\n 反之
+                     z    | 与否 -and -vs +% 反之 用微信 +)\\ ∧
+    R:dclm-odd       p1 0.95 | -and  |\n\n 与否 |\n\n -vs 用微信  /\n\n 反之
+                     z    | 与否 -and -vs +% 反之 用微信 +)\\ -ip
+    R:dclm           p1 0.96 | -and  |\n\n 与否 |\n\n -vs 用微信  /\n\n 反之
+                     z    | 与否 -and -vs +% 反之 用微信 +)\\ -ip
+    R:r24            p1 0.96 | -and  |\n\n |\n\n 与否 -vs  /\n\n -\n\n /\n\n
+                     z    | -and 与否 -vs +% -ip 用微信 _and -vers
+    J                p1 0.41 | …”\n\n …\n\n\n –\n\n …\n\n …” …"\n\n …)\n\n ,…\n\n
+                     z    | /forms ∧ -and ∣ -Isl ∕ –\n\n …and
+  L11 n5866 -
+    R:dclm-even      p1 0.25 |  ("  (  organis elt  --  capita ivate emark
+                     z    | elt ystone ivate igel ropriate itional sylvania emark
+    R:dclm-odd       p1 0.28 |  ("  (  organis elt  --  capita  "( ivate
+                     z    | elt ystone ivate igel ropriate sylvania emark itional
+    R:dclm           p1 0.27 |  ("  (  organis elt  --  capita ivate  "(
+                     z    | elt ystone ivate igel ropriate itional sylvania emark
+    R:r24            p1 0.29 |  ("  --  organis ropriate ivate emark celand  capita
+                     z    | elt ivate ropriate ystone celand sylvania ronym rowable
+    J                p1 0.14 |  --  <  (  ``  {  :  ''  EC
+                     z    | ENTITY uite icum emark ronym eren  ERC CADE
+  L11 n9558 +
+    R:dclm-even      p1 0.27 |  "  named  naming  first  titled  starting  '  title
+                     z    | 首家  naming 金奖  titled  genesis 命名为  named named
+    R:dclm-odd       p1 0.43 |  "  named  naming  first  titled  '  starting  title
+                     z    | 首家  naming 金奖  titled  genesis  named 命名为 named
+    R:dclm           p1 0.34 |  "  named  naming  first  titled  '  starting  title
+                     z    | 首家  naming 金奖  titled  genesis 命名为  named named
+    R:r24            p1 0.55 |  "  named  naming  organisation  first  '  centre  titled
+                     z    | 首家  naming  genesis  titled 金奖  simplicity 纲 命名为
+    J                p1 0.92 |  ...  Celtic  honoured  Ireland  honour  ''  named  organisation
+                     z    |  Celtic 至尊 KeyName 锺 icum enheim  honoured aghan
+  L11 n9558 -
+    R:dclm-even      p1 0.08 | 修理 ’) ,),\n ++\n  ++\n  ),\n ”\n 卫生间
+                     z    | ])+ ++)\n ,),\n 高涨 ++){\n 修理 _NEG ]+)/
+    R:dclm-odd       p1 0.07 | 修理 ’) ,),\n ++\n  ++\n ”\n  ))\n  ),\n
+                     z    | ++)\n ,),\n ])+ ++){\n _NEG 高涨 修理 ]+)/
+    R:dclm           p1 0.08 | 修理 ’) ,),\n ++\n  ++\n ”\n  ),\n  ))\n
+                     z    | ])+ ++)\n ,),\n 高涨 ++){\n 修理 _NEG ]+)/
+    R:r24            p1 0.17 | 修理 技师 堰  staffers 噪 _coef 卫生间 ’)
+                     z    | 堰 ])+ _coef 修理 高涨 技师 _NEG NEG
+    J                p1 0.46 | .’ …\n .”\n .… …” .“ .…\n\n ….\n\n
+                     z    |  CONDITIONS /posts ++\n 噪 \tno =” ’T ##\n
+  L11 n3578 +
+    R:dclm-even      p1 0.15 | 效能 贡献 模范  Motorola  productivity 攻关  Contribution 改进
+                     z    | 效能 先进单位 模范 发挥作用 _ACTIVITY 发挥了 贡献 enko
+    R:dclm-odd       p1 0.13 | 效能 模范 贡献 攻关  Motorola  teamwork  productivity 改进
+                     z    | 效能 先进单位 模范 发挥作用 _ACTIVITY 发挥了 enko 攻关
+    R:dclm           p1 0.14 | 效能 模范 贡献 攻关  Motorola  productivity 改进  Contribution
+                     z    | 效能 先进单位 模范 发挥作用 _ACTIVITY 发挥了 enko 效益
+    R:r24            p1 0.08 |  Motorola 队员 效能 攻关  productivity  teamwork 贡献  Employees
+                     z    | 先进单位 效能 模范 发挥了 发挥作用 班长 攻关 _ACTIVITY
+    J                p1 0.43 | .— .– ,— ,[ .| ;. .[ .
+                     z    | 口号 (Service 模范  Volunteer _chip 表扬 .getService 效能
+  L11 n3578 -
+    R:dclm-even      p1 0.31 |  existential _imm  genomic  legit  Brexit  barely  paranoid 交错
+                     z    | _imm 交错  understandably 诸侯 淡定  existential _bootstrap せい
+    R:dclm-odd       p1 0.24 |  existential _imm  legit  genomic  barely  Brexit -ish  unequiv
+                     z    | _imm 交错  understandably 淡定 诸侯 谨慎  existential  JSX
+    R:dclm           p1 0.27 |  existential _imm  legit  genomic  Brexit  barely 交错 -ish
+                     z    | _imm 交错  understandably 诸侯 淡定  existential 谨慎 _bootstrap
+    R:r24            p1 0.12 |  existential  Brexit  […]\n\n  genomic  [… 权威 …\n  nuanced
+                     z    | _imm  understandably 交错  JSX 权威 诸侯 王国  existential
+    J                p1 0.71 |  \\\\\n  --\n  \\'  ---\n  \\\\  ``  \\`  =>\n
+                     z    | 淡定  JSX 着实  unsettling 很正常  understandably  \\\\\n ETHER
+  L13 ant +
+    R:dclm-even      p1 0.99 | 蚁  colony  ants  hive 蚂蚁 分工  swarm  Colony
+                     z    | 蚁 蚂蚁 hive  colony  ants  Colony  hive  Swarm
+    R:dclm-odd       p1 0.99 | 蚁  colony  ants  hive 蚂蚁 分工 hive  swarm
+                     z    | 蚁 蚂蚁 hive  colony  hive  ants  Colony  Swarm
+    R:dclm           p1 0.99 | 蚁  colony  ants  hive 蚂蚁 分工  swarm hive
+                     z    | 蚁 蚂蚁 hive  colony  ants  hive  Colony  Swarm
+    R:r24            p1 0.99 | 蚁  ants 蚂蚁  colony  hive hive 昆虫  swarm
+                     z    | 蚁 蚂蚁 hive  ants  hive  colony 蜜蜂  Hive
+    J                p1 0.99 | 蚁  ants  armies 蚂蚁 作战  colony  troop  alliance
+                     z    | 蚁 蚂蚁 _Command 支部 开战 战术 战斗力 作战
+
+=== L14 (12288 neurons)
+  R:dclm-even      top-1 median 0.287  >0.1 0.82  >0.5 0.29  | sigma1 energy 0.37, write share on u1 0.21
+  R:dclm-odd       top-1 median 0.286  >0.1 0.81  >0.5 0.29  | sigma1 energy 0.38, write share on u1 0.22
+  R:dclm           top-1 median 0.286  >0.1 0.81  >0.5 0.29  | sigma1 energy 0.37, write share on u1 0.21
+  R:r24            top-1 median 0.300  >0.1 0.83  >0.5 0.30  | sigma1 energy 0.34, write share on u1 0.19
+  J                top-1 median 0.312  >0.1 0.76  >0.5 0.32  | sigma1 energy 0.63, write share on u1 0.50
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.91, top-10 overlap 0.93
+  R:dclm-even vs R:dclm: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-even vs R:r24: top-1 agree 0.58, top-10 overlap 0.68
+  R:dclm-even vs J: top-1 agree 0.06, top-10 overlap 0.12
+  R:dclm-odd vs R:dclm: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-odd vs R:r24: top-1 agree 0.57, top-10 overlap 0.67
+  R:dclm-odd vs J: top-1 agree 0.07, top-10 overlap 0.12
+  R:dclm vs R:r24: top-1 agree 0.57, top-10 overlap 0.68
+  R:dclm vs J: top-1 agree 0.06, top-10 overlap 0.12
+  R:r24 vs J: top-1 agree 0.06, top-10 overlap 0.12
+  L14 n8268 +
+    R:dclm-even      p1 0.68 | 帖  coloured  homemade  inland  personalised  Colour olio  colour
+                     z    | 帖  Alam olio [keys (Tag -Headers iped isci
+    R:dclm-odd       p1 0.73 | 帖  coloured  homemade  inland  personalised olio  Colour  colour
+                     z    | 帖  Alam (Tag olio iped [keys -Headers .DateTime
+    R:dclm           p1 0.70 | 帖  coloured  homemade  inland  personalised olio  Colour  colour
+                     z    | 帖  Alam olio (Tag [keys iped -Headers isci
+    R:r24            p1 0.47 | 帖  coloured  moist .......  inland  colour  Moist colour
+                     z    | 帖 isci -Headers  Alam iped dcc (Tag olio
+    J                p1 0.56 |  ..."\n ..."\n  ...\n ...\n ..."  ... ... ...",\n
+                     z    | 黏 岱 _ISS thumbnail .Json 攀 簇 爬
+  L14 n8268 -
+    R:dclm-even      p1 0.22 |  contrat  CONTRACT  contract  contractual  perms  blatant 铃 显然是
+                     z    |  contrat  Boeh 铃 _contract  CONTRACT  perms  blatant 显然是
+    R:dclm-odd       p1 0.23 |  contrat  CONTRACT  contract  contractual  perms  blatant ).</  Boeh
+                     z    |  contrat  Boeh _contract  CONTRACT 铃  blatant  perms 显然是
+    R:dclm           p1 0.22 |  contrat  CONTRACT  contract  contractual  perms  blatant 显然是 铃
+                     z    |  contrat  Boeh 铃 _contract  CONTRACT  perms  blatant 显然是
+    R:r24            p1 0.15 |  contrat  famously  contract  contractual 铃  CONTRACT  perms  Boeh
+                     z    |  contrat 铃  Boeh _contract  pubkey  perms  blatant 骋
+    J                p1 0.06 | ).\n\n  european /english  jewish /rs  russian !).\n\n  porno
+                     z    | /english tmpl /rs /msg /pub /ws /messages /runtime
+  L14 n2281 +
+    R:dclm-even      p1 0.22 |  CCTV  ageing ´t  aluminium  petrol  TV  BBC  programme
+                     z    | ODULE チャ Φ TU _CHANNELS .Top _BU \tQ
+    R:dclm-odd       p1 0.23 |  CCTV  ageing ´t  aluminium  petrol  TV  BBC  programme
+                     z    | ODULE チャ Φ _CHANNELS TU .Top _BU ´t
+    R:dclm           p1 0.23 |  CCTV  ageing ´t  aluminium  petrol  TV  BBC  programme
+                     z    | ODULE チャ Φ TU _CHANNELS .Top _BU ´t
+    R:r24            p1 0.52 |  ageing  CCTV  aluminium ´t  programme Behaviour  BBC  favourite
+                     z    | TU ODULE チャ .Top ´t _BU Φ Tiles
+    J                p1 0.23 |  favourite  BBC  TV BBC  traveller  specially  CCTV  organisation
+                     z    | AX leaflet BBC UEL  traveller eos Playable unittest
+  L14 n2281 -
+    R:dclm-even      p1 0.63 |  juris  litigation  appellate  Courts 法官 诉讼 法院  courts
+                     z    |  Scalia  appellate 法院  Courts  juris 诉讼  lawy -court
+    R:dclm-odd       p1 0.63 |  juris  litigation  appellate  Courts 法官 法院 诉讼  courts
+                     z    |  Scalia  appellate 法院  Courts  juris  lawy 诉讼 -court
+    R:dclm           p1 0.63 |  juris  litigation  appellate  Courts 法官 诉讼 法院  courts
+                     z    |  Scalia  appellate 法院  Courts  juris  lawy 诉讼 -court
+    R:r24            p1 0.73 |  juris  litigation  Courts 法院 [,  appellate  courts 诉讼
+                     z    |  Scalia  appellate 法院  Courts -court  juris 诉讼  lawy
+    J                p1 0.61 | [, "[  “[ [,] '[  "[ /[ [*
+                     z    |  lawy [, [tmp [arr  “[ [,] [op [cur
+  L14 n4617 +
+    R:dclm-even      p1 0.40 |  ...\n ...\n  [...]  [...  ... ...\n\n ...  ...\n\n
+                     z    | 萬元 億元 /k 新西 爺 蓮 飯店 韓
+    R:dclm-odd       p1 0.41 |  ...\n ...\n  [...]  [...  ... ...\n\n ...  ...\n\n
+                     z    | 萬元 億元 /k 新西 爺 蓮 飯店 潟
+    R:dclm           p1 0.40 |  ...\n ...\n  [...]  [...  ... ...\n\n ...  ...\n\n
+                     z    | 萬元 億元 /k 新西 爺 蓮 飯店 潟
+    R:r24            p1 0.41 |  ...\n ...\n  [...]  ... ...  [... ,...\n ....\n
+                     z    | 萬元 億元 新西 /k 爺 蓮 韓 網友
+    J                p1 0.18 | ,[ [… /{{ ;\n :[ )— , –
+                     z    | /el /UI /{{ /{}/ /py  {}; /head ('*',
+  L14 n4617 -
+    R:dclm-even      p1 0.98 | 的 在 不 有 与 和 以 到
+                     z    | 的 打 有 并 在 以 上的 不
+    R:dclm-odd       p1 0.99 | 的 在 不 有 和 与 以 到
+                     z    | 的 打 并 有 在 上的 不 以
+    R:dclm           p1 0.99 | 的 在 不 有 和 与 以 到
+                     z    | 的 打 并 有 在 以 上的 不
+    R:r24            p1 0.97 | 的 在 不 有 与 和 以 或
+                     z    | 的 打 有 在 与 并 以 而
+    J                p1 0.31 |  ， 的 一 在  的  。 有 除
+                     z    | 承 除 弱 多样 \tfunction 并不 以便 种类
+
+=== L17 (12288 neurons)
+  R:dclm-even      top-1 median 0.291  >0.1 0.81  >0.5 0.30  | sigma1 energy 0.32, write share on u1 0.19
+  R:dclm-odd       top-1 median 0.288  >0.1 0.81  >0.5 0.30  | sigma1 energy 0.33, write share on u1 0.19
+  R:dclm           top-1 median 0.289  >0.1 0.81  >0.5 0.30  | sigma1 energy 0.33, write share on u1 0.19
+  R:r24            top-1 median 0.302  >0.1 0.82  >0.5 0.31  | sigma1 energy 0.30, write share on u1 0.17
+  J                top-1 median 0.319  >0.1 0.78  >0.5 0.32  | sigma1 energy 0.55, write share on u1 0.40
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.92, top-10 overlap 0.94
+  R:dclm-even vs R:dclm: top-1 agree 0.96, top-10 overlap 0.97
+  R:dclm-even vs R:r24: top-1 agree 0.65, top-10 overlap 0.74
+  R:dclm-even vs J: top-1 agree 0.11, top-10 overlap 0.18
+  R:dclm-odd vs R:dclm: top-1 agree 0.96, top-10 overlap 0.97
+  R:dclm-odd vs R:r24: top-1 agree 0.64, top-10 overlap 0.73
+  R:dclm-odd vs J: top-1 agree 0.11, top-10 overlap 0.18
+  R:dclm vs R:r24: top-1 agree 0.65, top-10 overlap 0.74
+  R:dclm vs J: top-1 agree 0.11, top-10 overlap 0.18
+  R:r24 vs J: top-1 agree 0.11, top-10 overlap 0.18
+  L17 n2289 +
+    R:dclm-even      p1 0.07 | 今晚 昨天 直接 此次 这几天 这两天 昨晚 本次
+                     z    | 今晚 这几天 这两天 昨天 此次 本次 昨晚 今
+    R:dclm-odd       p1 0.07 | 今晚 昨天 这几天 直接 此次 这两天 昨晚 本次
+                     z    | 今晚 这两天 这几天 昨天 此次 本次 昨晚 今
+    R:dclm           p1 0.07 | 今晚 昨天 直接 此次 这几天 这两天 昨晚 本次
+                     z    | 今晚 这两天 这几天 昨天 此次 本次 昨晚 今
+    R:r24            p1 0.08 | 今晚 昨天 这几天 昨晚 这两天 此次 直接 本次
+                     z    | 这几天 昨天 今晚 这两天 昨晚 此次 本次 今
+    J                p1 0.30 | 昨天 刚才 这几天 昨晚 今晚 似乎 今天 ..."\n
+                     z    | 这几天 这两天 昨天 刚才 今晚 昨晚 眼下 当下
+  L17 n2289 -
+    R:dclm-even      p1 0.11 | \n  and  in  or  on ,  sometimes  life
+                     z    |  AIDS  HIV  Battle  •  Popular  controversy  life  Life
+    R:dclm-odd       p1 0.10 | \n  and  in  on  or ,  to  life
+                     z    |  AIDS  HIV  Battle  •  Popular  Life  controversy  life
+    R:dclm           p1 0.11 | \n  and  in  on  or ,  life  sometimes
+                     z    |  AIDS  HIV  Battle  •  Popular  controversy  Life  life
+    R:r24            p1 0.23 | \n  and  or  in ,  on  to  (
+                     z    |  AIDS  •  ¡  �  life  revolution  ^  HIV
+    J                p1 0.52 | ,[ .[ [[ [  [[ ',[ )[ ].[
+                     z    |  AIDS  unpopular  controversial  };  controversy ',[ [{  {};
+  L17 n1553 +
+    R:dclm-even      p1 0.93 |  similarly 也是如此  likewise  Similarly  Likewise  theoretically 门户 也不例外
+                     z    | 也是如此 门户  similarly 路况  Likewise 也不例外 也同样  likewise
+    R:dclm-odd       p1 0.87 |  similarly 也是如此  likewise  Similarly  theoretically 门户  Likewise 也不例外
+                     z    | 也是如此 门户  similarly 路况 也不例外  Likewise 也同样 -runtime
+    R:dclm           p1 0.90 |  similarly 也是如此  likewise  Similarly  Likewise  theoretically 门户 也不例外
+                     z    | 也是如此 门户  similarly 路况  Likewise 也不例外 也同样  likewise
+    R:r24            p1 0.98 |  similarly 也是如此  likewise  Similarly  Likewise 也同样  theoretically 也不例外
+                     z    | 也是如此 门户  similarly 路况 也同样 也不例外  Likewise  likewise
+    J                p1 0.02 |  similarly 同样 也是如此 -------------</ >@  [# 同樣 ['_
+                     z    | 同样 也是如此 /proto  similarly -------------</ cka 同樣 >@
+  L17 n1553 -
+    R:dclm-even      p1 0.28 |  ...\n\n\n\n  ...\n  ...\n\n  …\n\n ...\n  google  \n ...\n\n
+                     z    | 叔 .CO 阴 蓮 莲 _google Harry .objects
+    R:dclm-odd       p1 0.30 |  ...\n  ...\n\n\n\n  ...\n\n  …\n\n ...\n ...\n\n  \n ...\n\n\n
+                     z    | 叔 .CO 阴 蓮 莲 Harry _google .objects
+    R:dclm           p1 0.27 |  ...\n  ...\n\n\n\n  ...\n\n  …\n\n ...\n ...\n\n  \n  google
+                     z    | 叔 .CO 阴 蓮 莲 _google Harry .objects
+    R:r24            p1 0.65 |  ...\n ...\n  \n  google \n\t\t\t\n  ..\n  ...\n\n\n\n  \n            \n
+                     z    | 叔 _google 阴 .CO 蓮 .objects 莲 手腕
+    J                p1 0.39 |  \n …\n … ...\n …" …\n\n  ...\n …”
+                     z    | 出席会议  deputies 獬  prosecutions (eventName  eventName tokens .pose
+  L17 n10131 +
+    R:dclm-even      p1 0.50 | !"\n ]"\n ;"\n ,"\n }"\n ."\r\n "\n ?"\n
+                     z    | }"\n ]"\n }");\n ;"\n !"\n 所述  {}", 座
+    R:dclm-odd       p1 0.49 | !"\n ]"\n ;"\n ,"\n }"\n ."\r\n "\n ?"\n
+                     z    | }"\n ]"\n }");\n ;"\n !"\n 座  {}", })"\n
+    R:dclm           p1 0.49 | !"\n ]"\n ;"\n ,"\n }"\n ."\r\n "\n ?"\n
+                     z    | }"\n ]"\n }");\n ;"\n !"\n 座  {}", 所述
+    R:r24            p1 0.21 | !"\n ."\r\n ]"\n }"\n 报告 .— .-- 宣言
+                     z    | 所述 座  Seminar  {}", 报告 说法 磊 潘
+    J                p1 0.31 |  ",\n  \\"  "\n\n  "\n  }}"\n  """\n  "+\n  "\\\n
+                     z    | 他说 我说  Reporter REPORT 所说 日报 訂 这样说
+  L17 n10131 -
+    R:dclm-even      p1 0.62 |  (  likely  perhaps  probably  possibly \xa0  presumably  obviously
+                     z    | ivent (prob (and  likely (filtered /player OTOS  QT
+    R:dclm-odd       p1 0.58 |  (  likely  probably  perhaps  possibly \xa0  presumably  possible
+                     z    | ivent (prob (and  likely (filtered  QT  vaguely  GW
+    R:dclm           p1 0.60 |  (  likely  perhaps  probably  possibly \xa0  presumably  possible
+                     z    | ivent (prob (and  likely (filtered  QT /player  GW
+    R:r24            p1 0.47 |  (  (“  “  likely \xa0  possibly  perhaps  multiple
+                     z    | ivent OTOS (and (filtered (prob csi  QT elve
+    J                p1 0.39 |  [… [… …\n …\n\n ,…\n\n  […]\n\n \xading …\n\n\n
+                     z    | \xading  [… [… \xads …. \xad \xadt ‘s
+  L18 god +
+    R:dclm-even      p1 0.94 |  divine  Divine  scripture 祭祀 信徒  deity 神圣  mystical
+                     z    | 信徒 祭祀 祂 神圣 耶稣  deity 道教 圣经
+    R:dclm-odd       p1 0.91 |  divine 祭祀 信徒  scripture  Divine  deity 神圣  mystical
+                     z    | 信徒 祭祀 神圣 祂 耶稣  deity 道教 佛教
+    R:dclm           p1 0.93 |  divine 祭祀  Divine  scripture 信徒  deity 神圣  mystical
+                     z    | 信徒 祭祀 神圣 祂 耶稣  deity 道教 圣经
+    R:r24            p1 0.97 |  divine  Divine  scripture 信徒  deity 圣经  mystical  theological
+                     z    | 信徒 祂 神圣 耶稣  Divine  deity 祭祀 佛教
+    J                p1 0.26 |  theolog  divine  theological  scripture 圣经  theology 神圣 基督教
+                     z    | 神圣 耶稣 基督徒 基督教 信徒  theolog 祭祀 圣经
+
+=== L20 (12288 neurons)
+  R:dclm-even      top-1 median 0.296  >0.1 0.81  >0.5 0.32  | sigma1 energy 0.21, write share on u1 0.10
+  R:dclm-odd       top-1 median 0.297  >0.1 0.81  >0.5 0.32  | sigma1 energy 0.21, write share on u1 0.11
+  R:dclm           top-1 median 0.297  >0.1 0.81  >0.5 0.32  | sigma1 energy 0.21, write share on u1 0.11
+  R:r24            top-1 median 0.301  >0.1 0.82  >0.5 0.32  | sigma1 energy 0.20, write share on u1 0.09
+  J                top-1 median 0.341  >0.1 0.81  >0.5 0.35  | sigma1 energy 0.41, write share on u1 0.25
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-even vs R:dclm: top-1 agree 0.97, top-10 overlap 0.98
+  R:dclm-even vs R:r24: top-1 agree 0.72, top-10 overlap 0.79
+  R:dclm-even vs J: top-1 agree 0.20, top-10 overlap 0.28
+  R:dclm-odd vs R:dclm: top-1 agree 0.97, top-10 overlap 0.98
+  R:dclm-odd vs R:r24: top-1 agree 0.71, top-10 overlap 0.78
+  R:dclm-odd vs J: top-1 agree 0.20, top-10 overlap 0.28
+  R:dclm vs R:r24: top-1 agree 0.72, top-10 overlap 0.79
+  R:dclm vs J: top-1 agree 0.20, top-10 overlap 0.28
+  R:r24 vs J: top-1 agree 0.20, top-10 overlap 0.28
+  L20 n4104 +
+    R:dclm-even      p1 0.17 |  dissatisfaction  anonymity  healing  psychological  Healing  anonymously  psychologically 募集
+                     z    | _STATS 募集  dissatisfaction  Obamacare nutrition  Healing ни 激励
+    R:dclm-odd       p1 0.18 |  dissatisfaction  anonymity  healing  psychological  psychologically  Healing  anonymously 募集
+                     z    | _STATS 募集  dissatisfaction  Obamacare nutrition  Healing 激励 ни
+    R:dclm           p1 0.18 |  dissatisfaction  anonymity  healing  psychological  Healing  psychologically  anonymously 募集
+                     z    | _STATS 募集  dissatisfaction  Obamacare nutrition  Healing ни 激励
+    R:r24            p1 0.11 |  healing  anonymity  dissatisfaction  Healing  psychological  anonymously  psychologically 疗程
+                     z    | nutrition 疗程  Healing 募集 rief .Meta 激励 一年
+    J                p1 0.08 |  dissatisfaction 养老金  patriotism  criticizing 意识形态  criticize  socioeconomic \\u
+                     z    | 养老金 .keras 意识形态 _VALIDATE 养老  Obamacare 人权 内分泌
+  L20 n4104 -
+    R:dclm-even      p1 0.34 |  spill  overflow  spills  vertical 转弯 防止 撞  vertically
+                     z    | 转弯 ollision 撞  spills overflow 溅  overflow  spill
+    R:dclm-odd       p1 0.34 |  overflow  spill  spills  vertical 转弯 防止 撞  vertically
+                     z    | 转弯 ollision 撞  spills overflow 溅  overflow  spill
+    R:dclm           p1 0.34 |  overflow  spill  spills  vertical 转弯 防止 撞  vertically
+                     z    | 转弯 ollision 撞  spills overflow 溅  overflow  spill
+    R:r24            p1 0.64 |  spill  overflow  spills 转弯 撞  sideways 溢  vertical
+                     z    | 转弯  spills 溅  spill overflow 撞  overflow ollision
+    J                p1 0.64 |  spill  spills  overflow  collision  crash  tilt overflow  crashing
+                     z    | overflow  spills Overflow  spill 跄  overflow _collision 车身
+  L20 n8725 +
+    R:dclm-even      p1 0.23 |  (~ 不认识  ReadOnly 平等 =com  wich  EXP 虬
+                     z    |  ReadOnly =com (core 虬 大佬 ansson  PRIV 开源
+    R:dclm-odd       p1 0.20 |  (~ 不认识  ReadOnly 平等 =com  wich  EXP (core
+                     z    |  ReadOnly =com (core 虬 大佬  PRIV ansson 呼叫
+    R:dclm           p1 0.22 |  (~ 不认识  ReadOnly 平等 =com  wich  EXP (core
+                     z    |  ReadOnly =com (core 虬 大佬 ansson  PRIV 开源
+    R:r24            p1 0.27 |  (~ 平等 =com 不认识  ReadOnly  Editorial  EXP 小组
+                     z    |  ReadOnly =com (core 虬 平等 开源 ols ansson
+    J                p1 0.47 |  …\n\n  … …\n  ...\n …\n\n […  _\n  _
+                     z    |  ReadOnly 刊  wich Fortunately _EDITOR =com ansson  EDIT
+  L20 n8725 -
+    R:dclm-even      p1 0.19 | 十四条  nine  seven 管理中心  contaminated  eight 罚 Rectangle
+                     z    | 十四条 Rectangle _rectangle .chain rectangle _credit rabbit _SEQ
+    R:dclm-odd       p1 0.17 | 十四条  nine  seven  contaminated 管理中心  eight rectangle Rectangle
+                     z    | 十四条 Rectangle _rectangle .chain rectangle _credit rabbit _SEQ
+    R:dclm           p1 0.18 | 十四条  nine  seven  contaminated 管理中心  eight rectangle Rectangle
+                     z    | 十四条 Rectangle _rectangle .chain rectangle _credit rabbit _SEQ
+    R:r24            p1 0.19 | 十四条 罚  nine 管理中心  seven Rectangle  contaminated .chain
+                     z    | 十四条 Rectangle .chain 工序 rabbit 罚 _SEQ _rectangle
+    J                p1 0.41 | .</ ?</ ).</ ,</ ;</ 。</ )</ .*,
+                     z    | <(), .rectangle ?,?, <void rzy .movie 十四条 :disable
+  L20 n11553 +
+    R:dclm-even      p1 0.81 | 同样  similarly 同样的 相同的 同樣 同样是 也同样 相同
+                     z    | 同樣 同样 同样的 相同的 同样是 也同样 相同 一样
+    R:dclm-odd       p1 0.84 | 同样  similarly 同样的 相同的 同樣 同样是 也同样 相同
+                     z    | 同样 同樣 同样的 相同的 同样是 也同样 相同 一样
+    R:dclm           p1 0.83 | 同样  similarly 同样的 相同的 同樣 同样是 也同样 相同
+                     z    | 同样 同樣 同样的 相同的 同样是 也同样 相同 一样
+    R:r24            p1 0.68 | 同样  similarly 同样的 相同的 同樣 同样是 也同样 相同
+                     z    | 同样 同樣 同样的 相同的 同样是 也同样 一样 相同
+    J                p1 0.68 | 同样  similarly 同样的 也同样 相同的 同樣 相似  similar
+                     z    | 同样 也同样 同樣 同样的 相同的 同样是 相同 相似
+  L20 n11553 -
+    R:dclm-even      p1 0.07 |  stuff  kid  overall  full  replacement  spl  complete  Replacement
+                     z    | 坳  Wiley .getParam 杞 Snippet FRAME geben ovies
+    R:dclm-odd       p1 0.07 |  stuff  overall  kid  full  replacement  spl  complete  smells
+                     z    | 坳  Wiley .getParam 杞 geben Snippet FRAME <title
+    R:dclm           p1 0.07 |  stuff  overall  kid  full  replacement  spl  complete  Replacement
+                     z    | 坳  Wiley .getParam 杞 geben Snippet FRAME <title
+    R:r24            p1 0.05 |  overall  replacement  full  stuff  Replacement  complete —at —if
+                     z    |  Wiley FRAME 坳 关于我们 全过程 杞  FS .getParam
+    J                p1 0.22 | **\n "— "\n —at —he —if ”— —you
+                     z    | élé —at 关于我们 -columns stä —he itia —you
+  L21 mother -
+    R:dclm-even      p1 0.68 | 妇女 丈夫  women 女性 妇  husbands 女人 家务
+                     z    | 妇 丈夫 妇女 家务 生育 婦 女人  husbands
+    R:dclm-odd       p1 0.64 | 妇女 丈夫  women 女性  husbands 妇  wives 女人
+                     z    | 妇 丈夫 妇女 家务 生育 婦 女人  husbands
+    R:dclm           p1 0.66 | 妇女 丈夫  women 女性 妇  husbands 女人  wives
+                     z    | 妇 丈夫 妇女 家务 生育 婦 女人  husbands
+    R:r24            p1 0.78 | 妇女  women 女性 丈夫 妇 女人  husbands 家务
+                     z    | 妇 丈夫 妇女 家务 生育 女人 婦 女性
+    J                p1 0.54 |  women 妇女  wives 丈夫  husbands 女性 妇  Women
+                     z    | 妇 丈夫 妇女 婦 夫妻 女人 娘家 妻子
+
+=== L23 (12288 neurons)
+  R:dclm-even      top-1 median 0.309  >0.1 0.82  >0.5 0.35  | sigma1 energy 0.07, write share on u1 0.02
+  R:dclm-odd       top-1 median 0.309  >0.1 0.82  >0.5 0.35  | sigma1 energy 0.07, write share on u1 0.02
+  R:dclm           top-1 median 0.308  >0.1 0.82  >0.5 0.35  | sigma1 energy 0.07, write share on u1 0.02
+  R:r24            top-1 median 0.311  >0.1 0.82  >0.5 0.35  | sigma1 energy 0.06, write share on u1 0.01
+  J                top-1 median 0.353  >0.1 0.87  >0.5 0.36  | sigma1 energy 0.15, write share on u1 0.04
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.96, top-10 overlap 0.97
+  R:dclm-even vs R:dclm: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-even vs R:r24: top-1 agree 0.80, top-10 overlap 0.85
+  R:dclm-even vs J: top-1 agree 0.35, top-10 overlap 0.44
+  R:dclm-odd vs R:dclm: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-odd vs R:r24: top-1 agree 0.79, top-10 overlap 0.84
+  R:dclm-odd vs J: top-1 agree 0.35, top-10 overlap 0.44
+  R:dclm vs R:r24: top-1 agree 0.79, top-10 overlap 0.85
+  R:dclm vs J: top-1 agree 0.35, top-10 overlap 0.44
+  R:r24 vs J: top-1 agree 0.34, top-10 overlap 0.44
+  L23 n9861 +
+    R:dclm-even      p1 0.11 |  \n\n  \n 散  suppose inals 團 -dem ankan
+                     z    | 團 ('; -dem  suppose .GetKey ankan inals 散
+    R:dclm-odd       p1 0.15 |  \n\n  \n 散  suppose inals 團 -dem ankan
+                     z    | 團 ('; -dem  suppose ankan .GetKey inals 散
+    R:dclm           p1 0.13 |  \n\n  \n 散  suppose inals 團 -dem ankan
+                     z    | 團 ('; -dem  suppose ankan .GetKey inals 散
+    R:r24            p1 0.05 |  \n\n 散  suppose inals  \n 團 cka ankan
+                     z    | ('; 團  suppose .GetKey _sup inals cka -dem
+    J                p1 0.65 |  \n\n  \n  \n\n\n \xa0\n  \n\n\n\n  \n\n\n\n\n  \n \n )(\n
+                     z    |  \n\n  \n ('; ('+ ((\n ),' inals allah
+  L23 n9861 -
+    R:dclm-even      p1 0.13 |  \xad automatic 施  __________________ \u3000\u3000 erto 正面 …”
+                     z    | erto ust �  \xad \u3000\u3000 皎 施 ılı
+    R:dclm-odd       p1 0.14 |  \xad automatic  __________________ 施 \u3000\u3000 erto …” 正面
+                     z    | erto ust �  \xad \u3000\u3000 施 ılı 皎
+    R:dclm           p1 0.14 |  \xad automatic 施  __________________ \u3000\u3000 erto …” 正面
+                     z    | erto ust �  \xad \u3000\u3000 施 皎 ılı
+    R:r24            p1 0.15 | automatic 施 正面 erto  \xad  __________________ ust 皎
+                     z    | erto ust automatic 皎 施 � 正面 ılı
+    J                p1 0.50 |  __________________  ______  __________________________________ ________ ________________________________ ＿ \u3000\u3000 ____________
+                     z    |  __________________ ________________________________ ................................................................ ât  __________________________________ -------------------------------------------------------------------------------- ________________________________________________________________ \u3000\u3000
+  L23 n2407 +
+    R:dclm-even      p1 0.74 |  throughout  Throughout Throughout 在整个 全程 期间 贯穿 during
+                     z    |  Throughout Throughout  throughout 在整个 全程 期间  durante 期間
+    R:dclm-odd       p1 0.74 |  throughout  Throughout Throughout 在整个 全程 期间 贯穿 during
+                     z    |  Throughout Throughout  throughout 在整个 全程 期间  durante 期間
+    R:dclm           p1 0.74 |  throughout  Throughout Throughout 在整个 全程 期间 贯穿 during
+                     z    |  Throughout Throughout  throughout 在整个 全程 期间  durante 期間
+    R:r24            p1 0.74 |  throughout  Throughout Throughout 在整个 全程 期间 during 贯穿
+                     z    |  Throughout Throughout 在整个  throughout 全程 期间  durante 期間
+    J                p1 0.78 |  throughout  Throughout Throughout 在整个 全程 期间 贯穿  durante
+                     z    |  Throughout  throughout Throughout 在整个 全程 贯穿  durante 期間
+  L23 n2407 -
+    R:dclm-even      p1 0.51 | 继续  continuing  continued  continue  further 繼續  continuation  continues
+                     z    |  continuing 继续 繼續  weiter  Continuing  continued Contin \tcontinue
+    R:dclm-odd       p1 0.49 | 继续  continuing  continued  continue  further 繼續  continuation  continues
+                     z    |  continuing 继续 繼續  weiter  Continuing  continued Contin \tcontinue
+    R:dclm           p1 0.50 | 继续  continuing  continued  continue  further 繼續  continuation  continues
+                     z    |  continuing 继续 繼續  weiter  Continuing  continued Contin \tcontinue
+    R:r24            p1 0.49 |  continuing 继续  continued  further  continue 繼續  Continuing  continuation
+                     z    |  continuing 继续 繼續  weiter  Continuing  continued \tcontinue Contin
+    J                p1 0.75 | 继续  continuing  continued  afterwards 繼續  continue  Continuing  continuation
+                     z    |  continuing 继续 繼續  continued  Continuing  continue \tcontinue continue
+  L23 n5081 +
+    R:dclm-even      p1 0.98 | 不足以  insufficient 不够  inadequate 还不够 不足  inade 不行
+                     z    | 不足以  insufficient 不够  inadequate 还不够  inade 不足 并不能
+    R:dclm-odd       p1 0.99 | 不足以  insufficient 不够  inadequate 还不够 不足  inade 不行
+                     z    | 不足以  insufficient 不够  inadequate 还不够  inade 不足 并不能
+    R:dclm           p1 0.98 | 不足以  insufficient 不够  inadequate 还不够 不足  inade 不行
+                     z    | 不足以  insufficient 不够  inadequate 还不够  inade 不足 并不能
+    R:r24            p1 0.99 | 不足以  insufficient 不够  inadequate 还不够 不足  inade 不行
+                     z    | 不足以  insufficient 不够  inadequate 还不够  inade 不足 并不能
+    J                p1 0.98 | 不足以  insufficient 不够  inadequate 不足 还不够  inade 并不能
+                     z    | 不足以  insufficient 不够  inadequate 还不够 不足  inade 并不能
+  L23 n5081 -
+    R:dclm-even      p1 0.07 |  (_, 反对 .maps -context Metric atre BT 强壮
+                     z    | .maps Metric BT BF -context AMESPACE  (_, ampion
+    R:dclm-odd       p1 0.09 |  (_, 反对 .maps -context Metric BT atre 强壮
+                     z    | .maps Metric BT BF  (_, -context AMESPACE _owned
+    R:dclm           p1 0.08 |  (_, 反对 .maps -context Metric BT atre 强壮
+                     z    | .maps Metric BT BF -context  (_, AMESPACE _owned
+    R:r24            p1 0.08 | '.\n\n .'\n\n 反对  (_, .maps ".\n\n atre BT
+                     z    | .maps BT BF Metric AMESPACE -context ampion 反对
+    J                p1 0.32 | '.\n\n ’.\n\n  (_, `.\n\n >.\n\n ].\n\n .'\n\n ._\n\n
+                     z    |  (_, '.\n\n 发达 CMP ’.\n\n 打出 >.\n\n `.\n\n
+
+=== L26 (12288 neurons)
+  R:dclm-even      top-1 median 0.282  >0.1 0.82  >0.5 0.33  | sigma1 energy 0.03, write share on u1 0.01
+  R:dclm-odd       top-1 median 0.282  >0.1 0.82  >0.5 0.33  | sigma1 energy 0.03, write share on u1 0.01
+  R:dclm           top-1 median 0.283  >0.1 0.82  >0.5 0.33  | sigma1 energy 0.03, write share on u1 0.01
+  R:r24            top-1 median 0.281  >0.1 0.81  >0.5 0.33  | sigma1 energy 0.03, write share on u1 0.00
+  J                top-1 median 0.293  >0.1 0.83  >0.5 0.33  | sigma1 energy 0.10, write share on u1 0.02
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.97, top-10 overlap 0.98
+  R:dclm-even vs R:dclm: top-1 agree 0.98, top-10 overlap 0.99
+  R:dclm-even vs R:r24: top-1 agree 0.86, top-10 overlap 0.89
+  R:dclm-even vs J: top-1 agree 0.47, top-10 overlap 0.57
+  R:dclm-odd vs R:dclm: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-odd vs R:r24: top-1 agree 0.85, top-10 overlap 0.89
+  R:dclm-odd vs J: top-1 agree 0.47, top-10 overlap 0.57
+  R:dclm vs R:r24: top-1 agree 0.86, top-10 overlap 0.89
+  R:dclm vs J: top-1 agree 0.47, top-10 overlap 0.57
+  R:r24 vs J: top-1 agree 0.46, top-10 overlap 0.56
+  L26 n1618 +
+    R:dclm-even      p1 0.40 |  appearance  disposition  outlook  statement  announcement  workflow  investigation  attitude
+                     z    |  appearance  disposition  outlook  announcement  Nord  workflow  statement  attitude
+    R:dclm-odd       p1 0.40 |  appearance  disposition  statement  outlook  announcement  workflow  investigation  attitude
+                     z    |  appearance  disposition  outlook  announcement  Nord  statement  workflow  attitude
+    R:dclm           p1 0.40 |  appearance  disposition  statement  outlook  announcement  workflow  investigation  attitude
+                     z    |  appearance  disposition  outlook  announcement  Nord  statement  workflow  attitude
+    R:r24            p1 0.39 |  appearance  disposition  outlook  statement  investigation  workflow  announcement  characteristics
+                     z    |  appearance  disposition  outlook  workflow  announcement  conception  which  Nord
+    J                p1 0.52 |  appearance  announcement  attitude  statement  location  relationship  disposition  investigation
+                     z    |  appearance  attitude  announcement  exposition  statement  disposition  relationship  posture
+  L26 n1618 -
+    R:dclm-even      p1 0.25 | 的方式 的结果 的方式来 的能力 的行为 的过程 的画面 的情况
+                     z    | 的方式来 的方式 的能力 的情况 的过程 的过程中 的行为 的结果
+    R:dclm-odd       p1 0.24 | 的方式 的结果 的方式来 的能力 的行为 的过程 的画面 的情况
+                     z    | 的方式来 的方式 的能力 的情况 的过程中 的过程 的行为 的结果
+    R:dclm           p1 0.25 | 的方式 的结果 的方式来 的能力 的行为 的过程 的画面 的情况
+                     z    | 的方式来 的方式 的能力 的情况 的过程中 的过程 的行为 的结果
+    R:r24            p1 0.23 | 的方式 的方式来 的结果 的行为 的能力 的过程 的做法 的画面
+                     z    | 的方式来 的方式 的情况 的能力 的行为 的结果 的过程 的过程中
+    J                p1 0.46 | 的方式 的方式来 的结果 的过程 的行为 的房子 的能力 的事情
+                     z    | 的方式来 的方式 的事情 的过程中 的行为 的能力 的过程 的事
+  L26 n11957 +
+    R:dclm-even      p1 0.23 | 战斗 战役 projects 任务  projects  battles  tasks  battle
+                     z    | 战役 projects 战斗  battles  adventures  projects  fights  wars
+    R:dclm-odd       p1 0.20 | 战斗 projects 战役  projects 任务  battles  tasks  battle
+                     z    | 战役 projects 战斗  battles  adventures  projects  fights 任务
+    R:dclm           p1 0.22 | 战斗 projects 战役 任务  projects  battles  tasks  battle
+                     z    | 战役 projects 战斗  battles  adventures  projects  fights  wars
+    R:r24            p1 0.33 | 任务 战斗 战役 projects  projects  tasks  battles tasks
+                     z    | 战役 projects 战斗 任务  adventures  battles  projects tasks
+    J                p1 0.54 | 战斗 战争 战役 任务 projects battle  wars  battle
+                     z    | 战斗 战争 战役  guerra projects battle  wars campaign
+  L26 n11957 -
+    R:dclm-even      p1 0.29 | 确诊 宣布 宣告 仪表 确认 SetUp  SETUP 当选
+                     z    | 宣布 确诊 仪表 _INIT 宣告 SetUp  SetUp 确认
+    R:dclm-odd       p1 0.30 | 确诊 宣布 仪表 宣告 确认 当选  SETUP SetUp
+                     z    | 宣布 确诊 仪表 _INIT 宣告 SetUp  SetUp 确认
+    R:dclm           p1 0.30 | 确诊 宣布 宣告 仪表 确认 SetUp  SETUP 当选
+                     z    | 宣布 确诊 仪表 _INIT 宣告 SetUp  SetUp 确认
+    R:r24            p1 0.23 | 确诊 宣布 宣告 仪表 确认 SetUp  announcements  SETUP
+                     z    | 宣布 确诊 仪表 _INIT 宣告 SetUp 确认  SetUp
+    J                p1 0.53 | 确诊 宣布 当选 宣告  announcements  announcement 仪表  diagnosis
+                     z    | 确诊 宣布 _INIT 当选 宣告  announcements  announcement SetUp
+  L26 n1208 +
+    R:dclm-even      p1 0.30 |  GIVEN 开户  forecast  respect document stream izona ountain
+                     z    |  GIVEN 开户 izona  =' ountain .document document MM
+    R:dclm-odd       p1 0.28 |  GIVEN 开户  forecast  respect document stream izona ountain
+                     z    |  GIVEN 开户 izona  =' ountain document .document MM
+    R:dclm           p1 0.29 |  GIVEN 开户  forecast  respect document stream izona ountain
+                     z    |  GIVEN 开户 izona  =' ountain .document document MM
+    R:r24            p1 0.18 |  GIVEN 开户  forecast document  respect  forecasting izona stream
+                     z    |  GIVEN 开户 izona .document  =' MM document ountain
+    J                p1 0.10 |  GIVEN stream  final final  exploded  respect  recovered  given
+                     z    | stream  GIVEN eria  given final ountain _STREAM inals
+  L26 n1208 -
+    R:dclm-even      p1 0.11 | 寒假  Kash <{  Partial <$  Cly  Yue <void
+                     z    | д  Kash 近两年 <void 会使 _some  Yue 寒假
+    R:dclm-odd       p1 0.10 | 寒假  Kash <{ <$  Partial  Cly  Yue <void
+                     z    |  Kash д <void 近两年 _some 会使  Yue 寒假
+    R:dclm           p1 0.11 | 寒假  Kash <{  Partial <$  Cly  Yue <void
+                     z    | д  Kash <void 近两年 _some 会使  Yue 寒假
+    R:r24            p1 0.08 | 寒假  Kash <{  Partial  Cly  Yue 近两年 地说
+                     z    | д  Kash 近两年 <void  Yue 地说 会使 _corner
+    J                p1 0.06 | #+ <ul 寒假 <$ <_ }): <{ #\\
+                     z    | 会使 _some 片刻  Cly 寒假 近两年 <void /env
+  L27 candidate +
+    R:dclm-even      p1 0.57 | 候选人 候选  candidates  candidate  Candidate  Candidates candidate candidates
+                     z    | 候选人 候选  candidates  candidate candidate  Candidate  Candidates candidates
+    R:dclm-odd       p1 0.57 | 候选人 候选  candidates  candidate  Candidate  Candidates candidate candidates
+                     z    | 候选人 候选  candidates  candidate candidate  Candidate  Candidates candidates
+    R:dclm           p1 0.57 | 候选人 候选  candidates  candidate  Candidate  Candidates candidate candidates
+                     z    | 候选人 候选  candidates  candidate candidate  Candidate  Candidates candidates
+    R:r24            p1 0.55 | 候选人 候选  candidates  candidate  Candidate  Candidates candidate candidates
+                     z    | 候选人 候选  candidates  candidate candidate  Candidates  Candidate candidates
+    J                p1 0.55 | 候选人 候选  candidates  candidate  Candidate  Candidates candidate  candidacy
+                     z    | 候选人 候选  candidate  candidates candidate  Candidate  Candidates  candidacy
+
+=== L29 (12288 neurons)
+  R:dclm-even      top-1 median 0.341  >0.1 0.83  >0.5 0.39  | sigma1 energy 0.02, write share on u1 0.00
+  R:dclm-odd       top-1 median 0.341  >0.1 0.83  >0.5 0.39  | sigma1 energy 0.03, write share on u1 0.00
+  R:dclm           top-1 median 0.342  >0.1 0.83  >0.5 0.39  | sigma1 energy 0.02, write share on u1 0.00
+  R:r24            top-1 median 0.341  >0.1 0.83  >0.5 0.39  | sigma1 energy 0.02, write share on u1 0.00
+  J                top-1 median 0.333  >0.1 0.83  >0.5 0.39  | sigma1 energy 0.08, write share on u1 0.01
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-even vs R:dclm: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-even vs R:r24: top-1 agree 0.91, top-10 overlap 0.93
+  R:dclm-even vs J: top-1 agree 0.64, top-10 overlap 0.72
+  R:dclm-odd vs R:dclm: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-odd vs R:r24: top-1 agree 0.90, top-10 overlap 0.93
+  R:dclm-odd vs J: top-1 agree 0.64, top-10 overlap 0.72
+  R:dclm vs R:r24: top-1 agree 0.91, top-10 overlap 0.93
+  R:dclm vs J: top-1 agree 0.64, top-10 overlap 0.72
+  R:r24 vs J: top-1 agree 0.64, top-10 overlap 0.72
+  L29 n11206 +
+    R:dclm-even      p1 0.57 |  BR 集团 八 集團 _BR BR  Group (Group
+                     z    |  BR 集团 八  G _BR 曹 集團 七
+    R:dclm-odd       p1 0.54 |  BR 集团 八 集團 _BR BR  Group (Group
+                     z    |  BR 集团 八 _BR  G 曹 集團 七
+    R:dclm           p1 0.55 |  BR 集团 八 集團 _BR BR  Group (Group
+                     z    |  BR 集团 八 _BR  G 曹 集團 七
+    R:r24            p1 0.51 | 集团  BR 八 集團 _BR  Group BR (Group
+                     z    |  BR 集团 八 曹 集團  G _BR 七
+    J                p1 0.52 | 集团  BR 八 BR _BR 集團 七  Group
+                     z    |  BR 集团 八 _BR 集團 BR 七 曹
+  L29 n11206 -
+    R:dclm-even      p1 0.08 | 賦 -stop ||\n  Runner  cong  Programmer  Pul  Pane
+                     z    | _memcpy  Runner  sovereign -stop 賦 � ||\n  cong
+    R:dclm-odd       p1 0.08 | 賦 -stop ||\n  Runner  cong  Programmer  Pul  Pane
+                     z    | _memcpy -stop  Runner  sovereign 賦 � ||\n  cong
+    R:dclm           p1 0.08 | 賦 -stop ||\n  Runner  cong  Programmer  Pul  Pane
+                     z    | _memcpy -stop  Runner  sovereign 賦 � ||\n  cong
+    R:r24            p1 0.07 | 賦 -stop  Runner  Programmer  cong  sovereign  Pul 赋予
+                     z    |  sovereign �  Runner -stop _memcpy 賦  Programmer  cong
+    J                p1 0.16 | ||\n  Runner 賦  sheets  cong  Wah  Programmer 赋予
+                     z    |  Runner ||\n _memcpy  Wah 賦  cong  Programmer  Pane
+  L29 n5409 +
+    R:dclm-even      p1 0.13 |  viability  flats Accuracy  Logic  Dir Dir  Accuracy  Flat
+                     z    |  viability Accuracy Dir  Logic  Accuracy  flats _dir  Dir
+    R:dclm-odd       p1 0.13 |  viability  flats Accuracy  Logic  Dir  Accuracy adesh Dir
+                     z    |  viability Accuracy Dir  Logic  Accuracy  flats _dir  anders
+    R:dclm           p1 0.13 |  viability  flats Accuracy  Logic  Dir  Accuracy Dir  Flat
+                     z    |  viability Accuracy Dir  Logic  Accuracy  flats _dir  anders
+    R:r24            p1 0.13 |  viability  flats Accuracy  Logic Dir  Accuracy  Dir 渐
+                     z    |  viability Accuracy Dir  Logic _dir  Accuracy  flats  bert
+    J                p1 0.07 |  flats 宫  Logic  viability 蛇 Accuracy  *\\ Vi
+                     z    |  viability  Logic Accuracy 宫  flats Vi  Cust 渐
+  L29 n5409 -
+    R:dclm-even      p1 0.43 |  sun  Sun Sun sun  SPF SP  SUN  sunscreen
+                     z    | Sun  Sun  sun sun  SPF SP  SUN  sunscreen
+    R:dclm-odd       p1 0.43 |  sun  Sun Sun sun  SPF SP  SUN  sunscreen
+                     z    | Sun  Sun  sun sun  SPF SP  SUN  sunscreen
+    R:dclm           p1 0.44 |  sun  Sun Sun sun  SPF SP  SUN  sunscreen
+                     z    | Sun  Sun  sun sun  SPF SP  SUN  sunscreen
+    R:r24            p1 0.42 |  sun  Sun Sun  SPF SP sun  SUN  sunscreen
+                     z    | Sun  Sun  sun  SPF sun SP  SUN  sunscreen
+    J                p1 0.39 | SP  SPF  Sun Sun  sun sun  SUN  sunscreen
+                     z    | Sun  Sun SP  SPF  sun sun  sunscreen  SUN
+  L29 n7735 +
+    R:dclm-even      p1 0.46 |  Cindy gent  cy /providers  Diana <g  Cy  Yus
+                     z    |  Cindy Jennifer  Diana  john gent /providers <g },\n\n
+    R:dclm-odd       p1 0.47 |  Cindy gent  cy /providers <g  Diana  Cy  Yus
+                     z    |  Cindy Jennifer  Diana  john gent /providers <g },\n\n
+    R:dclm           p1 0.46 |  Cindy gent  cy /providers  Diana <g  Cy  Yus
+                     z    |  Cindy Jennifer  Diana  john gent /providers <g },\n\n
+    R:r24            p1 0.47 |  Cindy gent  cy  Diana  Cy /providers <g  Yus
+                     z    |  Cindy  Diana Jennifer gent  john /providers  Yus <g
+    J                p1 0.77 |  Cindy  Diana gent 冈 /providers  cy  Cy gp
+                     z    |  Cindy  Diana Jennifer /providers 冈 gent 龚 Providers
+  L29 n7735 -
+    R:dclm-even      p1 0.35 | 升 扭  Israel  Caught  Israeli MLE  Damascus 以色列
+                     z    |  Israel  Israeli  Caught 以色列  Damascus 扭  coef 升
+    R:dclm-odd       p1 0.32 | 升 扭  Israel  Caught  Israeli MLE  Damascus 以色列
+                     z    |  Israel  Israeli  Caught 以色列  Damascus 扭  coef 升
+    R:dclm           p1 0.33 | 升 扭  Israel  Caught  Israeli MLE  Damascus 以色列
+                     z    |  Israel  Israeli  Caught 以色列  Damascus 扭  coef 升
+    R:r24            p1 0.36 | 升 扭  Israel  Caught  Damascus  Israeli MLE  coef
+                     z    |  Israel  Israeli  Caught  Damascus 扭  coef 以色列 升
+    J                p1 0.16 |  Damascus  Israel  Israeli boro 升  coef  Caught 以色列
+                     z    |  Israel  Israeli  Damascus  coef  Caught 以色列  kings Israeli
+
+=== L32 (12288 neurons)
+  R:dclm-even      top-1 median 0.359  >0.1 0.87  >0.5 0.40  | sigma1 energy 0.02, write share on u1 0.00
+  R:dclm-odd       top-1 median 0.359  >0.1 0.87  >0.5 0.40  | sigma1 energy 0.02, write share on u1 0.00
+  R:dclm           top-1 median 0.359  >0.1 0.87  >0.5 0.40  | sigma1 energy 0.02, write share on u1 0.00
+  R:r24            top-1 median 0.360  >0.1 0.87  >0.5 0.40  | sigma1 energy 0.02, write share on u1 0.00
+  J                top-1 median 0.346  >0.1 0.86  >0.5 0.39  | sigma1 energy 0.06, write share on u1 0.01
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-even vs R:dclm: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-even vs R:r24: top-1 agree 0.95, top-10 overlap 0.96
+  R:dclm-even vs J: top-1 agree 0.73, top-10 overlap 0.79
+  R:dclm-odd vs R:dclm: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-odd vs R:r24: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-odd vs J: top-1 agree 0.73, top-10 overlap 0.79
+  R:dclm vs R:r24: top-1 agree 0.95, top-10 overlap 0.95
+  R:dclm vs J: top-1 agree 0.73, top-10 overlap 0.79
+  R:r24 vs J: top-1 agree 0.73, top-10 overlap 0.79
+  L32 n9171 +
+    R:dclm-even      p1 1.00 |  work work  Work Work 工作 -work _work  WORK
+                     z    |  work work  Work Work _work 工作 -work  trabajo
+    R:dclm-odd       p1 1.00 |  work work  Work Work 工作 -work _work  WORK
+                     z    |  work work  Work Work _work 工作 -work  trabajo
+    R:dclm           p1 1.00 |  work work  Work Work 工作 -work _work  WORK
+                     z    |  work work  Work Work _work 工作 -work  trabajo
+    R:r24            p1 1.00 |  work work  Work Work 工作 -work _work  WORK
+                     z    |  work work  Work Work _work 工作 -work  trabajo
+    J                p1 1.00 |  work work  Work Work 工作 _work -work  WORK
+                     z    |  work work  Work Work _work -work 工作  trabajo
+  L32 n9171 -
+    R:dclm-even      p1 0.07 | 重伤 dorf 一身 idas emies eltas ть ��
+                     z    | 重伤 dorf 囹 ть 褲  CURLOPT 一身 emies
+    R:dclm-odd       p1 0.07 | 重伤 dorf 一身 idas emies eltas ть  Rat
+                     z    | 重伤 dorf 囹 ть 褲  CURLOPT emies 一身
+    R:dclm           p1 0.07 | 重伤 dorf 一身 idas emies eltas ть  Rat
+                     z    | 重伤 dorf 囹 ть 褲  CURLOPT 一身 emies
+    R:r24            p1 0.07 | 重伤 dorf 一身 idas  Rat eltas �� emies
+                     z    | 重伤 囹 dorf  CURLOPT ть 褲 一身 emies
+    J                p1 0.04 | 重伤 emies eltas  Rat  transformations leet dorf idas
+                     z    | 重伤 褲  transformations emies eltas  CURLOPT ть RAINT
+  L32 n1649 +
+    R:dclm-even      p1 0.20 |  films  boxes  passages izations  scenes  stories  grids  songs
+                     z    |  songs  films izations  albums  videos  stories  novels  passages
+    R:dclm-odd       p1 0.20 |  films  boxes  passages izations  scenes  stories  grids  songs
+                     z    |  songs  films izations  albums  videos  stories  novels  passages
+    R:dclm           p1 0.20 |  films  boxes  passages izations  scenes  stories  grids  songs
+                     z    |  songs  films izations  albums  videos  stories  novels  passages
+    R:r24            p1 0.16 |  films  passages  boxes  scenes izations  grids  songs  stories
+                     z    |  songs  films izations  albums  videos  stories  novels  passages
+    J                p1 0.50 |  films izations  boxes  passages  scenes  songs  stories  races
+                     z    |  films  songs  albums izations  videos  stories  passages  complexes
+  L32 n1649 -
+    R:dclm-even      p1 0.30 | 同仁 Users (users 用户提供  Authors 师生  Users Authors
+                     z    | Users (users 同仁  Users Students  economists Authors Residents
+    R:dclm-odd       p1 0.30 | 同仁 Users (users 用户提供  Authors 师生  Users Authors
+                     z    | Users (users 同仁  Users Students  economists Authors Residents
+    R:dclm           p1 0.30 | 同仁 Users (users 用户提供  Authors 师生  Users Authors
+                     z    | Users (users 同仁  Users Students  economists Authors Residents
+    R:r24            p1 0.32 | Users 同仁  Authors 用户提供  Users (users Authors 师生
+                     z    | Users (users 同仁  Users Students Authors  Authors  economists
+    J                p1 0.34 | 同仁 Users 用户提供 师生 (users  users 技术人员  Users
+                     z    | Users 同仁 (users _users Students  Users  users 师生
+  L32 n5796 +
+    R:dclm-even      p1 0.41 | {"  "+"  "."  " >("  {"  "-"  ["
+                     z    |  "";\n  "";  "";\n\n  " ="  $("#  "."  "",\n
+    R:dclm-odd       p1 0.43 | {"  "+"  "."  "  {" >("  "-"  ["
+                     z    |  "";\n  "";  "";\n\n  " ="  $("#  "."  "",\n
+    R:dclm           p1 0.42 | {"  "+"  "."  " >("  {"  "-"  ["
+                     z    |  "";\n  "";\n\n  "";  " ="  $("#  "."  "",\n
+    R:r24            p1 0.41 | {"  "+"  "."  " >("  {"  "-"  ["
+                     z    |  "";\n  "";  "";\n\n ="  "  $("#  "",\n  "."
+    J                p1 0.98 |  "  "."  "+" "s {" ："  "^ >("
+                     z    |  " ="  "";\n\n  "";\n  ""; "s ("  "."
+  L32 n5796 -
+    R:dclm-even      p1 0.55 |  '  ‘ ‘  (' ('  '-  '/ ='
+                     z    |  '  ‘ ‘ =' ('  ('  '/  '-
+    R:dclm-odd       p1 0.56 |  '  ‘ ‘  (' ('  '-  '/  '_
+                     z    |  '  ‘ ‘ =' ('  ('  '/  '-
+    R:dclm           p1 0.55 |  '  ‘ ‘  (' ('  '-  '/  '_
+                     z    |  '  ‘ ‘ =' ('  ('  '/  '-
+    R:r24            p1 0.53 |  ‘  ' ‘  (' ('  '-  '/ ='
+                     z    |  '  ‘ ‘ =' ('  ('  '/  '-
+    J                p1 1.00 |  ‘  ' ‘  (' ('  '-  '/  '..
+                     z    |  '  ‘ ‘ =' ('  ('  '/  '-
+
+=== L34 (12288 neurons)
+  R:dclm-even      top-1 median 0.465  >0.1 0.86  >0.5 0.48  | sigma1 energy 0.01, write share on u1 0.00
+  R:dclm-odd       top-1 median 0.465  >0.1 0.86  >0.5 0.48  | sigma1 energy 0.01, write share on u1 0.00
+  R:dclm           top-1 median 0.464  >0.1 0.86  >0.5 0.48  | sigma1 energy 0.01, write share on u1 0.00
+  R:r24            top-1 median 0.466  >0.1 0.86  >0.5 0.48  | sigma1 energy 0.01, write share on u1 0.00
+  J                top-1 median 0.455  >0.1 0.86  >0.5 0.48  | sigma1 energy 0.04, write share on u1 0.00
+  R:dclm-even vs R:dclm-odd: top-1 agree 1.00, top-10 overlap 1.00
+  R:dclm-even vs R:dclm: top-1 agree 1.00, top-10 overlap 1.00
+  R:dclm-even vs R:r24: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-even vs J: top-1 agree 0.88, top-10 overlap 0.90
+  R:dclm-odd vs R:dclm: top-1 agree 1.00, top-10 overlap 1.00
+  R:dclm-odd vs R:r24: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-odd vs J: top-1 agree 0.88, top-10 overlap 0.90
+  R:dclm vs R:r24: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm vs J: top-1 agree 0.88, top-10 overlap 0.90
+  R:r24 vs J: top-1 agree 0.87, top-10 overlap 0.90
+  L34 n7113 +
+    R:dclm-even      p1 0.05 |  slippery rias /root boxed (common 保障  Boxes 踪
+                     z    |  slippery (common 保障 变速箱 /root 节目中 nostic 负责人
+    R:dclm-odd       p1 0.05 |  slippery rias /root boxed (common 保障  Boxes 踪
+                     z    |  slippery (common 保障 变速箱 /root 节目中 nostic 负责人
+    R:dclm           p1 0.05 |  slippery rias /root boxed (common 保障  Boxes 踪
+                     z    |  slippery (common 保障 变速箱 /root 节目中 nostic 负责人
+    R:r24            p1 0.05 |  slippery rias (common /root boxed 保障  Boxes 掌
+                     z    | (common  slippery 保障 变速箱 /root 节目中 nostic 负责人
+    J                p1 0.06 | rias  slippery (common /root 保障 boxed  Boxes 他妈
+                     z    | (common 保障  slippery /root 变速箱 nostic rias 节目中
+  L34 n7113 -
+    R:dclm-even      p1 0.33 | _recursive papers  lowering  LOWER  papers  Fab  INFORMATION 鞍
+                     z    | _recursive  lowering  papers  LOWER  INFORMATION papers investment  Fab
+    R:dclm-odd       p1 0.33 | _recursive papers  lowering  LOWER  papers  Fab  INFORMATION 鞍
+                     z    | _recursive  lowering  papers  LOWER  INFORMATION papers investment  Fab
+    R:dclm           p1 0.33 | _recursive papers  lowering  LOWER  papers  Fab  INFORMATION 鞍
+                     z    | _recursive  lowering  papers  LOWER  INFORMATION papers investment  Fab
+    R:r24            p1 0.33 | _recursive papers  lowering  LOWER  papers  Fab 鞍  INFORMATION
+                     z    | _recursive  lowering  papers  LOWER papers  INFORMATION investment  Fab
+    J                p1 0.34 | _recursive  lowering papers  LOWER  papers  Fab 鞍  INFORMATION
+                     z    | _recursive  lowering  LOWER  papers  INFORMATION papers  Fab  deselect
+  L34 n5180 +
+    R:dclm-even      p1 0.81 | 本 本书 本文 本書 本案 本期 本次 本公司
+                     z    | 本 本书 本文 本書 本案 本次 本公司 本期
+    R:dclm-odd       p1 0.82 | 本 本书 本文 本書 本案 本期 本次 本公司
+                     z    | 本 本书 本文 本書 本案 本次 本公司 本期
+    R:dclm           p1 0.82 | 本 本书 本文 本書 本案 本期 本次 本公司
+                     z    | 本 本书 本文 本書 本案 本次 本公司 本期
+    R:r24            p1 0.81 | 本 本书 本文 本書 本案 本期 本次 本公司
+                     z    | 本 本书 本文 本書 本案 本次 本公司 本期
+    J                p1 0.79 | 本 本书 本文 本書 本案 本期 本次 本公司
+                     z    | 本 本书 本文 本書 本案 本次 本公司 本期
+  L34 n5180 -
+    R:dclm-even      p1 0.07 | � JI 质 ibu leaflet rim ettes  CEL
+                     z    | � JI leaflet 以外  freeway  in _In 洋洋
+    R:dclm-odd       p1 0.07 | � JI 质 ibu leaflet rim ettes  CEL
+                     z    | � JI leaflet 以外  in  freeway _In 洋洋
+    R:dclm           p1 0.07 | � JI 质 ibu leaflet rim ettes  CEL
+                     z    | � JI leaflet 以外  in  freeway _In 洋洋
+    R:r24            p1 0.07 | � JI 质 ibu leaflet rim ettes  CEL
+                     z    | � JI leaflet 以外  freeway  in _In 蚕
+    J                p1 0.08 | JI � ettes 质  CEL 洋洋 ibu leaflet
+                     z    | � JI  freeway leaflet 洋洋 以外 ettes _In
+  L34 n10008 +
+    R:dclm-even      p1 0.99 |  sleep sleep  Sleep  sleeping Sleep 睡眠  dorm 睡
+                     z    |  sleep sleep Sleep  Sleep  sleeping 睡眠 _sleep  dorm
+    R:dclm-odd       p1 0.99 |  sleep sleep  Sleep  sleeping Sleep 睡眠  dorm 睡
+                     z    |  sleep sleep Sleep  Sleep  sleeping 睡眠 _sleep  dorm
+    R:dclm           p1 0.99 |  sleep sleep  Sleep  sleeping Sleep 睡眠  dorm 睡
+                     z    |  sleep sleep Sleep  Sleep  sleeping 睡眠 _sleep  dorm
+    R:r24            p1 0.99 |  sleep sleep  Sleep  sleeping Sleep 睡眠  dorm 睡
+                     z    |  sleep sleep Sleep  Sleep  sleeping 睡眠 _sleep  dorm
+    J                p1 0.99 |  sleep sleep  Sleep  sleeping Sleep 睡眠  dorm 睡
+                     z    |  sleep sleep Sleep  Sleep  sleeping 睡眠 _sleep  dorm
+  L34 n10008 -
+    R:dclm-even      p1 0.45 | -s  �  сп  sch -S  gesch  SP 峪
+                     z    |  �  сп -s  gesch ن -S  sch  neutron
+    R:dclm-odd       p1 0.45 | -s  �  сп  sch -S  gesch  SP 峪
+                     z    |  �  сп -s  gesch ن -S  sch  neutron
+    R:dclm           p1 0.44 | -s  �  сп  sch -S  gesch  SP 峪
+                     z    |  �  сп -s  gesch ن -S  sch  neutron
+    R:r24            p1 0.45 | -s  �  сп  sch -S  gesch  SP 峪
+                     z    |  �  сп -s  gesch ن -S  sch  neutron
+    J                p1 0.52 | -s  сп  � 峪 -S -ST  gesch  SP
+                     z    |  сп  � -s  gesch ن  sch -S  neutron

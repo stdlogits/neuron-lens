@@ -1,0 +1,9 @@
+S-lens linearity, Qwen/Qwen3-8B: 96 tokens at position 16 of 4 DCLM documents; footprint on the MLP input at offset 0 and summed over positions 16-126; R² (one fitted scale) / median cosine of each predictor: J true (finite difference), J relp (transport maps), both at position 16 only in each document; K (s-qwen3-8b-L36-dclm); embed
+
+L 0  offset 0: J true 0.86/0.94, J relp 0.86/0.94, K 0.63/0.80, embed 0.51/0.73   summed: J true 0.56/0.83, J relp 0.56/0.83, K 0.50/0.78, embed 0.11/0.37
+L 1  offset 0: J true 0.30/0.58, J relp 0.33/0.61, K 0.20/0.48, embed 0.08/0.32   summed: J true 0.28/0.56, J relp 0.30/0.59, K 0.28/0.56, embed 0.04/0.22
+L 2  offset 0: J true 0.23/0.50, J relp 0.26/0.54, K 0.15/0.42, embed 0.06/0.28   summed: J true 0.09/0.36, J relp 0.12/0.40, K 0.11/0.38, embed 0.01/0.13
+L 5  offset 0: J true 0.12/0.35, J relp 0.15/0.40, K 0.09/0.31, embed 0.03/0.17   summed: J true 0.05/0.23, J relp 0.07/0.28, K 0.06/0.28, embed 0.00/0.07
+L10  offset 0: J true 0.09/0.29, J relp 0.15/0.39, K 0.09/0.32, embed 0.01/0.12   summed: J true 0.02/0.13, J relp 0.03/0.18, K 0.03/0.21, embed 0.00/0.05
+L15  offset 0: J true 0.07/0.26, J relp 0.17/0.42, K 0.10/0.38, embed 0.01/0.09   summed: J true 0.01/0.09, J relp 0.02/0.15, K 0.02/0.21, embed 0.00/0.04
+L25  offset 0: J true 0.07/0.27, J relp 0.15/0.40, K 0.04/0.30, embed 0.01/0.08   summed: J true 0.01/0.10, J relp 0.01/0.14, K 0.01/0.16, embed 0.00/0.03

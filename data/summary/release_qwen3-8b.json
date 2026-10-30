@@ -1,0 +1,88 @@
+{
+ "model": "Qwen/Qwen3-8B",
+ "dir": "qwen3-8b",
+ "layers": 36,
+ "d_model": 4096,
+ "neurons": 12288,
+ "heads": 32,
+ "lenses": {
+  "text": {
+   "R_docs": 1000,
+   "S_docs": 1000,
+   "R": "0.00-0.06",
+   "R_mid": "0.00-0.06",
+   "S_mid": "0.00-0.05",
+   "S_out": "0.01-0.05",
+   "corpus": "HuggingFaceFW/dclm_100BT-shuffled",
+   "revision": "2fa015e4044ec442a0734e89658cdcc538d10dd4",
+   "rows_sha": "ca09a4d8081c7a07",
+   "t_max": 128
+  }
+ },
+ "configs": [
+  [
+   "qwen3-8b-neurons-acts",
+   "qwen3-8b/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-drivers",
+   "qwen3-8b/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-reads",
+   "qwen3-8b/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-legible",
+   "qwen3-8b/neurons/legible/*.parquet",
+   "which reads hold at every pole's top firings",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-labels",
+   "qwen3-8b/neurons/labels/*.parquet",
+   "every pole's labels, by Claude Haiku 5.5",
+   884736
+  ],
+  [
+   "qwen3-8b-heads-acts",
+   "qwen3-8b/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   1152
+  ],
+  [
+   "qwen3-8b-heads-drivers",
+   "qwen3-8b/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   1152
+  ],
+  [
+   "qwen3-8b-heads-reads",
+   "qwen3-8b/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   1152
+  ],
+  [
+   "qwen3-8b-heads-legible",
+   "qwen3-8b/heads/legible.parquet",
+   "which reads hold at every head's top firings",
+   1152
+  ],
+  [
+   "qwen3-8b-heads-labels",
+   "qwen3-8b/heads/labels.parquet",
+   "every head's labels, by Claude Haiku 5.5",
+   1152
+  ]
+ ],
+ "docs": 63990,
+ "positions": 15367795,
+ "kept": 103830,
+ "causal_picks": 1194
+}

@@ -1,0 +1,19 @@
+neurons, Qwen/Qwen3-8B: 884,736 poles; share of each band's poles (mean over layers) passing each test at a 5% false discovery rate; in brackets, the share past the 99% point of mismatched pairs net of theirs. Detectors: a third of top firings share a token. Dark: fires, but no test and no detector.
+
+band             silent  token_detector   next_detector         write_R         write_S          read_R          read_S        any_test            dark
+L0-8               0.19            0.38            0.09     0.00 [0.02]     0.11 [0.11]     0.02 [0.05]     0.35 [0.30]            0.36            0.29
+L9-12              0.00            0.19            0.07     0.01 [0.03]     0.01 [0.03]     0.08 [0.10]     0.03 [0.08]            0.11            0.72
+L13-20             0.00            0.12            0.06     0.00 [0.01]     0.00 [0.01]     0.04 [0.07]     0.01 [0.01]            0.05            0.82
+L21-27             0.00            0.28            0.12     0.12 [0.13]     0.02 [0.03]     0.06 [0.09]     0.05 [0.06]            0.19            0.59
+L28-35             0.00            0.25            0.16     0.29 [0.25]     0.00 [0.01]     0.03 [0.06]     0.01 [0.02]            0.31            0.52
+L0-35              0.05            0.25            0.10     0.09 [0.09]     0.03 [0.04]     0.04 [0.07]     0.10 [0.10]            0.22            0.57
+
+heads, Qwen/Qwen3-8B: 36 × 32 heads; share of each band's heads passing each test at a 5% false discovery rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: prev > 0.5, self > 0.5, induction > 0.3, duplicate > 0.3
+
+band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det    pattern   any_test       dark
+L0-8          0.01       0.01       0.00       0.00       0.31       0.49       0.10       0.02       0.41
+L9-12         0.00       0.01       0.00       0.00       0.08       0.13       0.08       0.01       0.78
+L13-20        0.01       0.00       0.00       0.00       0.10       0.15       0.08       0.02       0.74
+L21-27        0.05       0.01       0.00       0.00       0.15       0.25       0.06       0.05       0.61
+L28-35        0.27       0.10       0.00       0.00       0.32       0.27       0.04       0.27       0.38
+L0-35         0.07       0.03       0.00       0.00       0.21       0.28       0.07       0.08       0.56

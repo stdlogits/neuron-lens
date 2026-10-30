@@ -1,0 +1,94 @@
+Loading weights:   0%|          | 0/179 [00:00<?, ?it/s]Loading weights: 100%|██████████| 179/179 [00:00<00:00, 5062.07it/s]
+[transformers] [1mQwen3ForCausalLM LOAD REPORT[0m from: Qwen/Qwen3-0.6B
+Key                                                    | Status     |  | 
+-------------------------------------------------------+------------+--+-
+model.layers.{16...27}.self_attn.v_proj.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.self_attn.k_norm.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.mlp.down_proj.weight            | UNEXPECTED |  | 
+model.layers.{16...27}.mlp.up_proj.weight              | UNEXPECTED |  | 
+model.layers.{16...27}.input_layernorm.weight          | UNEXPECTED |  | 
+model.layers.{16...27}.self_attn.k_proj.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.self_attn.q_norm.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.mlp.gate_proj.weight            | UNEXPECTED |  | 
+model.layers.{16...27}.self_attn.o_proj.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.self_attn.q_proj.weight         | UNEXPECTED |  | 
+model.layers.{16...27}.post_attention_layernorm.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+relp: [6, 6] docs (even, odd)
+standard: [6, 6] docs (even, odd)
+
+layer offset predictor   R2     cos   gate-r  pole-top20  split-half
+L0    0      embed (K=I)    +0.036 +0.190 +0.226   0.00       
+L0    0      S relp         +0.958 +0.984 +0.969   0.70       0.059
+L0    0      S standard     +0.958 +0.984 +0.969   0.70       0.059
+L0    1      S relp         +0.512 +0.742 +0.704   0.15       0.123
+L0    1      S standard     +0.512 +0.742 +0.703   0.15       0.123
+L0    2      S relp         +0.363 +0.769 +0.651   0.05       0.205
+L0    2      S standard     +0.363 +0.769 +0.650   0.05       0.205
+L0    3      S relp         +0.247 +0.706 +0.504   0.05       0.222
+L0    3      S standard     +0.247 +0.705 +0.504   0.05       0.222
+L1    0      embed (K=I)    +0.019 +0.142 +0.124   0.00       
+L1    0      S relp         +0.749 +0.882 +0.806   0.25       0.103
+L1    0      S standard     +0.729 +0.870 +0.812   0.20       0.160
+L1    1      S relp         +0.276 +0.542 +0.550   0.05       0.192
+L1    1      S standard     +0.300 +0.566 +0.570   0.05       0.290
+L1    2      S relp         +0.218 +0.487 +0.514   0.05       0.280
+L1    2      S standard     +0.212 +0.479 +0.510   0.05       0.398
+L1    3      S relp         +0.154 +0.403 +0.410   0.05       0.315
+L1    3      S standard     +0.145 +0.390 +0.405   0.00       0.451
+L2    0      embed (K=I)    +0.012 +0.112 +0.110   0.00       
+L2    0      S relp         +0.716 +0.865 +0.788   0.20       0.109
+L2    0      S standard     +0.700 +0.856 +0.779   0.20       0.176
+L2    1      S relp         +0.254 +0.526 +0.543   0.05       0.212
+L2    1      S standard     +0.276 +0.549 +0.552   0.05       0.375
+L2    2      S relp         +0.177 +0.436 +0.464   0.05       0.317
+L2    2      S standard     +0.175 +0.433 +0.460   0.05       0.544
+L2    3      S relp         +0.094 +0.315 +0.300   0.00       0.382
+L2    3      S standard     +0.087 +0.303 +0.292   0.00       0.669
+L3    0      embed (K=I)    +0.011 +0.106 +0.138   0.00       
+L3    0      S relp         +0.636 +0.823 +0.733   0.15       0.125
+L3    0      S standard     +0.621 +0.816 +0.714   0.15       0.204
+L3    1      S relp         +0.170 +0.430 +0.416   0.00       0.277
+L3    1      S standard     +0.186 +0.451 +0.426   0.00       0.527
+L3    2      S relp         +0.103 +0.331 +0.349   0.00       0.395
+L3    2      S standard     +0.102 +0.328 +0.345   0.00       0.741
+L3    3      S relp         +0.069 +0.271 +0.282   0.00       0.494
+L3    3      S standard     +0.062 +0.256 +0.260   0.00       0.898
+L5    0      embed (K=I)    +0.005 +0.073 +0.133   0.00       
+L5    0      S relp         +0.573 +0.777 +0.561   0.05       0.137
+L5    0      S standard     +0.546 +0.758 +0.517   0.05       0.231
+L5    1      S relp         +0.177 +0.439 +0.354   0.00       0.349
+L5    1      S standard     +0.172 +0.433 +0.324   0.00       0.764
+L5    2      S relp         +0.107 +0.346 +0.310   0.00       0.448
+L5    2      S standard     +0.088 +0.313 +0.260   0.00       0.992
+L5    3      S relp         +0.078 +0.290 +0.264   0.00       0.538
+L5    3      S standard     +0.055 +0.244 +0.194   0.00       1.180
+L7    0      embed (K=I)    +0.004 +0.065 +0.133   0.00       
+L7    0      S relp         +0.523 +0.746 +0.469   0.05       0.146
+L7    0      S standard     +0.490 +0.720 +0.429   0.00       0.263
+L7    1      S relp         +0.155 +0.410 +0.299   0.00       0.398
+L7    1      S standard     +0.132 +0.381 +0.236   0.00       0.948
+L7    2      S relp         +0.073 +0.291 +0.245   0.00       0.529
+L7    2      S standard     +0.050 +0.239 +0.174   0.00       1.253
+L7    3      S relp         +0.048 +0.226 +0.204   0.00       0.625
+L7    3      S standard     +0.024 +0.161 +0.121   0.00       1.449
+L11   0      embed (K=I)    +0.002 +0.049 +0.100   0.00       
+L11   0      S relp         +0.549 +0.765 +0.406   0.00       0.114
+L11   0      S standard     +0.516 +0.740 +0.337   0.00       0.231
+L11   1      S relp         +0.135 +0.382 +0.273   0.00       0.414
+L11   1      S standard     +0.098 +0.327 +0.140   0.00       1.117
+L11   2      S relp         +0.019 +0.140 +0.183   0.00       0.632
+L11   2      S standard     +0.008 +0.097 +0.074   0.00       1.635
+L11   3      S relp         +0.021 +0.151 +0.157   0.00       0.790
+L11   3      S standard     +0.003 +0.062 +0.044   0.00       1.808
+L15   0      embed (K=I)    +0.003 +0.051 +0.053   0.00       
+L15   0      S relp         +0.475 +0.715 +0.396   0.00       0.121
+L15   0      S standard     +0.443 +0.691 +0.337   0.00       0.255
+L15   1      S relp         +0.115 +0.358 +0.240   0.00       0.362
+L15   1      S standard     +0.082 +0.302 +0.137   0.00       0.958
+L15   2      S relp         +0.046 +0.225 +0.180   0.00       0.657
+L15   2      S standard     +0.018 +0.140 +0.076   0.00       1.641
+L15   3      S relp         +0.022 +0.156 +0.133   0.00       0.885
+L15   3      S standard     +0.004 +0.064 +0.038   0.00       1.870

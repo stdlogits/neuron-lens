@@ -1,0 +1,85 @@
+attention heads' OV copying scores (Σλ/Σ|λ| of the token map), input at layer L−1's output and output at layer L's MLP input, Qwen/Qwen3-8B, 103830 tokens; induction heads: 33, duplicate-token heads: 33 (score past 0.3, head_patterns.py)
+ablation (change in the second copy's loss): largest +0.073 nats; heads past 0.01: 20, below -0.005: 23. R inputs start at L1.
+
+variant  AUROC induction  AUROC duplicate  AUROC previous  Spearman with induction  mean copy (induction / other)  Spearman with ablation (minus raw, 95% bootstrap)  AUROC helps  AUROC suppresses (−copy)
+raw      0.68             0.37             0.41            +0.29                    +0.26 / +0.07                  +0.14 (+0.00 [+0.00, +0.00])                  0.50         0.69
+S→S      0.43             0.27             0.74            -0.10                    +0.50 / +0.53                  +0.07 (-0.07 [-0.14, +0.00])                  0.39         0.57
+R→S      0.46             0.42             0.47            +0.10                    +0.31 / +0.34                  +0.11 (-0.03 [-0.10, +0.04])                  0.46         0.54
+S→R      0.68             0.35             0.47            +0.18                    +0.39 / +0.13                  +0.22 (+0.08 [+0.03, +0.12])                  0.66         0.73
+R→R      0.41             0.37             0.64            +0.04                    +0.39 / +0.40                  +0.07 (-0.07 [-0.13, -0.01])                  0.42         0.74
+
+by band: Spearman with ablation / AUROC induction / AUROC duplicate
+  L0-L8: raw +0.00/0.85/0.32   S→S +0.08/0.19/0.13   R→S -0.06/0.29/0.36   S→R +0.10/0.72/0.39   R→R -0.14/0.46/0.23
+  L9-L20: raw +0.06/0.73/0.46   S→S +0.09/0.31/0.41   R→S +0.09/0.28/0.48   S→R +0.14/0.70/0.38   R→R +0.16/0.39/0.47
+  L21-L35: raw +0.26/0.67/0.23   S→S -0.01/0.48/0.40   R→S +0.18/0.55/0.64   S→R +0.29/0.69/0.22   R→R +0.12/0.42/0.41
+
+most negative heads under S→R, the variant that tracks ablation best (copy suppression candidates): L32h9 -1.00 (ind 0.00), L33h21 -1.00 (ind 0.10), L29h4 -0.99 (ind 0.04), L24h28 -0.99 (ind 0.12), L24h21 -0.99 (ind 0.30), L27h16 -0.98 (ind 0.09), L29h16 -0.98 (ind 0.00), L25h28 -0.98 (ind 0.07), L25h30 -0.97 (ind 0.43), L35h17 -0.97 (ind 0.00)
+most positive: L34h1 +1.00 (ind 0.22), L32h8 +1.00 (ind 0.31), L29h12 +0.99 (ind 0.31), L29h14 +0.99 (ind 0.18), L24h5 +0.99 (ind 0.26), L29h6 +0.99 (ind 0.08), L24h29 +0.99 (ind 0.25), L24h23 +0.99 (ind 0.66), L24h22 +0.98 (ind 0.89), L24h30 +0.98 (ind 0.14)
+
+per-token reads under S→R (each token's z in its own column of the head's token map): the median z over tokens tracks copy_S_R at Spearman +0.93; median z by band (5% / 50% / 95% of heads):
+  L0-L8: -0.43 / +0.08 / +0.84
+  L9-L20: -0.67 / +0.11 / +0.88
+  L21-L35: -1.81 / +0.16 / +2.59
+
+most specific copiers (largest 8th-highest z), by band, and what each writes when it reads its first token:
+  L6h25 17.8 (copy_S_R +0.04, median -0.01): ...⏎⏎ | ⏎ | …⏎⏎ |  ...⏎⏎ | ...)⏎⏎ | ..."⏎⏎ | ⏎⏎ | ,...⏎⏎
+      reads '...⏎⏎' → writes  ...⏎⏎ | ...⏎⏎ |  […]⏎⏎ | ,...⏎⏎ | ⏎⏎ |  [...]⏎⏎ | …⏎⏎ |  …⏎⏎ ; suppresses ":⏎ | ():⏎ | ':⏎ | ):⏎ | "):⏎ | :⏎ | ]:⏎ | '):⏎
+  L6h15 15.8 (copy_S_R +0.64, median +1.40): 　 | …⏎⏎ |  … |  ⏎ |  ⏎⏎ |  ⏎ ⏎ | …⏎ | …⏎⏎⏎
+      reads '\u3000' → writes 　 |  ­ | ­s | ­ | ­t | ­ing | 　　 |  ; suppresses …” | …”⏎⏎ |          | """⏎ |  |⏎ |  ” | ‟ | ”,
+  L4h23 15.5 (copy_S_R -0.02, median -0.07):  ...⏎⏎ | …⏎⏎ | ⏎ | ...⏎⏎ | ⏎⏎ | ’s | …"⏎⏎ |  […]⏎⏎
+      reads ' ...⏎⏎' → writes ...⏎⏎ |  ...⏎⏎ |  […]⏎⏎ | ,...⏎⏎ |  [...]⏎⏎ | …⏎⏎ |  …⏎⏎ | ...⏎ ; suppresses "— | ”— | —that | —to | —an | ":⏎ | —from | —a
+  L8h31 15.2 (copy_S_R +0.25, median +0.23):  myself | 我们的 |  your |  my |  ourselves |  yourselves |  our | 对我们
+      reads ' myself' → writes  myself | 因为我 | 我自己 | 我的 |  my | 在我的 | 当我 | 但我 ; suppresses your |  yourselves |  your | 你的 | Your | 你自己 |  yourself |  Your
+  L17h8 18.4 (copy_S_R +0.35, median +0.20): ⏎ | -⏎ | ...⏎⏎ | ,⏎ |  [...]⏎⏎ |  ⏎ |  ,⏎ | ，⏎
+      reads '⏎' → writes ⏎ | ，⏎ | ,⏎ |  ⏎ | -⏎ |  &⏎ |  ⏎ | ⏎⏎ ; suppresses ":⏎ | "):⏎ | ':⏎ | :") | :') | ():⏎ | ]:⏎ | ):⏎
+  L17h10 17.5 (copy_S_R +0.14, median +0.12):  ...⏎⏎ | ..."⏎⏎ |  ...⏎ | ,...⏎⏎ | ...⏎⏎ | …⏎⏎ |  …⏎⏎ | ...⏎⏎⏎
+      reads ' ...⏎⏎' → writes  ...⏎⏎ | ...⏎⏎ |  […]⏎⏎ | …⏎⏎ |  …⏎⏎ |  [...]⏎⏎ | ,...⏎⏎ | ..."⏎⏎ ; suppresses ():⏎ | ":⏎ | ':⏎ | ):⏎ | :⏎ |  :⏎ | ]:⏎ | "):⏎
+  L20h17 14.1 (copy_S_R +0.48, median +0.40):  herself | 她在 | 她说 | 因为她 | 她们 | 但她 | 她是 |  himself
+      reads ' herself' → writes  herself | 她 | 她的 | 她们 | 她在 |  she | 她说 | 因为她 ; suppresses 父子 |  himself | 他自己 |  his | his | 他的 | 和他的 | 了他的
+  L20h25 13.8 (copy_S_R +0.78, median +0.94): .).⏎⏎ | .). | .⏎⏎ | .⏎ | .</ | ."). | .',⏎ | .'⏎⏎
+      reads '.).⏎⏎' → writes .⏎⏎ | .).⏎⏎ | .]⏎⏎ | .</ | .)⏎⏎ | ).⏎⏎ | .⏎⏎⏎ | .). ; suppresses $⏎ | ⏎⏎ | "⏎ | ⏎⏎⏎⏎⏎⏎⏎⏎⏎⏎ | ⏎⏎⏎⏎ | ⏎⏎⏎⏎⏎⏎⏎⏎⏎⏎⏎⏎ | ”⏎ | ⏎⏎⏎⏎⏎⏎
+  L34h10 37.6 (copy_S_R +0.22, median +0.03):  … |  …⏎⏎ |  …. |  ... |  […] | …⏎⏎ | …… | ….⏎⏎
+      reads ' …' → writes  … |  …⏎⏎ |  …. | .… | …… | …⏎⏎ | …⏎ | ……⏎⏎ ; suppresses ... | )... | "... | ...⏎ | ..." | ..."⏎⏎ | ..."⏎ | ...⏎⏎⏎⏎⏎⏎
+  L33h0 34.2 (copy_S_R +0.55, median +0.23):  — | – |  – | -- | .– | –and |  —⏎⏎ | ‐
+      reads ' —' → writes  — |  —⏎⏎ | —— | ———— | ,— | ———————— | ———————————————— | .— ; suppresses -- | "-- | )-- | --⏎⏎ | 其它 | 裏 | --⏎ | --[
+  L29h5 34.0 (copy_S_R -0.54, median -1.38):  S |  B |  D |  G |  F |  P |  E |  M
+      reads ' S' → writes  S | 张 | S | 張 | =S | :S | *S | .getS ; suppresses  M | 刘 | E | 郭 | M | "M | 劉 | 社
+  L34h9 33.7 (copy_S_R +0.30, median -0.03):  ⏎ ⏎ |  ⏎⏎ |  ⏎ |  ⏎    ⏎ | …⏎⏎⏎ |   ⏎⏎ |  ⏎⏎⏎ | ⏎ ⏎
+      reads ' ⏎ ⏎' → writes  ⏎ ⏎ |  ⏎⏎ | ⏎ ⏎ |  ⏎ |  ⏎  ⏎ |  ⏎⏎⏎ |  ⏎⏎⏎⏎⏎ |  ⏎    ⏎ ; suppresses ...⏎ |  ...⏎ | ,⏎ | ",⏎ | ',⏎ | (),⏎ | ;⏎ | :⏎
+
+most specific suppressors (largest 8th-lowest −z), by band, and what each writes when it reads its first token:
+  L7h12 14.4 (copy_S_R -0.02, median -0.01):  ...⏎⏎ |  […]⏎⏎ |  ..."⏎⏎ | ...⏎⏎ | ......⏎⏎ | ,...⏎⏎ | ...⏎⏎⏎ |  ....⏎⏎
+      reads ' ...⏎⏎' → writes ':⏎ | ():⏎ | 儿 | '):⏎ |  promised | 夭 | ":⏎ |  children ; suppresses  […]⏎⏎ | ...⏎⏎ |  ...⏎⏎ |  [...]⏎⏎ | ..."⏎⏎ | ,...⏎⏎ | ...⏎⏎⏎ | …⏎⏎
+  L7h14 12.8 (copy_S_R +0.11, median +0.11): …⏎⏎ | ...⏎⏎ | …⏎ |  ...⏎ |  […]⏎⏎ | …”⏎⏎ | ..."⏎⏎ | .'⏎⏎
+      reads '…⏎⏎' → writes ":⏎ | ():⏎ | :⏎ |  :⏎ | ：" | ':⏎ | :** | "):⏎ ; suppresses  ...⏎⏎ | ...⏎⏎ |  […]⏎⏎ | ,...⏎⏎ |  [...]⏎⏎ |  …⏎⏎ | …⏎⏎ | ,…⏎⏎
+  L6h12 12.3 (copy_S_R -0.60, median -1.28): 　 | …⏎⏎ |  ⏎ ⏎ |  …⏎⏎ |  … | …⏎⏎⏎ | ､ |  ⏎
+      reads '\u3000' → writes \⏎ |  |⏎ | %⏎ | """⏎ |  """⏎ |  )⏎ | (⏎ |          ; suppresses 　 |  ­ | ­ | ­s | ­t | ­ing |  | 　　
+  L5h11 12.0 (copy_S_R +0.09, median +0.08): ,…⏎⏎ | ..."⏎⏎ |  ..."⏎⏎ | .…⏎⏎ |  [...]⏎⏎ | ...⏎⏎ | ,...⏎⏎ |  ...⏎⏎
+      reads ',…⏎⏎' → writes ":⏎ | "). | ). | ):⏎ | }. | "):⏎ | `. | ". ; suppresses  ...⏎⏎ | ...⏎⏎ |  […]⏎⏎ | ,...⏎⏎ | …⏎⏎ |  …⏎⏎ | ,…⏎⏎ |  [...]⏎⏎
+  L17h11 13.3 (copy_S_R +0.17, median +0.22): ,…⏎⏎ |  [...]⏎⏎ |  —⏎⏎ | ⏎ |  […]⏎⏎ | —⏎⏎ | …⏎⏎ | .…⏎⏎
+      reads ',…⏎⏎' → writes ]** | ":⏎ | "):⏎ | _", | ():⏎ | __', | ):⏎ | :** ; suppresses  ...⏎⏎ |  […]⏎⏎ |  …⏎⏎ | ...⏎⏎ | ⏎ | ⏎⏎ | …⏎⏎ | ,...⏎⏎
+  L19h7 13.1 (copy_S_R -0.94, median -1.45): Whilst |  Whilst |  recognised |  organisations |  realised |  jewellery | organisation |  personalised
+      reads 'Whilst' → writes 一点儿 |  canceled |  theater | 点儿 |  favorite |  favors |  neighborhood |  colorful ; suppresses Whilst |  Whilst |  whilst |  utilise |  initialised |  initialise |  recognised |  endeavour
+  L10h21 12.1 (copy_S_R -0.84, median -1.19): Whilst |  organisations |  recognised |  Whilst |  ​​ |  whilst |  organisation |  armour
+      reads 'Whilst' → writes  canceled |  favors | ﹣ |  theater |  longtime |  neighborhood | gray |  Shiite ; suppresses Whilst |  Whilst |  whilst |  initialised |  initialise |  amongst |  utilise |  endeavour
+  L15h24 11.6 (copy_S_R -0.09, median -0.05): ...)⏎ |  [... |  +⏎ | (...)⏎ |  ..."⏎ |  (... | "+⏎ |  (...)
+      reads '...)⏎' → writes ？” |  ______ | _____ | ?” | ？ | ":⏎ | ?" | ？」 ; suppresses  ...⏎ | ...⏎ |  ...⏎⏎ | ⏎ | ,...⏎ | ...⏎⏎ |  […]⏎⏎ | …⏎
+  L31h23 23.6 (copy_S_R -0.48, median -0.01):  alternative |  balance |  combination | balance |  Balance |  balanced |  diverse |  combinations
+      reads ' alternative' → writes 再 | 增 |  evenly |  uniform | EQUAL | 均匀 |  duplicated | 再多 ; suppresses  alternative | alternative |  Alternative |  alternatives | Alternative |  alternate |  alternatively |  Altern
+  L31h22 19.5 (copy_S_R -0.28, median -0.30):  certain |  specific |  specifically |  Certain |  corresponding | Certain | 某些 | specific
+      reads ' certain' → writes 具体 | 具体的 | 的具体 |  '& |  '&# |  specifically | >& | &s ; suppresses  certain |  Certain | Certain | 某些 |  certains | ertain | 一定的 | 一定
+  L32h1 19.2 (copy_S_R -0.60, median -0.36):  fluid |  traffic |  bridge |  fuel |  energy |  weather |  oil |  bank
+      reads ' fluid' → writes -money | 地产 | _money | money | 发行 |  banks |  BANK |  money ; suppresses  fluid | fluid |  Fluid | Fluid |  fluids | -fluid | 液体 | 液
+  L30h10 19.1 (copy_S_R -0.66, median -0.17):  region |  period | 周期 |  periods |  situation |  moment |  place | 领域
+      reads ' region' → writes 步骤 | _loop |  steps |  loops | Loop |  loop | -loop | 循环 ; suppresses  region | region | 地区 |  regions | Region |  Region | .region | _region
+
+column reads quoted in findings §21:
+  L26h31 reads ' population' → writes 人口 |  population |  statistics | 统计 |  demographics |  demographic |  stats |  statistic ; suppresses  blush | icolor | 颜色 | 色彩 | 色泽 | setColor |  wavelengths | 光泽
+  L20h17 reads ' herself' → writes  herself | 她 | 她的 | 她们 | 她在 |  she | 她说 | 因为她 ; suppresses 父子 |  himself | 他自己 |  his | his | 他的 | 和他的 | 了他的
+  L20h17 reads ' himself' → writes  himself |  his | 他的 | his | 了他的 | 他自己 | 和他的 | 他对 ; suppresses 她们 | 她的 | 她 | 她在 |  herself | 她说 | 她是 | 娘家
+  L30h25 reads ' default' → writes  default | 默认 | default | .default | /default | 	default |  Default | _default ; suppresses  primitive |  Primitive |  primitives | primitive | Primitive | 原始 | Raw | Central
+  L32h9 reads ' Gallagher' → writes  SWT |  ENUM | uten | wnd | 汶 | 蔽 | ENUM | ervlet ; suppresses  Gallagher |  Gall |  gall |  gag |  Gaw |  GAL |  DAG | hq
+  L29h5 reads ' S' → writes  S | 张 | S | 張 | =S | :S | *S | .getS ; suppresses  M | 刘 | E | 郭 | M | "M | 劉 | 社
+  L32h1 reads ' traffic' → writes 的记忆 | experiment |  experiment |  bath | 浸泡 |  baths | 防水 | 疗 ; suppresses  traffic | 交通 | traffic |  Traffic | Traffic | _traffic |  traff |  traf
+  L31h23 reads ' alternative' → writes 再 | 增 |  evenly |  uniform | EQUAL | 均匀 |  duplicated | 再多 ; suppresses  alternative | alternative |  Alternative |  alternatives | Alternative |  alternate |  alternatively |  Altern
+  L19h7 reads 'Whilst' → writes 一点儿 |  canceled |  theater | 点儿 |  favorite |  favors |  neighborhood |  colorful ; suppresses Whilst |  Whilst |  whilst |  utilise |  initialised |  initialise |  recognised |  endeavour

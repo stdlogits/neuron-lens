@@ -1,0 +1,125 @@
+{
+ "model": "google/gemma-4-12B",
+ "dir": "gemma-4-12b",
+ "layers": 48,
+ "d_model": 3840,
+ "neurons": 15360,
+ "heads": 16,
+ "configs": [
+  [
+   "gemma-4-12b-neurons-acts",
+   "gemma-4-12b/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-drivers",
+   "gemma-4-12b/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-reads",
+   "gemma-4-12b/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-legible",
+   "gemma-4-12b/neurons/legible/*.parquet",
+   "which reads hold at every pole's top firings",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-labels",
+   "gemma-4-12b/neurons/labels/*.parquet",
+   "every pole's labels, by Claude Haiku 5.5",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-image",
+   "gemma-4-12b/neurons/image/*.parquet",
+   "every pole's image read and write, the images that drive it, and its cross-modal ranks",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-audio",
+   "gemma-4-12b/neurons/audio/*.parquet",
+   "every pole's audio read and write, the sounds that drive it, and its cross-modal ranks",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-image-optimised",
+   "gemma-4-12b/neurons/image_optimised.parquet",
+   "the patch that most raises each of the best-labelled poles",
+   1728
+  ],
+  [
+   "gemma-4-12b-neurons-audio-optimised",
+   "gemma-4-12b/neurons/audio_optimised.parquet",
+   "the 40 ms of sound that most raises each of the best-labelled poles",
+   1728
+  ],
+  [
+   "gemma-4-12b-heads-acts",
+   "gemma-4-12b/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-drivers",
+   "gemma-4-12b/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-reads",
+   "gemma-4-12b/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-legible",
+   "gemma-4-12b/heads/legible.parquet",
+   "which reads hold at every head's top firings",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-labels",
+   "gemma-4-12b/heads/labels.parquet",
+   "every head's labels, by Claude Haiku 5.5",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-media",
+   "gemma-4-12b/heads/media.parquet",
+   "every head in image and audio contexts",
+   768
+  ]
+ ],
+ "docs": 63992,
+ "positions": 15409492,
+ "kept": 123774,
+ "causal_picks": 1152,
+ "lenses": {
+  "text": {
+   "R_docs": 1000,
+   "S_docs": 1000,
+   "R": "0.01-0.12",
+   "S": "0.01-0.07",
+   "corpus": "HuggingFaceFW/dclm_100BT-shuffled",
+   "revision": "2fa015e4044ec442a0734e89658cdcc538d10dd4",
+   "t_max": 128
+  },
+  "image": {
+   "R_docs": 512,
+   "S_docs": 1000,
+   "basis": 2048
+  },
+  "audio": {
+   "R_docs": 512,
+   "S_docs": 1615,
+   "basis": 640
+  }
+ }
+}

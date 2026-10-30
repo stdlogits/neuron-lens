@@ -1,0 +1,21 @@
+detection scoring of the description pilot, Qwen/Qwen3-8B: 189 poles scored under both labels (378 of 378 tasks answered)
+AUROC of the scorer's probabilities, matched / control label (one derangement); means with 95% bootstrap intervals over neurons (they leave out document, explainer, scorer and derangement variation)
+  all                          n 189  mean 0.93 [0.91, 0.94] / 0.54 [0.51, 0.57]  median 1.00 / 0.50  matched > control 0.89
+  layers 0-11                  n  82  mean 0.96 [0.94, 0.97] / 0.57 [0.51, 0.62]  median 1.00 / 0.55  matched > control 0.89
+  layers 12-23                 n  54  mean 0.89 [0.86, 0.92] / 0.51 [0.45, 0.57]  median 0.98 / 0.47  matched > control 0.87
+  layers 24-35                 n  53  mean 0.91 [0.88, 0.94] / 0.53 [0.46, 0.59]  median 0.98 / 0.50  matched > control 0.91
+  explainer confidence 0-0.4   n  56  mean 0.87 [0.83, 0.90] / 0.48 [0.43, 0.54]  median 0.91 / 0.44  matched > control 0.91
+  explainer confidence 0.4-0.7 n  63  mean 0.92 [0.89, 0.95] / 0.58 [0.51, 0.64]  median 1.00 / 0.58  matched > control 0.84
+  explainer confidence 0.7-1.0 n  70  mean 0.98 [0.97, 0.99] / 0.55 [0.50, 0.61]  median 1.00 / 0.50  matched > control 0.91
+
+lowest matched AUROC
+  L19 n10115 +   0.46 (control 0.28)
+  L33 n11536 −   0.46 (control 0.18)
+  L17 n11117 +   0.50 (control 0.30)
+  L15 n10214 −   0.52 (control 0.64)
+  L27 n9980 −    0.58 (control 0.50)
+  L12 n6468 −    0.58 (control 0.68)
+  L31 n8587 +    0.58 (control 0.32)
+  L12 n145 +     0.60 (control 0.80)
+  L28 n8569 +    0.62 (control 0.82)
+  L32 n815 −     0.62 (control 0.40)

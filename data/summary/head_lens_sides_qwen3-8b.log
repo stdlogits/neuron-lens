@@ -1,0 +1,27 @@
+which lens on each side of each head's OV circuit, Qwen/Qwen3-8B: per-token reads checked at the census firings (24 per head, 63,990 documents), 23112 firings from L1 whose attended position is before the query and whose attended token and the token after it are kept. Input S: the target is the attended token; input R: the token after it. Output: the head's actual output read through the R-lens or the S-lens from the MLP input. Control: another head of the layer.
+
+copy: Spearman over firings between the target's weight-only z in its own column and its z in the actual output's read (own / control)
+  S→S  L1-8 +0.47/+0.03  L9-12 +0.26/+0.09  L13-20 +0.50/+0.27  L21-27 +0.29/+0.13  L28-35 +0.12/+0.05  L1-35 +0.35/+0.12
+  S→R  L1-8 +0.39/+0.00  L9-12 +0.29/+0.06  L13-20 +0.21/+0.00  L21-27 +0.68/+0.03  L28-35 +0.78/-0.02  L1-35 +0.52/+0.01
+  R→S  L1-8 +0.15/+0.08  L9-12 +0.25/+0.14  L13-20 +0.24/+0.22  L21-27 +0.25/+0.17  L28-35 +0.21/+0.09  L1-35 +0.22/+0.14
+  R→R  L1-8 +0.15/+0.15  L9-12 +0.09/+0.02  L13-20 +0.08/+0.06  L21-27 +0.14/-0.01  L28-35 +0.44/+0.02  L1-35 +0.18/+0.05
+
+column: Spearman over the vocabulary between the predicted column and the actual output's read, mean over firings (own / control)
+  S→S  L1-8 +0.196/+0.025  L9-12 +0.228/+0.150  L13-20 +0.404/+0.255  L21-27 +0.288/+0.115  L28-35 +0.221/+0.076  L1-35 +0.273/+0.123
+  S→R  L1-8 +0.200/+0.002  L9-12 +0.090/+0.010  L13-20 +0.061/+0.005  L21-27 +0.211/-0.006  L28-35 +0.271/-0.001  L1-35 +0.172/+0.001
+  R→S  L1-8 +0.119/+0.061  L9-12 +0.191/+0.136  L13-20 +0.287/+0.244  L21-27 +0.223/+0.141  L28-35 +0.162/+0.091  L1-35 +0.198/+0.136
+  R→R  L1-8 +0.133/+0.084  L9-12 +0.051/+0.011  L13-20 +0.018/+0.020  L21-27 +0.049/-0.004  L28-35 +0.106/+0.002  L1-35 +0.073/+0.025
+
+by pattern class, L1-35: column margin (own − control), mean over the class's heads
+  prev      ( 3 heads)  S→S +0.160  S→R +0.216  R→S +0.060  R→R -0.093
+  induction (33 heads)  S→S +0.084  S→R +0.291  R→S -0.042  R→R +0.050
+  duplicate (33 heads)  S→S +0.204  S→R +0.054  R→S +0.108  R→R +0.041
+  sink      (16 heads)  S→S +0.382  S→R +0.137  R→S +0.228  R→R +0.082
+
+share of heads each variant reads best (largest column margin), by band
+  L1-8: S→S 0.29  S→R 0.39  R→S 0.17  R→R 0.15
+  L9-12: S→S 0.22  S→R 0.29  R→S 0.31  R→R 0.18
+  L13-20: S→S 0.31  S→R 0.18  R→S 0.28  R→R 0.23
+  L21-27: S→S 0.26  S→R 0.36  R→S 0.24  R→R 0.13
+  L28-35: S→S 0.20  S→R 0.42  R→S 0.21  R→R 0.16
+  L1-35: S→S 0.26  S→R 0.33  R→S 0.24  R→R 0.17

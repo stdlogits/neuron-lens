@@ -1,0 +1,83 @@
+# Qwen3-8B lens estimators on one H100 80GB HBM3 (vast.ai), torch 2.13.0+cu129,
+# one 128-token dclm-a document, bf16 unless noted. Scratch scripts, not in the repo:
+# compare_old (autograd at HEAD 82f87d6 against the hand-written maps), gemm_bench,
+# compile_bench, fp8_bench, profile_lens; fit_bench is scripts/checks/fit_bench.py.
+
+## compare_old
+R-lens autograd, dim_batch 64: 27.2 s
+R-lens hand-written, dim_batch 256: 20.26 s (1.3x)
+S-lens autograd, dim_batch 64: 63.6 s
+S-lens hand-written, dim_batch 256: 23.33 s (2.7x)
+R-lens hand-written fp32: 132.9 s
+(the fp32 S-lens reference ran out of memory here; fp8_bench below has it)
+
+## gemm_bench
+M 28416 gate/up  K  4096 N 12288: bf16  746, fp8 1243, fp8 fast-accum 1439 TFLOP/s; fp8 rel err 3.8e-02
+M 28416 down     K 12288 N  4096: bf16  713, fp8 1250, fp8 fast-accum 1363 TFLOP/s; fp8 rel err 3.7e-02
+M 28416 q/o      K  4096 N  4096: bf16  641, fp8 1200, fp8 fast-accum 1410 TFLOP/s; fp8 rel err 3.7e-02
+M 28416 k/v      K  4096 N  1024: bf16  676, fp8 1141, fp8 fast-accum 1360 TFLOP/s; fp8 rel err 3.8e-02
+M 56832 gate/up  K  4096 N 12288: bf16  713, fp8 1104, fp8 fast-accum 1028 TFLOP/s; fp8 rel err 3.8e-02
+M 56832 down     K 12288 N  4096: bf16  651, fp8 1108, fp8 fast-accum 1310 TFLOP/s; fp8 rel err 3.7e-02
+M 56832 q/o      K  4096 N  4096: bf16  682, fp8 1199, fp8 fast-accum 1423 TFLOP/s; fp8 rel err 3.8e-02
+M 56832 k/v      K  4096 N  1024: bf16  648, fp8 1112, fp8 fast-accum 1425 TFLOP/s; fp8 rel err 3.8e-02
+row-wise fp8 cast of [28416, 4096]: 1.07 ms (eager)
+
+## compile_bench
+eager                        R-lens, dim_batch 256: 18.17 s (first call 18 s)
+eager                        S-lens, dim_batch 256: 19.11 s (first call 19 s)
+  peak 32.2 GiB
+default                      R-lens, dim_batch 256: 11.36 s (first call 16 s), vs eager 2.1e-03 max
+default                      S-lens, dim_batch 256: 11.56 s (first call 15 s), vs eager 2.0e-03 max
+  peak 47.9 GiB
+max-autotune-no-cudagraphs   R-lens, dim_batch 256: 11.36 s (first call 37 s), vs eager 2.1e-03 max
+max-autotune-no-cudagraphs   S-lens, dim_batch 256: 11.56 s (first call 36 s), vs eager 2.0e-03 max
+  peak 49.4 GiB
+
+## fit_bench_padded
+  R-lens, dim_batch 128: 11.70 s per document, 531 TFLOP/s, peak 20.2 GiB
+  R-lens, dim_batch 256: 11.24 s per document, 552 TFLOP/s, peak 25.8 GiB
+  R-lens, dim_batch 512: 11.26 s per document, 551 TFLOP/s, peak 28.1 GiB
+  S-lens, dim_batch 128: 11.77 s per document, 543 TFLOP/s, peak 29.1 GiB
+  S-lens, dim_batch 256: 11.54 s per document, 553 TFLOP/s, peak 39.2 GiB
+  S-lens, dim_batch 512: 11.54 s per document, 553 TFLOP/s, peak 41.4 GiB
+
+## fp8_bench (FP8: row-wise scaled torch._scaled_mm, fast accumulation, all projections)
+fp32 reference R saved
+fp32 reference S saved
+R-lens bf16: 12.24 s; vs fp32 median 7.2e-03, max 1.0e-02; document 2 vs document 1 median 6.5e-01, max 9.3e-01
+R-lens fp8: 8.41 s (1.46x); vs fp32 median 3.8e-02, max 5.2e-02; vs bf16 median 3.8e-02, max 5.2e-02
+S-lens bf16: 12.59 s; vs fp32 median 6.5e-03, max 8.3e-03; document 2 vs document 1 median 6.6e-01, max 7.1e-01
+S-lens fp8: 8.34 s (1.51x); vs fp32 median 4.5e-02, max 5.1e-02; vs bf16 median 4.5e-02, max 5.2e-02
+
+## profile_compiled
+R-lens, dim_batch 256: 726 ms wall per block, 703 ms GPU; copy 2 ms (0%), elementwise 3 ms (0%), gemm 580 ms (82%), reduce 6 ms (1%), triton 112 ms (16%)
+S-lens, dim_batch 256: 747 ms wall per block, 712 ms GPU; copy 2 ms (0%), elementwise 3 ms (0%), gemm 589 ms (83%), reduce 1 ms (0%), triton 117 ms (16%)
+
+## fp8_sys (FP8 minus bf16 on four documents: does the error average away?)
+R-lens fp8 error: one document median 3.8e-02; mean of 4 documents median 3.6e-02; least pairwise cosine of the errors, median over layers 0.65, min 0.34
+S-lens fp8 error: one document median 4.5e-02; mean of 4 documents median 4.2e-02; least pairwise cosine of the errors, median over layers 0.54, min 0.42
+
+## fit_bench_final (scripts/checks/fit_bench.py at df9cc57, --dim-batch 256 --compare-fp32)
+Qwen/Qwen3-0.6B: 28 layers, d 1024
+  R-lens, dim_batch 256: 0.36 s per document, 286 TFLOP/s, peak 2.4 GiB
+  S-lens, dim_batch 256: 0.36 s per document, 295 TFLOP/s, peak 2.6 GiB
+  R-lens final bf16 vs fp32 rel err: median 1.2e-02, max 1.9e-02
+  S-lens mid bf16 vs fp32 rel err: median 1.1e-02, max 1.6e-02
+  S-lens out bf16 vs fp32 rel err: median 1.1e-02, max 1.6e-02
+Qwen/Qwen3-8B: 36 layers, d 4096
+  R-lens, dim_batch 256: 11.75 s per document, 528 TFLOP/s, peak 22.3 GiB
+  S-lens, dim_batch 256: 11.78 s per document, 542 TFLOP/s, peak 31.1 GiB
+  R-lens final bf16 vs fp32 rel err: median 7.2e-03, max 1.0e-02
+  S-lens mid bf16 vs fp32 rel err: median 6.5e-03, max 8.3e-03
+  S-lens out bf16 vs fp32 rel err: median 6.2e-03, max 7.9e-03
+
+## ab_bench (interleaved, best of 3, same process): stacked q/k/v and gate/up products
+primal (_linearize) alone: 30 ms per document
+pre-merge  R-lens: best of 3 11.22 s per document
+merged     R-lens: best of 3 11.22 s per document
+pre-merge  S-lens: best of 3 11.54 s per document
+merged     S-lens: best of 3 11.54 s per document
+default compile, separate process: R 11.22 s, S 11.53 s
+CUDA graphs (mode="reduce-overhead"): RuntimeError, a replay overwrites the previous layer's
+output that the next layer reads (accessing tensor output of CUDAGraphs that has been
+overwritten by a subsequent run); fixing it needs a copy per layer

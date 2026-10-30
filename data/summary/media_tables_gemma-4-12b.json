@@ -1,0 +1,64 @@
+{
+ "image": {
+  "documents": 49694,
+  "labels": 2805,
+  "labels_scored": 1643,
+  "bands": {
+   "L0-L11": {
+    "reliable": 0.3422119140625,
+    "auroc_heldout": 0.962890625,
+    "text_all_three": 0.002353592690017998,
+    "scored": 50561
+   },
+   "L12-L23": {
+    "reliable": 0.2567599826388889,
+    "auroc_heldout": 0.9736328125,
+    "text_all_three": 0.029811841878128777,
+    "scored": 57930
+   },
+   "L24-L35": {
+    "reliable": 0.38959689670138886,
+    "auroc_heldout": 0.9677734375,
+    "text_all_three": 0.022264253770817637,
+    "scored": 62387
+   },
+   "L36-L47": {
+    "reliable": 0.3192355685763889,
+    "auroc_heldout": 0.97412109375,
+    "text_all_three": 0.013792520905986413,
+    "scored": 82871
+   }
+  }
+ },
+ "audio": {
+  "documents": 46932,
+  "labels": 1167,
+  "labels_scored": 981,
+  "bands": {
+   "L0-L11": {
+    "reliable": 0.5054877387152777,
+    "auroc_heldout": 0.91259765625,
+    "text_all_three": 0.0006458509643223019,
+    "scored": 44902
+   },
+   "L12-L23": {
+    "reliable": 0.19404568142361112,
+    "auroc_heldout": 0.86474609375,
+    "text_all_three": 0.006477065300594712,
+    "scored": 33966
+   },
+   "L24-L35": {
+    "reliable": 0.2845648871527778,
+    "auroc_heldout": 0.82666015625,
+    "text_all_three": 0.00325458728466416,
+    "scored": 89105
+   },
+   "L36-L47": {
+    "reliable": 0.17620985243055556,
+    "auroc_heldout": 0.78271484375,
+    "text_all_three": 0.0026292043934160987,
+    "scored": 64278
+   }
+  }
+ }
+}

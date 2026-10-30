@@ -1,0 +1,57 @@
+R-lens corpus check, Qwen/Qwen3-8B: R:chat (500 UltraChat-200k test_sft conversations, chat template) against R:dclm-even and R:dclm-odd (500 DCLM documents each); lens_compare.py, then the layer-contrastive (z) top-8 overlap
+
+=== L0 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.90, top-10 overlap 0.93
+  R:dclm-even vs R:chat: top-1 agree 0.40, top-10 overlap 0.55
+  R:dclm-odd vs R:chat: top-1 agree 0.40, top-10 overlap 0.54
+=== L2 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.89, top-10 overlap 0.92
+  R:dclm-even vs R:chat: top-1 agree 0.31, top-10 overlap 0.54
+  R:dclm-odd vs R:chat: top-1 agree 0.30, top-10 overlap 0.53
+=== L4 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.90, top-10 overlap 0.92
+  R:dclm-even vs R:chat: top-1 agree 0.41, top-10 overlap 0.53
+  R:dclm-odd vs R:chat: top-1 agree 0.40, top-10 overlap 0.52
+=== L8 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.89, top-10 overlap 0.91
+  R:dclm-even vs R:chat: top-1 agree 0.42, top-10 overlap 0.54
+  R:dclm-odd vs R:chat: top-1 agree 0.43, top-10 overlap 0.54
+=== L12 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.90, top-10 overlap 0.92
+  R:dclm-even vs R:chat: top-1 agree 0.48, top-10 overlap 0.59
+  R:dclm-odd vs R:chat: top-1 agree 0.47, top-10 overlap 0.59
+=== L16 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.92, top-10 overlap 0.94
+  R:dclm-even vs R:chat: top-1 agree 0.51, top-10 overlap 0.62
+  R:dclm-odd vs R:chat: top-1 agree 0.51, top-10 overlap 0.62
+=== L20 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.94, top-10 overlap 0.95
+  R:dclm-even vs R:chat: top-1 agree 0.63, top-10 overlap 0.71
+  R:dclm-odd vs R:chat: top-1 agree 0.63, top-10 overlap 0.71
+=== L24 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.96, top-10 overlap 0.97
+  R:dclm-even vs R:chat: top-1 agree 0.78, top-10 overlap 0.84
+  R:dclm-odd vs R:chat: top-1 agree 0.78, top-10 overlap 0.84
+=== L28 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.98, top-10 overlap 0.98
+  R:dclm-even vs R:chat: top-1 agree 0.87, top-10 overlap 0.90
+  R:dclm-odd vs R:chat: top-1 agree 0.87, top-10 overlap 0.90
+=== L32 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 0.99, top-10 overlap 0.99
+  R:dclm-even vs R:chat: top-1 agree 0.92, top-10 overlap 0.93
+  R:dclm-odd vs R:chat: top-1 agree 0.92, top-10 overlap 0.93
+=== L34 (12288 neurons)
+  R:dclm-even vs R:dclm-odd: top-1 agree 1.00, top-10 overlap 1.00
+  R:dclm-even vs R:chat: top-1 agree 0.96, top-10 overlap 0.96
+  R:dclm-odd vs R:chat: top-1 agree 0.96, top-10 overlap 0.96
+
+layer   plain top-10 overlap: even~odd  even~chat   |  z top-8 overlap: even~odd  even~chat
+L0     0.93      0.55        |   0.90      0.42
+L2     0.92      0.54        |   0.89      0.37
+L4     0.92      0.53        |   0.90      0.47
+L8     0.91      0.54        |   0.90      0.53
+L12    0.92      0.59        |   0.92      0.59
+L16    0.94      0.62        |   0.93      0.61
+L20    0.95      0.71        |   0.95      0.71
+L24    0.97      0.84        |   0.97      0.84
+L28    0.98      0.90        |   0.98      0.90

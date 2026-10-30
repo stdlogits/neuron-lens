@@ -1,0 +1,90 @@
+attention heads' QK circuits per token, Qwen/Qwen3-8B: 36 × 32 heads, 103830 tokens; statistics and the in-context check over 4000 documents (every 16th of the slim activation file), 11369 tokens seen 10+ times as keys. Inputs: raw (embeddings), S (the S-lens footprint at L−1's output) or R (the R-lens direction there that promotes the token; from L1).
+
+attends-to against the attention tokens receive in context: Spearman over tokens, mean over heads (own / control head), and the share of heads past +0.2 (own / control). Targets: key (by the key's token, queries at or after it); key, far and next, far (from queries two or more after it, by the key's token or the token after it):
+  raw vs key       L0-8 +0.13/+0.04 (0.14/0.04)  L9-12 +0.04/+0.02 (0.00/0.00)  L13-20 +0.00/+0.00 (0.00/0.00)  L21-27 +0.03/+0.01 (0.00/0.00)  L28-35 +0.10/+0.00 (0.18/0.00)  L0-35 +0.07/+0.02 (0.07/0.01)
+  raw vs key, far  L0-8 +0.16/+0.05 (0.16/0.07)  L9-12 +0.04/+0.02 (0.00/0.00)  L13-20 +0.00/+0.00 (0.00/0.00)  L21-27 +0.03/+0.01 (0.00/0.00)  L28-35 +0.10/+0.00 (0.19/0.00)  L0-35 +0.07/+0.02 (0.08/0.02)
+  raw vs next, far L0-8 +0.01/+0.01 (0.01/0.02)  L9-12 -0.00/+0.00 (0.00/0.00)  L13-20 -0.01/-0.00 (0.00/0.00)  L21-27 +0.01/+0.01 (0.00/0.00)  L28-35 +0.01/+0.01 (0.00/0.00)  L0-35 +0.00/+0.01 (0.00/0.01)
+  S   vs key       L0-8 +0.21/+0.09 (0.51/0.18)  L9-12 +0.22/+0.15 (0.59/0.35)  L13-20 +0.08/+0.05 (0.07/0.03)  L21-27 +0.12/+0.05 (0.12/0.02)  L28-35 +0.19/+0.03 (0.43/0.11)  L0-35 +0.16/+0.07 (0.33/0.12)
+  S   vs key, far  L0-8 +0.26/+0.11 (0.63/0.24)  L9-12 +0.22/+0.15 (0.61/0.38)  L13-20 +0.09/+0.05 (0.11/0.04)  L21-27 +0.13/+0.06 (0.18/0.03)  L28-35 +0.19/+0.03 (0.47/0.12)  L0-35 +0.18/+0.08 (0.39/0.14)
+  S   vs next, far L0-8 +0.02/+0.03 (0.03/0.05)  L9-12 +0.02/+0.03 (0.00/0.01)  L13-20 +0.02/+0.04 (0.00/0.00)  L21-27 +0.03/+0.04 (0.00/0.01)  L28-35 -0.02/-0.01 (0.00/0.01)  L0-35 +0.01/+0.03 (0.01/0.02)
+  R   vs key       L0-8 +0.04/+0.01 (0.05/0.05)  L9-12 +0.06/+0.01 (0.07/0.04)  L13-20 +0.05/-0.00 (0.10/0.04)  L21-27 +0.02/+0.00 (0.03/0.02)  L28-35 +0.02/-0.00 (0.01/0.02)  L0-35 +0.03/+0.00 (0.05/0.03)
+  R   vs key, far  L0-8 +0.05/+0.01 (0.05/0.06)  L9-12 +0.06/+0.01 (0.08/0.04)  L13-20 +0.06/+0.00 (0.10/0.04)  L21-27 +0.02/+0.01 (0.04/0.03)  L28-35 +0.02/-0.00 (0.01/0.02)  L0-35 +0.04/+0.01 (0.05/0.04)
+  R   vs next, far L0-8 +0.12/+0.10 (0.25/0.20)  L9-12 +0.11/+0.08 (0.12/0.04)  L13-20 +0.08/+0.05 (0.05/0.02)  L21-27 +0.05/+0.02 (0.03/0.00)  L28-35 +0.07/+0.03 (0.10/0.04)  L0-35 +0.09/+0.05 (0.11/0.06)
+
+QK–OV alignment: Spearman over tokens between attends-to (S) and the OV copy z (S→R), mean over heads (own / control head), and the share of heads past +0.2 / under −0.2:
+  L0-8: +0.014 / +0.010;  past +0.2 0.01 / 0.00;  under −0.2 0.00 / 0.00
+  L9-12: +0.012 / +0.004;  past +0.2 0.00 / 0.00;  under −0.2 0.00 / 0.00
+  L13-20: +0.013 / +0.012;  past +0.2 0.01 / 0.01;  under −0.2 0.00 / 0.00
+  L21-27: +0.028 / +0.004;  past +0.2 0.04 / 0.05;  under −0.2 0.01 / 0.02
+  L28-35: +0.047 / -0.010;  past +0.2 0.12 / 0.01;  under −0.2 0.03 / 0.03
+  L0-35: +0.023 / +0.004;  past +0.2 0.04 / 0.02;  under −0.2 0.01 / 0.01
+  against the census's src_copy_pct: Spearman +0.40; mean alignment of heads past 0.9 +0.10, under 0.1 -0.06, the rest +0.02
+
+self-match (median z over tokens) against head_patterns: AUROC for duplicate-token, induction and previous-token heads; Spearman with the duplicate score:
+  raw duplicate 0.94  induction 0.65  prev 0.41  spearman_duplicate 0.44
+  S   duplicate 0.96  induction 0.72  prev 0.26  spearman_duplicate 0.40
+  R   duplicate 0.93  induction 0.59  prev 0.31  spearman_duplicate 0.50
+
+best read by the context check (attends-to against attention received), by band:
+  L0h13 +0.84 (context +0.84, align +0.15):  tion |  Accordingly |  ensuring |  commenced |  delve |  additionally |  comprises |  Transcript
+  L0h27 +0.83 (context +0.83, align +0.21): /*⏎ |  import | >Title |  /**⏎ | import | """⏎ | /**⏎ |  Lemma
+  L0h14 +0.79 (context +0.79, align +0.13):  tion |  ensuring |  delve |  additionally |  ensures |  comprises |  commence |  Accordingly
+  L0h0 +0.79 (context +0.79, align +0.16): 是 | 在 |  在 | 答案 | の | 於 | 如果 | 于
+  L11h16 +0.43 (context +0.43, align -0.03):  Technique |  pooling | 手套 |  valeur |  screamed |  teeth | itivity |  curse
+  L10h5 +0.40 (context +0.40, align +0.07): 类似的 |  workaround |  screamed |  wondered | Similarly | activity |  imagine | 等等
+  L10h26 +0.40 (context +0.40, align -0.03):  Hotel |  valeur |  adhesive |  neighbour |  spoon |  shortcut |  protests |  Wallet
+  L10h4 +0.40 (context +0.40, align +0.13):  photograph |  rejected | activity |  disappear |  atmosphere | idade |  Perspective | ido
+  L32h2 +0.51 (context +0.51, align +0.35):  FIX |  Drink | (act |  surf | Lit |  Tick | .Port |  الط
+  L33h11 +0.51 (context +0.51, align +0.31): Scheduler |  Gardner | 	args | runner |  transporter | ournament | _transfer | Renderer
+  L33h9 +0.51 (context +0.51, align +0.33): 	args | .gamma | .logger | 	msg |  Controllers | Router | Scheduler | _pc
+  L33h8 +0.50 (context +0.50, align -0.37): Scheduler | 	args | .gamma |  transporter |  Controllers | ournament |  benchmarks | runner
+
+most aligned with OV (attend to what they copy), by band:
+  L0h12 +0.26 (context +0.60, align +0.26):  ensuring |  nodded |  ensures |  smiled |  profound | 显然 |  renowned |  intriguing
+  L0h27 +0.21 (context +0.83, align +0.21): /*⏎ |  import | >Title |  /**⏎ | import | """⏎ | /**⏎ |  Lemma
+  L8h1 +0.18 (context +0.42, align +0.18): activity |  atmosphere |  crash |  variance |  escape |  collisions | Noise |  survive
+  L1h9 +0.18 (context +0.25, align +0.18): ).⏎⏎⏎⏎ | !⏎⏎ | .⏎⏎⏎⏎ |  :)⏎⏎ |  .⏎⏎ |  ).⏎⏎ | ].⏎⏎ | ⏎⏎⏎⏎
+  L20h25 +0.30 (context -0.12, align +0.30): Register | Syntax | run | Quiz | Push | Widget | Bean | Reverse
+  L20h27 +0.29 (context -0.13, align +0.29): Register | Develop | Quiz | Bootstrap |  Photo | Failed |  Publisher | Bean
+  L20h24 +0.29 (context +0.05, align +0.29): _top | rs | nbsp | run | =` | cs |  JS | AO
+  L13h28 +0.19 (context -0.00, align +0.19):  peer | gle | Timer | George |  Ron | pool |  WP |  Cake
+  L33h30 +0.45 (context +0.47, align +0.45): isease |  invoice | _feature | riterion | assignment | _candidate | inciple | rule
+  L33h31 +0.43 (context +0.50, align +0.43):  อ | .auto |  الط |  Saved | =_ | (post | 及其他 | ulti
+  L32h2 +0.35 (context +0.51, align +0.35):  FIX |  Drink | (act |  surf | Lit |  Tick | .Port |  الط
+  L27h23 +0.34 (context +0.07, align +0.34): _without |  Vocabulary | _structure | _signature | ,U | 的食物 | uplicate | Simulation
+
+most anti-aligned (attend to what they suppress), by band:
+  L8h3 +0.18 (context +0.18, align -0.18): Iteration |  disappeared | 杂质 | 岛屿 |  Inspection |  specimens |  Filtering | Filtered
+  L0h22 +0.17 (context +0.03, align -0.17): 为了 | When | 。 | 是 |  is | 通过 | ， | 。⏎
+  L2h8 +0.15 (context +0.23, align -0.15): !⏎⏎ |  Accordingly | '))⏎⏎ | ?⏎⏎⏎⏎ | ...⏎ | RODUCTION |  ebook |  🙂⏎⏎
+  L0h21 +0.14 (context +0.32, align -0.14): ， | 。 | : | , |  is | ： | . |  to
+  L19h7 +0.18 (context +0.05, align -0.18):  disaster | Scheduled |  Scheduler |  documenting |  violates |  accumulator |  ranked |  immunity
+  L13h31 +0.15 (context -0.06, align -0.15): George |  Ron | Timer |  Cake |  George | pool | Widget |  Marcus
+  L13h29 +0.15 (context +0.08, align -0.15):  Lloyd | ="# | gle |  Cake |  Harper | aq | PG | ="_
+  L12h23 +0.13 (context +0.22, align -0.13):  Edit |  embedding |  expanded |  belongs |  hull | 的食物 |  merging |  encoded
+  L33h8 +0.37 (context +0.50, align -0.37): Scheduler | 	args | .gamma |  transporter |  Controllers | ournament |  benchmarks | runner
+  L31h12 +0.33 (context +0.46, align -0.33):  depreciation |  preorder |  Expo |  interpolated |  swallow | Forecast | hyper |  microbes
+  L30h10 +0.33 (context +0.47, align -0.33): .page | .Field | _epoch | _year | 		⏎⏎ | _days | (world | 	path
+  L32h4 +0.32 (context +0.45, align -0.32): .At |  À | 而去 | 不如 | /at | alto | asl |  ascent
+
+most self-seeking (median self-match z), by band:
+  L1h31 +6.12 (context +0.06, align -0.04): -d | ccc | tit | -cur | t |  ober | -cr |  Passion
+  L5h4 +5.93 (context +0.05, align +0.00):  Transformer | 地下水 |  reprodu |  younger | 地下 | 硬盘 |  combust | 无线电
+  L5h6 +5.87 (context +0.09, align +0.04): 浆 |  tid | 潜艇 |  seasoned | 正面 | 地下水 | 越发 |  deficiencies
+  L0h28 +5.68 (context +0.01, align -0.00): ricia | 天空部落 | 自己 |  Helen |  Melissa |  Patricia | Joe | Robert
+  L9h16 +5.77 (context +0.01, align +0.00):  unprecedented |  clue | cyan | wis | Maria | .ForeignKey | .makedirs | Features
+  L11h10 +5.50 (context -0.06, align +0.01): 彬 |  HAR | Decoder | \b | *g | -mar | *u |  matlab
+  L9h18 +5.39 (context +0.07, align -0.02): 带动 | 不定 | 过高 |  Cindy | 高低 | .ForeignKey | 串联 |  Carla
+  L11h8 +5.38 (context +0.05, align -0.03):  HAR | YE | *g | VV | -mar | IRR | JO | _hor
+  L28h21 +3.48 (context +0.24, align -0.05): _skip |  cmake |  Deb | _lambda | 磨 |  clauses | 	stop | .encoder
+  L22h23 +3.06 (context +0.09, align +0.34): -dot | oxy | _active | "a | -IN | _ld | .IN | _ON
+  L22h22 +2.95 (context +0.01, align +0.21): -dot | oxy | _active | -IN | "a | .IN | _ON | ################################
+  L22h21 +2.67 (context +0.19, align +0.30): -dot | _active | “No | oxy | 中国人 | -IN | .IN | (builder
+
+query reads quoted in findings §22 (the keys a query token favours, by z in its row):
+  L0h28 query ' Patricia' → favours  Patricia | ricia |  Gloria | ippo | SC |  CC | 出现 |  bus ; disfavours 疫情 |  interactive | ian |  girl | .query | aur |  MOD |  ord
+  L1h28 query ' Paris' → favours  Paris | Paris |  Parse |  Radius |  Paradise | Arizona |  airlines |  Universe ; disfavours (ct | (ob |  obt | (sm |  enth | (bt | _ck | Stmt
+  L6h21 query ' your' → favours  cattle |  stripes |  retention |  prototypes | 授予 | caled |  fellow |  France ; disfavours mq | Autom | 烟花 | .Should | 清净 | .ask | Lua | ..⏎⏎⏎⏎
+  L7h21 query ' almost' → favours  Actual | Actual | 原创 | 個人 | 参照 |  obvious | Independent |  Old ; disfavours _sha |  sigh | .sat |  Sms | Sprites | .rate | 靴 |  sewage
+  L20h17 query ' she' → favours Drop | Contact |  animal | Bean | Price | Claim |  Touch | Run ; disfavours  HOWEVER | 一邊 | /private | VILLE | ,copy | xCB |  antics | 𝕒
+  L20h17 query ' he' → favours Drop | Contact | Claim |  Pi |  Drop |  animal | Price | Run ; disfavours  HOWEVER | 一邊 | VILLE | /private | 𝕒 |  antics | uckles | ,copy

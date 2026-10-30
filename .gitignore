@@ -1,0 +1,25 @@
+# Runtime artifacts are regenerated locally; compact results stay in data/summary.
+data/**
+!data/.gitkeep
+!data/summary/
+!data/summary/**
+!data/corpus/
+!data/corpus/*.provenance.json
+logs/**
+!logs/.gitkeep
+
+# Python and local tooling.
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.env
+.DS_Store
+.idea/
+.vscode/
+.claude/
+settings.local.json

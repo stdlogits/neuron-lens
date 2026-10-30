@@ -1,0 +1,319 @@
+{
+ "poles": [
+  {
+   "layer": 24,
+   "neuron": 1998,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "sneezing",
+    "crying_baby",
+    "dog"
+   ],
+   "top_clip_category": "laughing",
+   "synth_activation_over_top_real": 4.775262355804443
+  },
+  {
+   "layer": 25,
+   "neuron": 1651,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "cow",
+    "sheep",
+    "pig"
+   ],
+   "top_clip_category": "dog",
+   "synth_activation_over_top_real": 2.790724754333496
+  },
+  {
+   "layer": 26,
+   "neuron": 5040,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "rooster",
+    "sneezing",
+    "laughing"
+   ],
+   "top_clip_category": "clock_alarm",
+   "synth_activation_over_top_real": 2.1589982509613037
+  },
+  {
+   "layer": 27,
+   "neuron": 3504,
+   "rank_other": 0.8695652173913043,
+   "rank_train": 1.0,
+   "top_categories": [
+    "sneezing",
+    "crying_baby",
+    "rooster"
+   ],
+   "top_clip_category": "crying_baby",
+   "synth_activation_over_top_real": 2.3823657035827637
+  },
+  {
+   "layer": 28,
+   "neuron": 15145,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "crying_baby",
+    "dog",
+    "pig"
+   ],
+   "top_clip_category": "car_horn",
+   "synth_activation_over_top_real": NaN
+  },
+  {
+   "layer": 29,
+   "neuron": 4781,
+   "rank_other": 0.8695652173913043,
+   "rank_train": 1.0,
+   "top_categories": [
+    "coughing",
+    "sheep",
+    "cow"
+   ],
+   "top_clip_category": "train",
+   "synth_activation_over_top_real": 0.9326245188713074
+  },
+  {
+   "layer": 30,
+   "neuron": 2115,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "door_wood_knock",
+    "coughing",
+    "mouse_click"
+   ],
+   "top_clip_category": "clock_alarm",
+   "synth_activation_over_top_real": 4.072391986846924
+  },
+  {
+   "layer": 31,
+   "neuron": 8863,
+   "rank_other": 0.391304347826087,
+   "rank_train": 1.0,
+   "top_categories": [
+    "rooster",
+    "train",
+    "cat"
+   ],
+   "top_clip_category": "snoring",
+   "synth_activation_over_top_real": 0.5992838740348816
+  },
+  {
+   "layer": 32,
+   "neuron": 6949,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "rain",
+    "washing_machine",
+    "vacuum_cleaner"
+   ],
+   "top_clip_category": "hand_saw",
+   "synth_activation_over_top_real": 3.4128806591033936
+  },
+  {
+   "layer": 33,
+   "neuron": 9866,
+   "rank_other": 0.8260869565217391,
+   "rank_train": 1.0,
+   "top_categories": [
+    "rain",
+    "car_horn",
+    "toilet_flush"
+   ],
+   "top_clip_category": "car_horn",
+   "synth_activation_over_top_real": 0.429849773645401
+  },
+  {
+   "layer": 34,
+   "neuron": 14452,
+   "rank_other": 0.30434782608695654,
+   "rank_train": 1.0,
+   "top_categories": [
+    "siren",
+    "sea_waves",
+    "helicopter"
+   ],
+   "top_clip_category": "snoring",
+   "synth_activation_over_top_real": NaN
+  },
+  {
+   "layer": 35,
+   "neuron": 7768,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "crickets",
+    "fireworks",
+    "toilet_flush"
+   ],
+   "top_clip_category": "sheep",
+   "synth_activation_over_top_real": 0.8683274984359741
+  },
+  {
+   "layer": 36,
+   "neuron": 6915,
+   "rank_other": 0.9565217391304348,
+   "rank_train": 0.34782608695652173,
+   "top_categories": [
+    "crying_baby",
+    "sneezing",
+    "coughing"
+   ],
+   "top_clip_category": "insects",
+   "synth_activation_over_top_real": 0.05376454442739487
+  },
+  {
+   "layer": 37,
+   "neuron": 12729,
+   "rank_other": 0.6521739130434783,
+   "rank_train": 1.0,
+   "top_categories": [
+    "mouse_click",
+    "can_opening",
+    "water_drops"
+   ],
+   "top_clip_category": "pig",
+   "synth_activation_over_top_real": 0.6653652787208557
+  },
+  {
+   "layer": 38,
+   "neuron": 8000,
+   "rank_other": 0.6956521739130435,
+   "rank_train": 0.6521739130434783,
+   "top_categories": [
+    "crying_baby",
+    "crow",
+    "rooster"
+   ],
+   "top_clip_category": "clapping",
+   "synth_activation_over_top_real": -2.92256498336792
+  },
+  {
+   "layer": 39,
+   "neuron": 14627,
+   "rank_other": 0.5217391304347826,
+   "rank_train": 0.9565217391304348,
+   "top_categories": [
+    "coughing",
+    "toilet_flush",
+    "door_wood_knock"
+   ],
+   "top_clip_category": "mouse_click",
+   "synth_activation_over_top_real": -0.046217139810323715
+  },
+  {
+   "layer": 40,
+   "neuron": 12361,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "insects",
+    "breathing",
+    "sea_waves"
+   ],
+   "top_clip_category": "insects",
+   "synth_activation_over_top_real": 1.5156265497207642
+  },
+  {
+   "layer": 41,
+   "neuron": 15288,
+   "rank_other": 0.4782608695652174,
+   "rank_train": 0.5217391304347826,
+   "top_categories": [
+    "sneezing",
+    "sheep",
+    "rooster"
+   ],
+   "top_clip_category": "door_wood_creaks",
+   "synth_activation_over_top_real": -5.769218444824219
+  },
+  {
+   "layer": 42,
+   "neuron": 9746,
+   "rank_other": 0.8260869565217391,
+   "rank_train": 0.9565217391304348,
+   "top_categories": [
+    "rooster",
+    "door_wood_knock",
+    "dog"
+   ],
+   "top_clip_category": "glass_breaking",
+   "synth_activation_over_top_real": 0.3946007192134857
+  },
+  {
+   "layer": 43,
+   "neuron": 14571,
+   "rank_other": 0.8260869565217391,
+   "rank_train": 0.8695652173913043,
+   "top_categories": [
+    "rain",
+    "helicopter",
+    "car_horn"
+   ],
+   "top_clip_category": "rain",
+   "synth_activation_over_top_real": 0.282595694065094
+  },
+  {
+   "layer": 44,
+   "neuron": 4696,
+   "rank_other": 0.30434782608695654,
+   "rank_train": 0.8260869565217391,
+   "top_categories": [
+    "siren",
+    "church_bells",
+    "airplane"
+   ],
+   "top_clip_category": "helicopter",
+   "synth_activation_over_top_real": 0.7205476760864258
+  },
+  {
+   "layer": 45,
+   "neuron": 10392,
+   "rank_other": 0.8695652173913043,
+   "rank_train": 1.0,
+   "top_categories": [
+    "rooster",
+    "coughing",
+    "cat"
+   ],
+   "top_clip_category": "door_wood_creaks",
+   "synth_activation_over_top_real": 2.237445592880249
+  },
+  {
+   "layer": 46,
+   "neuron": 7654,
+   "rank_other": 1.0,
+   "rank_train": 1.0,
+   "top_categories": [
+    "mouse_click",
+    "glass_breaking",
+    "sea_waves"
+   ],
+   "top_clip_category": "crow",
+   "synth_activation_over_top_real": 0.6359103322029114
+  },
+  {
+   "layer": 47,
+   "neuron": 2074,
+   "rank_other": 0.7391304347826086,
+   "rank_train": 1.0,
+   "top_categories": [
+    "car_horn",
+    "sea_waves",
+    "airplane"
+   ],
+   "top_clip_category": "church_bells",
+   "synth_activation_over_top_real": 0.589833676815033
+  }
+ ],
+ "seconds": 10.0,
+ "rank_other_median": 0.8695652173913043,
+ "rank_train_median": 1.0
+}

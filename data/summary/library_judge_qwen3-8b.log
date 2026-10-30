@@ -1,0 +1,80 @@
+Neuron Persona Library personas against a pole's reads, judged generously and blind by Claude, from each side: write (the lens of record's top 10 and top 8 layer-contrastive tokens), input (the R-lens read from the MLP input, top 10, and the S-lens read, raw top 10 through L8, layer-contrastive top 8 after), both. write: 720 items scored; input: 720 items scored; both: 720 items scored. Share of rows scoring 2+ (clear: the concept, a translation, or a strongly associated thing), 3 (the concept itself) and 1+ (loose), matched | control (another sampled row's name); strict: a name word's first token among the write side's tokens
+
+write, all names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      60   0.23 | 0.00   0.35 | 0.02   0.30 | 0.00   0.43 | 0.10
+L 6-11     60   0.10 | 0.00   0.27 | 0.02   0.10 | 0.02   0.45 | 0.08
+L12-17     60   0.03 | 0.00   0.20 | 0.07   0.10 | 0.02   0.28 | 0.18
+L18-23     60   0.10 | 0.00   0.22 | 0.02   0.12 | 0.00   0.33 | 0.08
+L24-29     60   0.18 | 0.00   0.45 | 0.00   0.25 | 0.00   0.62 | 0.10
+L30-35     60   0.52 | 0.00   0.53 | 0.02   0.38 | 0.00   0.58 | 0.12
+L 0-35    360   0.19 | 0.00   0.34 | 0.02   0.21 | 0.01   0.45 | 0.11
+weighted  34220   0.11 | 0.00   0.27 | 0.03   0.14 | 0.01   0.41 | 0.11   (groups weighted by the library's rows)
+
+write, specific names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      41   0.32 | 0.00   0.49 | 0.00   0.41 | 0.00   0.56 | 0.07
+L 6-11     34   0.18 | 0.00   0.35 | 0.00   0.15 | 0.00   0.56 | 0.09
+L12-17     32   0.03 | 0.00   0.22 | 0.03   0.16 | 0.00   0.31 | 0.19
+L18-23     32   0.16 | 0.00   0.22 | 0.00   0.12 | 0.00   0.34 | 0.06
+L24-29     47   0.19 | 0.00   0.51 | 0.00   0.28 | 0.00   0.66 | 0.11
+L30-35     53   0.49 | 0.00   0.51 | 0.02   0.38 | 0.00   0.57 | 0.13
+L 0-35    239   0.25 | 0.00   0.41 | 0.01   0.27 | 0.00   0.52 | 0.11
+weighted  20558   0.16 | 0.00   0.35 | 0.01   0.19 | 0.00   0.50 | 0.11   (groups weighted by the library's rows)
+
+input, all names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      60   0.23 | 0.00   0.35 | 0.02   0.28 | 0.00   0.42 | 0.05
+L 6-11     60   0.10 | 0.00   0.22 | 0.02   0.08 | 0.00   0.40 | 0.13
+L12-17     60   0.03 | 0.00   0.17 | 0.07   0.07 | 0.02   0.25 | 0.17
+L18-23     60   0.10 | 0.00   0.10 | 0.03   0.10 | 0.00   0.17 | 0.10
+L24-29     60   0.18 | 0.00   0.37 | 0.02   0.20 | 0.00   0.58 | 0.12
+L30-35     60   0.52 | 0.00   0.42 | 0.02   0.28 | 0.00   0.53 | 0.15
+L 0-35    360   0.19 | 0.00   0.27 | 0.03   0.17 | 0.00   0.39 | 0.12
+weighted  34220   0.11 | 0.00   0.22 | 0.03   0.11 | 0.00   0.35 | 0.13   (groups weighted by the library's rows)
+
+input, specific names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      41   0.32 | 0.00   0.46 | 0.00   0.39 | 0.00   0.54 | 0.05
+L 6-11     34   0.18 | 0.00   0.32 | 0.03   0.15 | 0.00   0.50 | 0.12
+L12-17     32   0.03 | 0.00   0.16 | 0.06   0.09 | 0.00   0.31 | 0.09
+L18-23     32   0.16 | 0.00   0.09 | 0.06   0.09 | 0.00   0.16 | 0.16
+L24-29     47   0.19 | 0.00   0.43 | 0.02   0.23 | 0.00   0.62 | 0.11
+L30-35     53   0.49 | 0.00   0.43 | 0.02   0.28 | 0.00   0.55 | 0.15
+L 0-35    239   0.25 | 0.00   0.34 | 0.03   0.22 | 0.00   0.47 | 0.11
+weighted  20558   0.16 | 0.00   0.29 | 0.04   0.16 | 0.00   0.44 | 0.11   (groups weighted by the library's rows)
+
+both, all names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      60   0.23 | 0.00   0.38 | 0.03   0.33 | 0.00   0.52 | 0.10
+L 6-11     60   0.10 | 0.00   0.33 | 0.07   0.15 | 0.02   0.52 | 0.17
+L12-17     60   0.03 | 0.00   0.28 | 0.10   0.10 | 0.02   0.40 | 0.30
+L18-23     60   0.10 | 0.00   0.27 | 0.05   0.10 | 0.00   0.37 | 0.17
+L24-29     60   0.18 | 0.00   0.50 | 0.03   0.30 | 0.00   0.68 | 0.12
+L30-35     60   0.52 | 0.00   0.62 | 0.02   0.43 | 0.00   0.70 | 0.18
+L 0-35    360   0.19 | 0.00   0.40 | 0.05   0.24 | 0.01   0.53 | 0.17
+weighted  34220   0.11 | 0.00   0.34 | 0.06   0.17 | 0.01   0.49 | 0.19   (groups weighted by the library's rows)
+
+both, specific names
+layers    rows   strict       2+ clear      3 itself      1+ loose
+L 0-5      41   0.32 | 0.00   0.51 | 0.00   0.46 | 0.00   0.63 | 0.05
+L 6-11     34   0.18 | 0.00   0.44 | 0.06   0.24 | 0.00   0.62 | 0.12
+L12-17     32   0.03 | 0.00   0.25 | 0.06   0.16 | 0.00   0.41 | 0.22
+L18-23     32   0.16 | 0.00   0.28 | 0.06   0.12 | 0.00   0.34 | 0.22
+L24-29     47   0.19 | 0.00   0.55 | 0.04   0.34 | 0.00   0.70 | 0.13
+L30-35     53   0.49 | 0.00   0.60 | 0.02   0.42 | 0.00   0.70 | 0.17
+L 0-35    239   0.25 | 0.00   0.46 | 0.04   0.31 | 0.00   0.59 | 0.15
+weighted  20558   0.16 | 0.00   0.41 | 0.05   0.24 | 0.00   0.56 | 0.15   (groups weighted by the library's rows)
+
+how the sides combine (clear, 2+), by group, matched | control: write only, input only, both judged together, and either side judged alone
+  L 0-5  write 0.35 | 0.02   input 0.35 | 0.02   both 0.38 | 0.03   either 0.38 | 0.03
+  L 6-11 write 0.27 | 0.02   input 0.22 | 0.02   both 0.33 | 0.07   either 0.33 | 0.03
+  L12-17 write 0.20 | 0.07   input 0.17 | 0.07   both 0.28 | 0.10   either 0.25 | 0.12
+  L18-23 write 0.22 | 0.02   input 0.10 | 0.03   both 0.27 | 0.05   either 0.25 | 0.05
+  L24-29 write 0.45 | 0.00   input 0.37 | 0.02   both 0.50 | 0.03   either 0.47 | 0.02
+  L30-35 write 0.53 | 0.02   input 0.42 | 0.02   both 0.62 | 0.02   either 0.58 | 0.03
+  L 0-35 write 0.34 | 0.02   input 0.27 | 0.03   both 0.40 | 0.05   either 0.38 | 0.05
+
+examples of clear matches, write: L1 n1347 − Member of a Large Loving Family:  family,  families, 全家; L3 n5892 + Internet Archivist: archives, 档案, Archive, archive; L5 n11970 + Paper Sheet: Paper, -paper, 纸; L9 n3370 − Dragon:  dragon, 龙,  dragons; L12 n7406 − Sheep:  sheep,  Sheep; L18 n11090 − Teacher:  instructors,  teaching,  classroom,  lesson; L23 n7888 − Human Friend:  person, 人; L25 n10857 − Casual Small Talk at the Water's Edge:  conversation,  conversations, 谈论, 交谈; L26 n10306 + Power of the Earth: 能力,  capability,  ability; L30 n2822 − Atmospheric Pressure Gauge:  pressure, 压力, Pressure,  pressures; L30 n10036 − Large-Scale Pulley Block System:  pul, 滑,  rig,  win; L31 n7283 + Yuki:  Japanese, 日本,  Japan; L35 n3804 − Qian Gang, the Supercop Rogue:  rogue
+examples of clear matches, input: L1 n1347 − Member of a Large Loving Family:  family,  Family,  families; L3 n120 − Qalam, the Most Merciful:  Mercy,  mercy,  merciless; L4 n1982 − Debtor:  debts,  debtor,  debt; L8 n12094 − Zhang San, a Beijing Storyteller: 相声, 师傅, 天津; L10 n11165 − Chinese-American Artist: 艺术家,  artist,  artists; L14 n1254 − Expatriate Newcomer: 外籍, 外国人,  foreigners; L21 n9668 + Chinese Person: China; L25 n4665 + Vast Repository of Oil and Coal: 石油, 油田, 油气; L27 n514 − Transparent Rope Floor Mat:  flooring,  Flooring; L30 n1107 + Registered Nurse:  nurse, 护士,  nurses; L30 n7390 + Massive Brash Mysterious D&D Veteran:  spells; L30 n11183 + Desert:  dry, 干燥; L33 n10136 + Sake Sake: wine
+examples of clear matches, both: L1 n1347 − Member of a Large Loving Family:  family, 全家; L3 n5892 + Internet Archivist: Archive,  archives, 档案; L5 n11970 + Paper Sheet: 纸, Paper, 纸质; L8 n12142 + Italy:  Italy; L12 n3384 + Prime Minister of the United Kingdom: 首相,  cabinet,  parliament, 内阁; L15 n5352 + Nervous Ghost:  Halloween; L19 n10169 + Human Who Loves Weather, Music, and Reading, Fixated on Not Playing with the Dog: 乐器, 玩耍, 喇叭; L24 n1490 + New York Location Content Selector:  selecting,  selection, 选择; L26 n4123 − Hand Sanitizer:  sanitizer; L27 n5397 − Dance Partner:  dance, 跳舞; L30 n3717 − Large-Scale Reality Show Talk Show Host:  reality, 综艺节目,  TV, 节目; L30 n11077 − Harvest Combine:  crop,  crops,  farmers,  farm; L31 n8844 + Schrödinger Lapcat:  Lap,  lap,  Schro,  Sch

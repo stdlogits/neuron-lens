@@ -1,0 +1,26 @@
+device mps, torch.bfloat16, one document of 128 tokens
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 35015.40it/s]
+
+Qwen/Qwen3-0.6B: 28 layers, d 1024
+  R-lens, dim_batch 32: 29.4 s per document
+  R-lens, dim_batch 64: 31.3 s per document
+  S-lens, dim_batch 32: 38.8 s per document
+  S-lens, dim_batch 64: 41.5 s per document
+  Drowse R-lens: 29.3 s; ours vs Drowse rel err median 2.0e-03, max 5.0e-03
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 4620.77it/s]
+  R-lens bf16 vs fp32 rel err: median 1.2e-02, max 2.1e-02
+  S-lens bf16 vs fp32 rel err: median 1.1e-02, max 2.5e-02
+device mps, torch.bfloat16, one document of 128 tokens
+Loading weights:   0%|          | 0/399 [00:00<?, ?it/s]Loading weights: 100%|██████████| 399/399 [00:00<00:00, 16153.89it/s]
+
+Qwen/Qwen3-8B: 36 layers, d 4096
+  R-lens vjp, dim_batch 32: 470.6 s per document
+  S-lens dual, dim_batch 32: 1039.0 s per document
+  S-lens linearize vs dual: rel err 1.2e-02
+  S-lens linearize, dim_batch 32: 374.7 s per document
+
+# 2026-10-28, later: the hand-written estimator (df9cc57), Mac GPU, bf16, dim_batch 256
+Qwen3-8B   R-lens, dim_batch 256: 231.44 s per document, 27 TFLOP/s
+Qwen3-8B   S-lens, dim_batch 256: 290.91 s per document, 22 TFLOP/s
+Qwen3-0.6B   R-lens, dim_batch 64: 6.82 s; 256: 7.25 s. S-lens (mid and out), 64: 7.55 s; 256: 7.91 s
+Qwen3-0.6B   bf16 vs fp32 rel err: R median 1.2e-02, max 1.7e-02; S mid median 1.0e-02, max 1.5e-02

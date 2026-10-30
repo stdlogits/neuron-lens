@@ -1,0 +1,500 @@
+{
+ "built_by": "scripts/13_media_activations.py (neuron_lens/media_sets.py)",
+ "read_on": "2026-10-30",
+ "order": "each source streamed with a seed-0 shuffle (or its file list, classes in turn); each document's own row, revision and SHA-1 are in media/<modality>_docs.parquet ('ref')",
+ "modality": "image",
+ "preprocessing": "centre-cropped to 384 × 384 (documents, charts, screens and drawings letterboxed on white)",
+ "sources": [
+  {
+   "source": "imagenet",
+   "dataset": "ILSVRC/imagenet-1k",
+   "config": null,
+   "split": "validation",
+   "items": 8000,
+   "read": "shuffle, buffer 256",
+   "revision": "49e2ee26f3810fb5a7536bbf732a7b07389a47b5",
+   "license": "other"
+  },
+  {
+   "source": "coco",
+   "dataset": "detection-datasets/coco",
+   "config": null,
+   "split": "val",
+   "items": 3000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "cf0b22332314a937e9dc8a1957b21725430bb41d",
+   "license": "not stated"
+  },
+  {
+   "source": "places365",
+   "dataset": "haideraltahan/wds_places365",
+   "config": null,
+   "split": "test",
+   "items": 3000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "1aaec15b7724b6490bd1adc6e9f45b9c0cb4d892",
+   "license": "not stated"
+  },
+  {
+   "source": "sun397",
+   "dataset": "tanganke/sun397",
+   "config": null,
+   "split": "train",
+   "items": 2000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "9c4afd6174afa3974f209a0ef099dbbe244dfd27",
+   "license": "not stated"
+  },
+  {
+   "source": "cityscapes",
+   "dataset": "Chris1/cityscapes",
+   "config": null,
+   "split": "validation",
+   "items": 300,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "f5245e5b4ce9ec8c1c00e17921e176c566914a7c",
+   "license": "not stated"
+  },
+  {
+   "source": "food101",
+   "dataset": "ethz/food101",
+   "config": null,
+   "split": "validation",
+   "items": 1500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "83488de741c1bd1ce27aa6a2b33e19c7bdf92ca9",
+   "license": "unknown"
+  },
+  {
+   "source": "pets",
+   "dataset": "visual-layer/oxford-iiit-pet-vl-enriched",
+   "config": null,
+   "split": "train",
+   "items": 800,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "66273bd68c7a29b979ba533700908f1613cbbf9f",
+   "license": "not stated"
+  },
+  {
+   "source": "flowers",
+   "dataset": "nelorth/oxford-flowers",
+   "config": null,
+   "split": "test",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "a37b1891609c0376fa81eced756e7863e1bd873b",
+   "license": "unknown"
+  },
+  {
+   "source": "cars",
+   "dataset": "tanganke/stanford_cars",
+   "config": null,
+   "split": "test",
+   "items": 1000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "9abf6cf7d6dfa7b95152a0d6e791ea9435b47a40",
+   "license": "not stated"
+  },
+  {
+   "source": "aircraft",
+   "dataset": "Multimodal-Fatima/FGVC_Aircraft_test",
+   "config": null,
+   "split": "test",
+   "items": 800,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "7aed01f3cbf8565946dff6ab186e637b31999ed2",
+   "license": "not stated"
+  },
+  {
+   "source": "dtd",
+   "dataset": "tanganke/dtd",
+   "config": null,
+   "split": "test",
+   "items": 1000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "d2afa97d9f335b1a6b3b09c637aef667f98f966e",
+   "license": "not stated"
+  },
+  {
+   "source": "quickdraw",
+   "dataset": "Xenova/quickdraw-small",
+   "config": null,
+   "split": "test",
+   "items": 2000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "8ecd85f5447fbac0f20e10ce7dc59b149c832d8d",
+   "license": "not stated"
+  },
+  {
+   "source": "eurosat",
+   "dataset": "blanchon/EuroSAT_RGB",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "655ef66ef2be07f89aec61407f24c772802eb87d",
+   "license": "unknown"
+  },
+  {
+   "source": "xray",
+   "dataset": "hf-vision/chest-xray-pneumonia",
+   "config": null,
+   "split": "test",
+   "items": 300,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "c1a67c18df1a52ec332ffc00418f4eaa61a9f2bc",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "mnist",
+   "dataset": "ylecun/mnist",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "77f3279092a1c1579b2250db8eafed0ad422088c",
+   "license": "mit"
+  },
+  {
+   "source": "rico",
+   "dataset": "rootsautomation/RICO-Screen2Words",
+   "config": null,
+   "split": "test",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "fcd10c2cda2538ed71b1028984675fa29854283b",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "flickr8k",
+   "dataset": "jxie/flickr8k",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "56f58c967835f7c508d684f36bd7897cca9d7634",
+   "license": "not stated"
+  },
+  {
+   "source": "wikiart",
+   "dataset": "huggan/wikiart",
+   "config": null,
+   "split": "train",
+   "items": 1500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "d559852d2b232e0fcf195e775866964f0564f2b5",
+   "license": "unknown"
+  },
+  {
+   "source": "docvqa",
+   "dataset": "pixparse/docvqa-single-page-questions",
+   "config": null,
+   "split": "validation",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "33136ef456fa5a3fe68568d6e31dda4eeff95b9b",
+   "license": "mit"
+  },
+  {
+   "source": "chartqa",
+   "dataset": "HuggingFaceM4/ChartQA",
+   "config": null,
+   "split": "val",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "b605b6e08b57faf4359aeb2fe6a3ca595f99b6c5",
+   "license": "gpl-3.0"
+  },
+  {
+   "source": "caltech101",
+   "dataset": "dpdl-benchmark/caltech101",
+   "config": null,
+   "split": "train",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "0546d19e9991f4f14d3015a75aacebc596f8db23",
+   "license": "not stated"
+  },
+  {
+   "source": "anime",
+   "dataset": "huggan/anime-faces",
+   "config": null,
+   "split": "train",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "67ebcf8c69b45feb3883d695f04227078a6c9da9",
+   "license": "cc0-1.0"
+  },
+  {
+   "source": "cartoon",
+   "dataset": "Norod78/cartoon-blip-captions",
+   "config": null,
+   "split": "train",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "db95ae658758c7b2337a54a2facabefe3af9698a",
+   "license": "cc-by-nc-sa-4.0"
+  },
+  {
+   "source": "sprite",
+   "dataset": "tkarr/sprite_caption_dataset",
+   "config": null,
+   "split": "train",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "b88d87988b5645dda3f69bb920a2468b3da82054",
+   "license": "not stated"
+  },
+  {
+   "source": "logo",
+   "dataset": "logo-wizard/modern-logo-dataset",
+   "config": null,
+   "split": "train",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "82051101cfdf253729e5f418c38d2d1305ef0a91",
+   "license": "cc-by-nc-3.0"
+  },
+  {
+   "source": "emoji",
+   "dataset": "valhalla/emoji-dataset",
+   "config": null,
+   "split": "train",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "67684ccc05d8d624f00a89b733d4e1d844b16242",
+   "license": "not stated"
+  },
+  {
+   "source": "newyorker",
+   "dataset": "jmhessel/newyorker_caption_contest",
+   "config": "explanation",
+   "split": "test",
+   "items": 300,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "d81cbab7d0392708d5371d3a4960e69261824db4",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "actions",
+   "dataset": "Bingsu/Human_Action_Recognition",
+   "config": null,
+   "split": "test",
+   "items": 1000,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "6c1a1284eb3557055d7c57b91cd7e68e3252b32c",
+   "license": "odbl"
+  },
+  {
+   "source": "textvqa",
+   "dataset": "lmms-lab/textvqa",
+   "config": null,
+   "split": "validation",
+   "items": 800,
+   "read": "shuffle, buffer 64",
+   "revision": "9c0699cd19768ac5ab97568f6b3cbac4c0062884",
+   "license": "not stated"
+  },
+  {
+   "source": "iam",
+   "dataset": "Teklia/IAM-line",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "fbdad97500ce54635c0d1ba306bf535cb40656cf",
+   "license": "mit"
+  },
+  {
+   "source": "letters",
+   "dataset": "pittawat/letter_recognition",
+   "config": null,
+   "split": "train",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "19a260327b3d3632b69ad4c1f030e19a7ae65c57",
+   "license": "not stated"
+  },
+  {
+   "source": "im2latex",
+   "dataset": "yuntian-deng/im2latex-100k",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "2cf5f2534bc6d9fb2a333cc99b46c0d331553200",
+   "license": "cc0-1.0"
+  },
+  {
+   "source": "ai2d",
+   "dataset": "lmms-lab/ai2d",
+   "config": null,
+   "split": "test",
+   "items": 600,
+   "read": "shuffle, buffer 64",
+   "revision": "c83a9b9692933aff8349157c88a413df9d02c4e5",
+   "license": "not stated"
+  },
+  {
+   "source": "websight",
+   "dataset": "HuggingFaceM4/WebSight",
+   "config": "v0.2",
+   "split": "train",
+   "items": 600,
+   "read": "shuffle, buffer 64",
+   "revision": "b11f8172f89c992b56ac702319e02c428cca4a4e",
+   "license": "cc-by-4.0"
+  },
+  {
+   "source": "pubtabnet",
+   "dataset": "apoidea/pubtabnet-html",
+   "config": null,
+   "split": "validation",
+   "items": 400,
+   "read": "shuffle, buffer 64",
+   "revision": "0d58324674ff93825c972f7fdfd2887e0ae0a247",
+   "license": "cdla-permissive-1.0"
+  },
+  {
+   "source": "aigen",
+   "dataset": "ProGamerGov/synthetic-dataset-1m-dalle3-high-quality-captions",
+   "config": null,
+   "split": "train",
+   "items": 800,
+   "read": "shuffle, buffer 64",
+   "revision": "216b8becd8c112e2a87c08f9ce8f2d65247c8c09",
+   "license": "mit"
+  },
+  {
+   "source": "birds",
+   "dataset": "bentrevett/caltech-ucsd-birds-200-2011",
+   "config": null,
+   "split": "test",
+   "items": 1200,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "1ef09e021b0b65b40337f6f285909656f407f6e0",
+   "license": "not stated"
+  },
+  {
+   "source": "signs",
+   "dataset": "tanganke/gtsrb",
+   "config": null,
+   "split": "test",
+   "items": 800,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "ea889fff70dda7b09e94a4b207dded438deca549",
+   "license": "not stated"
+  },
+  {
+   "source": "products",
+   "dataset": "ashraq/fashion-product-images-small",
+   "config": null,
+   "split": "train",
+   "items": 800,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "3859c76db2f6f3d3b9a3863345e3ccdbff75879d",
+   "license": "not stated"
+  },
+  {
+   "source": "fashionmnist",
+   "dataset": "zalando-datasets/fashion_mnist",
+   "config": null,
+   "split": "test",
+   "items": 300,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "531be5e2ccc9dba0c201ad3ae567a4f3d16ecdd2",
+   "license": "mit"
+  },
+  {
+   "source": "skin",
+   "dataset": "marmal88/skin_cancer",
+   "config": null,
+   "split": "test",
+   "items": 500,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "bdd59e10860746202dfdc452e0ac3a9eaa25268d",
+   "license": "not stated"
+  },
+  {
+   "source": "histology",
+   "dataset": "1aurent/PatchCamelyon",
+   "config": null,
+   "split": "test",
+   "items": 400,
+   "read": "shuffle, buffer 64",
+   "revision": "e4bd149e7a868a9d811fdd9f9a9fb78c05c104ab",
+   "license": "cc0-1.0"
+  },
+  {
+   "source": "galaxy",
+   "dataset": "matthieulel/galaxy10_decals",
+   "config": null,
+   "split": "test",
+   "items": 600,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "d1cfafdcce69ca7cd25aecce1a0b578cf07e6a30",
+   "license": "not stated"
+  },
+  {
+   "source": "aerial",
+   "dataset": "blanchon/UC_Merced",
+   "config": null,
+   "split": "train",
+   "items": 800,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "b79f9bfb55cd7731306d583c3e072c8c010bac61",
+   "license": "unknown"
+  },
+  {
+   "source": "underwater",
+   "dataset": "Francesco/aquarium-qlnqy",
+   "config": null,
+   "split": "test",
+   "items": 300,
+   "read": "shuffle, buffer max(1000, 2 × items)",
+   "revision": "040828dedabe342b06fbddba93ca0d8400358472",
+   "license": "cc"
+  },
+  {
+   "source": "slides",
+   "dataset": "NTT-hil-insight/SlideVQA",
+   "config": null,
+   "split": "val",
+   "items": 500,
+   "read": "shuffle, buffer 16",
+   "revision": "e780ea258d734958befbfaed19fa059584642ca8",
+   "license": "not stated"
+  },
+  {
+   "source": "expressions",
+   "dataset": "LaurenGurgiolo/9_Facial_Expressions",
+   "config": null,
+   "split": "train",
+   "items": 900,
+   "read": "file list, classes in turn",
+   "revision": "6c854b6e59b69377df5715a4e87b14cd332ef8cc",
+   "license": "other"
+  },
+  {
+   "source": "expressions",
+   "dataset": "gabriellidenor/facial_expression_seven_classes",
+   "config": null,
+   "split": "train",
+   "items": 700,
+   "read": "file list, classes in turn",
+   "revision": "5c99502b3dbbfa08b096d1e8efcfe8ea2051f206",
+   "license": "odbl"
+  },
+  {
+   "source": "celeba",
+   "dataset": "huggan/CelebA-faces-with-attributes",
+   "config": null,
+   "split": "train",
+   "items": 1500,
+   "read": "shuffle, buffer 64",
+   "revision": "b47e27a7c6bc578361ce132da8c8dad573b98d9e",
+   "license": "not stated"
+  }
+ ],
+ "also": "Also: 800 Manga109-s pages (hal-utokyo/Manga109-s, gated, revision 4b42924bb8afdb3460798fcfc9c09306b57e53fb, from Manga109s_released_2026_05_21.zip, random.Random(0)), labelled 'manga page' and 'comic'; the first 1,200 COCO items degraded in turn (low light, Gaussian blur, JPEG quality 4, motion blur), labelled 'synth:'; and synthetic images (neuron_lens.media_sets.synth_images, seed 0: gratings, colours, gradients, checkerboards, noise, shapes, glyphs, scripts in Noto fonts, code and maths). ImageNet is gated and its terms forbid redistribution, so the release links to its rows. CelebA is read without identities, and without its 'Attractive' attribute."
+}

@@ -1,0 +1,40 @@
+attention heads in image and audio contexts, google/gemma-4-12B: 48 × 16 heads; per modality N labelled documents in media.PROMPT, each followed by ' a <label>' (its own, and another class's)
+
+== image: 64 documents, 64 classes, 64 slots; label loss right 3.64 / wrong 10.29 nats, right below wrong in 97%
+band     read (×even)  sink   self   within  nbr    content>0 (z>3)  write_mid q≤.05  write_logit q≤.05
+L 0-11  0.147 (0.2)  0.261  0.075  0.546   0.166  0.04             0.04             0.02
+L12-23  0.185 (0.3)  0.287  0.060  0.365   0.046  0.12             0.43             0.21
+L24-35  0.266 (0.4)  0.276  0.077  0.358   0.036  0.29             0.41             0.34
+L36-47  0.141 (0.2)  0.405  0.054  0.133   0.018  0.08             0.36             0.33
+top media readers (attention from the text after the media, × an even spread): L24h13 0.964, L44h7 0.964, L31h3 0.941, L23h8 0.925, L25h14 0.906, L27h12 0.889, L46h4 0.859, L27h13 0.853
+top local heads (attention from a slot to its neighbours): L0h13 0.849, L0h4 0.833, L2h4 0.782, L2h8 0.774, L3h3 0.738, L2h14 0.724, L3h4 0.690, L1h14 0.687
+top content carriers (ablation raises the right label's loss more than a wrong one's, nats): L8h15 0.754 (z 5.1), L7h13 0.654 (z 5.0), L44h7 0.431 (z 7.4), L38h6 0.425 (z 7.8), L26h14 0.420 (z 7.3), L25h9 0.383 (z 3.9), L28h6 0.309 (z 9.9), L23h10 0.292 (z 3.8)
+top label writers (right class's mean percentile among classes, R-lens mid): L37h10 0.955 (q 0.017), L44h7 0.955 (q 0.017), L40h6 0.940 (q 0.017), L46h4 0.933 (q 0.017), L35h2 0.931 (q 0.017), L46h7 0.923 (q 0.017), L42h9 0.915 (q 0.017), L43h14 0.913 (q 0.017)
+  the top label writers, per document: its label → the class the head writes most (centred):
+    L37h10 (top-1 56%): house finch → robin | robin → robin | green mamba → green mamba | harvestman → spider web | goose → goose | jellyfish → jellyfish
+    L44h7 (top-1 56%): house finch → robin | robin → cliff | green mamba → green mamba | harvestman → spider web | goose → goose | jellyfish → jellyfish
+    L40h6 (top-1 48%): house finch → robin | robin → robin | green mamba → goose | harvestman → spider web | goose → goose | jellyfish → tank
+    L46h4 (top-1 61%): house finch → robin | robin → robin | green mamba → green mamba | harvestman → spider web | goose → cannon | jellyfish → jellyfish
+    L35h2 (top-1 44%): house finch → robin | robin → robin | green mamba → green mamba | harvestman → spider web | goose → goose | jellyfish → jellyfish
+  Spearman over heads with the text patterns: read_ratio vs sink -0.45, read_ratio vs prev +0.25, read_ratio vs induction +0.41, read_ratio vs duplicate +0.19, read_ratio vs ablate_copy +0.11, content vs sink -0.14, content vs prev -0.06, content vs induction +0.10, content vs duplicate +0.15, content vs ablate_copy +0.04
+
+== audio: 64 documents, 49 classes, 64 slots; label loss right 6.48 / wrong 6.56 nats, right below wrong in 55%
+band     read (×even)  sink   self   within  nbr    content>0 (z>3)  write_mid q≤.05  write_logit q≤.05
+L 0-11  0.412 (0.6)  0.161  0.058  0.596   0.074  0.00             0.00             0.00
+L12-23  0.180 (0.3)  0.343  0.033  0.285   0.030  0.00             0.00             0.00
+L24-35  0.264 (0.4)  0.305  0.062  0.235   0.012  0.00             0.00             0.00
+L36-47  0.124 (0.2)  0.414  0.053  0.111   0.011  0.00             0.00             0.00
+top media readers (attention from the text after the media, × an even spread): L8h5 1.402, L7h9 1.399, L3h6 1.392, L4h0 1.375, L10h7 1.341, L2h15 1.340, L2h1 1.338, L0h4 1.324
+top local heads (attention from a slot to its neighbours): L2h5 0.959, L3h10 0.902, L2h9 0.888, L4h12 0.883, L8h0 0.855, L1h12 0.848, L7h15 0.812, L16h14 0.689
+top content carriers (ablation raises the right label's loss more than a wrong one's, nats): L9h4 0.064 (z 1.6), L4h8 0.063 (z 2.4), L11h1 0.062 (z 2.0), L10h15 0.061 (z 2.8), L14h2 0.061 (z 2.3), L18h12 0.060 (z 2.5), L10h13 0.060 (z 1.7), L12h11 0.060 (z 2.1)
+top label writers (right class's mean percentile among classes, R-lens mid): L47h4 0.651 (q 0.159), L45h11 0.645 (q 0.159), L32h4 0.640 (q 0.159), L30h13 0.639 (q 0.159), L6h14 0.638 (q 0.159), L26h3 0.631 (q 0.159), L7h0 0.630 (q 0.159), L47h9 0.628 (q 0.159)
+  the top label writers, per document: its label → the class the head writes most (centred):
+    L47h4 (top-1 9%): chirping birds → chainsaw | vacuum cleaner → vacuum cleaner | thunderstorm → laughing | crow → frog | clapping → airplane | fireworks → laughing
+    L45h11 (top-1 3%): chirping birds → sea waves | vacuum cleaner → breathing | thunderstorm → drinking sipping | crow → thunderstorm | clapping → wind | fireworks → footsteps
+    L32h4 (top-1 2%): chirping birds → insects | vacuum cleaner → thunderstorm | thunderstorm → drinking sipping | crow → footsteps | clapping → keyboard typing | fireworks → keyboard typing
+    L30h13 (top-1 8%): chirping birds → airplane | vacuum cleaner → engine | thunderstorm → thunderstorm | crow → thunderstorm | clapping → engine | fireworks → fireworks
+    L6h14 (top-1 5%): chirping birds → dog | vacuum cleaner → insects | thunderstorm → thunderstorm | crow → thunderstorm | clapping → toilet flush | fireworks → sheep
+  Spearman over heads with the text patterns: read_ratio vs sink -0.42, read_ratio vs prev +0.08, read_ratio vs induction +0.11, read_ratio vs duplicate +0.01, read_ratio vs ablate_copy +0.04, content vs sink -0.10, content vs prev +0.11, content vs induction -0.09, content vs duplicate -0.06, content vs ablate_copy -0.05
+
+image against audio, Spearman over heads: read_ratio +0.51, sink +0.71, self +0.63, content +0.09, write_mid +0.45
+heads carrying content in both (z > 3 in each): 0: 

@@ -1,0 +1,161 @@
+blind interpretation of random poles, Qwen/Qwen3-8B: 100 poles, about 20 a band, 8 silent; 1420 of 1420 tasks answered
+fires: AUROC of the scorer's probabilities on held-out top contexts against quiet ones, all / random / same-document negatives, matched (control: another pole's label of the band and arm); holds = matched AUROC against all negatives >= 0.8
+writes: the judge's probability on the pole's own label among four of its band and arm (chance 0.25), and top-1 accuracy; means with 95% bootstrap intervals over poles
+
+all
+  h_lens   fires  n  92  all 0.66 [0.62, 0.71] (control 0.55)  rand 0.70 (0.56)  same 0.62 (0.54)  holds 0.30 (0.09)
+  h_lens   writes n 100  p(own) 0.45 [0.40, 0.51]  top-1 0.57 [0.48, 0.67]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.16, either 0.68, neither 0.32
+  h_both   fires  n  92  all 0.81 [0.77, 0.84] (control 0.55)  rand 0.83 (0.56)  same 0.79 (0.54)  holds 0.61 (0.14)
+  h_both   writes n 100  p(own) 0.46 [0.40, 0.51]  top-1 0.56 [0.47, 0.65]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.37, either 0.78, neither 0.22
+  h_v8     fires  n  92  all 0.71 [0.67, 0.75] (control 0.55)  rand 0.74 (0.56)  same 0.68 (0.54)  holds 0.41 (0.12)
+  h_v8     writes n 100  p(own) 0.47 [0.42, 0.53]  top-1 0.63 [0.53, 0.71]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.25, either 0.76, neither 0.24
+  h_v8both fires  n  92  all 0.82 [0.78, 0.85] (control 0.56)  rand 0.84 (0.55)  same 0.79 (0.56)  holds 0.61 (0.10)
+  h_v8both writes n 100  p(own) 0.44 [0.39, 0.49]  top-1 0.61 [0.52, 0.69]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.39, either 0.80, neither 0.20
+  s_both   fires  n  92  all 0.83 [0.80, 0.86] (control 0.56)  rand 0.85 (0.54)  same 0.81 (0.57)  holds 0.62 (0.12)
+  s_both   writes n 100  p(own) 0.49 [0.43, 0.55]  top-1 0.62 [0.54, 0.71]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.38, either 0.84, neither 0.16
+  doses, median multiple of act_top (firing poles): 0.5 nats 8.51×, 1 nats 11.9×, 2 nats 16.5×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.023, other poles' +0.001; own > other 0.63 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.059, other poles' +0.003; own > other 0.66 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.103, other poles' +0.003; own > other 0.61 (ties half; chance 0.5)
+
+L0-L8
+  h_lens   fires  n  24  all 0.70 [0.61, 0.79] (control 0.60)  rand 0.72 (0.62)  same 0.68 (0.59)  holds 0.42 (0.21)
+  h_lens   writes n  32  p(own) 0.32 [0.25, 0.40]  top-1 0.34 [0.18, 0.50]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.08, either 0.58, neither 0.42
+  h_both   fires  n  24  all 0.91 [0.86, 0.96] (control 0.60)  rand 0.92 (0.62)  same 0.91 (0.59)  holds 0.92 (0.21)
+  h_both   writes n  32  p(own) 0.32 [0.24, 0.40]  top-1 0.37 [0.21, 0.52]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.33, either 0.92, neither 0.08
+  h_v8     fires  n  24  all 0.77 [0.68, 0.86] (control 0.62)  rand 0.78 (0.61)  same 0.76 (0.62)  holds 0.54 (0.25)
+  h_v8     writes n  32  p(own) 0.38 [0.30, 0.48]  top-1 0.48 [0.31, 0.64]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.17, either 0.83, neither 0.17
+  h_v8both fires  n  24  all 0.93 [0.89, 0.97] (control 0.60)  rand 0.94 (0.59)  same 0.92 (0.61)  holds 0.83 (0.21)
+  h_v8both writes n  32  p(own) 0.35 [0.28, 0.44]  top-1 0.41 [0.26, 0.56]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.38, either 0.88, neither 0.12
+  s_both   fires  n  24  all 0.93 [0.88, 0.97] (control 0.65)  rand 0.95 (0.64)  same 0.92 (0.66)  holds 0.88 (0.29)
+  s_both   writes n  32  p(own) 0.34 [0.26, 0.42]  top-1 0.38 [0.23, 0.54]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.29, either 0.88, neither 0.12
+  doses, median multiple of act_top (firing poles): 0.5 nats 5.21×, 1 nats 7.05×, 2 nats 10.1×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.006, other poles' +0.004; own > other 0.52 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.006, other poles' +0.010; own > other 0.42 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.032, other poles' +0.010; own > other 0.47 (ties half; chance 0.5)
+
+L9-L12
+  h_lens   fires  n  12  all 0.70 [0.59, 0.80] (control 0.57)  rand 0.77 (0.59)  same 0.62 (0.55)  holds 0.33 (0.08)
+  h_lens   writes n  12  p(own) 0.39 [0.25, 0.55]  top-1 0.58 [0.33, 0.83]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.17, either 0.75, neither 0.25
+  h_both   fires  n  12  all 0.73 [0.60, 0.84] (control 0.63)  rand 0.76 (0.66)  same 0.69 (0.59)  holds 0.50 (0.25)
+  h_both   writes n  12  p(own) 0.42 [0.27, 0.58]  top-1 0.58 [0.33, 0.83]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.33, either 0.75, neither 0.25
+  h_v8     fires  n  12  all 0.69 [0.59, 0.80] (control 0.54)  rand 0.75 (0.56)  same 0.63 (0.52)  holds 0.42 (0.00)
+  h_v8     writes n  12  p(own) 0.41 [0.28, 0.56]  top-1 0.53 [0.31, 0.76]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.33, either 0.50, neither 0.50
+  h_v8both fires  n  12  all 0.83 [0.73, 0.92] (control 0.59)  rand 0.87 (0.66)  same 0.79 (0.52)  holds 0.75 (0.17)
+  h_v8both writes n  12  p(own) 0.37 [0.25, 0.51]  top-1 0.60 [0.38, 0.83]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.42, either 0.83, neither 0.17
+  s_both   fires  n  12  all 0.84 [0.76, 0.92] (control 0.56)  rand 0.87 (0.56)  same 0.81 (0.56)  holds 0.67 (0.08)
+  s_both   writes n  12  p(own) 0.42 [0.27, 0.59]  top-1 0.50 [0.25, 0.75]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.42, either 0.75, neither 0.25
+  doses, median multiple of act_top (firing poles): 0.5 nats 8.59×, 1 nats 12.2×, 2 nats 16.5×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.006, other poles' +0.001; own > other 0.54 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.007, other poles' -0.000; own > other 0.71 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.001, other poles' +0.002; own > other 0.38 (ties half; chance 0.5)
+
+L13-L20
+  h_lens   fires  n  14  all 0.66 [0.56, 0.76] (control 0.53)  rand 0.71 (0.54)  same 0.61 (0.51)  holds 0.36 (0.07)
+  h_lens   writes n  14  p(own) 0.39 [0.29, 0.50]  top-1 0.45 [0.21, 0.68]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.29, either 0.43, neither 0.57
+  h_both   fires  n  14  all 0.72 [0.62, 0.81] (control 0.50)  rand 0.73 (0.53)  same 0.71 (0.48)  holds 0.43 (0.14)
+  h_both   writes n  14  p(own) 0.43 [0.30, 0.57]  top-1 0.54 [0.29, 0.79]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.29, either 0.64, neither 0.36
+  h_v8     fires  n  14  all 0.64 [0.52, 0.77] (control 0.52)  rand 0.69 (0.56)  same 0.60 (0.48)  holds 0.36 (0.07)
+  h_v8     writes n  14  p(own) 0.43 [0.31, 0.56]  top-1 0.68 [0.45, 0.89]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.36, either 0.64, neither 0.36
+  h_v8both fires  n  14  all 0.69 [0.60, 0.80] (control 0.50)  rand 0.72 (0.46)  same 0.67 (0.53)  holds 0.43 (0.00)
+  h_v8both writes n  14  p(own) 0.38 [0.29, 0.50]  top-1 0.59 [0.36, 0.82]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.36, either 0.57, neither 0.43
+  s_both   fires  n  14  all 0.76 [0.66, 0.86] (control 0.53)  rand 0.78 (0.52)  same 0.75 (0.54)  holds 0.57 (0.07)
+  s_both   writes n  14  p(own) 0.46 [0.34, 0.58]  top-1 0.68 [0.45, 0.88]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.36, either 0.86, neither 0.14
+  doses, median multiple of act_top (firing poles): 0.5 nats 16.1×, 1 nats 21.9×, 2 nats 29.1×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.002, other poles' -0.001; own > other 0.64 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.005, other poles' -0.000; own > other 0.75 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.007, other poles' -0.001; own > other 0.68 (ties half; chance 0.5)
+
+L21-L27
+  h_lens   fires  n  16  all 0.53 [0.45, 0.60] (control 0.53)  rand 0.56 (0.54)  same 0.49 (0.52)  holds 0.00 (0.06)
+  h_lens   writes n  16  p(own) 0.53 [0.41, 0.65]  top-1 0.81 [0.62, 1.00]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.00, either 0.81, neither 0.19
+  h_both   fires  n  16  all 0.72 [0.64, 0.80] (control 0.50)  rand 0.75 (0.50)  same 0.70 (0.50)  holds 0.25 (0.06)
+  h_both   writes n  16  p(own) 0.46 [0.35, 0.58]  top-1 0.64 [0.41, 0.88]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.19, either 0.69, neither 0.31
+  h_v8     fires  n  16  all 0.68 [0.60, 0.77] (control 0.57)  rand 0.72 (0.59)  same 0.64 (0.56)  holds 0.19 (0.12)
+  h_v8     writes n  16  p(own) 0.46 [0.35, 0.58]  top-1 0.70 [0.45, 0.89]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.12, either 0.75, neither 0.25
+  h_v8both fires  n  16  all 0.74 [0.66, 0.82] (control 0.49)  rand 0.77 (0.51)  same 0.70 (0.48)  holds 0.31 (0.00)
+  h_v8both writes n  16  p(own) 0.47 [0.37, 0.58]  top-1 0.73 [0.53, 0.94]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.31, either 0.69, neither 0.31
+  s_both   fires  n  16  all 0.77 [0.69, 0.84] (control 0.50)  rand 0.80 (0.49)  same 0.73 (0.51)  holds 0.44 (0.06)
+  s_both   writes n  16  p(own) 0.54 [0.41, 0.67]  top-1 0.77 [0.58, 0.94]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.44, either 0.69, neither 0.31
+  doses, median multiple of act_top (firing poles): 0.5 nats 10.6×, 1 nats 15.2×, 2 nats 20.3×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.004, other poles' -0.001; own > other 0.66 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.027, other poles' -0.000; own > other 0.72 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.054, other poles' +0.003; own > other 0.62 (ties half; chance 0.5)
+
+L28-L35
+  h_lens   fires  n  26  all 0.70 [0.63, 0.78] (control 0.51)  rand 0.75 (0.51)  same 0.66 (0.52)  holds 0.35 (0.00)
+  h_lens   writes n  26  p(own) 0.64 [0.53, 0.74]  top-1 0.78 [0.63, 0.91]  (chance 0.25)
+  h_lens   firing poles, fires holds and writes top-1: both 0.27, either 0.81, neither 0.19
+  h_both   fires  n  26  all 0.85 [0.78, 0.90] (control 0.53)  rand 0.88 (0.52)  same 0.81 (0.54)  holds 0.69 (0.08)
+  h_both   writes n  26  p(own) 0.65 [0.53, 0.77]  top-1 0.73 [0.56, 0.88]  (chance 0.25)
+  h_both   firing poles, fires holds and writes top-1: both 0.58, either 0.81, neither 0.19
+  h_v8     fires  n  26  all 0.71 [0.62, 0.80] (control 0.49)  rand 0.75 (0.50)  same 0.68 (0.49)  holds 0.46 (0.08)
+  h_v8     writes n  26  p(own) 0.63 [0.52, 0.74]  top-1 0.78 [0.62, 0.91]  (chance 0.25)
+  h_v8     firing poles, fires holds and writes top-1: both 0.31, either 0.88, neither 0.12
+  h_v8both fires  n  26  all 0.81 [0.74, 0.88] (control 0.56)  rand 0.84 (0.55)  same 0.78 (0.58)  holds 0.62 (0.08)
+  h_v8both writes n  26  p(own) 0.59 [0.48, 0.71]  top-1 0.80 [0.65, 0.93]  (chance 0.25)
+  h_v8both firing poles, fires holds and writes top-1: both 0.46, either 0.92, neither 0.08
+  s_both   fires  n  26  all 0.81 [0.75, 0.87] (control 0.52)  rand 0.83 (0.49)  same 0.79 (0.55)  holds 0.50 (0.04)
+  s_both   writes n  26  p(own) 0.69 [0.58, 0.79]  top-1 0.88 [0.75, 0.97]  (chance 0.25)
+  s_both   firing poles, fires holds and writes top-1: both 0.42, either 0.92, neither 0.08
+  doses, median multiple of act_top (firing poles): 0.5 nats 8.07×, 1 nats 10.8×, 2 nats 15.6×
+  judge-free, light: steered tokens in the R top 64, over unsteered: own +0.075, other poles' -0.000; own > other 0.79 (ties half; chance 0.5)
+  judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.197, other poles' +0.000; own > other 0.83 (ties half; chance 0.5)
+  judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.318, other poles' -0.002; own > other 0.87 (ties half; chance 0.5)
+
+by the explainer's confidence (all bands)
+  h_lens   fires  confidence 0.0-0.4: n  39, matched_all 0.57
+  h_lens   fires  confidence 0.4-0.7: n  40, matched_all 0.73
+  h_lens   fires  confidence 0.7-1.0: n  13, matched_all 0.74
+  h_lens   writes confidence 0.0-0.4: n  51, p_true 0.37
+  h_lens   writes confidence 0.4-0.7: n  40, p_true 0.48
+  h_lens   writes confidence 0.7-1.0: n   9, p_true 0.81
+  h_both   fires  confidence 0.0-0.4: n  28, matched_all 0.73
+  h_both   fires  confidence 0.4-0.7: n  46, matched_all 0.83
+  h_both   fires  confidence 0.7-1.0: n  18, matched_all 0.88
+  h_both   writes confidence 0.0-0.4: n  59, p_true 0.38
+  h_both   writes confidence 0.4-0.7: n  32, p_true 0.49
+  h_both   writes confidence 0.7-1.0: n   9, p_true 0.83
+  h_v8     fires  confidence 0.0-0.4: n  33, matched_all 0.64
+  h_v8     fires  confidence 0.4-0.7: n  41, matched_all 0.70
+  h_v8     fires  confidence 0.7-1.0: n  18, matched_all 0.85
+  h_v8     writes confidence 0.0-0.4: n  51, p_true 0.39
+  h_v8     writes confidence 0.4-0.7: n  26, p_true 0.43
+  h_v8     writes confidence 0.7-1.0: n  23, p_true 0.70
+  h_v8both fires  confidence 0.0-0.4: n  33, matched_all 0.79
+  h_v8both fires  confidence 0.4-0.7: n  42, matched_all 0.79
+  h_v8both fires  confidence 0.7-1.0: n  17, matched_all 0.94
+  h_v8both writes confidence 0.0-0.4: n  50, p_true 0.31
+  h_v8both writes confidence 0.4-0.7: n  29, p_true 0.48
+  h_v8both writes confidence 0.7-1.0: n  21, p_true 0.70
+  s_both   fires  confidence 0.0-0.4: n  27, matched_all 0.77
+  s_both   fires  confidence 0.4-0.7: n  32, matched_all 0.81
+  s_both   fires  confidence 0.7-1.0: n  33, matched_all 0.90
+  s_both   writes confidence 0.0-0.4: n  58, p_true 0.37
+  s_both   writes confidence 0.4-0.7: n  27, p_true 0.55
+  s_both   writes confidence 0.7-1.0: n  15, p_true 0.81

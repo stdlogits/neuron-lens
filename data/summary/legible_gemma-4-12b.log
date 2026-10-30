@@ -1,0 +1,17 @@
+neurons, google/gemma-4-12B: 1,474,560 poles; share of each band's poles (mean over layers) passing each test at a 5% false discovery rate; in brackets, the share past the 99% point of mismatched pairs net of theirs. Detectors: a third of top firings share a token. Dark: fires, but no test and no detector.
+
+band             silent  token_detector   next_detector         write_R         write_S          read_R          read_S        any_test            dark
+L0-11              0.00            0.67            0.11     0.00 [0.00]     0.01 [0.02]     0.00 [0.01]     0.35 [0.28]            0.35            0.23
+L12-23             0.00            0.36            0.11     0.00 [0.02]     0.04 [0.04]     0.00 [0.01]     0.06 [0.08]            0.07            0.61
+L24-35             0.00            0.25            0.14     0.08 [0.09]     0.00 [0.00]     0.01 [0.03]     0.04 [0.06]            0.11            0.66
+L36-47             0.00            0.23            0.13     0.20 [0.19]     0.00 [0.00]     0.00 [0.02]     0.03 [0.05]            0.22            0.60
+L0-47              0.00            0.38            0.12     0.07 [0.08]     0.01 [0.02]     0.00 [0.02]     0.12 [0.12]            0.19            0.52
+
+heads, google/gemma-4-12B: 48 × 16 heads; share of each band's heads passing each test at a 5% false discovery rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: prev > 0.5, self > 0.5, induction > 0.3, duplicate > 0.3
+
+band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det    pattern   any_test       dark   ov_R_p05  ov_copy_p05   ov_S_p05   qk_S_p05
+L0-11         0.00       0.00       0.00       0.00       0.68       0.54       0.15       0.00       0.19       0.04       0.07       0.04       0.09
+L12-23        0.00       0.00       0.00       0.00       0.15       0.18       0.09       0.00       0.70       0.04       0.10       0.03       0.06
+L24-35        0.00       0.00       0.00       0.00       0.17       0.12       0.06       0.00       0.70       0.08       0.09       0.04       0.06
+L36-47        0.00       0.00       0.00       0.00       0.46       0.30       0.08       0.00       0.42       0.21       0.17       0.04       0.14
+L0-47         0.00       0.00       0.00       0.00       0.36       0.28       0.10       0.00       0.50       0.09       0.11       0.04       0.09
