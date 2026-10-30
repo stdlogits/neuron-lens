@@ -48,15 +48,19 @@ def load_r_lens(model_id: str, fit: str | None):
 def merge(lenses: list):
     """Prompt-weighted mean of lenses over the same layers: exactly the lens a single fit
     over the union of their (disjoint) corpora would give, since the estimator is a mean
-    of per-prompt Jacobians."""
+    of per-prompt Jacobians. The lenses must be the same kind at the same site; the merge
+    keeps that key."""
     from drowse.lens.jlens import JacobianLens
 
+    key = lenses[0].key
+    if any(lens.key != key for lens in lenses):
+        raise ValueError("lenses are of different kinds: " + ", ".join(sorted({lens.key.label for lens in lenses})))
     layers = lenses[0].source_layers
     if any(lens.source_layers != layers for lens in lenses):
         raise ValueError("lenses cover different source layers")
     total = sum(lens.n_prompts for lens in lenses)
     jac = {l: sum(lens.jacobians[l] * (lens.n_prompts / total) for lens in lenses) for l in layers}
-    return JacobianLens(jac, n_prompts=total, d_model=lenses[0].d_model)
+    return JacobianLens(jac, n_prompts=total, d_model=lenses[0].d_model, key=key)
 
 
 def load_lens(spec: str, model_id: str) -> dict | None:
