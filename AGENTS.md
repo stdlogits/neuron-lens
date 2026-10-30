@@ -97,10 +97,13 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **Replacing the lens of record:** fit, export to a new home under `data/lenses/`, rerun
   `08_reads.py` and the stages after it, record the comparison in findings, and rerun
   `12_release.py`.
-- **Drowse** ([github.com/a9lim/drowse](https://github.com/a9lim/drowse)) loads exported R-lenses
-  (`R:<name>` specs in `lens_compare.py`). It always writes to `local/relp` under `$DROWSE_HOME`,
-  so each export gets its own home under `data/lenses/<name>/` and never overwrites another, or
-  the user's default home. Fitting lives here; exact agreement with Drowse's fit is not required.
+- **Drowse** ([github.com/stdlogits/drowse](https://github.com/stdlogits/drowse)) loads exported R-lenses
+  (`R:<name>` specs in `lens_compare.py`). It always writes an R-lens to `local/r` under
+  `$DROWSE_HOME` (lens format v7, Drowse 5.4), so each export gets its own home under
+  `data/lenses/<name>/` and never overwrites another, or the user's default home. Fitting lives
+  here; exact agreement with Drowse's fit is not required. A home written before 5.4 (v6, lens
+  at `jlens/local/relp`) is read only after `python scripts/migrate_lens_v7.py --home <home>`
+  in the Drowse checkout.
 
 ## Method notes
 

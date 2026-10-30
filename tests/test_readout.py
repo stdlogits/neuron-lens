@@ -70,3 +70,14 @@ def test_merge_is_prompt_weighted():
     m = merge([a, b])
     assert m.n_prompts == 4
     assert torch.allclose(m.jacobians[0], torch.full((2, 2), 0.25))
+
+
+def test_merge_keeps_the_lens_kind_and_refuses_mixed_kinds():
+    jlens = pytest.importorskip("drowse.lens.jlens")
+    LensKey = pytest.importorskip("drowse.lens.key").LensKey
+    r1 = jlens.JacobianLens({0: torch.ones(2, 2)}, n_prompts=1, d_model=2, key=LensKey("R"))
+    r2 = jlens.JacobianLens({0: torch.zeros(2, 2)}, n_prompts=1, d_model=2, key=LensKey("R"))
+    j = jlens.JacobianLens({0: torch.zeros(2, 2)}, n_prompts=1, d_model=2, key=LensKey("J"))
+    assert merge([r1, r2]).key == LensKey("R")  # not drowse's default J
+    with pytest.raises(ValueError, match="different kinds"):
+        merge([r1, j])

@@ -1,6 +1,6 @@
 """The RelP derivative rules, which both lens estimators take derivatives under.
 
-RelP (arXiv:2508.21258, as in the R-lens and Drowse's ``core.relp``) replaces three local
+RelP (arXiv:2508.21258, as in the R-lens and Drowse's ``lens.relp``) replaces three local
 derivatives in each decoder layer:
 - **LN rule:** the decoder layers' RMSNorms hold their ``rsqrt`` constant (Qwen3: the input
   and post-attention norms; Gemma 4: those and the pre- and post-feedforward norms, the
