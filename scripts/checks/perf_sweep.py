@@ -3,7 +3,7 @@ document per configuration, with peak memory, throughput and each configuration'
 against a reference run. The model loads once.
 
 Axes (comma lists; every combination runs, per lens in ``--lenses``): ``--dim-batch``, ``--tf32``
-(fp32 matrix products in TF32: DeltaNet's ``T × T`` terms and the attention scores), ``--compile``
+(fp32 matrix products in TF32, as ``02_fit.py`` runs them: DeltaNet's chunked ones), ``--compile``
 (``transport._step``'s torch.compile on CUDA) and ``--acc-device`` (where the sums live). Each configuration runs a warm-up document, then
 ``--repeat`` timed ones. Its error is ``‖K − K_ref‖ / ‖K_ref‖`` per layer and target (median, max)
 against the same lens with TF32 off and no compile (the most precise run). An
@@ -131,7 +131,7 @@ def main() -> None:
     ap.add_argument("--seq-len", type=int, default=512)
     ap.add_argument("--lenses", default="R,S")
     ap.add_argument("--dim-batch", default="32")
-    ap.add_argument("--tf32", default="0,1")
+    ap.add_argument("--tf32", default="1")
     ap.add_argument("--compile", default="1")
     ap.add_argument("--acc-device", default="cuda")
     ap.add_argument("--repeat", type=int, default=1)

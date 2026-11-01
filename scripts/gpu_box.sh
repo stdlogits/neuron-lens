@@ -49,12 +49,12 @@ rows=$( [ -f data/corpus/dclm.jsonl ] && wc -l < data/corpus/dclm.jsonl || echo 
 
 python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py
 if [ "$QWEN35" = 1 ]; then
-    # Precision on a 4-layer slice against fp32, then a first throughput grid on the whole model;
-    # scripts/checks/perf_sweep.py's docstring has the rest of the sweep.
+    # Precision on a 4-layer slice against fp32 (with TF32 and without), each component's time,
+    # then the dim batch on the whole model; scripts/checks/perf_sweep.py's docstring has the rest.
     python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --fp32-layers 4 \
         --dim-batch 32 --tf32 0,1 --compile 0,1
-    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" \
-        --dim-batch 16,32,64,128 --tf32 0,1 --compile 1
+    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --parts --dim-batch 32
+    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --dim-batch 32,64,128
 else
     python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-0.6B,"$MODEL" \
         --dim-batch 128,256,512 --compare-fp32
