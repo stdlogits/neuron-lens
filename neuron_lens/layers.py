@@ -351,14 +351,22 @@ def _lin(m: "DeltaNet", q, k, v, H=None, rev: bool = False):
     """Decayed linear attention by chunks: ``Σ_{s≤t} Γ_ts (q_t·k_s) v_s`` at each ``t`` (``rev``:
     ``Σ_{s≥t} Γ_st (q_t·k_s) v_s``), for ``q``, ``k``, ``v`` ``[..., Hv, Tp, ·]`` (broadcast).
     ``H``: the states of a fixed ``(k, v)`` at each chunk's start (forward only), else built
-    from them."""
-    qc, kc, vc = (x.unflatten(-2, (-1, CHUNK)) for x in (q, k, v))
+    from them. Products are einsums, which fold dims that only one operand has into the
+    product's rows or columns, where matmul's broadcasting would copy the other operand."""
+    qc, kc, vc = (x.unflatten(-2, (-1, CHUNK)) for x in (q, k, v))  # [..., Hv, n, C, ·]
     dec, qd, kd, cm = (m.dec.mT, m.kdec, m.qdec, m.cm.mT) if rev else (m.dec, m.qdec, m.kdec, m.cm)
-    out = ((qc @ kc.mT) * dec) @ vc
+    a = torch.einsum("...hncd,...hned->...hnce", qc, kc) * dec
+    out = torch.einsum("...hnce,...hnef->...hncf", a, vc)
     if H is None:
-        D = (kc * kd[..., None]).mT @ vc
-        H = (cm @ D.flatten(-2)).unflatten(-1, D.shape[-2:])
-    return (out + (qc * qd[..., None]) @ H).flatten(-3, -2)
+        D = torch.einsum("...hncd,...hncf->...hndf", kc * kd[..., None], vc)
+        H = torch.einsum("hnm,...hmdf->...hndf", cm, D)
+    return (out + torch.einsum("...hncd,...hndf->...hncf", qc * qd[..., None], H)).flatten(-3, -2)
+
+
+def _heads(A: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """``A @ x`` for a fixed per-head matrix ``A`` (``[Hv, n, m]``) and tangents ``x``
+    (``[..., Hv, m, f]``), all copies in one product per head."""
+    return torch.einsum("hnm,...hmf->...hnf", A, x)
 
 
 def _gated_norm(norm, o):
@@ -601,11 +609,13 @@ def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
         dv = _norm_jvp(dv, m.v, m.rv, 1.0)
     dk, dv = dk.to(dt).transpose(1, 2), dv.to(dt).transpose(1, 2)  # [b, Hk, N, hd]
     keys = slice(m.s0, m.s0 + N)  # the valid positions, as keys
+    # (einsums, where a fixed operand meets the tangents: no copy of it per tangent)
     ds = (dq @ m.kr.mT).float()  # [b, Hk, g·N, Tp]
-    ds[..., keys] += (m.qr @ dk.mT).float()  # keys at valid positions move too
+    ds[..., keys] += torch.einsum("hqd,bhkd->bhqk", m.qr, dk).float()  # keys at valid positions move too
     ds *= m.scale
     dp = (m.p * (ds - (m.p * ds).sum(-1, keepdim=True))).to(dt)
-    do = (dp @ m.vn + m.p[..., keys] @ dv).view(b, hk, g, N, hd).permute(0, 3, 1, 2, 4).reshape(b, N, -1)
+    do = (dp @ m.vn + torch.einsum("hqk,bhkd->bhqd", m.p[..., keys], dv))
+    do = do.view(b, hk, g, N, hd).permute(0, 3, 1, 2, 4).reshape(b, N, -1)
     if m.sg is not None:  # the output gate, half rule
         do = HALF_RULE_BETA * (do.float() * m.sg + m.o * m.dsg * dgate)
     return F.linear(do.to(dt), m.wo).float()
@@ -627,8 +637,8 @@ def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
     gp = (go @ m.vn.mT).float()  # [b, Hk, g·N, Tp]
     gs = (m.p * (gp - (m.p * gp).sum(-1, keepdim=True)) * m.scale).to(dt)
     gq = (gs @ m.kr).view(b, hk, g, N, hd).permute(0, 3, 1, 2, 4).reshape(b, N, hk * g, hd)
-    gk = (gs[..., keys].mT @ m.qr).transpose(1, 2)  # [b, N, Hk, hd]
-    gv = (m.p[..., keys].mT @ go).transpose(1, 2).float()
+    gk = torch.einsum("bhqk,hqd->bkhd", gs[..., keys], m.qr)  # [b, N, Hk, hd]
+    gv = torch.einsum("hqk,bhqd->bkhd", m.p[..., keys], go).float()
     gq = _rope(gq.float(), m.cos, -m.sin)
     if m.wqn is not None:
         gq = _norm_vjp(gq, m.q, m.rq, m.wqn)
@@ -704,12 +714,12 @@ def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
     by_k = _lin(m, torch.stack((m.q, m.k))[:, None], pad(dkk), m.u)[..., S:T, :]
     diag = (dkk * k1).sum(-1, keepdim=True) * u1
     # dW U, with the decay's move
-    dWu = by_q[0] + by_k[0] + dgc[..., None] * m.o1 - W11 @ (dgc[..., None] * u1)
+    dWu = by_q[0] + by_k[0] + dgc[..., None] * m.o1 - _heads(W11, dgc[..., None] * u1)
     # dL U, which the pseudo-values must absorb
     dLu = dbeta[..., None] * m.cu1 + beta1 * (
-        by_q[1] + by_k[1] - 2 * diag + dgc[..., None] * m.cu1 - C11 @ (dgc[..., None] * u1))
+        by_q[1] + by_k[1] - 2 * diag + dgc[..., None] * m.cu1 - _heads(C11, dgc[..., None] * u1))
     r = dbeta[..., None] * m.v1 + beta1 * dvh - dLu
-    do = dWu + m.wl.float() @ r
+    do = dWu + _heads(m.wl.float(), r)
     dn = do.transpose(1, 2) * m.ao * m.wn  # [b, N, Hv, dv]: the output norm, LN rule
     dz = F.linear(xn, m.w_z).float().view(b, N, hv, dv)
     dy = HALF_RULE_BETA * (dn * m.z + m.on * m.sz * dz)
@@ -728,7 +738,7 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     gx = (gz.reshape(b, N, -1).to(dt) @ m.w_z).float()
     go = (gdn * m.ao * m.wn).transpose(1, 2)  # [b, Hv, N, dv]
     beta1 = m.beta1[..., None]
-    gr = m.wl.float().mT @ go
+    gr = _heads(m.wl.float().mT, go)
     gdv = beta1 * gr
     W11, C11 = _delta_mats(m)
     u1, k1 = m.u[:, S:T], m.k[:, S:T]
@@ -742,8 +752,8 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     to_k = _lin(m, m.u, torch.stack((pad(go), pad(gbl))), torch.stack((m.q, m.k))[:, None], rev=True)[..., S:T, :]
     gdq = to_q[0]
     gdk = to_q[1] + to_k[0] + to_k[1] - 2 * (gbl * u1).sum(-1, keepdim=True) * k1
-    gdgc = (gbl * m.cu1).sum(-1) - ((C11.mT @ gbl) * u1).sum(-1) \
-        + (go * m.o1).sum(-1) - ((W11.mT @ go) * u1).sum(-1)
+    gdgc = (gbl * m.cu1).sum(-1) - (_heads(C11.mT, gbl) * u1).sum(-1) \
+        + (go * m.o1).sum(-1) - (_heads(W11.mT, go) * u1).sum(-1)
     gdg = gdgc.flip(-1).cumsum(-1).flip(-1)
     unheads = lambda x: x.transpose(1, 2).reshape(b, N, hk, rep, dk).sum(3)  # [b, Hv, N, dk] → [b, N, Hk, dk]
     gq0 = _l2_jvp(unheads(gdq) * dk ** -0.5, m.q0, m.rq0).reshape(b, N, -1)
