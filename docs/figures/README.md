@@ -60,13 +60,13 @@ Left: ablation matches the linearized effect (r 0.78-1.00 by layer) except at L1
 
 ![Writes predict the next token late; reads name the firing token early](10_side_agreement.png)
 
-Left: prediction rises from L20 and peaks at 7.3% at L29-L30; suppression overtakes it at L35 (early layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 (40% at L0), with a spike at L8; the R-lens read from the MLP input takes over from L9.
+Left: prediction rises from L20 and peaks at 7.3% at L30; suppression overtakes it at L35 (early layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 (38% at L0), with a spike at L8; the R-lens read from the MLP input takes over from L9.
 
 ## 11. The S-lens names a neuron's real input tokens early, the R-lens from L8
 
 ![The S-lens names a neuron's real input tokens early, the R-lens from L8](11_drivers.png)
 
-At L0, 31% of the S-lens read's top 10 are exact drivers, and 4-11% at L1-L4; the R-lens read of the input direction leads from L8 (5-8% at L8-L12 and L22-L29). L13-L20 is the weakest stretch for every weight-only input read (R-lens 2-4%, S-lens under 1%).
+At L0, 32% of the S-lens read's top 10 are exact drivers, and 4-11% at L1-L4; the R-lens read of the input direction leads from L8 (5-8% at L8-L12 and L22-L29). L13-L20 is the weakest stretch for every weight-only input read (R-lens 2-4%, S-lens at most 1%).
 
 ## 12. Most mid-network poles are dark: they fire, but no token-level test reads them
 
@@ -78,7 +78,7 @@ Shares of each layer's poles: some weight-only read passes, only a token detecto
 
 ![A read's signal holds down to rank 64, not just its top tokens](13_rank_depth.png)
 
-Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read 30×, L12's read 6×), which is why the catalog keeps the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.
+Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read 29×, L12's read 6×), which is why the catalog keeps the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.
 
 ## 14. Labels written blind: lens reads predict what a pole promotes, contexts where it fires
 

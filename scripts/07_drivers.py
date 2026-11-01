@@ -3,7 +3,8 @@
 Every kept token (``catalog.kept``) goes into 8 real documents (4 DCLM, 2 code, 2 chat: the first
 full-length ones of the activation slices) at position 24, in place of the token there, with the
 documents' own 16 tokens after it; results are averaged over the documents (findings §6). Eager
-attention, bf16; an fp32 rerun through L9 kept 98-99% of a pole's top 20 (§6).
+attention, bf16; an fp32 rerun through L9 kept 98-99% of a pole's top 20 (§6,
+``checks/drivers_precision.py``, which imports this pass's documents, order and reductions).
 
 - **Neurons** (``neurons/drivers/L<layer>.parquet``): per pole, the 64 tokens with the largest
   activation at their own position (``drivers``), and summed over it and the 16 after
@@ -44,18 +45,34 @@ SEQ = 128  # the documents' length: full-length ones are typical text
 AT, AFTER = 24, 16
 
 
+def documents(dev) -> torch.Tensor:
+    """``[8, AT + 1 + AFTER]``: the documents the tokens go into, up to the last position read."""
+    tok = tokenizer()
+    rows = []
+    for name, k in SLICES.items():
+        rows += lens_docs(act_file(name), tok, 4 * k, SEQ, SEQ)[:k]
+    return torch.tensor(rows, device=dev)[:, :AT + 1 + AFTER]
+
+
+def token_order() -> torch.Tensor:
+    """Every kept token, in the order of the sweep (which breaks ties among equal activations)."""
+    keep = kept()
+    return keep[torch.randperm(len(keep), generator=torch.Generator().manual_seed(0))]
+
+
+def pole_drivers(a: torch.Tensor) -> dict[str, torch.Tensor]:
+    """A pass's neuron activations from the token on, ``[D, B, 1 + AFTER, f]``, reduced as the drivers
+    rank them and averaged over the documents: at the token, and summed over it and the 16 after."""
+    return {"at": a[:, :, 0].mean(0), "sum": a.sum(2).mean(0)}  # [B, f]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=64, help="tokens per pass, each in every document")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
     args = ap.parse_args()
     dev = args.device
-    tok = tokenizer()
-    keep = kept()
-    rows = []
-    for name, k in SLICES.items():
-        rows += lens_docs(act_file(name), tok, 4 * k, SEQ, SEQ)[:k]
-    docs = torch.tensor(rows, device=dev)[:, :AT + 1 + AFTER]
+    docs = documents(dev)
     D = len(docs)
     lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="eager").to(dev).eval()
     lm.requires_grad_(False)
@@ -79,7 +96,7 @@ def main() -> None:
     def neuron(l: int):
         def hook(m, x):
             a = x[0][:, AT:].float().unflatten(0, (D, -1))  # [D, B, 1 + AFTER, f]
-            for key, v in (("at", a[:, :, 0].mean(0)), ("sum", a.sum(2).mean(0))):  # [B, f]
+            for key, v in pole_drivers(a).items():
                 for p, sign in enumerate((1, -1)):
                     merge(key, (l, p), sign * v.T, cur["ids"])
         return hook
@@ -100,7 +117,7 @@ def main() -> None:
         m.self_attn.o_proj.register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
         m.self_attn.register_forward_hook(attention(l))
 
-    order = keep[torch.randperm(len(keep), generator=torch.Generator().manual_seed(0))]
+    order = token_order()
     t0 = time.time()
     with torch.inference_mode():
         for i in range(0, len(order), args.batch):

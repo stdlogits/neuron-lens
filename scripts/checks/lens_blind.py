@@ -198,19 +198,11 @@ def prompt_ids(tok) -> list[list[int]]:
     return out
 
 
-def measure(args) -> None:
-    device = args.device
-    inp = torch.load(OUT / "gpu_in.pt", weights_only=False)
-    poles, docs = inp["poles"], inp["docs"]
-    tok = AutoTokenizer.from_pretrained(MODEL)
-    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16).to(device).eval()
-    lm.requires_grad_(False)
-    layers = lm.model.layers
-    rng = random.Random(args.seed)
-    out = {"meta": {"model": MODEL, "kl_targets": KL_TARGETS, "prompts": PROMPTS, "chat_turn": CHAT_TURN,
-                    "new_tokens": NEW_TOKENS, "dtype": "bfloat16"}}
-
-    # Activations of every sampled pole (signed) at every position of the documents.
+def pole_acts(lm, poles: list[dict], docs: dict, pad: int, batch: int) -> dict:
+    """Signed activations (``sign · act``) of ``poles`` (dicts with ``layer``, ``neuron``, ``sign``) at
+    every position of ``docs`` (``{document: token ids}``), at each layer's ``down_proj`` input, right-padded
+    batches of ``batch`` documents: ``{document: [T, len(poles)]}`` in fp16."""
+    device, layers = lm.device, lm.model.layers
     at = defaultdict(list)  # layer -> [(pole index, neuron, sign)]
     for i, p in enumerate(poles):
         at[p["layer"]].append((i, p["neuron"], p["sign"]))
@@ -226,10 +218,9 @@ def measure(args) -> None:
             grab[layer] = (a[0][..., cols].float() * signs).cpu()
         return f
     hs = [layers[l].mlp.down_proj.register_forward_pre_hook(hook(l)) for l in at]
-    pad = tok.pad_token_id
     t0 = time.perf_counter()
-    for b in range(0, len(ids), args.batch):
-        part = ids[b:b + args.batch]
+    for b in range(0, len(ids), batch):
+        part = ids[b:b + batch]
         T = max(len(docs[d]) for d in part)
         x = torch.full((len(part), T), pad)
         mask = torch.zeros(len(part), T, dtype=torch.long)
@@ -247,19 +238,40 @@ def measure(args) -> None:
         h.remove()
     print(f"{time.strftime('%H:%M:%S')} activations of {len(poles)} poles over {len(ids)} documents, "
           f"{time.perf_counter() - t0:.0f}s", flush=True)
+    return acts
+
+
+def quiet(acts: dict, i: int, ds, below: float, k: int, rng) -> list[tuple[int, int]]:
+    """``k`` random (document, position) pairs of documents ``ds``, from ``MIN_POS`` on, where pole ``i``
+    of ``pole_acts`` stays under ``below``."""
+    q = [(d, t) for d in ds for t in (acts[d][MIN_POS:, i] < below).nonzero().squeeze(1).add(MIN_POS).tolist()]
+    return rng.sample(q, min(k, len(q)))
+
+
+def measure(args) -> None:
+    device = args.device
+    inp = torch.load(OUT / "gpu_in.pt", weights_only=False)
+    poles, docs = inp["poles"], inp["docs"]
+    tok = AutoTokenizer.from_pretrained(MODEL)
+    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16).to(device).eval()
+    lm.requires_grad_(False)
+    layers = lm.model.layers
+    rng = random.Random(args.seed)
+    out = {"meta": {"model": MODEL, "kl_targets": KL_TARGETS, "prompts": PROMPTS, "chat_turn": CHAT_TURN,
+                    "new_tokens": NEW_TOKENS, "dtype": "bfloat16"}}
+
+    # Activations of every sampled pole (signed) at every position of the documents.
+    pad = tok.pad_token_id
+    acts = pole_acts(lm, poles, docs, pad, args.batch)
 
     sets = {}
     for i, p in enumerate(poles):
         if p["silent"]:
             continue
-        quiet = p["act_top"] / 10
-
-        def quiet_at(ds, k):
-            q = [(d, t) for d in ds for t in (acts[d][MIN_POS:, i] < quiet).nonzero().squeeze(1).add(MIN_POS).tolist()]
-            return rng.sample(q, min(k, len(q)))
+        below = p["act_top"] / 10
         pos = [(d, t, v, float(acts[d][t, i])) for d, t, v in p["pos"]]
-        same = quiet_at(sorted({d for d, _, _ in p["pos"]}), N_NEG_SAME)
-        rand = quiet_at(inp["random_docs"], N_NEG_RAND)
+        same = quiet(acts, i, sorted({d for d, _, _ in p["pos"]}), below, N_NEG_SAME, rng)
+        rand = quiet(acts, i, inp["random_docs"], below, N_NEG_RAND, rng)
         items = [(context(tok, torch.tensor(docs[d]), t, after=0), "pos", v) for d, t, v, _ in pos]
         items += [(context(tok, torch.tensor(docs[d]), t, after=0), kind, float(acts[d][t, i]))
                   for kind, picked in (("same", same), ("rand", rand)) for d, t in picked]

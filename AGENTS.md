@@ -34,8 +34,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
   `14` media tables → `15` optimised media reads; then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
-  design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files);
-  analyses the pipeline absorbed are retired, and the findings name their old scripts.
+  design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
+  Every script the findings name is here. Checks read the catalog's tables and get documents from
+  `catalog.documents` (the activations file, else rebuilt from the corpus), so most run from the
+  release and the model.
 - `tests/`: `test_transport.py` (the estimator), `test_readout.py`, and `test_arch.py`,
   `test_gemma4.py` (Gemma 4's geometry and layer maps on small random models), `test_qwen35.py`
   (Qwen3.5's layer maps, MoE and dense, against autograd through HF's delta rule).

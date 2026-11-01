@@ -13,6 +13,12 @@ under the lens's logits for the pole ``s·W_down[:, n]``, plainly and z-scored a
 library's rows of that layer (layer-contrastive). Control: the same with each row's name swapped
 for the next row's of the same layer. Hit rates at ranks 10, 100 and 1,000 by layer group.
 
+**Coverage** (findings §10): which poles the library's steering caught (any published row, every
+category), among all poles and among those whose write predicts what follows their firings
+(``legible``'s ``write_R`` at a 5% false discovery rate, §7), against what each layer's base rate
+predicts for the latter (pooled over a band's write-legible poles), since the two sit at different
+depths.
+
     python scripts/checks/library_crosscheck.py --lenses logit,J,R:dclm
 """
 import argparse
@@ -20,9 +26,11 @@ import json
 import re
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import torch
 from transformers import AutoTokenizer
 
+from neuron_lens.catalog import neuron_table
 from neuron_lens.lenses import load_lens
 from neuron_lens.paths import LIBRARY, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
@@ -31,6 +39,8 @@ from neuron_lens.weights import down_proj, readout_names, tensors
 MODEL = "Qwen/Qwen3-8B"
 STOP = {"the", "of", "and", "old", "year", "years", "with", "from", "for", "who", "one", "your", "you"}
 GROUPS = [(0, 5), (6, 11), (12, 17), (18, 23), (24, 29), (30, 35)]
+BANDS = [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
+FDR = 0.05  # 09_legible.py's
 
 
 def name_tokens(tok, name: str) -> list[int]:
@@ -52,6 +62,31 @@ def best_rank(logits: torch.Tensor, cands: list[list[int]]) -> torch.Tensor:
     rank = (logits > best[None]).sum(0).cpu()
     rank[torch.tensor([not c for c in cands])] = 10**9
     return rank
+
+
+def coverage(lib: dict) -> tuple[list[str], dict]:
+    """The library's share of all poles and of write-legible poles, by band, and the latter's expected
+    share from each layer's base rate."""
+    caught = {(r[0], r[1], r[2]) for r in lib["rows"]}  # (layer, neuron, sign) of every published row
+    per = []  # (poles, poles caught, write-legible, write-legible caught) per layer
+    for layer in range(36):
+        t = pq.read_table(neuron_table("legible", layer), columns=["neuron", "pole", "write_R_q"]).to_pydict()
+        hit = torch.tensor([(layer, n, s) in caught for n, s in zip(t["neuron"], t["pole"])])
+        w = torch.tensor(t["write_R_q"]) <= FDR
+        per.append((len(hit), int(hit.sum()), int(w.sum()), int((hit & w).sum())))
+    lines = ["\ncoverage: the library's steering (any published row), share of all poles | of write-legible poles "
+             "(write_R at a 5% FDR) | what each layer's base rate predicts for them"]
+    table = {}
+    for lo, hi in BANDS + [(0, 35)]:
+        rows = per[lo:hi + 1]
+        n, w = sum(r[0] for r in rows), sum(r[2] for r in rows)
+        expected = sum(r[2] * r[1] / r[0] for r in rows) / max(1, w)
+        table[f"L{lo}-{hi}"] = {"all": sum(r[1] for r in rows) / n, "write": sum(r[3] for r in rows) / max(1, w),
+                                "write_expected": expected, "write_poles": w}
+        c = table[f"L{lo}-{hi}"]
+        lines.append(f"  L{lo:>2d}-{hi:<2d} {c['all']:.3f} | {c['write']:.3f} | {c['write_expected']:.3f}  "
+                     f"({w:,} write-legible poles)")
+    return lines, table
 
 
 def main() -> None:
@@ -112,7 +147,8 @@ def main() -> None:
                     for k in table["ks"]:
                         share.setdefault(str(k), []).append(round((v < k).float().mean().item(), 4))
             lines.append(f"L{lo:>2d}-{hi:<2d} {int(sel.sum()):5d} " + " ".join(f"{c:>34s}" for c in cells))
-    text = "\n".join(lines)
+    more, table["coverage"] = coverage(lib)
+    text = "\n".join(lines + more)
     print(text)
     (SUMMARY / "library_crosscheck_qwen3-8b.log").write_text(text + "\n")
     (SUMMARY / "library_crosscheck_qwen3-8b.json").write_text(json.dumps(table))

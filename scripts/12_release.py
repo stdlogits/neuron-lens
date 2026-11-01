@@ -370,8 +370,8 @@ Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
 ![Gemma 4: lens reads against steering](figures/19_gemma_steering.png)
 
 - **The S-lens reads early layers' input side.** Through L8 of Qwen3-8B (L13 of Gemma 4) it names the
-  tokens that make a neuron fire (Qwen3-8B, L0: the firing token is in its top 10 for 40% of top
-  firings; another neuron's read: 0.1%), and what early neurons write back. Past them its raw reads are
+  tokens that make a neuron fire (Qwen3-8B, L0: the firing token is in its top 10 for 38% of top
+  firings; another neuron's read: under 0.1%), and what early neurons write back. Past them its raw reads are
   swamped by hub tokens; z-scored across the layer they name concepts.
 - **From L9 of Qwen3-8B, read input directions with `r-lens/mid.pt`.** It names the exact tokens that
   drive a neuron more often than the S-lens (5-8% of its top 10 at L9-L12 and L22-L30). L13-L20 is hard
@@ -665,7 +665,7 @@ corpus, FineWeb-2 Chinese, codeparrot Python, and UltraChat dialogues ({q['docs'
 Every kept token at position 24 of 8 real documents (4 web, 2 code, 2 chat), averaged over them, bf16:
 `drivers` are the 64 tokens with the largest activation at the token itself, `drivers_sum` summed over
 it and the 16 positions after. Values are times the pole's sign. For Qwen3-8B, an fp32 check through L9
-shared 98-99% of a pole's top 20 on average (95-99% for `drivers_sum`; §6).
+shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §6).
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 

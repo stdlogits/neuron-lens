@@ -51,6 +51,30 @@ def doc_tokens(acts: dict) -> list[torch.Tensor]:
     return [flat[a:b] for a, b in itertools.pairwise(start)]
 
 
+def flat_tokens(model: str = MODEL) -> tuple[torch.Tensor, torch.Tensor]:
+    """Every activation document's tokens, flat, and each document's start (the end last): from
+    ``06_activations.py``'s file when present, else rebuilt from the corpus (``corpus_doc_tokens``), so the
+    released catalog suffices."""
+    if acts_path(model).exists():
+        acts = torch.load(acts_path(model), weights_only=False, map_location="cpu", mmap=True)
+        return acts["tokens"].long(), acts["doc_start"].long()
+    docs = corpus_doc_tokens(model)
+    return torch.tensor(list(itertools.chain(*docs))), torch.tensor([0, *itertools.accumulate(map(len, docs))])
+
+
+def documents(model: str = MODEL) -> list[torch.Tensor]:
+    """Each activation document's tokens (``flat_tokens``), as the ``acts`` tables' ``top_doc`` index them."""
+    flat, start = flat_tokens(model)
+    return [flat[a:b] for a, b in itertools.pairwise(start.tolist())]
+
+
+def firing_tokens(flat: torch.Tensor, start: torch.Tensor, doc: torch.Tensor, pos: torch.Tensor,
+                  offset: int = 0) -> torch.Tensor:
+    """The token ``offset`` after each firing (``doc``, ``pos``) in ``flat_tokens``, −1 past its document's end."""
+    p = pos + offset
+    return torch.where(p < start[doc + 1] - start[doc], flat[(start[doc] + p).clamp_max(len(flat) - 1)], -1)
+
+
 def corpus_doc_tokens(model: str = MODEL, seq_len: int = 256) -> list[list[int]]:
     """Each document's tokens rebuilt from the activation slices, as ``06_activations.py`` cut them
     (``seq_len``), for where the activations file isn't at hand: ``docs.parquet`` gives each
@@ -111,6 +135,12 @@ def kept_index(model: str = MODEL) -> torch.Tensor:
 def fixed(t: torch.Tensor) -> pa.Array:
     """A ``[n, k]`` tensor as a fixed-size list column."""
     return pa.FixedSizeListArray.from_arrays(pa.array(t.flatten().numpy()), t.shape[1])
+
+
+def column(table: pa.Table, name: str, k: int | None = None) -> torch.Tensor:
+    """A fixed-size list column (``fixed``) as a ``[rows, k]`` tensor: its first ``k`` entries."""
+    c = table.column(name).combine_chunks()
+    return torch.from_numpy(c.flatten().to_numpy().reshape(len(c), -1)[:, :k].copy())
 
 
 def joined(ids: torch.Tensor, k: int = 8, model: str = MODEL) -> pa.Array:

@@ -28,8 +28,8 @@ shows" / "...It sounds like"), followed by `` a <label>`` (``an`` before a vowel
   (Benjamini-Hochberg over all heads).
 
 Per head into ``data/catalog/gemma-4-12b/heads/media.parquet`` (columns ``<modality>_<score>``);
-the summary in ``data/summary/head_media_gemma-4-12b.{log,json}``, beside the text pattern classes
-of ``head_patterns.py`` when present.
+the summary in ``data/summary/head_media_gemma-4-12b.{log,json}``, beside the text patterns
+(``heads/acts``) and ``head_patterns.py``'s ablation of in-context copying, when present.
 
     python scripts/checks/head_media.py [--modality image,audio] [--n 64]
 """
@@ -44,9 +44,9 @@ from transformers import AutoProcessor
 
 from neuron_lens import arch
 from neuron_lens.stats import bh, spearman
-from neuron_lens.catalog import catalog_dir
+from neuron_lens.catalog import catalog_dir, head_table
 from neuron_lens.media import labelled_images, processed, slot_token, sounds
-from neuron_lens.paths import SUMMARY
+from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
 
 MODEL = "google/gemma-4-12B"
@@ -275,8 +275,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table({k: pa.array(v.numpy()) for k, v in cols.items()}), out_dir / "media.parquet")
 
-    pat_path = out_dir / "patterns.parquet"
-    pat = pq.read_table(pat_path).to_pydict() if pat_path.exists() else None
+    pat_path, abl_path = head_table("acts", MODEL), DATA / "heads" / f"{arch.stem(MODEL)}-ablate-copy.pt"
+    pat = pq.read_table(pat_path, columns=["sink", "prev", "induction", "duplicate"]).to_pydict() if pat_path.exists() else None
+    if pat and abl_path.exists():
+        pat["ablate_copy"] = torch.load(abl_path, weights_only=False)["ablate_copy"].flatten().tolist()
     bands = arch.bands(L)
     hl = lambda i: f"L{i // H}h{i % H}"  # noqa: E731
     lines = [f"attention heads in image and audio contexts, {MODEL}: {L} × {H} heads; per modality N labelled documents in "
@@ -316,7 +318,7 @@ def main() -> None:
             lines.append(f"    {hl(i)} (top-1 {st['top1_mid'].flatten()[i]:.0%}): {' | '.join(r['top_classes'][(i // H, i % H)])}")
         if pat:
             ok = ~st["content"].flatten().isnan()
-            pt = {k: torch.tensor(pat[k]) for k in ("sink", "prev", "induction", "duplicate", "ablate_copy")}
+            pt = {k: torch.tensor(v) for k, v in pat.items()}
             lines.append("  Spearman over heads with the text patterns: " + ", ".join(
                 f"{a} vs {k} {spearman(st[a].flatten()[ok], v[ok]):+.2f}" for a in ("read_ratio", "content") for k, v in pt.items()))
     if len(report) == 2:

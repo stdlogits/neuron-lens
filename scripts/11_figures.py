@@ -412,7 +412,7 @@ def _lenses() -> None:
 def fig_depth_map() -> None:
     """Every legibility share by layer, one row per side, as an annotated heatmap."""
     rows = summary(f"legible_{STEM}.json")["neurons"]["layers"]
-    steer = [r["steer_predicted"] for r in summary(f"legibility_census_{STEM}.json")["layers"]]
+    steer = summary(f"causal_lens_{STEM}.json")["targets"]["steer 1x"]["R:dclm"]["pass"]
     col = lambda k: [r[k] for r in rows]
     groups = [
         ("What makes a pole fire (its read direction)", [
@@ -468,9 +468,9 @@ def fig_depth_map() -> None:
     assert n_rows == len(ticks)
     finish(fig, "03_depth_map", "Each side of a neuron reads at its own depth: inputs early, outputs late, a dark middle",
            "Share of each layer's poles (%) whose weight-only read passes its test at the pole's top firings (5% false "
-           "discovery rate), except steering: of 64 random poles a layer, the share whose write predicts the effect of "
-           "adding it at every position (amplified, not one firing in context). Blank: under 0.5%.",
-           "findings §3, §4, §6, §7; data/summary/legible_qwen3-8b.json, legibility_census_qwen3-8b.json (steering)",
+           "discovery rate), except steering: of 64 random poles a layer (those that fire), the share whose write "
+           "predicts the effect of adding it at every position (amplified, not one firing in context). Blank: under 0.5%.",
+           "findings §3, §4, §6, §7; data/summary/legible_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
            "The input side reads early: the S-lens names the firing token for 78% of L0's poles and 14-58% at L1-L8, "
            "and almost none at L10-L20. The write side reads late: the R-lens write predicts the next token after a "
            "firing for at most 2% of poles before L23, rising to 35-37% at L28-L30. In between, 77-86% of L13-L20's "
@@ -587,15 +587,14 @@ def fig_steering() -> None:
 
 
 def fig_amplified() -> None:
-    steer = summary(f"legibility_census_{STEM}.json")["layers"]
+    steer = summary(f"causal_lens_{STEM}.json")["targets"]["steer 1x"]["R:dclm"]
     rows = summary(f"legible_{STEM}.json")["neurons"]["layers"]
     fig, (ax,) = figure()
     x = [r["layer"] for r in rows]
-    items = [series(ax, x, [r["steer_predicted"] for r in steer], 0, "write predicts its steering effect (amplified)")
-             + ("amplified",),
+    items = [series(ax, x, steer["pass"], 0, "write predicts its steering effect (amplified)") + ("amplified",),
              series(ax, x, [r["write_R_net"] for r in rows], 1, "write predicts the next token (when it fires)")
              + ("in context",)]
-    series(ax, x, [r["steer_null"] for r in steer], None, "chance for steering (mismatched pairs)", end=False)
+    series(ax, x, steer["pass_control"], None, "chance for steering (mismatched pairs)", end=False)
     layer_axis(ax)
     ax.set_ylim(-0.02, 1.02)
     end_labels(ax, items)
@@ -603,9 +602,10 @@ def fig_amplified() -> None:
     ax.set_ylabel("share of poles")
     ax.legend(loc="center right")
     finish(fig, "08_amplified_vs_in_context", "Amplified, nearly every write does what the lens says; in context, few do",
-           "Blue: of 64 random poles a layer, the share whose R-lens write read predicts their own 1× steering effect. "
+           "Blue: of 64 random poles a layer (those that fire), the share whose R-lens write read predicts their own 1× "
+           "steering effect. "
            "Orange: of all poles, the share whose write promotes the token after their top firings, net of chance.",
-           "findings §4; data/summary/legibility_census_qwen3-8b.json (steering), legible_qwen3-8b.json (in context)",
+           "findings §4; data/summary/causal_lens_qwen3-8b.json (steering), legible_qwen3-8b.json (in context)",
            "From L5, 92-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles "
            "predict what follows their own firings, rising to 31-32% at L28-L29. The gap is the difference between a "
            "write's average push and a firing's effect in its context (figure 9).")
@@ -643,14 +643,12 @@ def fig_context_linearity() -> None:
 def fig_side_agreement() -> None:
     r = summary(f"side_agreement_{STEM}.json")["reads"]
     fig, (a, b) = figure(2)
-    for k, label, slot in (("write_R_dclm", "write promotes the next token", 0),
-                           ("suppress_R_dclm", "write suppresses it", 1)):
+    for k, label, slot in (("write_R", "write promotes the next token", 0), ("suppress_R", "write suppresses it", 1)):
         series(a, r[k]["layer"], r[k]["mean"], slot, label)
-    series(a, r["write_R_dclm"]["layer"], r["write_R_dclm"]["control_mean"], None, "control: a random pole's read",
-           end=False)
+    series(a, r["write_R"]["layer"], r["write_R"]["control_mean"], None, "control: a random pole's read", end=False)
     a.set_title("Write side: the token after each top firing")
     for k, label, slot in (("read_S", "S-lens read", 2), ("read_S_z", "S-lens, contrasted within the layer", 3),
-                           ("read_R_dclm", "R-lens read (from the MLP input)", 0)):
+                           ("read_R", "R-lens read (from the MLP input)", 0)):
         series(b, r[k]["layer"], [max(v, 1e-3) for v in r[k]["mean"]], slot, label)
     series(b, r["read_S"]["layer"], [max(v, 1e-3) for v in r["read_S"]["control_mean"]], None, "control", end=False)
     b.set_yscale("log")
@@ -662,20 +660,23 @@ def fig_side_agreement() -> None:
         legend_below(ax)
     log_ticks(b, percent=True)
     a.set_ylabel("share of top firings in the read's top 10")
+    pred = r["write_R"]["mean"]
+    peak = max(range(len(pred)), key=pred.__getitem__)
     finish(fig, "10_side_agreement", "Writes predict the next token late; reads name the firing token early",
            "Mean share of each pole's 24 top firings whose token is in its read's top 10, all 884,736 poles; "
            "control: a random pole's read. Right panel on a log scale, floored at 0.1%.",
            "findings §5, §6; data/summary/side_agreement_qwen3-8b.json",
-           "Left: prediction rises from L20 and peaks at 7.3% at L29-L30; suppression overtakes it at L35 (early "
-           "layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 (40% at "
-           "L0), with a spike at L8; the R-lens read from the MLP input takes over from L9.")
+           f"Left: prediction rises from L20 and peaks at {pred[peak]:.1%} at L{peak}; suppression overtakes it at L35 "
+           "(early layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 "
+           f"({r['read_S']['mean'][0]:.0%} at L0), with a spike at L8; the R-lens read from the MLP input takes over "
+           "from L9.")
 
 
 def fig_drivers() -> None:
     r = summary(f"side_agreement_{STEM}.json")["reads"]
     fig, (ax,) = figure(top=0.72)
     for k, label, slot in (("drivers_S", "S-lens", 2), ("drivers_S_z", "S-lens, contrasted within the layer", 3),
-                           ("drivers_R_dclm", "R-lens from the MLP input", 0)):
+                           ("drivers_R", "R-lens from the MLP input", 0)):
         series(ax, r[k]["layer"], [max(v, 1e-3) for v in r[k]["mean"]], slot, label)
     series(ax, r["drivers_S"]["layer"], [max(v, 1e-3) for v in r["drivers_S"]["control_mean"]], None,
            "control: a random pole's read", end=False)
@@ -689,13 +690,16 @@ def fig_drivers() -> None:
     log_ticks(ax, percent=True)
     ax.set_ylabel("share of the read's top 10 that are exact drivers")
     legend_above(ax, 4)
+    s, rr = r["drivers_S"]["mean"], r["drivers_R"]["mean"]
+    span = lambda v: f"{min(v):.0%}-{max(v):.0%}".replace("%-", "-")
     finish(fig, "11_drivers", "The S-lens names a neuron's real input tokens early, the R-lens from L8",
            "Every common token placed in 8 real documents; a pole's exact drivers are the 20 that raise it most. "
            "Share of each weight-only read's top 10 among them; log scale, floored at 0.1%.",
            "findings §6; data/summary/side_agreement_qwen3-8b.json; neurons/drivers",
-           "At L0, 31% of the S-lens read's top 10 are exact drivers, and 4-11% at L1-L4; the R-lens read of the input "
-           "direction leads from L8 (5-8% at L8-L12 and L22-L29). L13-L20 is the weakest stretch for every "
-           "weight-only input read (R-lens 2-4%, S-lens under 1%).")
+           f"At L0, {s[0]:.0%} of the S-lens read's top 10 are exact drivers, and {span(s[1:5])} at L1-L4; the R-lens "
+           f"read of the input direction leads from L8 ({span(rr[8:13] + rr[22:30])} at L8-L12 and L22-L29). L13-L20 "
+           f"is the weakest stretch for every weight-only input read (R-lens {span(rr[13:21])}, S-lens at most "
+           f"{max(s[13:21]):.0%}).")
 
 
 def fig_census() -> None:
@@ -730,24 +734,22 @@ def fig_census() -> None:
 
 
 def fig_rank_depth() -> None:
-    text = (SUMMARY / f"rank_depth_{STEM}.log").read_text().splitlines()
-    rows = {}
-    for line in text[1:]:
-        m = re.match(r"^(L\d+ .+?)\s+(r1-8 .*)$", line)
-        if m:
-            rows[m.group(1).strip()] = [(int(a), int(b), float(c), float(d)) for a, b, c, d in
-                                        re.findall(r"r(\d+)-(\d+) ([\d.]+)/([\d.]+)", m.group(2))]
-    pick = [("L28 write R  -> next", "L28 write, R-lens → next token", 0),
-            ("L16 write Rz -> next", "L16 write, R-lens contrasted within the layer → next token", 1),
-            ("L12 read fwd -> peak", "L12 read, R-lens → firing token", 2),
-            ("L4 read S   -> peak", "L4 read, S-lens → firing token", 3)]
+    rd = summary(f"rank_depth_{STEM}.json")
+    mid = [(a + b) / 2 for a, b in rd["bins"]]
+
+    def ratios(key: str, layer: int) -> list[float]:
+        r = rd["reads"][key]
+        i = r["layer"].index(layer)
+        return [m / max(c, 1e-5) for m, c in zip(r["matched"][i], r["mismatched"][i])]
+    pick = [("write_R", 28, "L28 write, R-lens → next token", 0),
+            ("write_R_z", 16, "L16 write, R-lens contrasted within the layer → next token", 1),
+            ("read_R", 12, "L12 read, R-lens → firing token", 2),
+            ("read_S", 4, "L4 read, S-lens → firing token", 3)]
     fig, (ax,) = figure(top=0.68)
     items = []
-    for key, label, slot in pick:
-        key = next(k for k in rows if k.replace(" ", "") == key.replace(" ", ""))
-        mid = [(a + b) / 2 for a, b, *_ in rows[key]]
-        ratio = [m / max(c, 1e-5) for *_, m, c in rows[key]]
-        items.append(series(ax, mid, ratio, slot, label, marker="o", ms=3.5, mec=SURFACE) + (label.split(",")[0],))
+    for key, layer, label, slot in pick:
+        items.append(series(ax, mid, ratios(key, layer), slot, label, marker="o", ms=3.5, mec=SURFACE)
+                     + (label.split(",")[0],))
     ax.axhline(1, color=MUTED, lw=1.0, zorder=1)
     ax.annotate("chance (a mismatched pole)", (64, 1), xytext=(-4, 4), textcoords="offset points", ha="right",
                 fontsize=8, color=INK2)
@@ -762,10 +764,10 @@ def fig_rank_depth() -> None:
     finish(fig, "13_rank_depth", "A read's signal holds down to rank 64, not just its top tokens",
            "How often the token at each rank of a pole's read shows up in its behaviour (the next token for writes, "
            "the firing token for reads), divided by the same for a mismatched pole. Log scale.",
-           "findings §7; data/summary/rank_depth_qwen3-8b.log",
+           "findings §7; data/summary/rank_depth_qwen3-8b.json",
            "Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read "
-           "30×, L12's read 6×), which is why the catalog keeps the top 64 of every read. L4's S-lens ratio is noisy: "
-           "its mismatched rate is near zero.")
+           f"{ratios('write_R', 28)[-1]:.0f}×, L12's read {ratios('read_R', 12)[-1]:.0f}×), which is why the catalog keeps "
+           "the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.")
 
 
 def fig_lens_blind() -> None:

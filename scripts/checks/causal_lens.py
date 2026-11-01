@@ -17,9 +17,11 @@
 ``score`` (any device) compares each lens's read of ``s·W_down[:, n]`` (its logits
 ``W_U (γ ⊙ norm(J_L w))``) with those vectors: the Pearson correlation over the vocabulary (tokens
 seen 5+ times in the activation corpora) and the top-10 overlap, per layer and lens. The control
-pairs each pole's vectors with the read of the next sampled neuron of the same layer: what any
-write of that layer shares (the common mode).
-The per-layer medians use the random picks only; the named poles are listed one by one.
+pairs each pole's vectors with the read of the next random neuron of the same layer: what any
+write of that layer shares (the common mode). A pole's read **predicts** a target when its r passes
+the 99th percentile of the control's, pooled over layers (§3: from L5, 92-100% of random poles' writes
+predict their 1× steering); the per-layer share of poles that do, and of control pairs (chance).
+The per-layer medians and shares use the random picks only; the named poles are listed one by one.
 
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``): the MLP output passes a post-feedforward
 RMSNorm before the residual, so the push is added after it: ``s·α·γ_post ⊙ W_down[:, n]`` times the
@@ -50,6 +52,7 @@ from neuron_lens.stats import pearson
 SKIP_FIRST = 16
 WINDOW = 8
 DOSES = (1.0, 4.0)
+PASS_Q = 0.99  # a read predicts its pole's effect past this quantile of the control's r
 CAUSAL = DATA / "causal"
 
 
@@ -244,17 +247,20 @@ def score(args) -> None:
                "ablate pos": saved["ablate_pos"], "ablate win": saved["ablate_win"]}
     fired = (saved["fired"] > 0).any(-1)  # [picks, 2]: the pole has top contexts
     layers = sorted({l for l, _ in picks})
-    rows = []  # (layer, target, lens, matched r, control r, top-10 overlap, matched r quartiles)
+    rows = []  # (layer, target, lens, matched r, control r, top-10 overlap), each over the layer's random poles
     for layer in layers:
         idx = [i for i, (l, _) in enumerate(picks) if l == layer]
         is_rand = torch.tensor([picks[i] in rand for i in idx])
+        other = torch.arange(len(idx))  # each pick's control: the next random pick of the layer (named: next named)
+        for group in (is_rand, ~is_rand):
+            other[group] = other[group].roll(1)
         wd = directions(args.model, layer, dev)["write"]  # the write as the residual sees it (Gemma: s · γ_post ⊙ W_down)
         cols = wd[:, [picks[i][1] for i in idx]]
         for s in specs:
             jac = None if lenses[s] is None else lenses[s].get(layer)
             lg = (unembed @ rms_norm_columns(transport(cols, jac), gamma)).T  # [n, V]
             pred = torch.cat([lg, -lg])  # poles +, −
-            ctrl = torch.cat([lg.roll(1, 0), -lg.roll(1, 0)])
+            ctrl = torch.cat([lg[other], -lg[other]])
             for name, t in targets.items():
                 y = torch.cat([t[idx, 0, :nv], t[idx, 1, :nv]]).to(dev, torch.float32)
                 keep = torch.ones(len(y), dtype=torch.bool) if name.startswith("steer") \
@@ -262,15 +268,23 @@ def score(args) -> None:
                 keep &= y.abs().sum(1).cpu() > 0
                 pv, cv, yv = pred[:, keep_vocab], ctrl[:, keep_vocab], y[:, keep_vocab]
                 r, rc, ov = pearson(pv, yv).cpu(), pearson(cv, yv).cpu(), overlap(pv, yv)
-                k = keep & torch.cat([is_rand, is_rand])  # the per-layer medians: random picks only
+                k = keep & torch.cat([is_rand, is_rand])  # the per-layer statistics: random picks only
                 if k.any():
-                    q = torch.quantile(r[k], torch.tensor([0.25, 0.75])).tolist()
-                    rows.append((layer, name, s, r[k].median().item(), rc[k].median().item(), ov[k].mean().item(), q))
+                    rows.append((layer, name, s, r[k], rc[k], ov[k]))
                 for pi, sign in enumerate((1, -1)):
                     for j, i in enumerate(idx):
                         pole = (layer, picks[i][1], sign)
                         if pole in named and keep[pi * len(idx) + j]:
                             named_r[(pole, name, s)] = (r[pi * len(idx) + j].item(), ov[pi * len(idx) + j].item())
+    pooled = {}
+    for _, name, s, _, rc, _ in rows:
+        pooled.setdefault((name, s), []).append(rc)
+    thr = {key: torch.cat(v).quantile(PASS_Q).item() for key, v in pooled.items()}
+    stats = {(l, name, s): {"r_q25": r.quantile(0.25).item(), "r_med": r.median().item(), "r_q75": r.quantile(0.75).item(),
+                            "control_med": rc.median().item(), "overlap": ov.mean().item(),
+                            "pass": (r > thr[name, s]).float().mean().item(),
+                            "pass_control": (rc > thr[name, s]).float().mean().item()}
+             for l, name, s, r, rc, ov in rows}
     lines = [f"causal check of lens reads, {args.model}: {saved['meta']}",
              "median Pearson r over the vocabulary (matched / control: next sampled neuron's read), "
              "mean top-10 overlap; random picks only (named poles listed after)"]
@@ -278,10 +292,18 @@ def score(args) -> None:
         lines.append(f"\n{name}")
         lines.append("layer " + " ".join(f"{s:>22s}" for s in specs))
         for layer in layers:
-            cells = {s: (r, rc, ov) for l, n_, s, r, rc, ov, _ in rows if l == layer and n_ == name}
+            cells = {s: stats.get((layer, name, s)) for s in specs}
             lines.append(f"L{layer:<4d} " + " ".join(
-                f"{cells[s][0]:6.2f} /{cells[s][1]:5.2f} ov {cells[s][2]:.2f}" if s in cells else " " * 22
-                for s in specs))
+                f"{c['r_med']:6.2f} /{c['control_med']:5.2f} ov {c['overlap']:.2f}" if c else " " * 22
+                for c in cells.values()))
+    for name in ("steer 1x", "steer 4x"):
+        lines.append(f"\n{name}: share of poles whose read predicts it (r past the control's {PASS_Q:.0%} point, pooled "
+                     f"over layers: " + ", ".join(f"{s} {thr[name, s]:.2f}" for s in specs) + "; control pairs in brackets)")
+        lines.append("layer " + " ".join(f"{s:>14s}" for s in specs))
+        for layer in layers:
+            cells = [stats.get((layer, name, s)) for s in specs]
+            lines.append(f"L{layer:<4d} " + " ".join(
+                f"{c['pass']:6.2f} [{c['pass_control']:.2f}]" if c else " " * 14 for c in cells))
     lines.append("\nnamed poles: Pearson r (top-10 overlap) per lens, steer 4x | ablate win")
     for pole in sorted({p for p, _, _ in named_r}):
         l, n, sign = pole
@@ -294,12 +316,12 @@ def score(args) -> None:
     print(text)
     stem = f"causal_lens_{args.model.split('/')[-1].lower()}"
     (SUMMARY / f"{stem}.log").write_text(text + "\n")
-    table = {name: {s: {k: [] for k in ("layer", "r_q25", "r_med", "r_q75", "control_med", "overlap")}
-                    for s in specs} for name in targets}
-    for l, n_, s, r, rc, ov, q in rows:
-        t = table[n_][s]
-        for k, v in zip(t, (l, q[0], r, q[1], rc, ov)):
-            t[k].append(round(v, 4))
+    table = {name: {s: {"layer": [], "pass_threshold": round(thr[name, s], 4)} for s in specs} for name in targets}
+    for (l, name, s), st in stats.items():
+        t = table[name][s]
+        t["layer"].append(l)
+        for k, v in st.items():
+            t.setdefault(k, []).append(round(v, 4))
     (SUMMARY / f"{stem}.json").write_text(json.dumps({"meta": saved["meta"], "lenses": specs, "targets": table}))
 
 

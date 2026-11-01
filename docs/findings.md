@@ -5,10 +5,9 @@ What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§
 its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
 and the overview in the [README](../README.md).
 
-Numbers are medians or means over a layer's poles unless stated. Each setup names its script: the
-pipeline stages (`scripts/NN_*.py`), a check (`scripts/checks/`), or, for analyses the pipeline later
-absorbed, a script since retired (marked so). Compact outputs are in `data/summary/`, and figures are drawn
-by `scripts/11_figures.py`.
+Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a
+pipeline stage (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in
+`data/summary/`, and figures are drawn by `scripts/11_figures.py`.
 
 **Terms.** A *pole* is one sign of a neuron's activation (SwiGLU activations take both), written
 `L8 n344 +`. Its *write* is `±W_down[:, n]`, its *read direction* `â ± b̂` (the gate and up rows).
@@ -166,7 +165,7 @@ Python only, and chat is one synthetic dataset.
 `L`'s MLP output at positions 16-63 of 16 DCLM documents of 64 tokens, at 1× and 4× the pole's typical
 top activation from a pilot (about 0.6× the full pass's `act_top`), and records the mean change in
 log-probabilities. **Score:** Pearson r over the tokens seen 5+ times between that change and a lens's
-logits for the write. **Control:** another sampled neuron's read from the same layer. Medians over the
+logits for the write. **Control:** the next random neuron's read from the same layer. Medians over the
 random picks (64 poles a layer).
 
 | layer | logit lens | J-lens | R-lens | control |
@@ -174,7 +173,7 @@ random picks (64 poles a layer).
 | L0 | 0.09 | 0.38 | 0.35 | 0.01 |
 | L4 | 0.09 | 0.38 | 0.46 | −0.01 |
 | L8 | 0.12 | 0.42 | 0.51 | 0.01 |
-| L12 | 0.25 | 0.58 | 0.64 | −0.02 |
+| L12 | 0.25 | 0.58 | 0.64 | −0.03 |
 | L16 | 0.36 | 0.65 | 0.74 | 0.00 |
 | L20 | 0.59 | 0.81 | 0.87 | 0.01 |
 | L24 | 0.83 | 0.92 | 0.94 | 0.00 |
@@ -190,9 +189,9 @@ random picks (64 poles a layer).
   overlap. The J-lens leads at L0, they tie at L1-L3 and converge from L24. The logit lens, which
   ignores the later layers, trails until about L20.
 - **Nearly every pole has a specific effect when amplified.** From L5, 92-100% of random poles' writes
-  predict their own steering effect (r past 0.26, the 99th percentile of mismatched pairs), against
-  0-5% of mismatched pairs. L1-L3 are lower (28-55% pass; median r about 0.16 at L1-L2) because their
-  poles barely fire, so their doses are tiny.
+  predict their own steering effect (r past 0.26, the 99th percentile of mismatched pairs pooled over
+  layers), against 0-5% of mismatched pairs. L1-L3 are lower (32-57% of the poles that fire pass; median
+  r about 0.16 at L1-L2) because their poles barely fire, so their doses are tiny.
 - **Named concept poles show the R-lens's largest leads:** L8 n5315 − ("nature") at r 0.64 against
   0.10 for the J-lens; steering it raises ` trees`, ` vegetation`, ` gardens` and 植物, while the
   J-lens reads its write as brackets. Named poles are otherwise no more readable than random ones.
@@ -216,11 +215,17 @@ suppression takes over (§5). Amplified, 92-100% do from L5 (§3).
 
 ![Amplified against in context](figures/08_amplified_vs_in_context.png)
 
-**Per-context linearization.** For §3's random poles that fire (2,290), at each of the 24 top
-firings: the effect of removing the firing (the neuron set to 0 there), and its exact first-order
-effect `a·∂logp/∂a` (central difference), each as a change in log-probabilities at the firing
-position and summed over the next 8. Correlations are Pearson r over the vocabulary; one H100, fp32
-with TF32 matmuls (`context_linearity.py`, retired).
+**Per-context linearization** (`checks/context_linearity.py`; one H100, fp32 with TF32 matmuls, 57
+minutes). §3's random poles at their top firings, the strongest position in each of their 24 top
+documents (the `acts` table's `top_doc`, `top_pos`, `top_val`), scored where they fired at least twice
+(2,290 of 2,304 poles). At each firing, one batch of four rows multiplies the neuron's activation `a`
+there by 1, 0, 1.25 and 0.75: the effect of removing the firing (clean − removed) and its first-order
+effect `a·∂logp/∂a` (the central difference of the last two, over 0.5), each a change in
+log-probabilities summed over the firing position and the next 8. Correlations are Pearson r over the
+kept tokens; per-firing values are a pole's median over its firings, and the table gives medians over
+poles. "One context vs the pole's other 23" compares a firing's first-order effect with the mean of the
+pole's other firings'; steering is §3's at 1×. The measurement used the top firings of an earlier
+activation pass over the same documents, which the released `acts` match up to bf16 rounding.
 
 | band | removed vs first-order | one context vs the pole's other 23 | lens vs one context | lens vs the mean of 24 | steering vs the mean firing effect | steering vs lens |
 |---|---|---|---|---|---|---|
@@ -258,7 +263,7 @@ all tokens alike; TF32 makes weak early poles' values lower bounds.
 
 ## §5. Prediction and suppression
 
-**Setup** (`side_agreement.py`, retired; no model). For each pole's top firings, the token after
+**Setup** (`checks/side_agreement.py`; no model). For each pole's top firings, the token after
 the peak. **Predict:** the share of firings whose next token is in the write read's top 10.
 **Suppress:** the same for its bottom 10 (the opposite pole's top 10). Control: a random pole of the
 same layer and sign.
@@ -272,8 +277,8 @@ same layer and sign.
 | L28 | 0.068 (0.000) | 0.07 | 0.003 | 0.00 |
 | L30 | 0.073 (0.000) | 0.07 | 0.005 | 0.00 |
 | L32 | 0.058 (0.000) | 0.06 | 0.009 | 0.01 |
-| L34 | 0.045 (0.000) | 0.04 | 0.034 | 0.04 |
-| L35 | 0.055 (0.001) | 0.05 | 0.057 | 0.07 |
+| L34 | 0.042 (0.000) | 0.04 | 0.034 | 0.04 |
+| L35 | 0.040 (0.000) | 0.04 | 0.056 | 0.07 |
 
 ![Writes predict the next token late; reads name the firing token early](figures/10_side_agreement.png)
 
@@ -292,10 +297,10 @@ same layer and sign.
   | layer | P predicts (> ⅓) | S suppresses (> ⅓) | `act_top` P / S |
   |---|---|---|---|
   | L28 | 0.38 | 0.01 | 40 / 16 |
-  | L30 | 0.47 | 0.03 | 61 / 23 |
+  | L30 | 0.46 | 0.03 | 61 / 23 |
   | L32 | 0.36 | 0.05 | 62 / 31 |
-  | L34 | 0.10 | 0.37 | 49 / 54 |
-  | L35 | 0.23 | 0.51 | 45 / 68 |
+  | L34 | 0.10 | 0.37 | 49 / 53 |
+  | L35 | 0.22 | 0.51 | 44 / 67 |
 
   Through L32 the promoting pole fires harder; from L34 the suppressing one. In SwiGLU, prediction and
   suppression neurons are not two kinds of weights but two signs of one neuron, and a weight-only
@@ -319,8 +324,8 @@ those tokens, at which depth.
 - **Exact drivers** (`07_drivers.py`): every kept token at position 24 of 8 real documents (4 web, 2
   code, 2 chat), followed by the documents' own next 16 tokens; per pole, the 64 tokens with the
   largest activation at the token, and summed over the 16 after. An fp32 rerun through L9 shares
-  98-99% of a pole's top 20 on average at the token (95-99% summed; `drivers_precision.py`,
-  retired); later layers are unchecked.
+  98-99% of a pole's top 20 on average at the token (94-99% summed; `checks/drivers_precision.py`);
+  later layers are unchecked.
 
 **Early neurons are token-family detectors.** Exact drivers of random early poles:
 
@@ -333,27 +338,27 @@ those tokens, at which depth.
 | L2 n6890 + | Whitney, Courtney, Chelsea, Kendall, Shelby, Lindsay |
 
 **The S-lens names them from the weights, through L8.** Share of each read's top 10 among the pole's
-20 exact drivers (control 0.003 or less):
+20 exact drivers (control 0.003 or less; `checks/side_agreement.py`):
 
 | layer | `read_S` | `read_S_z` | `read_R` |
 |---|---|---|---|
-| L0 | 0.31 | 0.34 | 0.011 |
+| L0 | 0.32 | 0.34 | 0.011 |
 | L1 | 0.10 | 0.10 | 0.000 |
 | L4 | 0.10 | 0.14 | 0.003 |
 | L7 | 0.03 | 0.02 | 0.017 |
 | L8 | 0.06 | 0.07 | 0.069 |
 | L9 | 0.02 | 0.03 | 0.057 |
 | L12 | 0.004 | 0.004 | 0.053 |
-| L16 | 0.002 | 0.002 | 0.030 |
-| L20 | 0.010 | 0.013 | 0.037 |
-| L24 | 0.027 | 0.049 | 0.076 |
-| L29 | 0.007 | 0.026 | 0.080 |
-| L35 | 0.001 | 0.008 | 0.027 |
+| L16 | 0.003 | 0.002 | 0.030 |
+| L20 | 0.011 | 0.013 | 0.037 |
+| L24 | 0.031 | 0.050 | 0.076 |
+| L29 | 0.009 | 0.026 | 0.080 |
+| L35 | 0.002 | 0.008 | 0.027 |
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
-- **L0-L4:** `read_S` names exact drivers (31% of its top 10 at L0, 4-11% at L1-L4), and at L0 the
-  peak token of 40% of top firings (another pole's read: 0.1%); the R-lens read of the same direction
+- **L0-L4:** `read_S` names exact drivers (32% of its top 10 at L0, 4-11% at L1-L4), and at L0 the
+  peak token of 38% of top firings (another pole's read: under 0.1%); the R-lens read of the same direction
   almost none. At L1-L8 the S-lens read names 2-9% of peak tokens, against under 1.5% for the R-lens
   read (3.5% at L8).
 - **L8 is the crossover:** both reads name drivers (6-7%), and a pole's S-lens, R-lens and write reads
@@ -371,8 +376,8 @@ those tokens, at which depth.
   otherwise; L32 n2407 + reads 斗争 (struggle), fight and writes fight, fighting, 战斗.
 
 **Early neurons write back what they detect.** `write_S` reads a write through the S-lens to the
-layer's output: the tokens whose footprint the write imitates. It shares 1.66 tokens of 10 with the
-pole's exact drivers at L0 (control 0.003), 0.22-0.49 at L1-L4, 0.10-0.25 at L5-L8 and about 0.01
+layer's output: the tokens whose footprint the write imitates. It shares 1.69 tokens of 10 with the
+pole's exact drivers at L0 (control 0.004), 0.22-0.50 at L1-L4, 0.10-0.26 at L5-L8 and about 0.01
 from L11. L0 n1649 −, which fires on `ain`, writes `ain | AIN | ains | rain | strain`, where its R-lens
 write read is `... | ..." | the`. MLP0-MLP8 in effect act as an extended embedding.
 
@@ -457,11 +462,12 @@ Shares of poles passing at 5% FDR, band means over layers; net of chance in brac
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
-**Signal holds to rank 64** (`rank_depth.py`, retired; nine layers). Per rank, the share of
+**Signal holds to rank 64** (`checks/rank_depth.py`; nine layers). Per rank, the share of
 poles whose token at that rank shows up after a top firing (writes) or at the peak (reads), against a
 mismatched pole. Ranks 49-64 still run several times above chance for most reads (L28's write read
-30×, L12's `read_R` 6×), at 8-19% of a top-8 token's value. The exception is the plain write read at
-L2-L4, hub tokens at every rank; its `_z` read has signal there. The catalog keeps the top 64.
+29×, L12's `read_R` 6×), at 8-18% of a top-8 token's value. The exception is the plain write read
+before L21 (1.0-1.7× at ranks 49-64), hub tokens at every rank; its `_z` read keeps signal there from L8
+(3-7×). The catalog keeps the top 64.
 
 ![Read signal by rank](figures/13_rank_depth.png)
 
@@ -488,7 +494,7 @@ write **promotes** when amplified.
   still carried a steering-sample ablation summary that overlapped 90 of its 945 scored positives;
   dropping those moved its mean AUROC from 0.926 to 0.927, and later cards omit it.)
 
-**The pilot** (`describe_cards.py` and `describe_score.py`, retired): 197 poles (2 random neurons
+**The pilot** (`checks/describe_cards.py`, `checks/describe_score.py`): 197 poles (2 random neurons
 a layer, both poles, and 53 named poles), Claude Sonnet explainers, full cards (lens reads, top 5
 contexts, activation statistics, steering, outside labels). Over the 189 that fire, 5 held-out firings
 against 5 quiet positions score a mean AUROC of **0.93** [0.91, 0.94] (control 0.54); 0.96 at
@@ -496,7 +502,9 @@ L0-L11, 0.89 at L12-L23 and 0.91 at L24-L35. Most poles are token- or phrase-lev
 what comes next: L7 n271 + poxviruses (monkey⟦p⟧ox), L9 n8548 − an AI assistant's self-reference ("my
 training", "been programmed"), L16 n6934 + " upon" in "Once upon a time", L26 n4061 − the word before
 "suicide". The explainers judged that the descriptions rest on activations everywhere, with the weight
-reads agreeing on about 40% of cards from L12 and a quarter or fewer before.
+reads agreeing on about 40% of cards from L12 and a quarter or fewer before. Its score sets and
+scorers' answers were not kept, so these numbers stand as recorded; the scripts rebuild the same 197
+cards from the current catalog and draw fresh held-out sets.
 
 **The blind test** (`checks/lens_blind.py`): 160 random poles, 32 per band, explainers that never see
 steering, in four arms: **lens** (only the eight weight-only reads, plain and `_z`, 12 tokens each),
@@ -664,12 +672,12 @@ input side (`read_R` and `read_S`) or both together:
   its top 100 for 19% of pairs (mismatched names 3%; J-lens 10%, logit lens 7%;
   `checks/combo_crosscheck.py`). The best parent's read alone does about as well (24%, control 5%):
   the new concept is mostly latent in one parent's write.
-- **Steering one prompt finds personas, not everything.** Of the 79,949 poles whose write predicts
+- **Steering one prompt finds personas, not everything.** Of the 78,420 poles whose write predicts
   what follows their firings (§7), 4.0% have a library row, mostly because 98% sit at L21-L35, where
-  the library is thin; against each layer's base rate the library is enriched for them (1.5×). What it
-  misses has no self-description: idiom completers (L30 n1034 + writes *again* on "once"), morphology
-  (L8 n1541 + writes *-ism*/主义 on the stem before it), everyday concepts (L28 n8868 − writes
-  *democracy* on "arist|", "olig|").
+  the library is thin; against each layer's base rate the library is enriched for them (1.5×;
+  `checks/library_crosscheck.py`). What it misses has no self-description: idiom completers (L30
+  n1034 + writes *again* on "once"), morphology (L8 n1541 + writes *-ism*/主义 on the stem before it),
+  everyday concepts (L28 n8868 − writes *democracy* on "arist|", "olig|").
 
 **Against whole evidence cards** (§8's pilot), the explainers' verdicts on outside labels:
 
@@ -708,10 +716,10 @@ queries at 16+; induction and duplicate-token scores from 64 sequences of 64 ran
 twice. Qwen3-8B copies such a sequence almost perfectly (13.55 nats a token on the first copy, 0.09 on
 the second). It has 33 induction heads (score past 0.3; strongest L13h13 0.99, L22h23 0.97), 33
 duplicate-token heads, mostly early (L1h31, L1h28, seven in L3), 4 previous-token heads (L0h1, L1h4,
-L19h20, L12h0) and 60 sink heads (none before L7). Removing one head at a time (`head_patterns.py`, retired) costs
-the second copy at most 0.07 nats (L1h28): copying is spread over many heads, as is usual in large
-models. Duplicate-token heads cost as much as induction heads but copy almost nothing; they likely
-write a marker that the token was seen.
+L19h20, L12h0) and 16 sink heads (past 0.9; none before L7). Removing one head at a time
+(`checks/head_patterns.py`) costs the second copy at most 0.07 nats (L1h28): copying is spread over
+many heads, as is usual in large models. Duplicate-token heads cost as much as induction heads but copy
+almost nothing; they likely write a marker that the token was seen.
 
 **Where to read a head.** A head reads layer `L − 1`'s output and writes into layer `L`'s MLP input,
 so its token map is read between those points. A token at its input can be its S-lens footprint (the
@@ -737,22 +745,23 @@ the token after the attended position for an R-lens input:
   output lens in every band, on this test and on whole predicted columns (the one exception is the
   copy test at L28-L35 with an S-lens output, which the catalog doesn't use there); on the QK side
   too, the S-lens key read agrees with the attention keys receive (+0.18, control +0.08) better than
-  the R-lens's (+0.09, control +0.05). A head reads what a position holds, not what it is about to
-  say.
+  the R-lens's (+0.09, control +0.05; `checks/head_qk.py`, over every 16th document). A head reads
+  what a position holds, not what it is about to say.
 - **The output side is the S-lens early and the R-lens late,** as for neuron writes: S→S leads at
   L1-L8 and edges S→R at L13-L20 (where it also predicts whole columns better), S→R leads at L9-L12
   and by far from L21. Induction heads favour S→R, duplicate-token heads S→S.
 - An earlier, coarser test agrees: of the four brackets' copying scores, only S→R tracked single-head
-  ablation better than the raw score (Spearman +0.22, +0.08 over raw, 95% interval +0.03 to +0.12).
+  ablation better than the raw score (Spearman +0.22, +0.08 over raw, 95% interval +0.03 to +0.12;
+  `checks/head_circuits.py`).
 - The catalog reads QK with the S-lens on both sides, and OV as `ov_R` (S→R, trusted from L9) and
   `ov_S` (S→S, trusted through L8 and a second view through L20).
 
 **What each head copies** (`ov_R`, `ov_S` in `heads/reads`): each token's z in its own column of the
 OV map, that is, where `v` ranks in what the head writes when it reads `v`. At each firing this
-weight-only read predicts where the attended token ranks in the head's actual output (Spearman +0.54
-over firings; the same token under another head, 0.00), from +0.23 at L13-L20 to +0.77 at L28-L35. The
-S-lens input is what helps: against the same logit-lens read of the output, an S-lens input scores
-+0.51 and the raw embedding +0.42. Examples:
+weight-only read predicts where the attended token ranks in the head's actual output (Spearman +0.51
+over firings; the same token under another head, 0.00), from +0.22 at L13-L20 to +0.74 at L28-L35
+(`checks/head_census.py`). The S-lens input is what helps: against the same logit-lens read of the
+output, an S-lens input scores +0.49 and the raw embedding +0.40. Examples:
 - **Classes, across languages:** L26h31 copies quantities (` weight | 体重 | strength | temperature`);
   reading ` population` it writes `人口 | population | statistics`.
 - **Pronouns by gender:** L20h17, reading ` herself`, writes ` herself | 她 | she` and suppresses
@@ -771,12 +780,15 @@ S-lens input is what helps: against the same logit-lens read of the output, an S
 with the q/k norms' derivative and RoPE averaged over the head's own offsets.
 - **Self-match finds duplicate-token heads from the weights** (`qk_self`, AUROC 0.96): as queries they
   favour a token's own surface form (L1h28 reading ` Paris` favours ` Paris | Paris | Parse`).
-- **Attends-to agrees with the attention tokens receive in context early and late:** Spearman over
-  tokens +0.21 at L0-L8 (control +0.09), +0.08 at L13-L20 (+0.05), +0.19 at L28-L35 (+0.03); best at
-  L0 (+0.43: L0h27 attends to the starts of code and documents, L0h0 to Chinese and Japanese function
-  words). The S-lens beats raw embeddings at every depth.
-- **Late heads attend to what they copy:** at L28-L35, 19% of heads attend mostly to tokens high in
-  their own copy read (control 2%), and class suppressors to the class they suppress (L31h23 attends to
+- **Attends-to agrees with the attention tokens receive in context early and late** (`qk_ctx_rho`,
+  over tokens seen 10+ times as keys): Spearman over tokens +0.18 at L0-L8 (control +0.07), +0.01 at
+  L13-L20 (−0.01), +0.16 at L28-L35 (+0.04); best at L0 (+0.42: L0h27 attends to the starts of code and
+  documents, L0h0 to Chinese and Japanese function words). The S-lens beats raw embeddings wherever
+  either reads anything (`checks/head_qk.py`). The released pass renormalized attention without the
+  sink by `1 − a₀`, which bf16 rounds to 0 for sink heads; `06_activations.py` now divides by the
+  non-sink sum, which on a 176-document slice raises these means by at most 0.03 (at L28-L35).
+- **Late heads attend to what they copy:** at L28-L35, 23% of heads attend mostly to tokens high in
+  their own copy read (control 7%; `checks/head_census.py`), and class suppressors to the class they suppress (L31h23 attends to
   ` Combination | Equality` and suppresses ` alternative | balance | combination`). Mid-network, where a
   head looks says little about what it writes.
 - **Query reads past L1 are noise:** L20h17 favours nearly the same keys whether its query is ` she` or
@@ -807,9 +819,9 @@ Dark: no test, no token mode (a third of firings sharing a query or attended tok
 ![Which reads hold for each head](figures/17_head_census.png)
 
 - **Late heads write the next token:** `ov_R` holds for 27% of L28-L35's heads (50% at L33). Read
-  from their actual outputs in context, 45-68% of heads from L21 promote the token that follows their
-  strongest firings, and 42-46% the token they attend to, against 5-8% and 16-24% mid-network
-  (`heads/acts`' `out_R_z`; `head_census.py`, retired).
+  from their actual outputs in context, 32-61% of heads from L21 promote the token that follows their
+  strongest firings, and 38% the token they attend to, against 4-7% and 10-14% before L21
+  (`heads/acts`' `out_R_z`; `checks/head_census.py`).
 - **Heads are dark mid-network, as neurons are:** 74-78% at L9-L20, 38% at L28-L35 (the same shape as
   §7).
 - **The S-side reads never separate a head from its layer.** S→S copying is common to nearly every
