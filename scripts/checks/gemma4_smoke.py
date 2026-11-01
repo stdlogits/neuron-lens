@@ -72,19 +72,19 @@ def hooks_on(model, store, grads=False):
 def few_dirs(maps, dirs, lens):
     """Our estimates for basis directions ``dirs`` only: S columns ``{(kind, L): [d, k]}``,
     R rows ``{(kind, L): [k, d]}``."""
-    from neuron_lens import gemma4
-    N, d = maps[0].a1.shape
-    X = torch.zeros(len(dirs), N, d, device=maps[0].a1.device)
+    from neuron_lens import layers
+    N, d = maps[0].n1.a.shape
+    X = torch.zeros(len(dirs), N, d, device=maps[0].n1.a.device)
     X[torch.arange(len(dirs)), :, torch.tensor(dirs)] = 1
     out = {}
     if lens == "S":
         for L, m in enumerate(maps):
-            X, mid = gemma4.jvp(m, X)
+            X, mid = layers.jvp(m, X)
             out[("mid", L)], out[("out", L)] = mid.mean(1).T, X.mean(1).T
     else:
         G = X
         for L in range(len(maps) - 1, -1, -1):
-            G, mid, est = gemma4.vjp(maps[L], G)
+            G, mid, est = layers.vjp(maps[L], G)
             out[("mid", L)] = mid
             if L > 0:
                 out[("out", L - 1)] = est
@@ -93,13 +93,13 @@ def few_dirs(maps, dirs, lens):
 
 def check_maps(ids, dirs, device="cpu"):
     """fp32: our few-direction estimates against autograd under the RelP rules."""
-    from neuron_lens import gemma4
+    from neuron_lens import layers
     t0 = time.perf_counter()
     model = load(torch.float32, device)
     print(f"fp32 model on {device} in {time.perf_counter() - t0:.0f}s", flush=True)
     ids = ids.to(device)
     valid = valid_positions(len(ids), device)
-    maps = gemma4.linearize(model, ids)
+    maps = layers.linearize(model, ids)
     n = len(model.layers)
     ours = {lens: few_dirs(maps, dirs, lens) for lens in ("S", "R")}
     del maps
@@ -148,8 +148,8 @@ def check_maps(ids, dirs, device="cpu"):
 
 def first_dirs(lens, model, ids, dirs, device):
     """Our few-direction estimates in the model's dtype, as fp32 on the CPU."""
-    from neuron_lens import gemma4
-    maps = gemma4.linearize(model, ids.to(device))
+    from neuron_lens import layers
+    maps = layers.linearize(model, ids.to(device))
     out = few_dirs(maps, dirs, lens)
     return {k: v.float().cpu() for k, v in out.items()}
 

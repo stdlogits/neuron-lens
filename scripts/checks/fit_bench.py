@@ -7,6 +7,8 @@ a new machine:
 
     python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-0.6B,Qwen/Qwen3-8B
         [--dim-batch 128,256,512] [--compare-fp32]
+    python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3.5-35B-A3B \
+        --seq-len 512 --dim-batch 16,32,64
 """
 import argparse
 import time
@@ -39,24 +41,40 @@ def load(model_id: str, dtype, device: str):
     return decoder_stack(model).to(device).eval().requires_grad_(False)
 
 
+def active(layer, T: int) -> int:
+    """Per tangent and position, a layer's matrix-product multiply-adds: its projections (a
+    sparse MLP's chosen experts, shared expert and router), plus attention over the ``T − 1``
+    keys kept (softmax: scores and values, both terms; DeltaNet: about ten ``T × d_k`` products
+    a value head)."""
+    mlp = layer.mlp
+    if hasattr(mlp, "experts"):
+        ex = mlp.experts
+        k = mlp.gate.top_k
+        mlp_n = k * (ex.gate_up_proj[0].numel() + ex.down_proj[0].numel()) + mlp.gate.weight.numel() \
+            + sum(m.weight.numel() for m in (mlp.shared_expert.gate_proj, mlp.shared_expert.up_proj,
+                                              mlp.shared_expert.down_proj, mlp.shared_expert_gate))
+    else:
+        mlp_n = sum(m.weight.numel() for m in (mlp.gate_proj, mlp.up_proj, mlp.down_proj))
+    if hasattr(layer, "linear_attn"):
+        la = layer.linear_attn
+        mix = sum(m.weight.numel() for m in (la.in_proj_qkv, la.in_proj_z, la.in_proj_b, la.in_proj_a, la.out_proj))
+        return mlp_n + mix + 10 * la.num_v_heads * la.head_k_dim * (T - 1)
+    at = layer.self_attn
+    proj = sum(m.weight.numel() for m in (at.q_proj, at.k_proj, at.v_proj, at.o_proj) if m is not None)
+    return mlp_n + proj + 4 * at.config.num_attention_heads * at.head_dim * (T - 1)
+
+
 def flops(model, T: int, lens: str) -> float:
     """Matrix-product FLOPs of one document: per layer passed, ``d_model`` directions times
-    the valid positions times the projections, plus attention over the positions kept (per
-    layer, so models whose layers differ in head shapes, as Gemma 4's, count right)."""
+    the valid positions times ``active`` (per layer, so models whose layers differ, as Gemma 4's
+    and Qwen3.5's do, count right)."""
     d, n = model.config.hidden_size, T - 1 - SKIP_FIRST
-    total = 0
-    for layer in model.layers[:len(model.layers) - (lens == "R")]:
-        at, mlp = layer.self_attn, layer.mlp
-        proj = sum(m.weight.numel() for m in (at.q_proj, at.k_proj, at.v_proj, at.o_proj,
-                                               mlp.gate_proj, mlp.up_proj, mlp.down_proj) if m is not None)
-        attn = 4 * at.q_proj.weight.shape[0] * (T - 1)  # scores and values, both terms, over the keys kept
-        total += 2 * d * n * (proj + attn)
-    return total
+    return sum(2 * d * n * active(layer, T) for layer in model.layers[:len(model.layers) - (lens == "R")])
 
 
-def fit_one(lens: str, model, ids, device: str, dim_batch: int):
+def fit_one(lens: str, model, ids, device: str, dim_batch: int, acc_device: str | None = None):
     n, d = len(model.layers), model.config.hidden_size
-    acc = Accumulator({t: target_layers(lens, t, n) for t in TARGETS[lens]}, d, device=device)
+    acc = Accumulator({t: target_layers(lens, t, n) for t in TARGETS[lens]}, d, device=acc_device or device)
     sync(device)
     t0 = time.perf_counter()
     (r_lens_doc if lens == "R" else s_lens_doc)(model, ids, acc, 0, dim_batch=dim_batch)
@@ -75,12 +93,14 @@ def main() -> None:
     ap.add_argument("--dim-batch", default="256")
     ap.add_argument("--lenses", default="R,S")
     ap.add_argument("--compare-fp32", action="store_true")
+    ap.add_argument("--seq-len", type=int, default=128, help="one document of exactly this many tokens")
+    ap.add_argument("--acc-device", default=None, help="where the sums live (default: the model's)")
     args = ap.parse_args()
     dtype = torch.float32 if args.device == "cpu" else torch.bfloat16
     print(f"device {args.device}, {dtype}", flush=True)
     for model_id in args.models.split(","):
         tok = AutoTokenizer.from_pretrained(model_id)
-        row = lens_docs(CORPUS_DIR / "dclm.jsonl", tok, 1, 128, SKIP_FIRST + 2)[0]
+        row = lens_docs(CORPUS_DIR / "dclm.jsonl", tok, 1, args.seq_len, SKIP_FIRST + 2, full=True)[0]
         ids = torch.tensor(row)
         model = load(model_id, dtype, args.device)
         print(f"one document of {len(row)} tokens", flush=True)
@@ -88,10 +108,10 @@ def main() -> None:
         est = {}
         for lens in args.lenses.split(","):
             for b in (int(x) for x in args.dim_batch.split(",")):
-                fit_one(lens, model, ids, args.device, b)  # warm-up
+                fit_one(lens, model, ids, args.device, b, args.acc_device)  # warm-up
                 if args.device == "cuda":
                     torch.cuda.reset_peak_memory_stats()
-                est[lens], t = fit_one(lens, model, ids, args.device, b)
+                est[lens], t = fit_one(lens, model, ids, args.device, b, args.acc_device)
                 mem = f", peak {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB" \
                     if args.device == "cuda" else ""
                 print(f"  {lens}-lens, dim_batch {b}: {t:.2f} s per document, "

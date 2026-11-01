@@ -68,21 +68,27 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   compared: the R-lens leads the J-lens at predicting steering from L4 to L23 (the J-lens leads at L0,
   they tie at L1-L3; §3), and on the input side RelP halves the S-lens's noise and fits footprints
   better from L1 (§1, §6).
-- **Hand-written layer maps.** Under the rules each decoder layer is, for a given document, a fixed
-  linear map: the norms scale each position, the MLP scales its gate and up projections per position
-  and neuron, and attention keeps its true derivative. `_linearize` runs the model once per document
-  and keeps those constants; `_jvp` applies a layer's map to a block of tangents and `_vjp` its
+- **Hand-written layer maps, by component.** Under the rules each decoder layer is, for a given
+  document, a fixed linear map: the norms scale each position, the MLP scales its gate and up
+  projections per position and neuron, and attention keeps its true derivative.
+  `neuron_lens/layers.py` writes each component once (RMSNorms, softmax attention with grouped
+  heads, q/k and value norms, partial RoPE, sliding-window and bidirectional masks and an output
+  gate, Gated DeltaNet, gated and sparse MLPs) and composes every model's layers from what they hold,
+  so Qwen3, Gemma 4 and Qwen3.5 share one implementation. `linearize` runs the model once per
+  document and keeps those constants; `jvp` applies a layer's map to a block of tangents and `vjp` its
   transpose to cotangents, as a few matrix products. The R-lens's map is exactly the transpose of the
-  S-lens's. `neuron_lens/rules.py` applies the same rules to the model as autograd patches, the tests'
-  reference; `_check` refuses what the maps don't cover (projection biases, other norms or
-  activations). Supporting another architecture means writing its maps, as `neuron_lens/gemma4.py`
-  does for Gemma 4.
+  S-lens's. `neuron_lens/rules.py` applies the same rules to the model as autograd patches, by
+  operation, the tests' reference; `layers.check` refuses what the components don't cover
+  (projection biases, other norms or activations, Qwen3-Next's fused DeltaNet projections).
+  Supporting another architecture means composing it from these components, adding one where a part
+  is new.
 - **Tests** (`tests/test_transport.py`, on tiny Qwen3 models, one with grouped-query attention): both
   lenses and both targets match brute-force Jacobians of the patched model (1e-4), and the R-lens
   matches Drowse's own RelP fit (1e-5) and loads in Drowse. `tests/test_arch.py` and
-  `tests/test_gemma4.py` do the same for small random Gemma 4 models, images and sound included.
-  Estimator changes must pass them.
-- **Fit files** (`data/fits/<lens>-<model>-L<layers>-<corpus>[-s<i>of<n>].pt`) hold even- and odd-half
+  `tests/test_gemma4.py` do the same for small random Gemma 4 models, images, sound and a binding
+  sliding window included, and `tests/test_qwen35.py` for small Qwen3.5 models, MoE and dense,
+  through HF's own delta-rule kernel. Estimator changes must pass them.
+- **Fit files** (`data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`) hold even- and odd-half
   sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
   corpus), and shard across GPUs (`--shard i/n`); `lenses.load_fits` adds shards and halves.
   `04_export_rlens.py` writes an R-lens to its own Drowse home under `data/lenses/<name>/`.
@@ -244,7 +250,8 @@ The second model is the base model `google/gemma-4-12B` (`gemma4_unified`): 48 d
 3,840-dimensional residual stream, 15,360 GELU-tanh MLP neurons and 16 query heads a layer, 262,144
 tokens, and image and audio inputs. `NEURON_LENS_MODEL=google/gemma-4-12B` selects it for every
 stage. `neuron_lens/arch.py` holds its geometry, `neuron_lens/neurons.py` its neurons' directions,
-`neuron_lens/gemma4.py` its layer maps and `neuron_lens/media.py` its image and audio documents. The
+`neuron_lens/media.py` its image and audio documents (and `multimodal_embeds`, their residual input);
+its layers are composed from `neuron_lens/layers.py`'s components. The
 tables, tests and conventions are Qwen3-8B's, with these differences:
 
 - **The write and read.** The MLP output passes a post-feedforward RMSNorm before the residual, and
@@ -324,6 +331,76 @@ a 640-dimensional subspace.
 - **Cross-modal ranks** (`checks/crossmodal.py`) and **heads in media contexts**
   (`checks/head_media.py`): findings §15 and §16 give their setups.
 
+## Qwen3.5-35B-A3B (in progress)
+
+The third model, `Qwen/Qwen3.5-35B-A3B`, is a hybrid and a mixture of experts: 40 layers, a
+2,048-dimensional residual stream and, in a 3:1 pattern, 30 Gated DeltaNet layers (16 key heads,
+32 value heads of 128) and 10 gated softmax-attention layers (16 query heads, 2 key-value heads of
+256, RoPE on the first 64 dimensions of each head). Every layer's MLP is 256 experts of 512 neurons,
+the router's top 8 weighted by its softmax renormalised over them, plus a shared expert of 512
+behind a sigmoid gate. `neuron_lens/layers.py` gains two components for it, Gated DeltaNet and the
+sparse MLP, and the output gate on attention (Qwen3.5-9B's dense layers are covered too); the catalog
+stages are not ported yet.
+
+- **DeltaNet as attention.** Per value head the delta rule's output is `o = A v` with
+  `A = W L⁻¹ diag(β)`, `W = (Q Kᵀ) ⊙ Γ` (causal, with its diagonal), `L = I + diag(β)((K Kᵀ) ⊙ Γ)`
+  (strictly lower) and `Γ_ts = exp(gc_t − gc_s)` from the cumulative log decay: attention whose
+  matrix does not depend on v (as in "The Hidden Attention of Mamba Models", Ali et al. 2024,
+  [arXiv:2403.01590](https://arxiv.org/abs/2403.01590), for Mamba). The maps build `A`'s pieces
+  explicitly from the forward pass and push tangents through q, k, β and the decay by hand; the
+  tests check them against autograd through HF's chunked kernel. The width-4 causal convolution is
+  linear and exact.
+- **Rules, by operation.** RelP's rules are applied to every operation of their kind, wherever it
+  sits: norms take the LN rule (the residual norms and DeltaNet's per-head output norm);
+  activations of the form `x · g(x)` the identity rule (SiLU in the experts, after the convolution
+  and in DeltaNet's `silu(z)`). Gates split by shape. Elementwise gates, a vector of gates on a
+  vector of features, take the half rule: SwiGLU's, DeltaNet's `norm(o) · silu(z)` and the attention
+  output's `o · σ(gate)` (with σ's true derivative), the same output-gating role in both mixers.
+  Scalar weights that decide how much of a value or a module passes keep their true derivative, as
+  softmax attention's do in every lens here: DeltaNet's `A` (through q, k, β and the decay), the
+  router's weights over its chosen experts, and the shared expert's gate `σ(s)`, a router for one
+  expert. q/k norms and DeltaNet's L2 norms keep theirs. Holding `A` and the router (as MambaLRP
+  holds Mamba's input-dependent parameters) was weighed and set aside, so that DeltaNet and softmax
+  layers are read alike and the lens keeps the routing paths the model uses. Under conservation (LRP's principle, behind the half rule) the half rule is exact for
+  `norm(o) · silu(z)`, whose factors are both linear under the LN and identity rules, as SwiGLU's
+  are; the sigmoid of the attention output gate is not, so there the rule extends by analogy. A true
+  sigmoid derivative adds `g(1 − σ(g))` times the output's relevance: nothing for an open gate,
+  about −5 times it at `g = −5`, which is why the elementwise gates, sparse in gated attention, keep
+  the half rule.
+- **Against the published R-lens** (Blank, Bhatia and Nanda; its rules are in the J++ code's
+  `lrp.py`, preset `r+moe`, for Qwen3.6-35B-A3B, the same architecture). Its estimator reads the
+  penultimate layer from 25 Pile prompts, skipping 4 positions, with an `out` target only; ours
+  reads the last layer from 1,000 DCLM documents of 512 tokens, skipping 16, with `out` and `mid`
+  targets and an S-lens. Its rule scope is by module: the token mixers (softmax attention and
+  DeltaNet, everything inside them) keep plain autograd. The rules then differ in:
+
+  | operation | published R-lens | here |
+  |---|---|---|
+  | residual norms; SwiGLU in routed and shared experts | LN; identity and half | the same |
+  | softmax attention, q/k norms; DeltaNet's `A` | true derivative | the same |
+  | DeltaNet's convolution SiLU | true derivative | identity rule |
+  | DeltaNet's output norm | true derivative | LN rule |
+  | DeltaNet's `norm(o) · silu(z)` | true derivative | identity and half rules |
+  | attention output gate `o · σ(gate)` | true derivative | half rule |
+  | router weights over the chosen experts | held | true derivative |
+  | shared expert's gate | held, and its branch's backward pass ×4 (swept) | true derivative |
+
+  The first three new rows apply RelP's own rules to operations its module scope left out; the
+  last three are choices made here (the attention gate under the elementwise-gate rule, as
+  DeltaNet's; the router and the shared gate read as attention's weights are; no swept scale).
+- **Precedent.** AttnLRP keeps the router's path with a half rule, which its Mixtral test found more
+  faithful than constant routing; MambaLRP holds Mamba's input-dependent parameters and puts the
+  half rule on its output gate, which it found more faithful than holding the gate. None of the
+  published lenses tested a rule for DeltaNet.
+- **Long documents.** A DeltaNet head holds about `d_k` = 128 keys before they interfere, which
+  128-token documents barely use. Its lenses are fitted on 512-token documents (`02_fit.py
+  --seq-len 512 --full-length`: the first DCLM documents that long, 63% of rows). The cost per
+  document grows about linearly with length, since the projections dominate; the explicit `T × T`
+  DeltaNet terms of the `relp` arm add about a third at 512 tokens (a chunked form would make them
+  linear in length).
+- **Memory.** The decoder stack is 68 GB in bf16, which leaves about 15 GiB of an 80 GB H100: fits
+  keep their sums on the CPU (`--acc-device cpu`) and a dim batch of 16-64.
+
 ## Related work
 
 Lenses:
@@ -347,6 +424,21 @@ Lenses:
   give a theory of what the J-lens finds.
 - [Drowse](https://github.com/stdlogits/drowse): the R-lens implementation this estimator is tested
   against and exports to.
+
+Rules for gated, mixture and recurrent layers (Qwen3.5):
+- AttnLRP (Achtibat et al. 2024, [arXiv:2402.05602](https://arxiv.org/abs/2402.05602)) and its
+  [LXT](https://github.com/rachtibat/LRP-eXplains-Transformers) code: the half rule on a router's
+  weight times its expert's output, with the router's path kept.
+- MambaLRP (Rezaei Jafari et al. 2024, [arXiv:2406.07592](https://arxiv.org/abs/2406.07592)): holds
+  Mamba's input-dependent SSM parameters, the half rule on its output gate.
+- [J++ lens code](https://github.com/safety-research/jpp_lens) (`lrp.py`), which carries the published
+  R-lens's MoE rules for Qwen3.5 and Qwen3.6.
+- DeltaTrace ([arXiv:2610.25877](https://arxiv.org/abs/2610.25877)): finite-difference attribution
+  through Gated DeltaNet's recurrence, on Qwen3.5-9B. WriteSAE
+  ([arXiv:2605.12770](https://arxiv.org/abs/2605.12770)): dictionaries of DeltaNet's matrix-valued
+  memory writes.
+- Qwen-Scope (Qwen team 2026, [arXiv:2605.11887](https://arxiv.org/abs/2605.11887)): residual-stream
+  SAEs at every layer of Qwen3.5-35B-A3B-Base (and Qwen3-8B-Base), an outside reference.
 
 Neuron descriptions:
 - Bills et al. 2023

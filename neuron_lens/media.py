@@ -165,3 +165,23 @@ def basis(lm, modality: str) -> torch.Tensor:
     if int((S > 1e-6 * S[0]).sum()) > k:
         raise ValueError(f"the image map has rank {int((S > 1e-6 * S[0]).sum())} > {k}")
     return U[:, :k].T.float()
+
+
+@torch.no_grad()
+def multimodal_embeds(lm, inputs: dict) -> torch.Tensor:
+    """``[T, d]``: the residual stream's input for one processed document (``inputs`` as the
+    processor returns them, batch 1): scaled text-token embeddings with image and audio
+    embeddings scattered in, as ``Gemma4UnifiedModel.forward`` does."""
+    model = lm.model
+    ids = inputs["input_ids"]
+    image_mask, video_mask, audio_mask = model.get_placeholder_mask(ids)
+    text_ids = torch.where(image_mask | video_mask | audio_mask, model.config.text_config.pad_token_id, ids)
+    h = model.language_model.embed_tokens(text_ids)
+    if "pixel_values" in inputs:
+        feats = torch.cat(model.get_image_features(inputs["pixel_values"], inputs["image_position_ids"]).pooler_output)
+        h = h.masked_scatter(image_mask[..., None].expand_as(h), feats.to(h.dtype))
+    if "input_features" in inputs:
+        feats = model.get_audio_features(inputs["input_features"], inputs["input_features_mask"]).pooler_output
+        feats = feats[inputs["input_features_mask"]]
+        h = h.masked_scatter(audio_mask[..., None].expand_as(h), feats.to(h.dtype))
+    return h[0]

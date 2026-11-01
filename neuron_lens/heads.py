@@ -9,7 +9,7 @@ read from the 128-dimensional factors.
 """
 import torch
 
-from neuron_lens.transport import _rotate_half
+from neuron_lens.layers import _rotate_half
 
 
 def own_token_z(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:

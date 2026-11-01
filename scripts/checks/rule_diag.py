@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from media_lens import EPS, SLOTS, images, processed, sounds, stack, to  # noqa: E402
 from media_reads import MODEL, audio_reads, pixel_reads  # noqa: E402
 
-from neuron_lens.gemma4 import multimodal_embeds  # noqa: E402
+from neuron_lens.media import multimodal_embeds  # noqa: E402
 from neuron_lens.paths import DATA  # noqa: E402
 from neuron_lens.rules import _norm, relp_rules  # noqa: E402
 from neuron_lens.transport import SKIP_FIRST, decoder_stack, input_reads_doc  # noqa: E402

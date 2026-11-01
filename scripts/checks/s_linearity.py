@@ -24,7 +24,8 @@ from neuron_lens.catalog import kept
 from neuron_lens.corpus import lens_docs
 from neuron_lens.lenses import load_fits
 from neuron_lens.paths import CORPUS_DIR, FITS, SUMMARY
-from neuron_lens.transport import SKIP_FIRST, _jvp, _linearize
+from neuron_lens.layers import jvp, linearize
+from neuron_lens.transport import SKIP_FIRST
 
 MODEL = "Qwen/Qwen3-8B"
 S_FIT = "s-qwen3-8b-L36-dclm"
@@ -81,8 +82,8 @@ def main() -> None:
                         res["J true"][l][j][c:c + CHUNK] += (sides[0][l][j] - sides[1][l][j]) / (2 * EPS * N_DOCS)
             X = torch.zeros(N_TOKENS, end - s0, E.shape[1], device=dev)
             X[:, 0] = E[ids] - E[doc[s0]]
-            for l, m in enumerate(_linearize(model.model, doc)):
-                X, mid = _jvp(m, X)
+            for l, m in enumerate(linearize(model.model, doc)):
+                X, mid = jvp(m, X)
                 if l in LAYERS:
                     for j, v in enumerate(reduce(F.pad(mid, (0, 0, s0, 0)))):
                         res["J relp"][l][j] += v / N_DOCS

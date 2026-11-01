@@ -1,4 +1,4 @@
-"""The Gemma 4 layer maps (``neuron_lens.gemma4``) against autograd through HF's own
+"""The layer maps (``neuron_lens.layers``) on Gemma 4 against autograd through HF's own
 ``Gemma4UnifiedTextModel`` under the RelP rules, on a tiny model shaped like the 12B: sliding
 and full layers with different head sizes and key-head counts, keys as values on the full
 layers, partial RoPE there, four norms per layer with non-unit weights, layer scalars."""
@@ -9,7 +9,7 @@ import torch.autograd.forward_ad as fwAD
 gemma = pytest.importorskip("transformers.models.gemma4_unified.modeling_gemma4_unified")
 from transformers.models.gemma4_unified.configuration_gemma4_unified import Gemma4UnifiedTextConfig
 
-from neuron_lens import gemma4
+from neuron_lens import layers
 from neuron_lens.rules import HALF_RULE_BETA, relp_rules
 from neuron_lens.transport import SKIP_FIRST, Accumulator, r_lens_doc, s_lens_doc, valid_positions
 
@@ -68,7 +68,6 @@ def run_with(model, ids, layer, h_new):
 @pytest.mark.parametrize("k_eq_v", [True, False])
 def test_estimates_match_brute_force(n_valid, k_eq_v):
     model = tiny_model(k_eq_v=k_eq_v)
-    assert gemma4.is_gemma4(model)
     assert (model.layers[1].self_attn.v_proj is None) == k_eq_v and model.layers[0].self_attn.v_proj is not None
     ids = torch.randint(0, V, (SKIP_FIRST + n_valid + 1,))
     valid = valid_positions(len(ids))
@@ -105,7 +104,7 @@ def test_primal_matches_the_model():
     the map, so a wrong primal shows here before it shows in the Jacobians)."""
     model = tiny_model()
     ids = torch.randint(0, V, (SKIP_FIRST + 9,))
-    maps = gemma4.linearize(model, ids)
+    maps = layers.linearize(model, ids)
     caught = {}
     hooks = [b.mlp.gate_proj.register_forward_hook(lambda _m, _a, o, i=i: caught.__setitem__(i, o[0]))
              for i, b in enumerate(model.layers)]
@@ -114,8 +113,8 @@ def test_primal_matches_the_model():
         h.remove()
     for i, m in enumerate(maps):
         act = model.layers[i].mlp.act_fn(caught[i][SKIP_FIRST:])
-        assert torch.allclose(m.cu, HALF_RULE_BETA * act, atol=1e-5), i
-        assert torch.allclose(m.p.sum(-1), torch.ones(()), atol=1e-5)
+        assert torch.allclose(m.mlp.cu, HALF_RULE_BETA * act, atol=1e-5), i
+        assert torch.allclose(m.mix.p.sum(-1), torch.ones(()), atol=1e-5)
 
 
 def test_relp_mlp_tangent_uses_the_gelu_factor():
@@ -145,11 +144,33 @@ def test_relp_rules_keep_values_and_unpatch():
         assert "forward" not in module.__dict__ and not hasattr(module, "_rules_orig_forward")
 
 
-def test_refuses_documents_past_the_sliding_window():
-    model = tiny_model()
-    model.layers[0].self_attn.sliding_window = SKIP_FIRST + 4
-    with pytest.raises(ValueError, match="sliding window"):
-        gemma4.linearize(model, torch.randint(0, V, (SKIP_FIRST + 9,)))
+def test_sliding_window_matches_brute_force():
+    """Documents longer than the sliding layers' window: keys past it are masked, as HF masks them."""
+    model = tiny_model(seed=4)
+    window = 5
+    model.config.sliding_window = window
+    for layer in model.layers:
+        if layer.self_attn.sliding_window is not None:
+            layer.self_attn.sliding_window = window
+    ids = torch.randint(0, V, (SKIP_FIRST + 9,))
+    valid = valid_positions(len(ids))
+    r = Accumulator({"out": N_LAYERS - 1, "mid": N_LAYERS}, D)
+    r_lens_doc(model, ids, r, 0, dim_batch=7)
+    s = Accumulator({"mid": N_LAYERS, "out": N_LAYERS}, D)
+    s_lens_doc(model, ids, s, 0, dim_batch=7)
+    emb = model.embed_tokens(ids[None])[0].detach()
+    with relp_rules(model):
+        _, outs = run_with(model, ids, None, emb)
+        for layer in range(N_LAYERS - 1):
+            h = outs[layer][0].detach()
+            J = torch.autograd.functional.jacobian(
+                lambda x: run_with(model, ids, layer, x)[1][N_LAYERS - 1][0, valid].sum(0), h)
+            assert torch.allclose(r.mean("out")[layer], J[:, valid].mean(1), atol=1e-4), layer
+        for layer in range(N_LAYERS):
+            K = torch.autograd.functional.jacobian(
+                lambda x, layer=layer: run_with(model, ids, None, x)[1][layer][0, valid].mean(0), emb)
+            want = K[:, valid].sum(1)  # large here (embeddings scaled by √d): compare relatively
+            assert ((s.mean("out")[layer] - want).norm() / want.norm()).item() < 1e-5, layer
 
 
 def test_input_reads_match_the_s_lens():

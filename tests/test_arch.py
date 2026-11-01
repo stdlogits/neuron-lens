@@ -9,7 +9,7 @@ pytest.importorskip("transformers.models.gemma4_unified.modeling_gemma4_unified"
 from test_gemma4 import TYPES, tiny_model
 
 from neuron_lens import arch
-from neuron_lens.transport import _rotate_half
+from neuron_lens.layers import _rotate_half
 
 
 def _captures(model, ids):

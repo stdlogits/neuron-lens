@@ -3,8 +3,8 @@
 Both lenses sum over offsets and take RelP derivatives. Documents are the first ``--docs`` rows
 of a corpus JSONL in ``data/corpus/``, read as Drowse reads them. Document ``i`` goes to half
 ``i % 2``. The fit is saved every ``--save-minutes`` and at the end to
-``data/fits/<lens>-<model>-L<layers>-<corpus>.pt`` (``{"meta", "state", "next_doc",
-"done_sha256"}``), and a rerun resumes from it, also with a larger ``--docs`` when the
+``data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>].pt`` (``{"meta", "state", "next_doc",
+"done_sha256"}``; ``-T<len>`` for ``--full-length`` fits), and a rerun resumes from it, also with a larger ``--docs`` when the
 documents already fitted are a prefix of the new list. At the end it prints each layer's
 split-half difference, how differently the two halves of the corpus read. The sums live on the
 model's device unless ``--acc-device`` says otherwise (Qwen3-8B: 9.5 GB for the R-lens and 9.7 GB
@@ -17,6 +17,12 @@ export) adds them up.
 
     python scripts/02_fit.py --lens S --model Qwen/Qwen3-0.6B --layers 16 --docs 12 --detach
     python scripts/02_fit.py --lens R --model Qwen/Qwen3-8B --docs 1000 --device cuda --detach
+    python scripts/02_fit.py --lens R --model Qwen/Qwen3.5-35B-A3B --docs 1000 --seq-len 512 \
+        --full-length --dim-batch 32 --device cuda --detach
+
+Qwen3.5's DeltaNet layers hold a memory of about 128 keys a head, which 128-token documents
+barely fill: ``--full-length`` fits documents of exactly ``--seq-len`` tokens (the first ones of
+the corpus that long), whose T×T DeltaNet terms want a smaller ``--dim-batch``.
 """
 import argparse
 import os
@@ -46,6 +52,8 @@ from neuron_lens.transport import (
 def out_path(args):
     stem = "-".join([args.lens.lower(), args.model.split("/")[-1].lower(), f"L{args.n_layers}",
                      args.corpus.removesuffix(".jsonl")])
+    if args.full_length:
+        stem += f"-T{args.seq_len}"
     if args.n_shards > 1:
         stem += f"-s{args.shard}of{args.n_shards}"
     return FITS / f"{stem}.pt"
@@ -86,7 +94,7 @@ def media_doc(args, model, proc, doc: dict, acc: Accumulator, half: int, basis) 
     """One image or audio document into ``acc``; returns its length. The rows before the first
     slot carry nothing (``first``); the S-lens also drops the text after the slots, which never
     reaches them (attention is causal outside an image's block)."""
-    from neuron_lens.gemma4 import multimodal_embeds
+    from neuron_lens.media import multimodal_embeds
     from neuron_lens.media import slot_token
     dev = model.embed_tokens.weight.device
     d = {k: v.to(dev, model.embed_tokens.weight.dtype) if v.is_floating_point() else v.to(dev) for k, v in doc.items()}
@@ -116,7 +124,7 @@ def fit(args, model, tok, device: str, dtype) -> None:
     d, n = model.config.hidden_size, len(model.layers)
     basis = None
     if args.modality == "text":
-        rows = lens_docs(CORPUS_DIR / args.corpus, tok, args.docs, args.seq_len, SKIP_FIRST + 2)
+        rows = lens_docs(CORPUS_DIR / args.corpus, tok, args.docs, args.seq_len, SKIP_FIRST + 2, args.full_length)
         docs = None
     else:
         docs = media_docs(args, tok)  # tok is the processor here
@@ -129,13 +137,14 @@ def fit(args, model, tok, device: str, dtype) -> None:
             "basis": None if basis is None else f"{args.modality}:{len(basis)}", "rules": args.rules,
             "corpus_spec": f"file:{args.corpus}" if args.modality == "text" else f"hf:{args.corpus}",
             "rows_sha256": rows_sha256(rows),
-            "docs": len(rows), "seq_len": args.seq_len, "dim_batch": args.dim_batch,
+            "docs": len(rows), "seq_len": args.seq_len, "full_length": args.full_length,
+            "dim_batch": args.dim_batch,
             "targets": list(args.targets), "shard": [args.shard, args.n_shards],
             "dtype": str(dtype).removeprefix("torch.")}
     if path.exists():
         saved = torch.load(path, weights_only=False, map_location="cpu")
         loose = ("docs", "rows_sha256", "dim_batch")  # dim_batch changes speed, not the estimate
-        older = {"modality": "text", "basis": None, "rules": "relp"}  # fits saved before these fields
+        older = {"modality": "text", "basis": None, "rules": "relp", "full_length": False}  # fits saved before these fields
         same = all(saved["meta"].get(k, older.get(k)) == v for k, v in meta.items() if k not in loose)
         if not same or saved["done_sha256"] != rows_sha256(rows[:saved["next_doc"]]):
             raise SystemExit(f"{path} was fitted with {saved['meta']}, not {meta}")
@@ -189,6 +198,8 @@ def main() -> None:
                          "slots, the S-lens seeded in the subspace the embedder reaches")
     ap.add_argument("--docs", type=int, default=12)
     ap.add_argument("--seq-len", type=int, default=128)
+    ap.add_argument("--full-length", action="store_true",
+                    help="only documents of at least --seq-len tokens (the first --docs of them)")
     ap.add_argument("--dim-batch", type=int, default=DIM_BATCH)
     ap.add_argument("--targets", default=None, help="targets (default: out,mid for R, mid,out for S)")
     ap.add_argument("--device", default="auto", help="auto (cuda, else cpu), cuda, mps, cpu")

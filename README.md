@@ -538,8 +538,8 @@ GB is enough for the text passes). `scripts/checks/` holds the analyses behind t
 the blind tests, sinks and entropy neurons, outside labels, head lens sides; for Gemma 4, the media
 lens tests, the cross-modal ranks `14_media_tables.py` reads, and the heads in media contexts);
 analyses the pipeline later absorbed are retired. The package `neuron_lens/` holds the
-estimator (`transport.py`, with `rules.py` as its test reference, and Gemma 4's layer maps in
-`gemma4.py`), the models' geometry (`arch.py`, `neurons.py`), the readouts (`readout.py`, `heads.py`),
+estimator (`transport.py`, the layer maps of every model in `layers.py`, and `rules.py` as their
+test reference), the models' geometry (`arch.py`, `neurons.py`), the readouts (`readout.py`, `heads.py`),
 lens loading (`lenses.py`), images and sound (`media.py`, `media_sets.py`) and the catalog
 (`catalog.py`).
 

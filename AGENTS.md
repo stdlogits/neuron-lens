@@ -18,9 +18,11 @@ by `scripts/12_release.py`, one card per repo covering both models.
 
 ## Layout
 
-- `neuron_lens/`: the package. `transport.py` is the lens estimator (hand-written RelP layer maps
-  and their transposes; Gemma 4's are in `gemma4.py`); `rules.py` states the same rules as autograd
-  patches and is the test reference; `arch.py` holds each model's geometry (head layouts, weight
+- `neuron_lens/`: the package. `transport.py` is the lens estimator; `layers.py` writes every
+  model's decoder layers as RelP linear maps and their transposes, one implementation per component
+  (norms, softmax attention with sliding windows and gates, Gated DeltaNet, gated and sparse MLPs),
+  composed from what each layer holds; `rules.py` states the same rules as autograd patches, by
+  operation, and is the test reference; `arch.py` holds each model's geometry (head layouts, weight
   names, token counts, which fits are of record) and `neurons.py` its neurons' read and write
   directions; `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
   maps; `lenses.py` loads fits, released lenses and Drowse lenses; `media.py` builds Gemma's image and
@@ -35,7 +37,15 @@ by `scripts/12_release.py`, one card per repo covering both models.
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files);
   analyses the pipeline absorbed are retired, and the findings name their old scripts.
 - `tests/`: `test_transport.py` (the estimator), `test_readout.py`, and `test_arch.py`,
-  `test_gemma4.py` (Gemma 4's geometry and layer maps on small random models).
+  `test_gemma4.py` (Gemma 4's geometry and layer maps on small random models), `test_qwen35.py`
+  (Qwen3.5's layer maps, MoE and dense, against autograd through HF's delta rule).
+- **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
+  attention, MoE with a shared expert; Qwen3.5-9B's dense MLP too). RelP's rules apply by operation (elementwise gates take
+  the half rule; scalar weights, DeltaNet's mixing matrix, the router and the shared expert's gate,
+  keep their true derivative, as softmax attention's do); design.md's Qwen3.5 section lists how this
+  differs from the published R-lens. Fits use 512-token
+  documents (`--seq-len 512 --full-length`) so the DeltaNet memories fill. Not yet in the catalog
+  pipeline (`arch.py`, `neurons.py`, the tables).
 - `data/` is ignored except `data/summary/` (compact results and logs, tracked) and
   `data/corpus/*.provenance.json`. Locally it holds corpora, fits (`data/fits/`), Drowse homes
   (`data/lenses/<name>/`), catalog shards (`data/catalog/<model>/`), activation stores, the
@@ -60,16 +70,18 @@ by `scripts/12_release.py`, one card per repo covering both models.
   unit's top documents past the first `N_CONTEXTS`. Nothing on an evidence card may summarize them: no
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §8 records why.
-- **Estimator changes** need `tests/test_transport.py` and `tests/test_gemma4.py` to pass: both
+- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass: both
   lenses against brute-force Jacobians of the model under `relp_rules`, and the R-lens against
   Drowse's RelP fit (loosen that test only for a deliberate change). Supporting another architecture
-  means writing its layer map and transpose (as `gemma4.py` does for Gemma 4) and its geometry in
-  `arch.py`; `_check` refuses what they don't cover.
+  means composing its layers from `layers.py`'s components, adding a component (its map, transpose
+  and autograd rule) where one is missing, and its geometry in `arch.py`, with a test file of tiny
+  random models; `layers.check` refuses what the components don't cover.
 - **Both lenses sum over positions** (as the J-lens does) and use RelP. These are fixed, not
   options. More generally, keep one current code path: delete superseded options and formats
   rather than keeping compatibility.
 - **Fit files** in `data/fits/` are the authoritative lens format:
-  `<lens>-<model>-L<layers>-<corpus>[-s<i>of<n>].pt`, holding even- and odd-document sums per
+  `<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt` (`-T<len>`: documents of exactly
+  that many tokens, `--full-length`), holding even- and odd-document sums per
   target. Both lenses have an `out` target (layer outputs) and a `mid` target (each layer's MLP
   input): R `out` reads MLP writes, R `mid` reads MLP read directions and attention writes, S
   `mid` reads read directions, S `out` reads writes. `lenses.load_fits` adds shards and halves;

@@ -10,19 +10,24 @@ ACT_SLICES = ("dclm", "zh", "code", "chat")  # 05_act_corpus.py's slices, in the
 
 
 def _rows(path: Path, tok, seq_len: int):
+    chars = max(DOC_CHARS, 8 * seq_len)  # long documents keep enough text for seq_len tokens
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 text = json.loads(line)["text"] if line.startswith("{") else line
-                yield tok(text[:DOC_CHARS])["input_ids"][:seq_len]
+                yield tok(text[:chars])["input_ids"][:seq_len]
 
 
-def lens_docs(path: Path, tok, n: int, seq_len: int, min_len: int) -> list[list[int]]:
+def lens_docs(path: Path, tok, n: int, seq_len: int, min_len: int, full: bool = False) -> list[list[int]]:
     """Token rows of the first ``n`` documents of ``path``, each cut to ``DOC_CHARS``
-    characters and ``seq_len`` tokens; rows shorter than ``min_len`` tokens are dropped."""
+    characters (more for ``seq_len`` past 500) and ``seq_len`` tokens; rows shorter than
+    ``min_len`` tokens are dropped. ``full``: the first ``n`` documents that fill ``seq_len``
+    tokens, all of one length (for hybrid models' memories, and one compiled shape)."""
     rows = []
     for r in _rows(path, tok, seq_len):
+        if full and len(r) < seq_len:
+            continue
         rows.append(r)
         if len(rows) == n:
             break

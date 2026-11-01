@@ -36,7 +36,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor
 sys.path.insert(0, str(Path(__file__).parent))
 from media_reads import MODEL, audio_reads, pixel_reads  # noqa: E402
 
-from neuron_lens.gemma4 import multimodal_embeds  # noqa: E402
+from neuron_lens.media import multimodal_embeds  # noqa: E402
 from neuron_lens.media import PROMPT, SIDE, images, processed, sounds  # noqa: E402,F401
 from neuron_lens.paths import DATA  # noqa: E402
 from neuron_lens.transport import SKIP_FIRST, decoder_stack, input_reads_doc  # noqa: E402
