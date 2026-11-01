@@ -13,12 +13,17 @@ out-of-memory configuration is recorded and skipped. Results go to
 ``--profile`` also prints, per configuration, the CUDA kernels that took the most time in the
 timed document (torch.profiler), to show what a code change should target.
 
+``--parts`` times each component's map and transpose instead (softmax attention, Gated DeltaNet,
+the MLP; compiled, one dim batch, on the first layer of each kind) and scales each to a document:
+which component a code change should target.
+
 ``--fp32-layers N`` checks precision instead: the first N layers load twice, in fp32 (the
 reference) and bf16, and each configuration's bf16 estimates are compared with fp32's on that
 slice: what bf16 weights and the precision settings cost together.
 
     python scripts/checks/perf_sweep.py --model Qwen/Qwen3.5-35B-A3B --seq-len 512 \\
         --dim-batch 16,32,64,128 --tf32 0,1 --compile 0,1
+    python scripts/checks/perf_sweep.py --model Qwen/Qwen3.5-35B-A3B --seq-len 512 --parts --dim-batch 32
     python scripts/checks/perf_sweep.py --model Qwen/Qwen3.5-35B-A3B --seq-len 512 \\
         --fp32-layers 4 --dim-batch 32 --tf32 0,1 --compile 0,1
 """
@@ -36,7 +41,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 sys.path.insert(0, str(Path(__file__).parent))
 from fit_bench import flops  # noqa: E402
 
-from neuron_lens import transport  # noqa: E402
+from neuron_lens import layers, transport  # noqa: E402
 from neuron_lens.corpus import lens_docs  # noqa: E402
 from neuron_lens.paths import CORPUS_DIR, DATA  # noqa: E402
 from neuron_lens.transport import SKIP_FIRST, TARGETS, Accumulator, decoder_stack, target_layers  # noqa: E402
@@ -77,6 +82,49 @@ def errors(acc: Accumulator, ref: Accumulator) -> dict:
     return out
 
 
+def parts(model, ids, dim_batch: int, repeat: int = 5) -> None:
+    """Milliseconds per call of each component's map and transpose at ``dim_batch``, compiled,
+    on the first layer of each kind, and seconds per document (every layer of the kind, every
+    block of directions); ``layer`` is the whole layer step (``layers.jvp``, ``layers.vjp``)."""
+    maps = layers.linearize(model, ids)
+    N, d = maps[0].n1.a.shape
+    dt = layers._dtype(maps[0])
+    blocks = -(-d // dim_batch)
+    fns = {"Attention": (layers._attn_jvp, layers._attn_vjp), "DeltaNet": (layers._delta_jvp, layers._delta_vjp),
+           "MoE": (layers._moe_jvp, layers._moe_vjp), "GatedMLP": (layers._mlp_jvp, layers._mlp_vjp)}
+    X = torch.randn(dim_batch, N, d, device="cuda")
+
+    def time_ms(f, *a):
+        f(*a)
+        torch.cuda.synchronize()
+        start, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+        start.record()
+        for _ in range(repeat):
+            f(*a)
+        end.record()
+        torch.cuda.synchronize()
+        return start.elapsed_time(end) / repeat
+
+    total = {"jvp": 0.0, "vjp": 0.0}
+    for kind in ("mix", "mlp", "layer"):
+        seen = {}
+        for m in maps:
+            part = m if kind == "layer" else getattr(m, kind)
+            name = "layer:" + type(m.mix).__name__ if kind == "layer" else type(part).__name__
+            seen.setdefault(name, [part, 0])[1] += 1
+        for name, (part, count) in seen.items():
+            jvp, vjp = (layers.jvp, layers.vjp) if kind == "layer" else fns[name]
+            row = []
+            for direction, f in (("jvp", jvp), ("vjp", vjp)):
+                ms = time_ms(torch.compile(f, dynamic=False), part, X if f in (layers.jvp, layers.vjp) or direction == "vjp" else X.to(dt))
+                per_doc = ms * blocks * count / 1e3
+                if kind == "layer":
+                    total[direction] += per_doc
+                row.append(f"{direction} {ms:7.1f} ms/call, {per_doc:6.1f} s/doc")
+            print(f"{name:>15} ×{count:<3} " + "   ".join(row), flush=True)
+    print(f"all layers: jvp {total['jvp']:.1f} s/doc, vjp {total['vjp']:.1f} s/doc", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3.5-35B-A3B")
@@ -89,6 +137,7 @@ def main() -> None:
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--fp32-layers", type=int, default=None)
     ap.add_argument("--profile", action="store_true")
+    ap.add_argument("--parts", action="store_true")
     args = ap.parse_args()
     # Every dim batch, arm and layer kind is its own compiled graph; past the limit dynamo would
     # fall back to eager and the timings would mislead.
@@ -102,6 +151,12 @@ def main() -> None:
     t0 = time.perf_counter()
     model = load(args.model, torch.bfloat16, args.fp32_layers)
     ref_model = None if args.fp32_layers is None else load(args.model, torch.float32, args.fp32_layers)
+    if args.parts:
+        for tf32 in [bool(int(x)) for x in args.tf32.split(",")]:
+            configure(tf32, True)
+            print(f"tf32 {int(tf32)}, dim batch {args.dim_batch.split(',')[0]}:", flush=True)
+            parts(model, ids, int(args.dim_batch.split(",")[0]), args.repeat * 5)
+        return
     name = args.model.split("/")[-1].lower() + ("" if args.fp32_layers is None else f"-fp32check-L{args.fp32_layers}")
     out_path = DATA / "summary" / f"perf_{name}.json"
     print(f"{torch.cuda.get_device_name()}; loaded in {time.perf_counter() - t0:.0f}s, "
