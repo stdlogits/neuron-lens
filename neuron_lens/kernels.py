@@ -20,8 +20,9 @@ import triton.language as tl
 
 # the experts' first product: rows, columns and inner block, num_warps, num_stages (jvp, vjp)
 MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
-# per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100)
-CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
+# per DeltaNet kernel: key and value feature blocks, num_warps, num_stages, a register cap or None
+# (tuned on an H100)
+CONFIG = {"jvp": (64, 64, 4, 1, None), "vjp_r": (128, 128, 8, 2, None), "vjp_k": (64, 32, 2, 1, None)}
 
 
 @triton.jit
@@ -463,10 +464,10 @@ def _shapes(m):
 
 
 def _config(name, DK, DV):
-    BK, BV, nw, ns = CONFIG[name]
+    BK, BV, nw, ns, nreg = CONFIG[name]
     BK, BV = min(BK, DK), min(BV, DV)
     assert DK % BK == 0 and DV % BV == 0 and DK // BK <= 4, (DK, DV, BK, BV)  # states in at most 4 key blocks
-    return BK, BV, nw, ns
+    return BK, BV, dict(num_warps=nw, num_stages=ns, **({} if nreg is None else {"maxnreg": nreg}))
 
 
 def delta_jvp(m, dq, dk, dv, db, dg):
@@ -474,12 +475,12 @@ def delta_jvp(m, dq, dk, dv, db, dg):
     dq, dk, dv, db, dg = map(_rows, (dq, dk, dv, db, dg))
     b, N, hv, DV = dv.shape
     _, NT, C, DK, _ = _shapes(m)
-    BK, BV, nw, ns = _config("jvp", DK, DV)
+    BK, BV, launch = _config("jvp", DK, DV)
     out = torch.empty(b, N, hv, DV, device=dv.device, dtype=torch.float32)
     _jvp[(DV // BV, b * hv)](
         m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, dq, dk, dv, db, dg, out,
         *dq.stride()[:3], *dk.stride()[:3], *dv.stride()[:3], *db.stride()[:2], *dg.stride()[:2], *out.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
+        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, **launch)
     return out
 
 
@@ -489,18 +490,18 @@ def delta_vjp(m, go):
     b, N, hv, DV = go.shape
     _, NT, C, DK, _ = _shapes(m)
     f32 = dict(device=go.device, dtype=torch.float32)
-    BK, BV, nw, ns = _config("vjp_r", DK, DV)
+    BK, BV, launch = _config("vjp_r", DK, DV)
     assert DV // BV <= 2  # one value block stores to gks; two add onto zeros, either first: deterministic
     gdv, gbp = torch.empty(b, N, hv, DV, **f32), torch.empty(DV // BV, b, N, hv, **f32)
     gks = (torch.empty if DV == BV else torch.zeros)(b, N, hv, DK, **f32)
     _vjp_r[(DV // BV, b * hv)](
         m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.tinv, m.qkd, go, gdv, gbp, gks,
         *go.stride()[:3], *gdv.stride()[:3], *gbp.stride()[:3], *gks.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
-    BK, BV, nw, ns = _config("vjp_k", DK, DV)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, **launch)
+    BK, BV, launch = _config("vjp_k", DK, DV)
     gq, gk, gcp = torch.empty(b, N, hv, DK, **f32), torch.empty(b, N, hv, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
     _vjp_k[(DK // BK, NT, b * hv)](
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, **launch)
     return gq, gk, gdv, gbp.sum(0), gcp.sum(0)
