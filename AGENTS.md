@@ -21,8 +21,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - `neuron_lens/`: the package. `transport.py` is the lens estimator; `layers.py` writes every
   model's decoder layers as RelP linear maps and their transposes, one implementation per component
   (norms, softmax attention with sliding windows and gates, Gated DeltaNet, gated and sparse MLPs),
-  composed from what each layer holds; `rules.py` states the same rules as autograd patches, by
-  operation, and is the test reference; `arch.py` holds each model's geometry (head layouts, weight
+  composed from what each layer holds; `kernels.py` runs its hot spots on CUDA as Triton kernels
+  (DeltaNet's derivative, the sparse MLP's experts), with `layers.py`'s torch passes as their
+  reference; `rules.py` states the same rules as autograd patches, by operation, and is the test
+  reference; `arch.py` holds each model's geometry (head layouts, weight
   names, token counts, which fits are of record) and `neurons.py` its neurons' read and write
   directions; `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
   maps; `lenses.py` loads fits, released lenses and Drowse lenses; `media.py` builds Gemma's image and
@@ -40,7 +42,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   release and the model.
 - `tests/`: `test_transport.py` (the estimator), `test_readout.py`, and `test_arch.py`,
   `test_gemma4.py` (Gemma 4's geometry and layer maps on small random models), `test_qwen35.py`
-  (Qwen3.5's layer maps, MoE and dense, against autograd through HF's delta rule).
+  (Qwen3.5's layer maps, MoE and dense, against autograd through HF's delta rule),
+  `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA).
 - **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
   attention, MoE with a shared expert; Qwen3.5-9B's dense MLP too). RelP's rules apply by operation (elementwise gates take
   the half rule; scalar weights, DeltaNet's mixing matrix, the router and the shared expert's gate,
@@ -72,7 +75,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   unit's top documents past the first `N_CONTEXTS`. Nothing on an evidence card may summarize them: no
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §8 records why.
-- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass: both
+- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass
+  (and `tests/test_kernels.py` on a CUDA machine when the kernels change): both
   lenses against brute-force Jacobians of the model under `relp_rules`, and both against
   Drowse's RelP fits (loosen that test only for a deliberate change). Supporting another architecture
   means composing its layers from `layers.py`'s components, adding a component (its map, transpose
@@ -163,7 +167,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
 ## Running jobs
 
 - A Mac with Apple silicon (MPS) runs everything except the lens fits and the GPU passes; the fits
-  take about 3 hours (Qwen3-8B) or 4.5 hours (Gemma 4) per text lens per 1,000 documents on one H100
+  take about 3 hours (Qwen3-8B), 4.5 hours (Gemma 4) or 5.5 hours (Qwen3.5-35B-A3B, 512-token
+  documents, `--dim-batch 32`) per text lens per 1,000 documents on one H100
   (`02_fit.py --device cuda`, bf16 with fp32 sums), 45-90 minutes per media lens.
 - `13_media_activations.py` keeps every document's activations for all of Gemma's neurons in RAM
   (about 220 GB for the images): run the two modalities one at a time.

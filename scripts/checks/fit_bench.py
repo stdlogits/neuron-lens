@@ -17,6 +17,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens.corpus import lens_docs
+from neuron_lens.layers import CHUNK
 from neuron_lens.paths import CORPUS_DIR
 from neuron_lens.transport import (
     SKIP_FIRST,
@@ -44,8 +45,8 @@ def load(model_id: str, dtype, device: str):
 def active(layer, T: int) -> int:
     """Per tangent and position, a layer's matrix-product multiply-adds: its projections (a
     sparse MLP's chosen experts, shared expert and router), plus attention over the ``T − 1``
-    keys kept (softmax: scores and values, both terms; DeltaNet: about ten ``T × d_k`` products
-    a value head)."""
+    keys kept (softmax: scores and values, both terms; DeltaNet, per value head: its chunked
+    products, ``4·CHUNK·(d_k + d_v) + 6·d_k·d_v``)."""
     mlp = layer.mlp
     if hasattr(mlp, "experts"):
         ex = mlp.experts
@@ -58,7 +59,8 @@ def active(layer, T: int) -> int:
     if hasattr(layer, "linear_attn"):
         la = layer.linear_attn
         mix = sum(m.weight.numel() for m in (la.in_proj_qkv, la.in_proj_z, la.in_proj_b, la.in_proj_a, la.out_proj))
-        return mlp_n + mix + 10 * la.num_v_heads * la.head_k_dim * (T - 1)
+        dk, dv = la.head_k_dim, la.head_v_dim
+        return mlp_n + mix + la.num_v_heads * (4 * CHUNK * (dk + dv) + 6 * dk * dv)
     at = layer.self_attn
     proj = sum(m.weight.numel() for m in (at.q_proj, at.k_proj, at.v_proj, at.o_proj) if m is not None)
     return mlp_n + proj + 4 * at.config.num_attention_heads * at.head_dim * (T - 1)

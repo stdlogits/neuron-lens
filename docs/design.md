@@ -347,10 +347,18 @@ stages are not ported yet.
   `A = W L⁻¹ diag(β)`, `W = (Q Kᵀ) ⊙ Γ` (causal, with its diagonal), `L = I + diag(β)((K Kᵀ) ⊙ Γ)`
   (strictly lower) and `Γ_ts = exp(gc_t − gc_s)` from the cumulative log decay: attention whose
   matrix does not depend on v (as in "The Hidden Attention of Mamba Models", Ali et al. 2024,
-  [arXiv:2403.01590](https://arxiv.org/abs/2403.01590), for Mamba). The maps build `A`'s pieces
-  explicitly from the forward pass and push tangents through q, k, β and the decay by hand; the
-  tests check them against autograd through HF's chunked kernel. The width-4 causal convolution is
-  linear and exact.
+  [arXiv:2403.01590](https://arxiv.org/abs/2403.01590), for Mamba). The maps push tangents
+  through q, k, β and the decay by hand, in chunks of 32 positions as flash-linear-attention runs
+  the delta rule: within a chunk as small `Γ`-weighted matrices, across chunks through one
+  `d_k × d_v` state per tangent and head. The decay's tangent moves `Γ` by `Γ_ts (dgc_t − dgc_s)`,
+  and `L⁻¹` is a forward substitution with each chunk's `(I + diag(β) C)⁻¹` held, so cost and
+  memory grow linearly with length. On CUDA the passes run as Triton kernels
+  (`neuron_lens/kernels.py`, products in TF32); the torch passes in `layers.py` are their
+  reference and run elsewhere. Against the same kernels with exact fp32 products, one
+  document's estimates move by a median 0.5% per layer for the R-lens and 0.2% for the S-lens
+  (bf16 operands: 2.2% for the R-lens, for 3% more speed). The tests check the maps against autograd through HF's chunked
+  kernel, and the kernels against the torch passes. The width-4 causal convolution is linear and
+  exact.
 - **Rules, by operation.** RelP's rules are applied to every operation of their kind, wherever it
   sits: norms take the LN rule (the residual norms and DeltaNet's per-head output norm);
   activations of the form `x · g(x)` the identity rule (SiLU in the experts, after the convolution
@@ -396,11 +404,11 @@ stages are not ported yet.
 - **Long documents.** A DeltaNet head holds about `d_k` = 128 keys before they interfere, which
   128-token documents barely use. Its lenses are fitted on 512-token documents (`02_fit.py
   --seq-len 512 --full-length`: the first DCLM documents that long, 63% of rows). The cost per
-  document grows about linearly with length, since the projections dominate; the explicit `T × T`
-  DeltaNet terms of the `relp` arm add about a third at 512 tokens (a chunked form would make them
-  linear in length).
-- **Memory.** The decoder stack is 68 GB in bf16, which leaves about 15 GiB of an 80 GB H100: fits
-  keep their sums on the CPU (`--acc-device cpu`) and a dim batch of 16-64.
+  document grows linearly with length: about 19 s per 512-token document and lens on an H100.
+- **Memory.** The decoder stack is 68 GB in bf16, which leaves about 15 GiB of an 80 GB H100. A
+  512-token document's maps take about 7 GiB and a layer step 1.5-2 GiB at a dim batch of 32, so
+  both lenses fit with their sums on the GPU. A larger dim batch gains nothing: a step at 64 takes
+  twice as long.
 
 ## Related work
 

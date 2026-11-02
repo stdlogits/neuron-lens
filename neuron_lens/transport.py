@@ -144,7 +144,11 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     maps = linearize(model, ids, **linearize_kw)
     N, d = maps[0].n1.a.shape
     dev = maps[0].n1.a.device
-    jvp = _step(jvp, dev)
+
+    def step(m, X, w):  # the layer, and its tangents' means over the target rows (inside the compiled step)
+        X, mid = jvp(m, X)
+        return X, *((t.mean(1) if w is None else (t * w).sum(1)) for t in (mid, X))
+    step = _step(step, dev)
     kinds = {t for t, _ in acc.sums}
     k = d if basis is None else basis.shape[0]
     src = None if source_rows is None else source_rows.to(dev).float()[None, :, None]
@@ -158,10 +162,9 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
         if src is not None:
             X = X * src
         for layer, m in enumerate(maps):
-            X, mid = jvp(m, X)
-            for kind, est in (("mid", mid), ("out", X)):
+            X, *ests = step(m, X, w)
+            for kind, e in zip(("mid", "out"), ests):
                 if kind in kinds:
-                    e = est.mean(1) if w is None else (est * w).sum(1)
                     s = acc.sums[(kind, half)]
                     s[layer, :, start:start + b] += e.mT.to(s.device)
     acc.n_docs[half] += 1

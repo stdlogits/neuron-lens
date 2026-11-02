@@ -9,8 +9,8 @@
 # Qwen3.5 fits documents of exactly SEQ_LEN tokens (--full-length), so its DeltaNet memories
 # fill: about 63% of DCLM rows reach 512 of its tokens and 33% reach 1,024, so the corpus is
 # exported to CORPUS_ROWS rows (default 4,000 for Qwen3.5; the first 1,000 stay the same, so
-# other models' fits are unchanged). Its decoder stack (68 GB in bf16) leaves ~15 GiB of an 80 GB H100:
-# the sweep (perf_sweep.py) finds the dim batch, TF32, compile and sum-device settings.
+# other models' fits are unchanged). Its decoder stack (68 GB in bf16) leaves ~15 GiB of an 80 GB H100,
+# enough for a dim batch of 32 with the sums on the GPU (~19 s per document and lens on an H100).
 #
 # Installs the package (no Drowse needed; uv picks the torch build that matches the CUDA
 # driver), downloads the models, exports the lens corpus unless data/corpus/ came along, runs
@@ -47,14 +47,12 @@ hf download "$MODEL" > /dev/null
 rows=$( [ -f data/corpus/dclm.jsonl ] && wc -l < data/corpus/dclm.jsonl || echo 0 )
 [ "$rows" -ge "$CORPUS_ROWS" ] || python scripts/01_lens_corpus.py --docs "$CORPUS_ROWS"
 
-python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py
+python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py tests/test_kernels.py
 if [ "$QWEN35" = 1 ]; then
-    # Precision on a 4-layer slice against fp32, then a first throughput grid on the whole model;
-    # scripts/checks/perf_sweep.py's docstring has the rest of the sweep.
-    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --fp32-layers 4 \
-        --dim-batch 32 --tf32 0,1 --compile 0,1
-    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" \
-        --dim-batch 16,32,64,128 --tf32 0,1 --compile 1
+    # Each component's time, then one document per lens; scripts/checks/perf_sweep.py's
+    # docstring has the rest.
+    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --parts --dim-batch 32
+    python scripts/checks/perf_sweep.py --model "$MODEL" --seq-len "$SEQ_LEN" --dim-batch 32
 else
     python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-0.6B,"$MODEL" \
         --dim-batch 128,256,512 --compare-fp32

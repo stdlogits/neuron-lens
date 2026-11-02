@@ -75,8 +75,11 @@ def mlp_out(block, x):
     return x + block.mlp(block.post_attention_layernorm(x))
 
 
-@pytest.mark.parametrize("moe", [True, False])
-def test_estimates_match_brute_force(moe):
+@pytest.mark.parametrize("moe,chunk", [(True, 32), (False, 32), (True, 5)])
+def test_estimates_match_brute_force(moe, chunk, monkeypatch):
+    """Chunks of 5 split the 24 positions into five, with padding: DeltaNet's products cross
+    chunks through their states."""
+    monkeypatch.setattr(layers, "CHUNK", chunk)
     model = tiny_model(moe=moe)
     ids = torch.randint(0, V, (SKIP_FIRST + 9,))
     valid = valid_positions(len(ids))

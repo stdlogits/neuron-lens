@@ -22,7 +22,9 @@ export) adds them up.
 
 Qwen3.5's DeltaNet layers hold a memory of about 128 keys a head, which 128-token documents
 barely fill: ``--full-length`` fits documents of exactly ``--seq-len`` tokens (the first ones of
-the corpus that long), whose T×T DeltaNet terms want a smaller ``--dim-batch``.
+the corpus that long). On an H100, a dim batch of 32 with the sums on the GPU takes about 19 s per
+512-token document for either lens (a larger batch is no faster). On CUDA in bf16, fp32 matrix
+products run in TF32, as DeltaNet's kernels do (``neuron_lens.kernels``).
 """
 import argparse
 import os
@@ -65,6 +67,10 @@ def load_model(args):
         device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = {"auto": torch.float32 if device == "cpu" else torch.bfloat16,
              "fp32": torch.float32, "bf16": torch.bfloat16}[args.dtype]
+    if device == "cuda" and dtype == torch.bfloat16:
+        # fp32 products (DeltaNet's chunked ones) in TF32, which keeps more precision than the
+        # model's bf16 products every tangent passes through
+        torch.set_float32_matmul_precision("high")
     config = AutoConfig.from_pretrained(args.model)
     if args.layers is not None:  # only the first layers' weights load
         tc = config.get_text_config()
