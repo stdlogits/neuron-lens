@@ -368,11 +368,11 @@ def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, scale, CH: tl.constexp
         else:
             y = _l2(g, tl.load(k0 + rows, mask=okr, other=0.), tl.load(rk0 + t * HK + h, mask=t < N, other=0.)[:, None])
             tl.store(okk + out, y, mask=okr)
-    else:
-        h = i_c - 2 * HK
-        od = tl.arange(0, DV)
-        g = _conv_rows(x, wc, sc, i_b, t, 2 * HK * DK + h * DV + od, N, CH, K)
-        tl.store(ov + ((i_b * N + t[:, None]) * HV + h) * DV + od[None, :], g, mask=okr)
+    else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
+        hv_ = i_c - 2 * HK
+        odv = tl.arange(0, DV)
+        gv_ = _conv_rows(x, wc, sc, i_b, t, 2 * HK * DK + hv_ * DV + odv, N, CH, K)
+        tl.store(ov + ((i_b * N + t[:, None]) * HV + hv_) * DV + odv[None, :], gv_, mask=okr)
 
 
 @triton.jit
@@ -404,20 +404,20 @@ def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, scale, CH: tl.conste
             else:
                 g = _l2(g, tl.load(k0 + rows, mask=oks, other=0.), tl.load(rk0 + src * HK + h, mask=src < N, other=0.)[:, None])
             g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
-            acc += g * tl.load(wc + ch * K + (K - 1 - j))[None, :]
+            acc += g * tl.load(wc + ch * K + j)[None, :]
         tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
-    else:
-        h = i_c - 2 * HK
-        od = tl.arange(0, DV)
-        ch = 2 * HK * DK + h * DV + od
-        acc = tl.zeros([BT, DV], dtype=tl.float32)
+    else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
+        hv_ = i_c - 2 * HK
+        odv = tl.arange(0, DV)
+        chv = 2 * HK * DK + hv_ * DV + odv
+        accv = tl.zeros([BT, DV], dtype=tl.float32)
         for j in tl.static_range(K):
             src = t + (K - 1) - j
             oks = (src < N)[:, None]
-            g = tl.load(gv + ((i_b * N + src[:, None]) * HV + h) * DV + od[None, :], mask=oks, other=0.)
-            g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
-            acc += g * tl.load(wc + ch * K + (K - 1 - j))[None, :]
-        tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
+            gv_ = tl.load(gv + ((i_b * N + src[:, None]) * HV + hv_) * DV + odv[None, :], mask=oks, other=0.)
+            gv_ *= tl.load(sc + src[:, None] * CH + chv[None, :], mask=oks, other=0.)
+            accv += gv_ * tl.load(wc + chv * K + j)[None, :]
+        tl.store(out + (i_b * N + t[:, None]) * CH + chv[None, :], accv.to(out.dtype.element_ty), mask=(t < N)[:, None])
 
 
 def delta_conv_in(m, x):
