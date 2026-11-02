@@ -22,7 +22,7 @@ import triton.language as tl
 MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
 # per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100; a
 # register cap, maxnreg, only slowed them)
-CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 64, 4, 1)}
+CONFIG = {"jvp": (32, 128, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 64, 4, 1)}
 VJPK_COPIES = 16  # tangent copies per program in the chunk-parallel ``_vjp_k``
 # the convolution kernels: rows per program, num_warps, tangent copies per program
 CONV = {"in": (16, 4, 8), "out": (16, 4, 16)}
