@@ -718,9 +718,10 @@ def _delta_core_jvp(m: DeltaNet, dq, dk, dv, db, dg) -> torch.Tensor:
     return torch.stack(out, 2).flatten(2, 3)[:, :, S:S + N].transpose(1, 2)
 
 
-def _delta_core_vjp(m: DeltaNet, go: torch.Tensor, hk: int):
+def _delta_core_vjp(m: DeltaNet, go: torch.Tensor):
     """``_delta_core_jvp``'s transpose: the output's cotangents ``[b, N, Hv, dv]`` to the
-    queries' and keys' (``[b, N, Hk, dk]``), values', β's and the cumulative decay's. With
+    queries' and keys' (``[b, N, Hv, dk]``, per value head), values', β's and the cumulative
+    decay's. With
     ``gr = L⁻ᵀ Wᵀ go`` and ``gbl = −β gr`` (dC U's cotangent), one pass back over the chunks
     through ``A = Σ_{later} Γ (q_t go_tᵀ + k_t gbl_tᵀ)``, which ``gr`` reads through the keys and
     the keys' cotangent as writers (``gkt``) through the pseudo-values; as readers (``gq`` through
@@ -754,8 +755,7 @@ def _delta_core_vjp(m: DeltaNet, go: torch.Tensor, hk: int):
         A = cd[:, c, None, None] * A + torch.einsum("htd,bhtf->bhdf", qc * qdc, goc) \
             + torch.einsum("htd,bhtf->bhdf", kc * qdc, gbl)
     rows = lambda i: torch.stack([g[i] for g in grads], 2).flatten(2, 3)[:, :, S:S + N].transpose(1, 2)
-    unheads = lambda x: x.unflatten(2, (hk, hv // hk)).sum(3)  # value heads → their key head
-    return unheads(rows(0)), unheads(rows(1)), rows(3), rows(4), rows(2)
+    return rows(0), rows(1), rows(3), rows(4), rows(2)
 
 
 def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
@@ -764,14 +764,17 @@ def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
     b, N, _ = xn.shape
     hv, dv = m.u.shape[0], m.u.shape[-1]
     hk, dk = m.q0.shape[1:]
-    dc = _conv(F.linear(xn, m.w_qkv).float(), m.wc) * m.sc  # [b, N, C] (identity rule)
-    dq0, dk0, dvv = dc.split([hk * dk, hk * dk, hv * dv], -1)
-    dq = _l2_jvp(dq0.view(b, N, hk, dk), m.q0, m.rq0) * dk ** -0.5
-    dkk = _l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0)
+    cuda = kernels is not None and xn.is_cuda
+    if cuda:  # the convolution and L2 norms in one kernel
+        dq, dkk, dvv = kernels.delta_conv_in(m, F.linear(xn, m.w_qkv))
+    else:
+        dc = _conv(F.linear(xn, m.w_qkv).float(), m.wc) * m.sc  # [b, N, C] (identity rule)
+        dq0, dk0, dvv = dc.split([hk * dk, hk * dk, hv * dv], -1)
+        dq = _l2_jvp(dq0.view(b, N, hk, dk), m.q0, m.rq0) * dk ** -0.5
+        dkk = _l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0)
     db = m.db * F.linear(xn, m.w_b).float()  # [b, N, Hv]
     dg = (m.dga * F.linear(xn, m.w_a).float()).cumsum(1)
-    core = _delta_core_jvp if kernels is None or not xn.is_cuda else kernels.delta_jvp
-    do = core(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg)
+    do = (kernels.delta_jvp if cuda else _delta_core_jvp)(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg)
     dn = do * m.ao * m.wn  # the output norm, LN rule
     dz = F.linear(xn, m.w_z).float().view(b, N, hv, dv)
     dy = HALF_RULE_BETA * (dn * m.z + m.on * m.sz * dz)
@@ -787,12 +790,15 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     gy = (G.to(dt) @ m.w_out).float().view(b, N, hv, dv)
     gdn, gz = HALF_RULE_BETA * gy * m.z, HALF_RULE_BETA * gy * m.on * m.sz
     gx = (gz.reshape(b, N, -1).to(dt) @ m.w_z).float()
-    core = _delta_core_vjp if kernels is None or not G.is_cuda else kernels.delta_vjp
-    gdq, gdk, gdv, gbeta, gdgc = core(m, gdn * m.ao * m.wn, hk)
+    cuda = kernels is not None and G.is_cuda
+    gdq, gdk, gdv, gbeta, gdgc = (kernels.delta_vjp if cuda else _delta_core_vjp)(m, gdn * m.ao * m.wn)
     gdg = gdgc.flip(1).cumsum(1).flip(1)
-    gq0 = _l2_jvp(gdq * dk ** -0.5, m.q0, m.rq0).reshape(b, N, -1)
-    gk0 = _l2_jvp(gdk, m.k0, m.rk0).reshape(b, N, -1)
     gx = gx + ((gbeta * m.db).to(dt) @ m.w_b + (gdg * m.dga).to(dt) @ m.w_a).float()
+    if cuda:  # the L2 norms and the convolution in one kernel
+        return gx + (kernels.delta_conv_out(m, gdq, gdk, gdv, dt) @ m.w_qkv).float()
+    unheads = lambda x: x.unflatten(2, (hk, hv // hk)).sum(3)  # value heads → their key head
+    gq0 = _l2_jvp(unheads(gdq) * dk ** -0.5, m.q0, m.rq0).reshape(b, N, -1)
+    gk0 = _l2_jvp(unheads(gdk), m.k0, m.rk0).reshape(b, N, -1)
     gc = torch.cat((gq0, gk0, gdv.reshape(b, N, -1)), -1) * m.sc
     return gx + (_conv_t(gc, m.wc).to(dt) @ m.w_qkv).float()
 

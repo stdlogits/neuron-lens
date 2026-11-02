@@ -1,5 +1,6 @@
-"""Triton kernels for the layer maps' hot spots on CUDA: Gated DeltaNet's derivative, and the
-sparse MLP's experts (the first product, gathering its rows, and the sum over each row's experts).
+"""Triton kernels for the layer maps' hot spots on CUDA: Gated DeltaNet's derivative (its delta
+rule, and the convolution with the L2 norms around it), and the sparse MLP's experts (the first
+product, gathering its rows, and the sum over each row's experts).
 
 DeltaNet: ``delta_jvp`` and ``delta_vjp`` run
 ``layers._delta_core_jvp`` and ``layers._delta_core_vjp`` (the reference, and the path off CUDA).
@@ -329,6 +330,126 @@ def moe_up(pos, offs, cg, cu, x, w, jvp: bool):
     return h
 
 
+@triton.jit
+def _conv_rows(x, wc, sc, i_b, t, ch, N, CH: tl.constexpr, K: tl.constexpr):
+    """The causal convolution of rows ``t`` on channels ``ch``, times σ: ``[len(t), len(ch)]`` fp32."""
+    acc = tl.zeros([t.shape[0], ch.shape[0]], dtype=tl.float32)
+    for j in tl.static_range(K):
+        src = t - (K - 1) + j
+        xs = tl.load(x + (i_b * N + src[:, None]) * CH + ch[None, :], mask=((src >= 0) & (src < N))[:, None], other=0.)
+        acc += xs.to(tl.float32) * tl.load(wc + ch * K + j)[None, :]
+    return acc * tl.load(sc + t[:, None] * CH + ch[None, :], mask=(t < N)[:, None], other=0.)
+
+
+@triton.jit
+def _l2(g, x0, r):
+    """An L2 norm's derivative (symmetric, so its own transpose) on rows: ``r (g − x0 r² (x0·g))``."""
+    return r * (g - x0 * r * r * tl.sum(x0 * g, 1)[:, None])
+
+
+@triton.jit
+def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, scale, CH: tl.constexpr, HK: tl.constexpr,
+             HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
+    """DeltaNet's convolution of the projected tangents ``x`` (``[b, N, CH]``), times σ (identity
+    rule), on one head's channels for ``BT`` rows; the queries' and keys' heads then through their
+    L2 norm's derivative (the queries scaled)."""
+    i_t, i_c, i_b = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    t = i_t * BT + tl.arange(0, BT)
+    okr = (t < N)[:, None]
+    if i_c < 2 * HK:
+        h = i_c % HK
+        od = tl.arange(0, DK)
+        g = _conv_rows(x, wc, sc, i_b, t, i_c * DK + od, N, CH, K)
+        rows = (t[:, None] * HK + h) * DK + od[None, :]
+        out = ((i_b * N + t[:, None]) * HK + h) * DK + od[None, :]
+        if i_c < HK:
+            y = _l2(g, tl.load(q0 + rows, mask=okr, other=0.), tl.load(rq0 + t * HK + h, mask=t < N, other=0.)[:, None])
+            tl.store(oq + out, y * scale, mask=okr)
+        else:
+            y = _l2(g, tl.load(k0 + rows, mask=okr, other=0.), tl.load(rk0 + t * HK + h, mask=t < N, other=0.)[:, None])
+            tl.store(okk + out, y, mask=okr)
+    else:
+        h = i_c - 2 * HK
+        od = tl.arange(0, DV)
+        g = _conv_rows(x, wc, sc, i_b, t, 2 * HK * DK + h * DV + od, N, CH, K)
+        tl.store(ov + ((i_b * N + t[:, None]) * HV + h) * DV + od[None, :], g, mask=okr)
+
+
+@triton.jit
+def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, scale, CH: tl.constexpr, HK: tl.constexpr,
+              HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
+    """``_conv_in``'s transpose, from the queries', keys' (per value head, summed into their key
+    head here) and values' cotangents to the projection's, in ``out``'s dtype."""
+    i_t, i_c, i_b = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    REP: tl.constexpr = HV // HK
+    t = i_t * BT + tl.arange(0, BT)
+    if i_c < 2 * HK:
+        h = i_c % HK
+        od = tl.arange(0, DK)
+        ch = i_c * DK + od
+        acc = tl.zeros([BT, DK], dtype=tl.float32)
+        for j in tl.static_range(K):
+            src = t + (K - 1) - j
+            oks = (src < N)[:, None]
+            g = tl.zeros([BT, DK], dtype=tl.float32)
+            for rr in tl.static_range(REP):
+                vrows = ((i_b * N + src[:, None]) * HV + h * REP + rr) * DK + od[None, :]
+                if i_c < HK:
+                    g += tl.load(gq + vrows, mask=oks, other=0.)
+                else:
+                    g += tl.load(gk + vrows, mask=oks, other=0.)
+            rows = (src[:, None] * HK + h) * DK + od[None, :]
+            if i_c < HK:
+                g = _l2(g, tl.load(q0 + rows, mask=oks, other=0.), tl.load(rq0 + src * HK + h, mask=src < N, other=0.)[:, None]) * scale
+            else:
+                g = _l2(g, tl.load(k0 + rows, mask=oks, other=0.), tl.load(rk0 + src * HK + h, mask=src < N, other=0.)[:, None])
+            g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
+            acc += g * tl.load(wc + ch * K + (K - 1 - j))[None, :]
+        tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
+    else:
+        h = i_c - 2 * HK
+        od = tl.arange(0, DV)
+        ch = 2 * HK * DK + h * DV + od
+        acc = tl.zeros([BT, DV], dtype=tl.float32)
+        for j in tl.static_range(K):
+            src = t + (K - 1) - j
+            oks = (src < N)[:, None]
+            g = tl.load(gv + ((i_b * N + src[:, None]) * HV + h) * DV + od[None, :], mask=oks, other=0.)
+            g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
+            acc += g * tl.load(wc + ch * K + (K - 1 - j))[None, :]
+        tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
+
+
+def delta_conv_in(m, x):
+    """``layers._delta_jvp``'s convolution and L2 norms on CUDA: the projected tangents ``x``
+    (``[b, N, CH]``) to the queries' and keys' (``[b, N, Hk, dk]``, normed, the queries scaled)
+    and values' (``[b, N, Hv, dv]``) tangents, fp32."""
+    b, N, CH = x.shape
+    _, hk, DK = m.q0.shape
+    hv, DV = m.u.shape[0], m.u.shape[-1]
+    assert CH == 2 * hk * DK + hv * DV and x.is_contiguous()
+    f32 = dict(device=x.device, dtype=torch.float32)
+    oq, ok_, ov = torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hv, DV, **f32)
+    BT = 32
+    _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, b)](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, DK ** -0.5,
+                                                   CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
+    return oq, ok_, ov
+
+
+def delta_conv_out(m, gq, gk, gv, dtype):
+    """``_conv_in``'s transpose on CUDA: the queries' and keys' cotangents (``[b, N, Hv, dk]``, per
+    value head) and values' (``[b, N, Hv, dv]``) to the projection's, ``[b, N, CH]`` in ``dtype``."""
+    b, N, hv, DV = gv.shape
+    _, hk, DK = m.q0.shape
+    CH = 2 * hk * DK + hv * DV
+    assert gq.is_contiguous() and gk.is_contiguous() and gv.is_contiguous()
+    out = torch.empty(b, N, CH, device=gv.device, dtype=dtype)
+    BT = 32
+    _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, DK ** -0.5,
+                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
+    return out
+
+
 def _rows(x):
     """``x`` with unit stride along features (the kernels' loads assume it)."""
     return x if x.stride(-1) == 1 else x.contiguous()
@@ -362,7 +483,7 @@ def delta_jvp(m, dq, dk, dv, db, dg):
     return out
 
 
-def delta_vjp(m, go, hk: int):
+def delta_vjp(m, go):
     """``layers._delta_core_vjp`` on CUDA."""
     go = _rows(go)
     b, N, hv, DV = go.shape
@@ -382,5 +503,4 @@ def delta_vjp(m, go, hk: int):
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
         m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
-    unheads = lambda x: x.view(b, N, hk, hv // hk, DK).sum(3)
-    return unheads(gq), unheads(gk), gdv, gbp.sum(0), gcp.sum(0)
+    return gq, gk, gdv, gbp.sum(0), gcp.sum(0)

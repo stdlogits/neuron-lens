@@ -51,21 +51,34 @@ def test_delta_kernels_match_reference(dk, dv, T):
     torch.set_float32_matmul_precision("highest")
     try:
         want_do = layers._delta_core_jvp(m, dq, dkk, dvv, db, dg)
-        want_g = layers._delta_core_vjp(m, go, hk)
+        want_g = layers._delta_core_vjp(m, go)
     finally:
         torch.set_float32_matmul_precision(prec)
     do = kernels.delta_jvp(m, dq, dkk, dvv, db, dg)
-    g = kernels.delta_vjp(m, go, hk)
+    g = kernels.delta_vjp(m, go)
     assert rel(do, want_do) < 1e-2
     for name, a, w in zip(("q", "k", "v", "beta", "gc"), g, want_g):
         assert rel(a, w) < 1e-2, name
     # the kernels transpose each other: <jvp(t), go> = <t, vjp(go)>
     lhs = (do * go).sum()
-    rhs = sum((a * t).sum() for a, t in zip(g, (dq, dkk, dvv, db, dg)))
+    rep = lambda x: x.repeat_interleave(hv // hk, 2)  # key-head tangents meet each value head's cotangent
+    rhs = sum((a * t).sum() for a, t in zip(g, (rep(dq), rep(dkk), dvv, db, dg)))
     assert abs((lhs - rhs) / lhs).item() < 1e-2
     # compiled, as the layer steps run them
     assert rel(torch.compile(kernels.delta_jvp)(m, dq, dkk, dvv, db, dg), do) < 1e-5
-    assert rel(torch.compile(kernels.delta_vjp)(m, go, hk)[1], g[1]) < 1e-5
+    assert rel(torch.compile(kernels.delta_vjp)(m, go)[1], g[1]) < 1e-5
+    # the whole mixer, convolution and norms included, against the torch path
+    xn = torch.randn(b, N, m.w_qkv.shape[1], device="cuda")
+    G = torch.randn(b, N, m.w_out.shape[0], device="cuda")
+    got = layers._delta_jvp(m, xn), layers._delta_vjp(m, G)
+    layers.kernels = None
+    try:
+        torch.set_float32_matmul_precision("highest")
+        want = layers._delta_jvp(m, xn), layers._delta_vjp(m, G)
+    finally:
+        layers.kernels = kernels
+        torch.set_float32_matmul_precision(prec)
+    assert rel(got[0], want[0]) < 1e-2 and rel(got[1], want[1]) < 1e-2
 
 
 def test_moe_combine_matches_reference():
