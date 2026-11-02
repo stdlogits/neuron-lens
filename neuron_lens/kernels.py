@@ -18,7 +18,7 @@ import triton
 import triton.language as tl
 
 # the experts' first product: rows, columns and inner block, num_warps, num_stages (jvp, vjp)
-MOE = {"jvp": (128, 64, 64, 8, 3), "vjp": (128, 128, 64, 8, 3)}
+MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
 # per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100)
 CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
 
