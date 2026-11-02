@@ -4,9 +4,9 @@ type: software
 title: "neuron-lens: a catalog of every MLP neuron and attention head of Qwen3-8B and Gemma 4 12B"
 authors:
   - name: "@_a9lim"
-    website: "https://x.com/_a9lim"
+    website: "https://a9l.im"
   - name: "@treetowntree"
-    website: "https://x.com/treetowntree"
+    website: "https://logits.ml"
   - name: "Claude"
     website: "https://www.anthropic.com/claude"
 abstract: >-
