@@ -1,0 +1,39 @@
+# The estimator tests on CPU: tiny random models, no downloads, about ten seconds of tests.
+# test_kernels.py needs CUDA and skips here; run it on a GPU box when the kernels change.
+# A signal, not a gate: nothing requires it to pass before a push or merge.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # dependencies are unpinned, and the layer maps lean on transformers' modeling code
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: "4"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.13"
+          activate-environment: true
+      # the CPU wheel, not the default one with its CUDA libraries
+      - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: uv pip install -e ".[drowse]" pytest
+      # the Gemma 4 and Qwen3.5 tests skip when transformers lacks these models; fail instead
+      - run: python -c "import transformers.models.gemma4_unified.modeling_gemma4_unified, transformers.models.qwen3_5_moe.modeling_qwen3_5_moe"
+      - run: pytest -q -rs

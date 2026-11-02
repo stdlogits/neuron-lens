@@ -76,7 +76,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §8 records why.
 - **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass
-  (and `tests/test_kernels.py` on a CUDA machine when the kernels change): both
+  (and `tests/test_kernels.py` on a CUDA machine when the kernels change; CI runs the rest on CPU
+  for pushes to main, pull requests and weekly, `.github/workflows/tests.yml`, as a signal, not a
+  gate): both
   lenses against brute-force Jacobians of the model under `relp_rules`, and both against
   Drowse's RelP fits (loosen that test only for a deliberate change). Supporting another architecture
   means composing its layers from `layers.py`'s components, adding a component (its map, transpose
