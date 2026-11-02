@@ -65,3 +65,37 @@ def test_delta_kernels_match_reference(dk, dv, T):
     # compiled, as the layer steps run them
     assert rel(torch.compile(kernels.delta_jvp)(m, dq, dkk, dvv, db, dg), do) < 1e-5
     assert rel(torch.compile(kernels.delta_vjp)(m, go, hk)[1], g[1]) < 1e-5
+
+
+def test_moe_combine_matches_reference():
+    torch.manual_seed(0)
+    N, k, b, d = 37, 8, 5, 64
+    inv = torch.randperm(N * k, device="cuda").view(N, k)
+    w = torch.rand(N, k, device="cuda").softmax(-1)
+    y = torch.randn(N * k, b, d, device="cuda").to(torch.bfloat16)
+    m = layers.MoE(*[None] * len(layers.MoE._fields))._replace(inv=inv, slot_w=w)
+    want = (y[inv] * w[..., None, None]).sum(1).transpose(0, 1)
+    assert rel(kernels.moe_combine(inv, w, y), want) < 1e-6
+    assert rel(layers._combine(m, y), want) < 1e-6
+
+
+@pytest.mark.parametrize("jvp", [True, False])
+def test_moe_up_matches_reference(jvp):
+    """Uneven experts, one empty, rows that end mid-tile."""
+    torch.manual_seed(0)
+    N, k, b, d, I, E = 45, 4, 5, 64, 32, 8
+    idx = torch.randint(0, E - 1, (N * k,), device="cuda")  # expert E − 1 gets no pairs
+    order = torch.argsort(idx, stable=True)
+    pos, offs = (order // k).contiguous(), torch.bincount(idx, minlength=E).cumsum(0).to(torch.int32)
+    cg, cu = (torch.randn(N * k, I, device="cuda").to(torch.bfloat16) for _ in range(2))
+    x = torch.randn(b, N, d, device="cuda").to(torch.bfloat16)
+    w = torch.randn(E, 2 * I, d, device="cuda").to(torch.bfloat16) if jvp else \
+        torch.randn(E, d, I, device="cuda").to(torch.bfloat16)
+    rows = x.transpose(0, 1)[pos].reshape(-1, d)
+    if jvp:
+        gu = torch.nn.functional.grouped_mm(rows, w.transpose(1, 2), offs=offs * b).view(-1, b, 2 * I)
+        want = (cg[:, None] * gu[..., :I] + cu[:, None] * gu[..., I:]).reshape(-1, I)
+    else:
+        gp = torch.nn.functional.grouped_mm(rows, w, offs=offs * b).view(-1, b, I)
+        want = torch.cat((cg[:, None] * gp, cu[:, None] * gp), -1).reshape(-1, 2 * I)
+    assert rel(kernels.moe_up(pos, offs, cg, cu, x, w, jvp).float(), want.float()) < 1e-2
