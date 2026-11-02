@@ -1,7 +1,7 @@
 [project]
 name = "neuron-lens"
 version = "0.1.0"
-description = "A catalog of every MLP neuron and attention head of Qwen3-8B, read through two Jacobian lenses and from activations."
+description = "A catalog of every MLP neuron and attention head of Qwen3-8B and Gemma 4 12B, read through two Jacobian lenses and from activations."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"

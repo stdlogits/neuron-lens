@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use the catalog, the lenses or this code, please cite it as below."
+type: software
+title: "neuron-lens: a catalog of every MLP neuron and attention head of Qwen3-8B and Gemma 4 12B"
+authors:
+  - name: "@_a9lim"
+    website: "https://x.com/_a9lim"
+  - name: "@treetowntree"
+    website: "https://x.com/treetowntree"
+  - name: "Claude"
+    website: "https://www.anthropic.com/claude"
+abstract: >-
+  Reads every MLP neuron (both poles) and every attention head of Qwen3-8B and Gemma 4 12B three
+  ways: from their weights alone, through two Jacobian lenses (the R-lens and the S-lens); from
+  their activations over 15M tokens of text; and from the exact tokens that drive them. Gemma 4's
+  neurons are also read through images and sound. The release holds the catalog, the lenses, and
+  measurements of where each way of reading works and where it fails.
+url: "https://neuron-lens.com"
+repository-code: "https://github.com/stdlogits/neuron-lens"
+license: MIT
+keywords:
+  - mechanistic interpretability
+  - neurons
+  - attention heads
+  - Jacobian lens
+  - Qwen3-8B
+  - Gemma 4
