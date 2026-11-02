@@ -22,7 +22,9 @@ export) adds them up.
 
 Qwen3.5's DeltaNet layers hold a memory of about 128 keys a head, which 128-token documents
 barely fill: ``--full-length`` fits documents of exactly ``--seq-len`` tokens (the first ones of
-the corpus that long). On CUDA in bf16, fp32 matrix products run in TF32.
+the corpus that long). On an H100, a dim batch of 32 with the sums on the GPU takes about 19 s per
+512-token document for either lens (a larger batch is no faster). On CUDA in bf16, fp32 matrix
+products run in TF32, as DeltaNet's kernels do (``neuron_lens.kernels``).
 """
 import argparse
 import os

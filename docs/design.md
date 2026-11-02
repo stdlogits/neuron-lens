@@ -353,7 +353,9 @@ stages are not ported yet.
   and `L⁻¹` is a forward substitution with each chunk's `(I + diag(β) C)⁻¹` held, so cost and
   memory grow linearly with length. On CUDA the passes run as Triton kernels
   (`neuron_lens/kernels.py`, products in TF32); the torch passes in `layers.py` are their
-  reference and run elsewhere. The tests check the maps against autograd through HF's chunked
+  reference and run elsewhere. Against the same kernels with exact fp32 products, one
+  document's estimates move by a median 0.5% per layer for the R-lens and 0.2% for the S-lens
+  (bf16 operands: 2.2% for the R-lens, for 3% more speed). The tests check the maps against autograd through HF's chunked
   kernel, and the kernels against the torch passes. The width-4 causal convolution is linear and
   exact.
 - **Rules, by operation.** RelP's rules are applied to every operation of their kind, wherever it
@@ -401,7 +403,7 @@ stages are not ported yet.
 - **Long documents.** A DeltaNet head holds about `d_k` = 128 keys before they interfere, which
   128-token documents barely use. Its lenses are fitted on 512-token documents (`02_fit.py
   --seq-len 512 --full-length`: the first DCLM documents that long, 63% of rows). The cost per
-  document grows linearly with length.
+  document grows linearly with length: about 19 s per 512-token document and lens on an H100.
 - **Memory.** The decoder stack is 68 GB in bf16, which leaves about 15 GiB of an 80 GB H100. A
   512-token document's maps take about 7 GiB and a layer step 1.5-2 GiB at a dim batch of 32, so
   both lenses fit with their sums on the GPU. A larger dim batch gains nothing: a step at 64 takes

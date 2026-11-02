@@ -168,7 +168,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
 ## Running jobs
 
 - A Mac with Apple silicon (MPS) runs everything except the lens fits and the GPU passes; the fits
-  take about 3 hours (Qwen3-8B) or 4.5 hours (Gemma 4) per text lens per 1,000 documents on one H100
+  take about 3 hours (Qwen3-8B), 4.5 hours (Gemma 4) or 5.5 hours (Qwen3.5-35B-A3B, 512-token
+  documents, `--dim-batch 32`) per text lens per 1,000 documents on one H100
   (`02_fit.py --device cuda`, bf16 with fp32 sums), 45-90 minutes per media lens.
 - `13_media_activations.py` keeps every document's activations for all of Gemma's neurons in RAM
   (about 220 GB for the images): run the two modalities one at a time.

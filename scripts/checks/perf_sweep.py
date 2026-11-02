@@ -3,7 +3,8 @@ document per configuration, with peak memory, throughput and each configuration'
 against a reference run. The model loads once.
 
 Axes (comma lists; every combination runs, per lens in ``--lenses``): ``--dim-batch``, ``--tf32``
-(fp32 matrix products in TF32, as ``02_fit.py`` runs them: DeltaNet's chunked ones), ``--compile``
+(torch's fp32 matrix products in TF32, as ``02_fit.py`` runs them; DeltaNet's kernels take TF32
+either way), ``--compile``
 (``transport._step``'s torch.compile on CUDA) and ``--acc-device`` (where the sums live). Each configuration runs a warm-up document, then
 ``--repeat`` timed ones. Its error is ``‖K − K_ref‖ / ‖K_ref‖`` per layer and target (median, max)
 against the same lens with TF32 off and no compile (the most precise run). An
