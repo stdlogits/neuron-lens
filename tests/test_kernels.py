@@ -46,27 +46,27 @@ def test_delta_kernels_match_reference(dk, dv, T):
     dq, dkk = torch.randn(b, N, hk, dk, device="cuda"), torch.randn(b, N, hk, dk, device="cuda")
     dvv = torch.randn(b, N, hv, 2 * dv, device="cuda")[..., :dv]  # a strided view, as the projection's split
     db, dg = torch.randn(b, N, hv, device="cuda"), 0.1 * torch.randn(b, N, hv, device="cuda").cumsum(1)
-    go = torch.randn(b, N, hv, dv, device="cuda")
+    dz, gy = torch.randn(b, N, hv, dv, device="cuda"), torch.randn(b, N, hv, dv, device="cuda")
     prec = torch.get_float32_matmul_precision()
     torch.set_float32_matmul_precision("highest")
     try:
-        want_do = layers._delta_core_jvp(m, dq, dkk, dvv, db, dg)
-        want_g = layers._delta_core_vjp(m, go)
+        want_do = layers._delta_core_jvp(m, dq, dkk, dvv, db, dg) * m.zo + dz * m.zg  # with the gate, as the kernel
+        want_g = layers._delta_core_vjp(m, gy * m.zo)
     finally:
         torch.set_float32_matmul_precision(prec)
-    do = kernels.delta_jvp(m, dq, dkk, dvv, db, dg)
-    g = kernels.delta_vjp(m, go)
+    do = kernels.delta_jvp(m, dq, dkk, dvv, db, dg, dz)
+    g = kernels.delta_vjp(m, gy)
     assert rel(do, want_do) < 1e-2
     for name, a, w in zip(("q", "k", "v", "beta", "gc"), g, want_g):
         assert rel(a, w) < 1e-2, name
-    # the kernels transpose each other: <jvp(t), go> = <t, vjp(go)>
-    lhs = (do * go).sum()
+    # the kernels transpose each other: <jvp(t), gy> = <t, vjp(gy)> (+ the gate's own term)
+    lhs = (do * gy).sum() - (dz * m.zg * gy).sum()
     rep = lambda x: x.repeat_interleave(hv // hk, 2)  # key-head tangents meet each value head's cotangent
     rhs = sum((a * t).sum() for a, t in zip(g, (rep(dq), rep(dkk), dvv, db, dg)))
     assert abs((lhs - rhs) / lhs).item() < 1e-2
     # compiled, as the layer steps run them
-    assert rel(torch.compile(kernels.delta_jvp)(m, dq, dkk, dvv, db, dg), do) < 1e-5
-    assert rel(torch.compile(kernels.delta_vjp)(m, go)[1], g[1]) < 1e-5
+    assert rel(torch.compile(kernels.delta_jvp)(m, dq, dkk, dvv, db, dg, dz), do) < 1e-5
+    assert rel(torch.compile(kernels.delta_vjp)(m, gy)[1], g[1]) < 1e-5
     # the whole mixer, convolution and norms included, against the torch path
     xn = torch.randn(b, N, m.w_qkv.shape[1], device="cuda")
     G = torch.randn(b, N, m.w_out.shape[0], device="cuda")

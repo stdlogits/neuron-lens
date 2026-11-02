@@ -139,11 +139,8 @@ class DeltaNet(NamedTuple):
     kh: torch.Tensor
     db: torch.Tensor  # [N, Hv]: σ'(b), dβ/db
     dga: torch.Tensor  # [N, Hv]: dg/da
-    on: torch.Tensor  # [N, Hv, dv]: the output norm's output (weight · o · rsqrt)
-    ao: torch.Tensor  # [N, Hv, 1]: its rsqrt; with ``wn`` the LN rule's scaling
-    wn: torch.Tensor  # [dv]
-    sz: torch.Tensor  # [N, Hv, dv]: σ(z)
-    z: torch.Tensor  # [N, Hv, dv]: silu(z)
+    zo: torch.Tensor  # [N, Hv, dv]: ½ · the output norm's scaling (LN rule) · silu(z): o's way to y
+    zg: torch.Tensor  # [N, Hv, dv]: ½ · norm(o) · σ(z): z's way (half rule; identity rule for silu)
     s0: int
 
 
@@ -327,8 +324,8 @@ def _delta_primal(la, x, S):
               q=pad(qh), k=pad(kh), u=pad(u), vmc=pad(vh - Cm @ u), beta=bp, gc=gp,
               **_chunks(gp, pad(qh), pad(kh), pad(u), bp),
               db=(beta * (1 - beta))[:, S:].T, dga=-la.A_log.float().exp() * torch.sigmoid(a + la.dt_bias.float())[S:],
-              on=on[S:], ao=ao[S:], wn=la.norm.weight.float(),
-              sz=torch.sigmoid(z[S:]), z=F.silu(z[S:]), s0=S)
+              zo=HALF_RULE_BETA * ao[S:] * la.norm.weight.float() * F.silu(z[S:]),
+              zg=HALF_RULE_BETA * on[S:] * torch.sigmoid(z[S:]), s0=S)
     return out, m
 
 
@@ -774,11 +771,12 @@ def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
         dkk = _l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0)
     db = m.db * F.linear(xn, m.w_b).float()  # [b, N, Hv]
     dg = (m.dga * F.linear(xn, m.w_a).float()).cumsum(1)
-    do = (kernels.delta_jvp if cuda else _delta_core_jvp)(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg)
-    dn = do * m.ao * m.wn  # the output norm, LN rule
-    dz = F.linear(xn, m.w_z).float().view(b, N, hv, dv)
-    dy = HALF_RULE_BETA * (dn * m.z + m.on * m.sz * dz)
-    return F.linear(dy.reshape(b, N, -1).to(dt), m.w_out).float()
+    dz = F.linear(xn, m.w_z).view(b, N, hv, dv)
+    if cuda:  # the gate in the kernel's last step
+        dy = kernels.delta_jvp(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg, dz)
+    else:
+        dy = (_delta_core_jvp(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg) * m.zo + dz.float() * m.zg).to(dt)
+    return F.linear(dy.reshape(b, N, -1), m.w_out).float()
 
 
 def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
@@ -787,11 +785,11 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     b, N, _ = G.shape
     hv, dv = m.u.shape[0], m.u.shape[-1]
     hk, dk = m.q0.shape[1:]
-    gy = (G.to(dt) @ m.w_out).float().view(b, N, hv, dv)
-    gdn, gz = HALF_RULE_BETA * gy * m.z, HALF_RULE_BETA * gy * m.on * m.sz
-    gx = (gz.reshape(b, N, -1).to(dt) @ m.w_z).float()
+    gy = (G.to(dt) @ m.w_out).view(b, N, hv, dv)
+    gx = ((gy * m.zg).reshape(b, N, -1).to(dt) @ m.w_z).float()
     cuda = kernels is not None and G.is_cuda
-    gdq, gdk, gdv, gbeta, gdgc = (kernels.delta_vjp if cuda else _delta_core_vjp)(m, gdn * m.ao * m.wn)
+    # the output's cotangent, gy · zo (on CUDA, as the kernels load gy)
+    gdq, gdk, gdv, gbeta, gdgc = kernels.delta_vjp(m, gy) if cuda else _delta_core_vjp(m, gy.float() * m.zo)
     gdg = gdgc.flip(1).cumsum(1).flip(1)
     gx = gx + ((gbeta * m.db).to(dt) @ m.w_b + (gdg * m.dga).to(dt) @ m.w_a).float()
     if cuda:  # the L2 norms and the convolution in one kernel
