@@ -317,9 +317,9 @@ def _delta_primal(la, x, S):
     y = (on * F.silu(z)).reshape(T, -1).to(dt)
     out = F.linear(y, la.out_proj.weight)
     tp = -(-T // CHUNK) * CHUNK
-    pad = lambda t: F.pad(t, (0, 0, 0, tp - T))
+    pad = lambda t: F.pad(t, (0, 0, 0, tp - T)).contiguous()  # (rows first, as the kernels read them)
     gp = torch.cat((gc, gc[:, -1:].expand(hv, tp - T)), -1)  # no decay in the padding
-    bp = F.pad(beta, (0, tp - T))
+    bp = F.pad(beta, (0, tp - T)).contiguous()
     m = DeltaNet(w_qkv=la.in_proj_qkv.weight, w_z=la.in_proj_z.weight, w_b=la.in_proj_b.weight,
               w_a=la.in_proj_a.weight, w_out=la.out_proj.weight, wc=wc.float(),
               sc=torch.sigmoid(c[S:]),

@@ -37,7 +37,8 @@ def rel(a, b):
     return ((a - b).norm() / b.norm()).item()
 
 
-@pytest.mark.parametrize("dk,dv,T", [(128, 128, SKIP_FIRST + 150), (32, 64, SKIP_FIRST + 64), (64, 128, 40)])
+@pytest.mark.parametrize("dk,dv,T", [(128, 128, SKIP_FIRST + 150), (32, 64, SKIP_FIRST + 64), (64, 128, 40),
+                                     (64, 64, 4 * layers.CHUNK + 1)])  # (whole chunks, no padding)
 def test_delta_kernels_match_reference(dk, dv, T):
     m = delta_map(dk, dv, T)
     (N, hk, _), hv, b = m.q0.shape, m.q.shape[0], 3
