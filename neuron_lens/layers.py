@@ -41,11 +41,14 @@ Mixers:
   triangle with its diagonal), ``L = I + diag(β) ((K Kᵀ) ⊙ Γ)`` (strictly lower) and
   ``Γ_ts = e^{gc_t − gc_s}`` for the cumulative log decay ``gc``: attention with a structured
   matrix that does not depend on v. The pseudo-values ``U = L⁻¹ diag(β) V`` are the memory's
-  columns: ``S_t = Σ_{s≤t} Γ_ts u_s k_sᵀ``. The derivative's products of a tangent with
-  ``(X Yᵀ) ⊙ Γ`` (decayed linear attention) run in chunks of ``CHUNK`` positions, as
-  flash-linear-attention's kernels do: within a chunk as small ``Γ``-weighted matrices, across
-  chunks through ``[d_k, d_v]`` states, so no ``[b, Hv, N, T]`` matrix is formed. The memory at
-  each chunk's start (states of ``K`` and ``U``) is a per-document constant.
+  columns: ``S_t = Σ_{s≤t} Γ_ts u_s k_sᵀ``. The derivative runs in chunks of ``CHUNK``
+  positions, as flash-linear-attention's kernels run the delta rule: within a chunk as small
+  ``Γ``-weighted matrices, across chunks through one ``[d_k, d_v]`` state per tangent and head,
+  so no ``[b, Hv, N, T]`` matrix is formed. The decay's tangent ``dgc`` moves the queries and
+  keys (``Γ_ts`` moves by ``Γ_ts (dgc_t − dgc_s)``), and ``L⁻¹`` is a forward substitution
+  over chunks with each chunk's ``(I + diag(β) C)⁻¹`` (``tinv``) held, so the map is one pass
+  forward over the chunks and its transpose one pass back (``_delta_core_jvp``,
+  ``_delta_core_vjp``; Triton kernels on CUDA, ``neuron_lens.kernels``).
 
 MLPs: **gated** (SwiGLU or GELU-tanh), or **sparse**: routed experts weighted by the router's softmax
 renormalised over its top k (Qwen3.5's 256 experts, top 8), plus an optional shared expert behind an
@@ -63,6 +66,11 @@ import torch
 import torch.nn.functional as F
 
 from neuron_lens.rules import HALF_RULE_BETA, act_factor, check_layer, is_gated, norm_eps, norm_weight
+
+try:
+    from neuron_lens import kernels
+except ImportError:  # no Triton (macOS): the cores run in torch
+    kernels = None
 
 CHUNK = 64  # DeltaNet's chunk length (positions) for the derivative's decayed products
 
@@ -120,19 +128,13 @@ class DeltaNet(NamedTuple):
     q: torch.Tensor  # [Hv, Tp, dk]: normed, scaled queries
     k: torch.Tensor  # [Hv, Tp, dk]: normed keys
     u: torch.Tensor  # [Hv, Tp, dv]: pseudo-values
-    beta1: torch.Tensor  # [Hv, N]
-    gc: torch.Tensor  # [Hv, T]: cumulative log decay
-    dec: torch.Tensor  # [Hv, n, C, C]: Γ within each chunk
-    qdec: torch.Tensor  # [Hv, n, C]: e^{gc_t − gc at the previous chunk's end}
-    kdec: torch.Tensor  # [Hv, n, C]: e^{gc at the chunk's end − gc_s}
-    cm: torch.Tensor  # [Hv, n, n]: e^{gc at chunk c − 1's end − gc at chunk c′'s end}, c′ < c
+    vmc: torch.Tensor  # [Hv, Tp, dv]: V − C U, C = (K Kᵀ) ⊙ Γ (strictly lower): β's move
+    beta: torch.Tensor  # [Hv, Tp]
+    gc: torch.Tensor  # [Hv, Tp]: cumulative log decay (constant over the padding)
     hku: torch.Tensor  # [Hv, n, dk, dv]: the memory at each chunk's start, Σ Γ k_s u_sᵀ
-    o1: torch.Tensor  # [Hv, N, dv]: the output before its norm, W1 U
-    cu1: torch.Tensor  # [Hv, N, dv]: C1 U, C = (K Kᵀ) ⊙ Γ (strictly lower)
-    db: torch.Tensor  # [Hv, N]: σ'(b), dβ/db
-    dga: torch.Tensor  # [Hv, N]: dg/da
-    wl: torch.Tensor  # [Hv, N, N]: W11 L11⁻¹ (valid rows and columns), so A11 = wl diag(β1)
-    v1: torch.Tensor  # [Hv, N, dv]
+    tinv: torch.Tensor  # [Hv, n, C, C]: each chunk's (I + diag(β) C)⁻¹
+    db: torch.Tensor  # [N, Hv]: σ'(b), dβ/db
+    dga: torch.Tensor  # [N, Hv]: dg/da
     on: torch.Tensor  # [N, Hv, dv]: the output norm's output (weight · o · rsqrt)
     ao: torch.Tensor  # [N, Hv, 1]: its rsqrt; with ``wn`` the LN rule's scaling
     wn: torch.Tensor  # [dv]
@@ -307,66 +309,54 @@ def _delta_primal(la, x, S):
     L = torch.eye(T, device=x.device) + beta[..., None] * Cm
     u = torch.linalg.solve_triangular(L, beta[..., None] * vh, upper=False, unitriangular=True)
     o = W @ u  # [Hv, T, dv]
-    eye = torch.eye(T - S, device=x.device)
-    wl = W[:, S:, S:] @ torch.linalg.solve_triangular(L[:, S:, S:], eye, upper=False, unitriangular=True)
     on, ao = _gated_norm(la.norm, o.transpose(0, 1))
     y = (on * F.silu(z)).reshape(T, -1).to(dt)
     out = F.linear(y, la.out_proj.weight)
     tp = -(-T // CHUNK) * CHUNK
     pad = lambda t: F.pad(t, (0, 0, 0, tp - T))
+    gp = torch.cat((gc, gc[:, -1:].expand(hv, tp - T)), -1)  # no decay in the padding
+    bp = F.pad(beta, (0, tp - T))
     m = DeltaNet(w_qkv=la.in_proj_qkv.weight, w_z=la.in_proj_z.weight, w_b=la.in_proj_b.weight,
               w_a=la.in_proj_a.weight, w_out=la.out_proj.weight, wc=wc.float(),
               sc=torch.sigmoid(c[S:]),
               q0=q0[S:], rq0=rq0[S:], k0=k0[S:], rk0=rk0[S:],
-              q=pad(qh), k=pad(kh), u=pad(u), beta1=beta[:, S:], gc=gc,
-              **_chunks(gc, pad(kh), pad(u)), o1=o[:, S:], cu1=(Cm[:, S:] @ u),
-              db=(beta * (1 - beta))[:, S:], dga=(-la.A_log.float().exp() * torch.sigmoid(a + la.dt_bias.float())).T[:, S:],
-              wl=wl.to(dt), v1=vh[:, S:].contiguous(), on=on[S:], ao=ao[S:], wn=la.norm.weight.float(),
+              q=pad(qh), k=pad(kh), u=pad(u), vmc=pad(vh - Cm @ u), beta=bp, gc=gp,
+              **_chunks(gp, pad(kh), pad(u), bp),
+              db=(beta * (1 - beta))[:, S:].T, dga=-la.A_log.float().exp() * torch.sigmoid(a + la.dt_bias.float())[S:],
+              on=on[S:], ao=ao[S:], wn=la.norm.weight.float(),
               sz=torch.sigmoid(z[S:]), z=F.silu(z[S:]), s0=S)
     return out, m
 
 
-def _chunks(gc, k, u) -> dict:
-    """The chunked products' constants (``DeltaNet``'s ``dec`` to ``hku``) from the cumulative log
-    decay ``[Hv, T]`` and the padded keys and pseudo-values ``[Hv, Tp, ·]``. Every factor is
-    ``e^{x}`` for some ``x ≤ 0``, as the decay only shrinks."""
-    hv, T = gc.shape
-    tp = k.shape[1]
-    n = tp // CHUNK
-    g = torch.cat((gc, gc[:, -1:].expand(hv, tp - T)), -1).view(hv, n, CHUNK)  # no decay in the padding
-    end = g[..., -1]  # [Hv, n]
-    prev = F.pad(end[:, :-1], (1, 0))  # the previous chunk's end (0 before the first)
+def _decays(gc):
+    """Per chunk, from the cumulative log decay ``[Hv, Tp]``: ``Γ`` within it (``[Hv, n, C, C]``,
+    ``s ≤ t``), ``e^{gc_t − gc at the previous chunk's end}`` and ``e^{gc at its end − gc_s}``
+    (``[Hv, n, C]``), and ``e^{gc at its end − gc at the previous one's}`` (``[Hv, n]``). Each
+    is ``e^{x}`` for some ``x ≤ 0``, as the decay only shrinks."""
+    hv = gc.shape[0]
+    g = gc.view(hv, -1, CHUNK)
+    end = g[..., -1]
+    prev = F.pad(end[:, :-1], (1, 0))  # 0 before the first chunk
     lower = torch.ones(CHUNK, CHUNK, dtype=torch.bool, device=gc.device).tril()
     dec = (g[..., :, None] - g[..., None, :]).masked_fill(~lower, float("-inf")).exp()
-    before = torch.ones(n, n, dtype=torch.bool, device=gc.device).tril(-1)
-    cm = (prev[..., :, None] - end[..., None, :]).masked_fill(~before, float("-inf")).exp()
-    qdec, kdec = (g - prev[..., None]).exp(), (end[..., None] - g).exp()
+    return dec, (g - prev[..., None]).exp(), (end[..., None] - g).exp(), (end - prev).exp()
+
+
+def _chunks(gc, k, u, beta) -> dict:
+    """``DeltaNet``'s per-document chunk constants from the padded decay, keys, pseudo-values and
+    β: the memory of ``(K, U)`` at each chunk's start, and each chunk's ``(I + diag(β) C)⁻¹``."""
+    hv, tp = gc.shape
+    n = tp // CHUNK
+    dec, _, kd, cd = _decays(gc)
     kc, uc = k.unflatten(1, (n, CHUNK)), u.unflatten(1, (n, CHUNK))
-    D = (kc * kdec[..., None]).mT @ uc  # [Hv, n, dk, dv]: each chunk's own writes, at its end
-    hku = (cm @ D.flatten(-2)).unflatten(-1, D.shape[-2:])
-    return dict(dec=dec, qdec=qdec, kdec=kdec, cm=cm, hku=hku)
-
-
-def _lin(m: "DeltaNet", q, k, v, H=None, rev: bool = False):
-    """Decayed linear attention by chunks: ``Σ_{s≤t} Γ_ts (q_t·k_s) v_s`` at each ``t`` (``rev``:
-    ``Σ_{s≥t} Γ_st (q_t·k_s) v_s``), for ``q``, ``k``, ``v`` ``[..., Hv, Tp, ·]`` (broadcast).
-    ``H``: the states of a fixed ``(k, v)`` at each chunk's start (forward only), else built
-    from them. Products are einsums, which fold dims that only one operand has into the
-    product's rows or columns, where matmul's broadcasting would copy the other operand."""
-    qc, kc, vc = (x.unflatten(-2, (-1, CHUNK)) for x in (q, k, v))  # [..., Hv, n, C, ·]
-    dec, qd, kd, cm = (m.dec.mT, m.kdec, m.qdec, m.cm.mT) if rev else (m.dec, m.qdec, m.kdec, m.cm)
-    a = torch.einsum("...hncd,...hned->...hnce", qc, kc) * dec
-    out = torch.einsum("...hnce,...hnef->...hncf", a, vc)
-    if H is None:
-        D = torch.einsum("...hncd,...hncf->...hndf", kc * kd[..., None], vc)
-        H = torch.einsum("hnm,...hmdf->...hndf", cm, D)
-    return (out + torch.einsum("...hncd,...hndf->...hncf", qc * qd[..., None], H)).flatten(-3, -2)
-
-
-def _heads(A: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    """``A @ x`` for a fixed per-head matrix ``A`` (``[Hv, n, m]``) and tangents ``x``
-    (``[..., Hv, m, f]``), all copies in one product per head."""
-    return torch.einsum("hnm,...hmf->...hnf", A, x)
+    D = (kc * kd[..., None]).mT @ uc  # [Hv, n, dk, dv]: each chunk's own writes, at its end
+    hku = [torch.zeros_like(D[:, 0])]
+    for c in range(n - 1):
+        hku.append(cd[:, c, None, None] * hku[-1] + D[:, c])
+    eye = torch.eye(CHUNK, device=gc.device)
+    Lc = eye + beta.view(hv, n, CHUNK, 1) * ((kc @ kc.mT) * dec).tril(-1)
+    tinv = torch.linalg.solve_triangular(Lc, eye.expand_as(Lc), upper=False, unitriangular=True)
+    return dict(hku=torch.stack(hku, 1), tinv=tinv)
 
 
 def _gated_norm(norm, o):
@@ -679,48 +669,98 @@ def _l2_jvp(dx, x, r):
     return r * (dx - x * r.square() * (x * dx).sum(-1, keepdim=True))
 
 
-def _delta_mats(m: DeltaNet):
-    """``(W11, C11)``, ``[Hv, N, N]`` at the valid rows and columns, rebuilt per call: cheap
-    beside the tangents' products, where two such matrices per layer held for the document would
-    take ~2 GB beside the weights."""
-    S, T = m.s0, m.gc.shape[-1]
-    gam, strict = _decay_mask(m.gc[:, S:], m.gc[:, S:], 0)
-    q1, k1 = m.q[:, S:T], m.k[:, S:T]
-    return (q1 @ k1.mT) * gam, (k1 @ k1.mT) * gam * strict
+def _delta_core_jvp(m: DeltaNet, dq, dk, dv, db, dg) -> torch.Tensor:
+    """The delta rule's map: tangents of the queries and keys (``[b, N, Hk, dk]``, normed, the
+    queries scaled), values (``[b, N, Hv, dv]``), β and the cumulative log decay (``[b, N, Hv]``)
+    to the output's, ``[b, N, Hv, dv]``, before its norm. With ``q̃ = dq + dgc·q``,
+    ``k̂ = dk + dgc·k`` and ``k̃ = dk − dgc·k`` (the decay's move),
+
+        dW U = lin(q̃, K, U) + lin(Q, k̃, U),   dC U = lin⁻(k̂, K, U) + lin⁻(K, k̃, U),
+        do = dW U + W L⁻¹ r,   r = dβ (V − C U) + β (dv − dC U),
+
+    for ``lin(X, Y, Z)_t = Σ_{s≤t} Γ_ts (x_t·y_s) z_s`` (``lin⁻``: ``s < t``). One pass forward
+    over the chunks: ``L⁻¹ r`` by forward substitution, through one state that also carries
+    ``k̃``'s writes. ``neuron_lens.kernels.delta_jvp`` runs the same pass on CUDA."""
+    b, N, hv, dvd = dv.shape
+    _, tp, dkd = m.q.shape
+    n, S = tp // CHUNK, m.s0
+    chunks = lambda x: F.pad(x.repeat_interleave(hv // x.shape[2], 2).transpose(1, 2),
+                             (0, 0, S, tp - S - N)).unflatten(2, (n, CHUNK))  # [b, Hv, n, C, ·]
+    dq, dk, dv, db, dg = chunks(dq), chunks(dk), chunks(dv), chunks(db[..., None]), chunks(dg[..., None])
+    q, k, u, vmc = (x.unflatten(1, (n, CHUNK)) for x in (m.q, m.k, m.u, m.vmc))
+    beta = m.beta.view(hv, n, CHUNK, 1)
+    dec, qd, kd, cd = _decays(m.gc)
+    qt, kh, kt = dq + dg * q, dk + dg * k, dk - dg * k
+    H = dv.new_zeros(b, hv, dkd, dvd)  # Σ_{earlier chunks} Γ (k̃_s u_sᵀ + k_s x_sᵀ), x = L⁻¹ r
+    out = []
+    for c in range(n):
+        qc, kc, uc, d, qdc, kdc = q[:, c], k[:, c], u[:, c], dec[:, c], qd[:, c, :, None], kd[:, c, :, None]
+        a0 = (torch.einsum("bhcd,hed->bhce", qt[:, :, c], kc) + torch.einsum("hcd,bhed->bhce", qc, kt[:, :, c])) * d
+        a1 = (torch.einsum("bhcd,hed->bhce", kh[:, :, c], kc) + torch.einsum("hcd,bhed->bhce", kc, kt[:, :, c])) * d.tril(-1)
+        dcu = (torch.einsum("bhce,hef->bhcf", a1, uc) + torch.einsum("bhcd,hdf->bhcf", kh[:, :, c] * qdc, m.hku[:, c])
+               + torch.einsum("hcd,bhdf->bhcf", kc * qdc, H))  # dC U, and C's part of the substitution
+        x = torch.einsum("hce,bhef->bhcf", m.tinv[:, c], db[:, :, c] * vmc[:, c] + beta[:, c] * (dv[:, :, c] - dcu))
+        out.append(torch.einsum("bhce,hef->bhcf", a0, uc) + torch.einsum("bhcd,hdf->bhcf", qt[:, :, c] * qdc, m.hku[:, c])
+                   + torch.einsum("hcd,bhdf->bhcf", qc * qdc, H)
+                   + torch.einsum("hce,bhef->bhcf", torch.einsum("hcd,hed->hce", qc, kc) * d, x))
+        H = cd[:, c, None, None] * H + torch.einsum("bhcd,hcf->bhdf", kt[:, :, c] * kdc, uc) \
+            + torch.einsum("hcd,bhcf->bhdf", kc * kdc, x)
+    return torch.stack(out, 2).flatten(2, 3)[:, :, S:S + N].transpose(1, 2)
+
+
+def _delta_core_vjp(m: DeltaNet, go: torch.Tensor, hk: int):
+    """``_delta_core_jvp``'s transpose: the output's cotangents ``[b, N, Hv, dv]`` to the
+    queries' and keys' (``[b, N, Hk, dk]``), values', β's and the cumulative decay's. With
+    ``gr = L⁻ᵀ Wᵀ go`` and ``gbl = −β gr`` (dC U's cotangent), one pass back over the chunks
+    through ``A = Σ_{later} Γ (q_t go_tᵀ + k_t gbl_tᵀ)``: ``gr`` reads it through the keys, ``k̃``'s
+    cotangent through the pseudo-values. ``neuron_lens.kernels.delta_vjp`` on CUDA."""
+    b, N, hv, dvd = go.shape
+    _, tp, dkd = m.q.shape
+    n, S = tp // CHUNK, m.s0
+    go = F.pad(go.transpose(1, 2), (0, 0, S, tp - S - N)).unflatten(2, (n, CHUNK))  # [b, Hv, n, C, dv]
+    valid = torch.zeros(tp, 1, device=go.device)
+    valid[S:S + N] = 1
+    valid = valid.view(n, CHUNK, 1)
+    q, k, u, vmc = (x.unflatten(1, (n, CHUNK)) for x in (m.q, m.k, m.u, m.vmc))
+    beta = m.beta.view(hv, n, CHUNK, 1)
+    dec, qd, kd, cd = _decays(m.gc)
+    A = go.new_zeros(b, hv, dkd, dvd)
+    grads = [None] * n
+    for c in reversed(range(n)):
+        qc, kc, uc, d, qdc, kdc, goc = q[:, c], k[:, c], u[:, c], dec[:, c], qd[:, c, :, None], kd[:, c, :, None], go[:, :, c]
+        rhs = torch.einsum("hts,bhtf->bhsf", torch.einsum("hcd,hed->hce", qc, kc) * d, goc) \
+            + torch.einsum("hsd,bhdf->bhsf", kc * kdc, A)
+        gr = torch.einsum("hts,bhtf->bhsf", m.tinv[:, c], rhs) * valid[c]  # Tᵀ rhs
+        gbl = -beta[:, c] * gr
+        p, pb = torch.einsum("bhtf,hsf->bhts", goc, uc) * d, torch.einsum("bhtf,hsf->bhts", gbl, uc) * d.tril(-1)
+        gq = torch.einsum("bhts,hsd->bhtd", p, kc) + torch.einsum("bhtf,hdf->bhtd", goc * qdc, m.hku[:, c])
+        gkh = torch.einsum("bhts,hsd->bhtd", pb, kc) + torch.einsum("bhtf,hdf->bhtd", gbl * qdc, m.hku[:, c])
+        gkt = torch.einsum("bhts,htd->bhsd", p, qc) + torch.einsum("bhts,htd->bhsd", pb, kc) \
+            + torch.einsum("hsf,bhdf->bhsd", uc * kdc, A)
+        grads[c] = (gq, gkh + gkt, (gq * qc).sum(-1) + ((gkh - gkt) * kc).sum(-1), beta[:, c] * gr,
+                    (gr * vmc[:, c]).sum(-1))
+        A = cd[:, c, None, None] * A + torch.einsum("htd,bhtf->bhdf", qc * qdc, goc) \
+            + torch.einsum("htd,bhtf->bhdf", kc * qdc, gbl)
+    rows = lambda i: torch.stack([g[i] for g in grads], 2).flatten(2, 3)[:, :, S:S + N].transpose(1, 2)
+    unheads = lambda x: x.unflatten(2, (hk, hv // hk)).sum(3)  # value heads → their key head
+    return unheads(rows(0)), unheads(rows(1)), rows(3), rows(4), rows(2)
 
 
 def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
     """Tangents at the mixer's (normed) input to tangents at its output, ``[b, N, d]`` fp32."""
     dt = m.w_qkv.dtype
     b, N, _ = xn.shape
-    hv, tp, dk = m.q.shape
-    hk, dv = m.q0.shape[1], m.v1.shape[-1]
-    rep, S, T = hv // hk, m.s0, m.gc.shape[-1]
+    hv, dv = m.u.shape[0], m.u.shape[-1]
+    hk, dk = m.q0.shape[1:]
     dc = _conv(F.linear(xn, m.w_qkv).float(), m.wc) * m.sc  # [b, N, C] (identity rule)
     dq0, dk0, dvv = dc.split([hk * dk, hk * dk, hv * dv], -1)
-    dvh = dvv.view(b, N, hv, dv).transpose(1, 2)  # [b, Hv, N, dv]
-    beta1 = m.beta1[..., None]
-    W11, C11 = _delta_mats(m)
-    heads = lambda x: x.repeat_interleave(rep, 2).transpose(1, 2)  # [b, N, Hk, dk] → [b, Hv, N, dk]
-    dq = heads(_l2_jvp(dq0.view(b, N, hk, dk), m.q0, m.rq0) * dk ** -0.5)
-    dkk = heads(_l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0))
-    dbeta = (m.db.mT * F.linear(xn, m.w_b).float()).transpose(1, 2)  # [b, Hv, N]
-    dgc = (m.dga.mT * F.linear(xn, m.w_a).float()).transpose(1, 2).cumsum(-1)
-    u1, k1 = m.u[:, S:T], m.k[:, S:T]
-    pad = lambda x: F.pad(x, (0, 0, S, tp - T))  # valid rows → all positions, padded
-    # (X Yᵀ) ⊙ Γ U: queries' and keys' moves through W (index 0) and C (index 1, strictly lower:
-    # the diagonal, alike in both, comes off once each)
-    by_q = _lin(m, torch.stack((pad(dq), pad(dkk))), m.k, m.u, m.hku)[..., S:T, :]
-    by_k = _lin(m, torch.stack((m.q, m.k))[:, None], pad(dkk), m.u)[..., S:T, :]
-    diag = (dkk * k1).sum(-1, keepdim=True) * u1
-    # dW U, with the decay's move
-    dWu = by_q[0] + by_k[0] + dgc[..., None] * m.o1 - _heads(W11, dgc[..., None] * u1)
-    # dL U, which the pseudo-values must absorb
-    dLu = dbeta[..., None] * m.cu1 + beta1 * (
-        by_q[1] + by_k[1] - 2 * diag + dgc[..., None] * m.cu1 - _heads(C11, dgc[..., None] * u1))
-    r = dbeta[..., None] * m.v1 + beta1 * dvh - dLu
-    do = dWu + _heads(m.wl.float(), r)
-    dn = do.transpose(1, 2) * m.ao * m.wn  # [b, N, Hv, dv]: the output norm, LN rule
+    dq = _l2_jvp(dq0.view(b, N, hk, dk), m.q0, m.rq0) * dk ** -0.5
+    dkk = _l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0)
+    db = m.db * F.linear(xn, m.w_b).float()  # [b, N, Hv]
+    dg = (m.dga * F.linear(xn, m.w_a).float()).cumsum(1)
+    core = _delta_core_jvp if kernels is None or not xn.is_cuda else kernels.delta_jvp
+    do = core(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg)
+    dn = do * m.ao * m.wn  # the output norm, LN rule
     dz = F.linear(xn, m.w_z).float().view(b, N, hv, dv)
     dy = HALF_RULE_BETA * (dn * m.z + m.on * m.sz * dz)
     return F.linear(dy.reshape(b, N, -1).to(dt), m.w_out).float()
@@ -730,38 +770,18 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     """Cotangents at the mixer's output to cotangents at its (normed) input."""
     dt = m.w_qkv.dtype
     b, N, _ = G.shape
-    hv, tp, dk = m.q.shape
-    hk, dv = m.q0.shape[1], m.v1.shape[-1]
-    rep, S, T = hv // hk, m.s0, m.gc.shape[-1]
+    hv, dv = m.u.shape[0], m.u.shape[-1]
+    hk, dk = m.q0.shape[1:]
     gy = (G.to(dt) @ m.w_out).float().view(b, N, hv, dv)
     gdn, gz = HALF_RULE_BETA * gy * m.z, HALF_RULE_BETA * gy * m.on * m.sz
     gx = (gz.reshape(b, N, -1).to(dt) @ m.w_z).float()
-    go = (gdn * m.ao * m.wn).transpose(1, 2)  # [b, Hv, N, dv]
-    beta1 = m.beta1[..., None]
-    gr = _heads(m.wl.float().mT, go)
-    gdv = beta1 * gr
-    W11, C11 = _delta_mats(m)
-    u1, k1 = m.u[:, S:T], m.k[:, S:T]
-    gL = -gr
-    gbeta = (gr * m.v1).sum(-1) + (gL * m.cu1).sum(-1)  # [b, Hv, N]
-    gbl = beta1 * gL
-    pad = lambda x: F.pad(x, (0, 0, S, tp - T))
-    # _delta_jvp's chunked products, transposed: to the queries' side through W (index 0) and C
-    # (index 1), and back in time to the keys' side
-    to_q = _lin(m, torch.stack((pad(go), pad(gbl))), m.u, m.k, m.hku.mT)[..., S:T, :]
-    to_k = _lin(m, m.u, torch.stack((pad(go), pad(gbl))), torch.stack((m.q, m.k))[:, None], rev=True)[..., S:T, :]
-    gdq = to_q[0]
-    gdk = to_q[1] + to_k[0] + to_k[1] - 2 * (gbl * u1).sum(-1, keepdim=True) * k1
-    gdgc = (gbl * m.cu1).sum(-1) - (_heads(C11.mT, gbl) * u1).sum(-1) \
-        + (go * m.o1).sum(-1) - (_heads(W11.mT, go) * u1).sum(-1)
-    gdg = gdgc.flip(-1).cumsum(-1).flip(-1)
-    unheads = lambda x: x.transpose(1, 2).reshape(b, N, hk, rep, dk).sum(3)  # [b, Hv, N, dk] → [b, N, Hk, dk]
-    gq0 = _l2_jvp(unheads(gdq) * dk ** -0.5, m.q0, m.rq0).reshape(b, N, -1)
-    gk0 = _l2_jvp(unheads(gdk), m.k0, m.rk0).reshape(b, N, -1)
-    gb = (gbeta * m.db).transpose(1, 2)  # [b, N, Hv]
-    ga = (gdg * m.dga).transpose(1, 2)
-    gx = gx + (gb.to(dt) @ m.w_b + ga.to(dt) @ m.w_a).float()
-    gc = torch.cat((gq0, gk0, gdv.transpose(1, 2).reshape(b, N, -1)), -1) * m.sc
+    core = _delta_core_vjp if kernels is None or not G.is_cuda else kernels.delta_vjp
+    gdq, gdk, gdv, gbeta, gdgc = core(m, gdn * m.ao * m.wn, hk)
+    gdg = gdgc.flip(1).cumsum(1).flip(1)
+    gq0 = _l2_jvp(gdq * dk ** -0.5, m.q0, m.rq0).reshape(b, N, -1)
+    gk0 = _l2_jvp(gdk, m.k0, m.rk0).reshape(b, N, -1)
+    gx = gx + ((gbeta * m.db).to(dt) @ m.w_b + (gdg * m.dga).to(dt) @ m.w_a).float()
+    gc = torch.cat((gq0, gk0, gdv.reshape(b, N, -1)), -1) * m.sc
     return gx + (_conv_t(gc, m.wc).to(dt) @ m.w_qkv).float()
 
 
