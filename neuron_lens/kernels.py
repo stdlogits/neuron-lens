@@ -10,6 +10,9 @@ import torch
 import triton
 import triton.language as tl
 
+# launch configurations (num_warps, num_stages) per kernel, tuned on an H100
+CONFIG = {"jvp": (4, 1), "vjp_r": (4, 1), "vjp_k": (4, 1)}
+
 
 @triton.jit
 def _jvp(q, k, u, vmc, beta, gc, hku, tinv, dq, dk, dv, db, dg, out,
@@ -237,7 +240,8 @@ def delta_jvp(m, dq, dk, dv, db, dg):
     _jvp[(DV // BV, b * hv)](
         m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, dq, dk, dv, db, dg, out,
         *dq.stride()[:3], *dk.stride()[:3], *dv.stride()[:3], *db.stride()[:2], *dg.stride()[:2], *out.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV)
+        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV,
+        num_warps=CONFIG["jvp"][0], num_stages=CONFIG["jvp"][1])
     return out
 
 
@@ -252,11 +256,13 @@ def delta_vjp(m, go, hk: int):
     _vjp_r[(DV // BV, b * hv)](
         m.q, m.k, m.vmc, m.beta, m.gc, m.tinv, go, gdv, gbp,
         *go.stride()[:3], *gdv.stride()[:3], *gbp.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV,
+        num_warps=CONFIG["vjp_r"][0], num_stages=CONFIG["vjp_r"][1])
     gq, gk, gcp = torch.empty(b, N, hv, DK, **f32), torch.empty(b, N, hv, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
     _vjp_k[(DK // BK, b * hv)](
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV,
+        num_warps=CONFIG["vjp_k"][0], num_stages=CONFIG["vjp_k"][1])
     unheads = lambda x: x.view(b, N, hk, hv // hk, DK).sum(3)
     return unheads(gq), unheads(gk), gdv, gbp.sum(0), gcp.sum(0)
