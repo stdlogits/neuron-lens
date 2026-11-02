@@ -23,8 +23,8 @@ MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
 # per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100; a
 # register cap, maxnreg, only slowed them)
 CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
-# the convolution kernels: rows per program, num_warps
-CONV = {"in": (32, 4), "out": (32, 4)}
+# the convolution kernels: rows per program, num_warps, tangent copies per program
+CONV = {"in": (32, 4, 8), "out": (32, 4, 8)}
 
 
 @triton.jit
@@ -352,75 +352,77 @@ def _l2(g, x0, r):
 
 @triton.jit
 def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, SCALE: tl.constexpr, CH: tl.constexpr, HK: tl.constexpr,
-             HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
+             HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr, B, CB: tl.constexpr):
     """DeltaNet's convolution of the projected tangents ``x`` (``[b, N, CH]``), times σ (identity
     rule), on one head's channels for ``BT`` rows; the queries' and keys' heads then through their
     L2 norm's derivative (the queries scaled)."""
-    i_t, i_c, i_b = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    i_t, i_c, i_bb = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     t = i_t * BT + tl.arange(0, BT)
     okr = (t < N)[:, None]
-    if i_c < 2 * HK:
-        h = i_c % HK
-        od = tl.arange(0, DK)
-        g = _conv_rows(x, wc, sc, i_b, t, i_c * DK + od, N, CH, K)
-        rows = (t[:, None] * HK + h) * DK + od[None, :]
-        out = ((i_b * N + t[:, None]) * HK + h) * DK + od[None, :]
-        if i_c < HK:
-            y = _l2(g, tl.load(q0 + rows, mask=okr, other=0.), tl.load(rq0 + t * HK + h, mask=t < N, other=0.)[:, None])
-            tl.store(oq + out, y * SCALE, mask=okr)
-        else:
-            y = _l2(g, tl.load(k0 + rows, mask=okr, other=0.), tl.load(rk0 + t * HK + h, mask=t < N, other=0.)[:, None])
-            tl.store(okk + out, y, mask=okr)
-    else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
-        hv_ = i_c - 2 * HK
-        odv = tl.arange(0, DV)
-        gv_ = _conv_rows(x, wc, sc, i_b, t, 2 * HK * DK + hv_ * DV + odv, N, CH, K)
-        tl.store(ov + ((i_b * N + t[:, None]) * HV + hv_) * DV + odv[None, :], gv_, mask=okr)
+    for i_b in range(i_bb * CB, tl.minimum(i_bb * CB + CB, B)):  # CB copies: the factors stay in L1
+        if i_c < 2 * HK:
+            h = i_c % HK
+            od = tl.arange(0, DK)
+            g = _conv_rows(x, wc, sc, i_b, t, i_c * DK + od, N, CH, K)
+            rows = (t[:, None] * HK + h) * DK + od[None, :]
+            out = ((i_b * N + t[:, None]) * HK + h) * DK + od[None, :]
+            if i_c < HK:
+                y = _l2(g, tl.load(q0 + rows, mask=okr, other=0.), tl.load(rq0 + t * HK + h, mask=t < N, other=0.)[:, None])
+                tl.store(oq + out, y * SCALE, mask=okr)
+            else:
+                y = _l2(g, tl.load(k0 + rows, mask=okr, other=0.), tl.load(rk0 + t * HK + h, mask=t < N, other=0.)[:, None])
+                tl.store(okk + out, y, mask=okr)
+        else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
+            hv_ = i_c - 2 * HK
+            odv = tl.arange(0, DV)
+            gv_ = _conv_rows(x, wc, sc, i_b, t, 2 * HK * DK + hv_ * DV + odv, N, CH, K)
+            tl.store(ov + ((i_b * N + t[:, None]) * HV + hv_) * DV + odv[None, :], gv_, mask=okr)
 
 
 @triton.jit
 def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, SCALE: tl.constexpr, CH: tl.constexpr, HK: tl.constexpr,
-              HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
+              HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr, B, CB: tl.constexpr):
     """``_conv_in``'s transpose, from the queries', keys' (per value head, summed into their key
     head here) and values' cotangents to the projection's, in ``out``'s dtype."""
-    i_t, i_c, i_b = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    i_t, i_c, i_bb = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     REP: tl.constexpr = HV // HK
     t = i_t * BT + tl.arange(0, BT)
-    if i_c < 2 * HK:
-        h = i_c % HK
-        od = tl.arange(0, DK)
-        ch = i_c * DK + od
-        acc = tl.zeros([BT, DK], dtype=tl.float32)
-        for j in tl.static_range(K):
-            src = t + (K - 1) - j
-            oks = (src < N)[:, None]
-            g = tl.zeros([BT, DK], dtype=tl.float32)
-            for rr in tl.static_range(REP):
-                vrows = ((i_b * N + src[:, None]) * HV + h * REP + rr) * DK + od[None, :]
+    for i_b in range(i_bb * CB, tl.minimum(i_bb * CB + CB, B)):  # CB copies: the factors stay in L1
+        if i_c < 2 * HK:
+            h = i_c % HK
+            od = tl.arange(0, DK)
+            ch = i_c * DK + od
+            acc = tl.zeros([BT, DK], dtype=tl.float32)
+            for j in tl.static_range(K):
+                src = t + (K - 1) - j
+                oks = (src < N)[:, None]
+                g = tl.zeros([BT, DK], dtype=tl.float32)
+                for rr in tl.static_range(REP):
+                    vrows = ((i_b * N + src[:, None]) * HV + h * REP + rr) * DK + od[None, :]
+                    if i_c < HK:
+                        g += tl.load(gq + vrows, mask=oks, other=0.)
+                    else:
+                        g += tl.load(gk + vrows, mask=oks, other=0.)
+                rows = (src[:, None] * HK + h) * DK + od[None, :]
                 if i_c < HK:
-                    g += tl.load(gq + vrows, mask=oks, other=0.)
+                    g = _l2(g, tl.load(q0 + rows, mask=oks, other=0.), tl.load(rq0 + src * HK + h, mask=src < N, other=0.)[:, None]) * SCALE
                 else:
-                    g += tl.load(gk + vrows, mask=oks, other=0.)
-            rows = (src[:, None] * HK + h) * DK + od[None, :]
-            if i_c < HK:
-                g = _l2(g, tl.load(q0 + rows, mask=oks, other=0.), tl.load(rq0 + src * HK + h, mask=src < N, other=0.)[:, None]) * SCALE
-            else:
-                g = _l2(g, tl.load(k0 + rows, mask=oks, other=0.), tl.load(rk0 + src * HK + h, mask=src < N, other=0.)[:, None])
-            g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
-            acc += g * tl.load(wc + ch * K + j)[None, :]
-        tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
-    else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
-        hv_ = i_c - 2 * HK
-        odv = tl.arange(0, DV)
-        chv = 2 * HK * DK + hv_ * DV + odv
-        accv = tl.zeros([BT, DV], dtype=tl.float32)
-        for j in tl.static_range(K):
-            src = t + (K - 1) - j
-            oks = (src < N)[:, None]
-            gv_ = tl.load(gv + ((i_b * N + src[:, None]) * HV + hv_) * DV + odv[None, :], mask=oks, other=0.)
-            gv_ *= tl.load(sc + src[:, None] * CH + chv[None, :], mask=oks, other=0.)
-            accv += gv_ * tl.load(wc + chv * K + j)[None, :]
-        tl.store(out + (i_b * N + t[:, None]) * CH + chv[None, :], accv.to(out.dtype.element_ty), mask=(t < N)[:, None])
+                    g = _l2(g, tl.load(k0 + rows, mask=oks, other=0.), tl.load(rk0 + src * HK + h, mask=src < N, other=0.)[:, None])
+                g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
+                acc += g * tl.load(wc + ch * K + j)[None, :]
+            tl.store(out + (i_b * N + t[:, None]) * CH + ch[None, :], acc.to(out.dtype.element_ty), mask=(t < N)[:, None])
+        else:  # (names apart from the branch above: dk and dv tiles may differ in shape)
+            hv_ = i_c - 2 * HK
+            odv = tl.arange(0, DV)
+            chv = 2 * HK * DK + hv_ * DV + odv
+            accv = tl.zeros([BT, DV], dtype=tl.float32)
+            for j in tl.static_range(K):
+                src = t + (K - 1) - j
+                oks = (src < N)[:, None]
+                gv_ = tl.load(gv + ((i_b * N + src[:, None]) * HV + hv_) * DV + odv[None, :], mask=oks, other=0.)
+                gv_ *= tl.load(sc + src[:, None] * CH + chv[None, :], mask=oks, other=0.)
+                accv += gv_ * tl.load(wc + chv * K + j)[None, :]
+            tl.store(out + (i_b * N + t[:, None]) * CH + chv[None, :], accv.to(out.dtype.element_ty), mask=(t < N)[:, None])
 
 
 def delta_conv_in(m, x):
@@ -433,9 +435,9 @@ def delta_conv_in(m, x):
     assert CH == 2 * hk * DK + hv * DV and all(t.is_contiguous() for t in (x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     f32 = dict(device=x.device, dtype=torch.float32)
     oq, ok_, ov = torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hv, DV, **f32)
-    BT, nw = CONV["in"]
-    _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, b)](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, SCALE=DK ** -0.5,
-                                                   CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=nw)
+    BT, nw, CB = CONV["in"]
+    _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, triton.cdiv(b, CB))](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, SCALE=DK ** -0.5,
+                                                   CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, B=b, CB=CB, num_warps=nw)
     return oq, ok_, ov
 
 
@@ -447,9 +449,9 @@ def delta_conv_out(m, gq, gk, gv, dtype):
     CH = 2 * hk * DK + hv * DV
     assert all(t.is_contiguous() for t in (gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     out = torch.empty(b, N, CH, device=gv.device, dtype=dtype)
-    BT, nw = CONV["out"]
-    _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, SCALE=DK ** -0.5,
-                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=nw)
+    BT, nw, CB = CONV["out"]
+    _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, triton.cdiv(b, CB))](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, SCALE=DK ** -0.5,
+                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, B=b, CB=CB, num_warps=nw)
     return out
 
 
