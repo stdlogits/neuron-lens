@@ -323,7 +323,7 @@ def _delta_primal(la, x, S):
     m = DeltaNet(w_qkv=la.in_proj_qkv.weight, w_z=la.in_proj_z.weight, w_b=la.in_proj_b.weight,
               w_a=la.in_proj_a.weight, w_out=la.out_proj.weight, wc=wc.float(),
               sc=torch.sigmoid(c[S:]),
-              q0=q0[S:], rq0=rq0[S:], k0=k0[S:], rk0=rk0[S:],
+              q0=q0[S:].contiguous(), rq0=rq0[S:], k0=k0[S:].contiguous(), rk0=rk0[S:],
               q=pad(qh), k=pad(kh), u=pad(u), vmc=pad(vh - Cm @ u), beta=bp, gc=gp,
               **_chunks(gp, pad(qh), pad(kh), pad(u), bp),
               db=(beta * (1 - beta))[:, S:].T, dga=-la.A_log.float().exp() * torch.sigmoid(a + la.dt_bias.float())[S:],

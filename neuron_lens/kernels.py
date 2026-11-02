@@ -427,7 +427,7 @@ def delta_conv_in(m, x):
     b, N, CH = x.shape
     _, hk, DK = m.q0.shape
     hv, DV = m.u.shape[0], m.u.shape[-1]
-    assert CH == 2 * hk * DK + hv * DV and x.is_contiguous()
+    assert CH == 2 * hk * DK + hv * DV and all(t.is_contiguous() for t in (x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     f32 = dict(device=x.device, dtype=torch.float32)
     oq, ok_, ov = torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hv, DV, **f32)
     BT = 32
@@ -442,7 +442,7 @@ def delta_conv_out(m, gq, gk, gv, dtype):
     b, N, hv, DV = gv.shape
     _, hk, DK = m.q0.shape
     CH = 2 * hk * DK + hv * DV
-    assert gq.is_contiguous() and gk.is_contiguous() and gv.is_contiguous()
+    assert all(t.is_contiguous() for t in (gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     out = torch.empty(b, N, CH, device=gv.device, dtype=dtype)
     BT = 32
     _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, DK ** -0.5,
