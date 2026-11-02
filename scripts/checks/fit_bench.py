@@ -46,7 +46,7 @@ def active(layer, T: int) -> int:
     """Per tangent and position, a layer's matrix-product multiply-adds: its projections (a
     sparse MLP's chosen experts, shared expert and router), plus attention over the ``T − 1``
     keys kept (softmax: scores and values, both terms; DeltaNet, per value head: its chunked
-    products, ``4·CHUNK·(d_k + d_v) + 5·d_k·d_v``, and three ``T × d_v`` ones)."""
+    products, ``4·CHUNK·(d_k + d_v) + 6·d_k·d_v``)."""
     mlp = layer.mlp
     if hasattr(mlp, "experts"):
         ex = mlp.experts
@@ -60,7 +60,7 @@ def active(layer, T: int) -> int:
         la = layer.linear_attn
         mix = sum(m.weight.numel() for m in (la.in_proj_qkv, la.in_proj_z, la.in_proj_b, la.in_proj_a, la.out_proj))
         dk, dv = la.head_k_dim, la.head_v_dim
-        return mlp_n + mix + la.num_v_heads * (4 * CHUNK * (dk + dv) + 5 * dk * dv + 3 * (T - 1) * dv)
+        return mlp_n + mix + la.num_v_heads * (4 * CHUNK * (dk + dv) + 6 * dk * dv)
     at = layer.self_attn
     proj = sum(m.weight.numel() for m in (at.q_proj, at.k_proj, at.v_proj, at.o_proj) if m is not None)
     return mlp_n + proj + 4 * at.config.num_attention_heads * at.head_dim * (T - 1)
