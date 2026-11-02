@@ -20,9 +20,11 @@ import triton.language as tl
 
 # the experts' first product: rows, columns and inner block, num_warps, num_stages (jvp, vjp)
 MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
-# per DeltaNet kernel: key and value feature blocks, num_warps, num_stages, a register cap or None
-# (tuned on an H100)
-CONFIG = {"jvp": (64, 64, 4, 1, None), "vjp_r": (128, 128, 8, 2, None), "vjp_k": (64, 32, 2, 1, None)}
+# per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100; a
+# register cap, maxnreg, only slowed them)
+CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
+# the convolution kernels: rows per program, num_warps
+CONV = {"in": (32, 4), "out": (32, 4)}
 
 
 @triton.jit
@@ -431,9 +433,9 @@ def delta_conv_in(m, x):
     assert CH == 2 * hk * DK + hv * DV and all(t.is_contiguous() for t in (x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     f32 = dict(device=x.device, dtype=torch.float32)
     oq, ok_, ov = torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hv, DV, **f32)
-    BT = 32
+    BT, nw = CONV["in"]
     _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, b)](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, SCALE=DK ** -0.5,
-                                                   CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
+                                                   CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=nw)
     return oq, ok_, ov
 
 
@@ -445,9 +447,9 @@ def delta_conv_out(m, gq, gk, gv, dtype):
     CH = 2 * hk * DK + hv * DV
     assert all(t.is_contiguous() for t in (gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     out = torch.empty(b, N, CH, device=gv.device, dtype=dtype)
-    BT = 32
+    BT, nw = CONV["out"]
     _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, SCALE=DK ** -0.5,
-                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
+                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=nw)
     return out
 
 
@@ -464,10 +466,10 @@ def _shapes(m):
 
 
 def _config(name, DK, DV):
-    BK, BV, nw, ns, nreg = CONFIG[name]
+    BK, BV, nw, ns = CONFIG[name]
     BK, BV = min(BK, DK), min(BV, DV)
     assert DK % BK == 0 and DV % BV == 0 and DK // BK <= 4, (DK, DV, BK, BV)  # states in at most 4 key blocks
-    return BK, BV, dict(num_warps=nw, num_stages=ns, **({} if nreg is None else {"maxnreg": nreg}))
+    return BK, BV, dict(num_warps=nw, num_stages=ns)
 
 
 def delta_jvp(m, dq, dk, dv, db, dg):
