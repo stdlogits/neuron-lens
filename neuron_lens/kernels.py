@@ -24,7 +24,7 @@ MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
 # register cap, maxnreg, only slowed them)
 CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
 # the convolution kernels: rows per program, num_warps, tangent copies per program
-CONV = {"in": (32, 4, 8), "out": (32, 4, 8)}
+CONV = {"in": (16, 4, 8), "out": (16, 4, 16)}
 
 
 @triton.jit
