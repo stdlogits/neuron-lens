@@ -348,7 +348,7 @@ def _l2(g, x0, r):
 
 
 @triton.jit
-def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, scale, CH: tl.constexpr, HK: tl.constexpr,
+def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, SCALE: tl.constexpr, CH: tl.constexpr, HK: tl.constexpr,
              HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
     """DeltaNet's convolution of the projected tangents ``x`` (``[b, N, CH]``), times σ (identity
     rule), on one head's channels for ``BT`` rows; the queries' and keys' heads then through their
@@ -364,7 +364,7 @@ def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, scale, CH: tl.constexp
         out = ((i_b * N + t[:, None]) * HK + h) * DK + od[None, :]
         if i_c < HK:
             y = _l2(g, tl.load(q0 + rows, mask=okr, other=0.), tl.load(rq0 + t * HK + h, mask=t < N, other=0.)[:, None])
-            tl.store(oq + out, y * scale, mask=okr)
+            tl.store(oq + out, y * SCALE, mask=okr)
         else:
             y = _l2(g, tl.load(k0 + rows, mask=okr, other=0.), tl.load(rk0 + t * HK + h, mask=t < N, other=0.)[:, None])
             tl.store(okk + out, y, mask=okr)
@@ -376,7 +376,7 @@ def _conv_in(x, wc, sc, q0, rq0, k0, rk0, oq, okk, ov, N, scale, CH: tl.constexp
 
 
 @triton.jit
-def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, scale, CH: tl.constexpr, HK: tl.constexpr,
+def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, SCALE: tl.constexpr, CH: tl.constexpr, HK: tl.constexpr,
               HV: tl.constexpr, DK: tl.constexpr, DV: tl.constexpr, K: tl.constexpr, BT: tl.constexpr):
     """``_conv_in``'s transpose, from the queries', keys' (per value head, summed into their key
     head here) and values' cotangents to the projection's, in ``out``'s dtype."""
@@ -400,7 +400,7 @@ def _conv_out(gq, gk, gv, wc, sc, q0, rq0, k0, rk0, out, N, scale, CH: tl.conste
                     g += tl.load(gk + vrows, mask=oks, other=0.)
             rows = (src[:, None] * HK + h) * DK + od[None, :]
             if i_c < HK:
-                g = _l2(g, tl.load(q0 + rows, mask=oks, other=0.), tl.load(rq0 + src * HK + h, mask=src < N, other=0.)[:, None]) * scale
+                g = _l2(g, tl.load(q0 + rows, mask=oks, other=0.), tl.load(rq0 + src * HK + h, mask=src < N, other=0.)[:, None]) * SCALE
             else:
                 g = _l2(g, tl.load(k0 + rows, mask=oks, other=0.), tl.load(rk0 + src * HK + h, mask=src < N, other=0.)[:, None])
             g *= tl.load(sc + src[:, None] * CH + ch[None, :], mask=oks, other=0.)
@@ -431,7 +431,7 @@ def delta_conv_in(m, x):
     f32 = dict(device=x.device, dtype=torch.float32)
     oq, ok_, ov = torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hk, DK, **f32), torch.empty(b, N, hv, DV, **f32)
     BT = 32
-    _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, b)](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, DK ** -0.5,
+    _conv_in[(triton.cdiv(N, BT), 2 * hk + hv, b)](x, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, oq, ok_, ov, N, SCALE=DK ** -0.5,
                                                    CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
     return oq, ok_, ov
 
@@ -445,7 +445,7 @@ def delta_conv_out(m, gq, gk, gv, dtype):
     assert all(t.is_contiguous() for t in (gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0))
     out = torch.empty(b, N, CH, device=gv.device, dtype=dtype)
     BT = 32
-    _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, DK ** -0.5,
+    _conv_out[(triton.cdiv(N, BT), 2 * hk + hv, b)](gq, gk, gv, m.wc, m.sc, m.q0, m.rq0, m.k0, m.rk0, out, N, SCALE=DK ** -0.5,
                                                     CH=CH, HK=hk, HV=hv, DK=DK, DV=DV, K=m.wc.shape[-1], BT=BT, num_warps=4)
     return out
 
