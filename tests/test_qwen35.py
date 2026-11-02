@@ -125,7 +125,8 @@ def test_primal_matches_the_model():
     assert len(maps) == N_LAYERS
     for m in maps:
         assert torch.allclose(m.mlp.slot_w.sum(-1), torch.ones(()), atol=1e-5)
-    assert torch.allclose(h, outs[0][0], atol=1e-5)
+    # 1e-5 holds on Apple silicon; x86 BLAS reorders fp32 sums enough to differ by ~2e-5
+    assert torch.allclose(h, outs[0][0], atol=1e-4)
 
 
 def test_input_reads_match_the_s_lens():
