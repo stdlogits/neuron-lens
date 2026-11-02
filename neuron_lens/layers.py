@@ -604,10 +604,11 @@ def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
     dk, dv = dk.to(dt).transpose(1, 2), dv.to(dt).transpose(1, 2)  # [b, Hk, N, hd]
     keys = slice(m.s0, m.s0 + N)  # the valid positions, as keys
     # (einsums, where a fixed operand meets the tangents: no copy of it per tangent)
-    ds = (dq @ m.kr.mT).float()  # [b, Hk, g·N, Tp]
-    ds[..., keys] += torch.einsum("hqd,bhkd->bhqk", m.qr, dk).float()  # keys at valid positions move too
-    ds *= m.scale
-    dp = (m.p * (ds - (m.p * ds).sum(-1, keepdim=True))).to(dt)
+    tp = m.kr.shape[1]
+    # [b, Hk, g·N, Tp]; keys at valid positions move too (padded, not added in place, so the sum
+    # fuses into the softmax's step)
+    ds = (dq @ m.kr.mT).float() + F.pad(torch.einsum("hqd,bhkd->bhqk", m.qr, dk).float(), (m.s0, tp - m.s0 - N))
+    dp = (m.p * m.scale * (ds - (m.p * ds).sum(-1, keepdim=True))).to(dt)
     do = (dp @ m.vn + torch.einsum("hqk,bhkd->bhqd", m.p[..., keys], dv))
     do = do.view(b, hk, g, N, hd).permute(0, 3, 1, 2, 4).reshape(b, N, -1)
     if m.sg is not None:  # the output gate, half rule
