@@ -23,6 +23,7 @@ MOE = {"jvp": (64, 256, 64, 8, 3), "vjp": (128, 256, 64, 8, 4)}
 # per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100; a
 # register cap, maxnreg, only slowed them)
 CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
+VJPK_COPIES = 4  # tangent copies per program in the chunk-parallel ``_vjp_k``
 # the convolution kernels: rows per program, num_warps, tangent copies per program
 CONV = {"in": (16, 4, 8), "out": (16, 4, 16)}
 
@@ -195,13 +196,14 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
 def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
            sgb, sgn, sgh, sdb, sdn, sdh, ssb, ssn, ssh, sqb, sqn, sqh, spk, spb, spn,
            S, N, HV: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
-           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
+           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr,
+           B, CB: tl.constexpr):
     """One chunk's cotangents of the queries (``gq``, through W) and keys (through C as readers,
     ``gkh``; as writers, ``gkt``, with ``_vjp_r``'s state term) on a block of key features, per
     value head (adding into key heads in the kernel, with atomics, was slower), and this block's
     part of the cumulative decay's."""
     i_k, c, i_bh = tl.program_id(0), tl.program_id(1), tl.program_id(2)
-    i_b, i_h = i_bh // HV, i_bh % HV
+    i_bb, i_h = i_bh // HV, i_bh % HV
     TP: tl.constexpr = NT * C
     oc = tl.arange(0, C)
     obv = tl.arange(0, BV)
@@ -213,32 +215,33 @@ def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
     g_prev = tl.load(gc + i_h * TP + c * C - 1, mask=c > 0, other=0.)
     qd = tl.exp(g - g_prev)
     dec = tl.exp(tl.where(oc[:, None] >= oc[None, :], g[:, None] - g[None, :], float("-inf")))
-    p = tl.zeros([C, C], dtype=tl.float32)
-    pb = tl.zeros([C, C], dtype=tl.float32)
-    gqc = tl.zeros([C, BK], dtype=tl.float32)
-    gkh = tl.zeros([C, BK], dtype=tl.float32)
-    for vb in tl.static_range(DV // BV):
-        cv = vb * BV + obv
-        goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + cv[None, :], mask=ok[:, None], other=0.)
-        gbl = -tl.load(gdv + i_b * sdb + r[:, None] * sdn + i_h * sdh + cv[None, :], mask=ok[:, None], other=0.)
-        uu = tl.load(u + (i_h * TP + t[:, None]) * DV + cv[None, :])
-        hs = tl.load(hku + ((i_h * NT + c) * DK + ck[None, :]) * DV + cv[:, None])  # [BV, BK]
-        p = tl.dot(goc, tl.trans(uu), p)
-        pb = tl.dot(gbl, tl.trans(uu), pb)
-        gqc = tl.dot(goc * qd[:, None], hs, gqc)
-        gkh = tl.dot(gbl * qd[:, None], hs, gkh)
-    p = p * dec
-    pb = tl.where(oc[:, None] > oc[None, :], pb * dec, 0.)
     qq = tl.load(q + (i_h * TP + t[:, None]) * DK + ck[None, :])
     kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :])
-    gqc = tl.dot(p, kk, gqc)
-    gkh = tl.dot(pb, kk, gkh)
-    gkt = tl.load(gks + i_b * ssb + r[:, None] * ssn + i_h * ssh + ck[None, :], mask=ok[:, None], other=0.)
-    gkt = tl.dot(tl.trans(pb), kk, tl.dot(tl.trans(p), qq, gkt))
-    rows = i_b * sqb + r[:, None] * sqn + i_h * sqh + ck[None, :]
-    tl.store(gq + rows, gqc, mask=ok[:, None])
-    tl.store(gk + rows, gkh + gkt, mask=ok[:, None])
-    tl.store(gcp + i_k * spk + i_b * spb + r * spn + i_h, tl.sum(gqc * qq + (gkh - gkt) * kk, 1), mask=ok)
+    for i_b in range(i_bb * CB, tl.minimum(i_bb * CB + CB, B)):  # CB copies: the chunk's constants stay in L1
+        p = tl.zeros([C, C], dtype=tl.float32)
+        pb = tl.zeros([C, C], dtype=tl.float32)
+        gqc = tl.zeros([C, BK], dtype=tl.float32)
+        gkh = tl.zeros([C, BK], dtype=tl.float32)
+        for vb in tl.static_range(DV // BV):
+            cv = vb * BV + obv
+            goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + cv[None, :], mask=ok[:, None], other=0.)
+            gbl = -tl.load(gdv + i_b * sdb + r[:, None] * sdn + i_h * sdh + cv[None, :], mask=ok[:, None], other=0.)
+            uu = tl.load(u + (i_h * TP + t[:, None]) * DV + cv[None, :])
+            hs = tl.load(hku + ((i_h * NT + c) * DK + ck[None, :]) * DV + cv[:, None])  # [BV, BK]
+            p = tl.dot(goc, tl.trans(uu), p)
+            pb = tl.dot(gbl, tl.trans(uu), pb)
+            gqc = tl.dot(goc * qd[:, None], hs, gqc)
+            gkh = tl.dot(gbl * qd[:, None], hs, gkh)
+        p = p * dec
+        pb = tl.where(oc[:, None] > oc[None, :], pb * dec, 0.)
+        gqc = tl.dot(p, kk, gqc)
+        gkh = tl.dot(pb, kk, gkh)
+        gkt = tl.load(gks + i_b * ssb + r[:, None] * ssn + i_h * ssh + ck[None, :], mask=ok[:, None], other=0.)
+        gkt = tl.dot(tl.trans(pb), kk, tl.dot(tl.trans(p), qq, gkt))
+        rows = i_b * sqb + r[:, None] * sqn + i_h * sqh + ck[None, :]
+        tl.store(gq + rows, gqc, mask=ok[:, None])
+        tl.store(gk + rows, gkh + gkt, mask=ok[:, None])
+        tl.store(gcp + i_k * spk + i_b * spb + r * spn + i_h, tl.sum(gqc * qq + (gkh - gkt) * kk, 1), mask=ok)
 
 
 @triton.jit
@@ -504,8 +507,9 @@ def delta_vjp(m, go):
         m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, **launch)
     BK, BV, launch = _config("vjp_k", DK, DV)
     gq, gk, gcp = torch.empty(b, N, hv, DK, **f32), torch.empty(b, N, hv, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
-    _vjp_k[(DK // BK, NT, b * hv)](
+    CB = VJPK_COPIES
+    _vjp_k[(DK // BK, NT, triton.cdiv(b, CB) * hv)](
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, **launch)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, B=b, CB=CB, **launch)
     return gq, gk, gdv, gbp.sum(0), gcp.sum(0)
