@@ -324,8 +324,8 @@ def _delta_primal(la, x, S):
               q=pad(qh), k=pad(kh), u=pad(u), vmc=pad(vh - Cm @ u), beta=bp, gc=gp,
               **_chunks(gp, pad(qh), pad(kh), pad(u), bp),
               db=(beta * (1 - beta))[:, S:].T, dga=-la.A_log.float().exp() * torch.sigmoid(a + la.dt_bias.float())[S:],
-              zo=HALF_RULE_BETA * ao[S:] * la.norm.weight.float() * F.silu(z[S:]),
-              zg=HALF_RULE_BETA * on[S:] * torch.sigmoid(z[S:]), s0=S)
+              zo=(HALF_RULE_BETA * ao[S:] * la.norm.weight.float() * F.silu(z[S:])).contiguous(),
+              zg=(HALF_RULE_BETA * on[S:] * torch.sigmoid(z[S:])).contiguous(), s0=S)
     return out, m
 
 
