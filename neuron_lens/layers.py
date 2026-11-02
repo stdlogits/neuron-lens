@@ -356,7 +356,7 @@ def _chunks(gc, k, u, beta) -> dict:
     eye = torch.eye(CHUNK, device=gc.device)
     Lc = eye + beta.view(hv, n, CHUNK, 1) * ((kc @ kc.mT) * dec).tril(-1)
     tinv = torch.linalg.solve_triangular(Lc, eye.expand_as(Lc), upper=False, unitriangular=True)
-    return dict(hku=torch.stack(hku, 1), tinv=tinv)
+    return dict(hku=torch.stack(hku, 1), tinv=tinv.contiguous())  # (the solve may return columns first)
 
 
 def _gated_norm(norm, o):

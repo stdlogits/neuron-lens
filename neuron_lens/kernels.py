@@ -225,6 +225,7 @@ def _rows(x):
 
 
 def _shapes(m):
+    assert all(x.is_contiguous() for x in (m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv))
     hv, tp, dk = m.q.shape
     C = m.tinv.shape[-1]
     return hv, tp // C, C, dk, m.u.shape[-1]
