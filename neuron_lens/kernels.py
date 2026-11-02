@@ -190,12 +190,12 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
 @triton.jit
 def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
            sgb, sgn, sgh, sdb, sdn, sdh, ssb, ssn, ssh, sqb, sqn, sqh, spk, spb, spn,
-           S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
+           S, N, HV: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
            DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
     """One chunk's cotangents of the queries (``gq``, through W) and keys (through C as readers,
-    ``gkh``; as writers, ``gkt``, with ``_vjp_r``'s state term) on a block of key features, added
-    into the key head's (two value heads per key head add onto zeros, either first:
-    deterministic), and this block's part of the cumulative decay's."""
+    ``gkh``; as writers, ``gkt``, with ``_vjp_r``'s state term) on a block of key features, per
+    value head (adding into key heads in the kernel, with atomics, was slower), and this block's
+    part of the cumulative decay's."""
     i_k, c, i_bh = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     i_b, i_h = i_bh // HV, i_bh % HV
     TP: tl.constexpr = NT * C
@@ -231,13 +231,9 @@ def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
     gkh = tl.dot(pb, kk, gkh)
     gkt = tl.load(gks + i_b * ssb + r[:, None] * ssn + i_h * ssh + ck[None, :], mask=ok[:, None], other=0.)
     gkt = tl.dot(tl.trans(pb), kk, tl.dot(tl.trans(p), qq, gkt))
-    rows = i_b * sqb + r[:, None] * sqn + (i_h // REP) * sqh + ck[None, :]
-    if REP == 1:
-        tl.store(gq + rows, gqc, mask=ok[:, None])
-        tl.store(gk + rows, gkh + gkt, mask=ok[:, None])
-    else:
-        tl.atomic_add(gq + rows, gqc, mask=ok[:, None])
-        tl.atomic_add(gk + rows, gkh + gkt, mask=ok[:, None])
+    rows = i_b * sqb + r[:, None] * sqn + i_h * sqh + ck[None, :]
+    tl.store(gq + rows, gqc, mask=ok[:, None])
+    tl.store(gk + rows, gkh + gkt, mask=ok[:, None])
     tl.store(gcp + i_k * spk + i_b * spb + r * spn + i_h, tl.sum(gqc * qq + (gkh - gkt) * kk, 1), mask=ok)
 
 
@@ -381,11 +377,10 @@ def delta_vjp(m, go, hk: int):
         *go.stride()[:3], *gdv.stride()[:3], *gbp.stride()[:3], *gks.stride()[:3],
         m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     BK, BV, nw, ns = _config("vjp_k", DK, DV)
-    assert hv // hk <= 2
-    new = torch.empty if hv == hk else torch.zeros
-    gq, gk, gcp = new(b, N, hk, DK, **f32), new(b, N, hk, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
+    gq, gk, gcp = torch.empty(b, N, hv, DK, **f32), torch.empty(b, N, hv, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
     _vjp_k[(DK // BK, NT, b * hv)](
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // hk, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
-    return gq, gk, gdv, gbp.sum(0), gcp.sum(0)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
+    unheads = lambda x: x.view(b, N, hk, hv // hk, DK).sum(3)
+    return unheads(gq), unheads(gk), gdv, gbp.sum(0), gcp.sum(0)
