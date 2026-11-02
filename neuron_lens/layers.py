@@ -137,6 +137,8 @@ class DeltaNet(NamedTuple):
     kkd: torch.Tensor
     qh: torch.Tensor  # [Hv, Tp, dv]: queries, keys through the memory at their chunk's start
     kh: torch.Tensor
+    wk: torch.Tensor  # [Hv, Tp, dk]: tinv diag(β) (k ⊙ qd), the state's move of L⁻¹ r; and
+    wq: torch.Tensor  # q ⊙ qd − ((Q Kᵀ) ⊙ Γ) wk, of the output (per chunk)
     db: torch.Tensor  # [N, Hv]: σ'(b), dβ/db
     dga: torch.Tensor  # [N, Hv]: dg/da
     zo: torch.Tensor  # [N, Hv, dv]: ½ · the output norm's scaling (LN rule) · silu(z): o's way to y
@@ -359,8 +361,11 @@ def _chunks(gc, q, k, u, beta) -> dict:
     eye = torch.eye(CHUNK, device=gc.device)
     tinv = torch.linalg.solve_triangular(eye + beta.view(hv, n, CHUNK, 1) * kkd, eye.expand_as(kkd),
                                          upper=False, unitriangular=True)
-    return dict(hku=hku, tinv=tinv.contiguous(), qkd=(qc @ kc.mT) * dec, kkd=kkd,  # (the solve may return columns first)
-                qh=((qc * qd[..., None]) @ hku).flatten(1, 2), kh=((kc * qd[..., None]) @ hku).flatten(1, 2))
+    qkd = (qc @ kc.mT) * dec
+    wk = tinv @ (beta.view(hv, n, CHUNK, 1) * kc * qd[..., None])
+    return dict(hku=hku, tinv=tinv.contiguous(), qkd=qkd, kkd=kkd,  # (the solve may return columns first)
+                qh=((qc * qd[..., None]) @ hku).flatten(1, 2), kh=((kc * qd[..., None]) @ hku).flatten(1, 2),
+                wk=wk.flatten(1, 2).contiguous(), wq=(qc * qd[..., None] - qkd @ wk).flatten(1, 2).contiguous())
 
 
 def _gated_norm(norm, o):
