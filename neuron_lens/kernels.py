@@ -25,8 +25,8 @@ CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2,
 
 
 @triton.jit
-def _jvp(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, zo, zg, dq, dk, dv, db, dg, dz, out,
-         sqb, sqn, sqh, skb, skn, skh, svb, svn, svh, sbb, sbn, sgb, sgn, szb, szn, szh, sob, son, soh,
+def _jvp(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, dq, dk, dv, db, dg, out,
+         sqb, sqn, sqh, skb, skn, skh, svb, svn, svh, sbb, sbn, sgb, sgn, sob, son, soh,
          S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
          DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
     i_v, i_bh = tl.program_id(0), tl.program_id(1)
@@ -97,11 +97,7 @@ def _jvp(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, zo, zg, dq, dk, dv
         bt = tl.load(beta + i_h * TP + t)
         x = tl.dot(tl.load(tinv + sq), dbv[:, None] * tl.load(vmc + fv) + bt[:, None] * (dvv - dcu))
         o += tl.dot(qk, x)
-        # the output norm and gate: dy = do · zo + dz · zg
-        fz = (r[:, None] * HV + i_h) * DV + ov[None, :]
-        dzz = tl.load(dz + i_b * szb + r[:, None] * szn + i_h * szh + ov[None, :], mask=ok[:, None], other=0.)
-        o = o * tl.load(zo + fz, mask=ok[:, None], other=0.) + dzz.to(tl.float32) * tl.load(zg + fz, mask=ok[:, None], other=0.)
-        tl.store(out + i_b * sob + r[:, None] * son + i_h * soh + ov[None, :], o.to(out.dtype.element_ty), mask=ok[:, None])
+        tl.store(out + i_b * sob + r[:, None] * son + i_h * soh + ov[None, :], o, mask=ok[:, None])
         for kb in tl.static_range(NK):
             ck = kb * BK + obk
             kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :]) * kd[:, None]
@@ -118,7 +114,7 @@ def _jvp(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, zo, zg, dq, dk, dv
 
 
 @triton.jit
-def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, zo, go, gdv, gbp, gks,
+def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
            sgb, sgn, sgh, sdb, sdn, sdh, spv, spb, spn, ssb, ssn, ssh,
            S, N, HV: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
            DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
@@ -150,8 +146,7 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, zo, go, gdv, gbp, gks,
         qd = tl.exp(g - g_prev)
         kd = tl.exp(g_end - g)
         cd = tl.exp(g_end - g_prev)
-        goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + ov[None, :], mask=ok[:, None], other=0.).to(tl.float32) \
-            * tl.load(zo + (r[:, None] * HV + i_h) * DV + ov[None, :], mask=ok[:, None], other=0.)
+        goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + ov[None, :], mask=ok[:, None], other=0.)
         sq = (i_h * NT + c) * C * C + oc[:, None] * C + oc[None, :]
         rhs = tl.dot(tl.trans(tl.load(qkd + sq)), goc)
         fv = (i_h * TP + t[:, None]) * DV + ov[None, :]
@@ -194,7 +189,7 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, zo, go, gdv, gbp, gks,
 
 
 @triton.jit
-def _vjp_k(q, k, u, gc, hku, zo, go, gdv, gks, gq, gk, gcp,
+def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
            sgb, sgn, sgh, sdb, sdn, sdh, ssb, ssn, ssh, sqb, sqn, sqh, spk, spb, spn,
            S, N, HV: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
            DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
@@ -221,8 +216,7 @@ def _vjp_k(q, k, u, gc, hku, zo, go, gdv, gks, gq, gk, gcp,
     gkh = tl.zeros([C, BK], dtype=tl.float32)
     for vb in tl.static_range(DV // BV):
         cv = vb * BV + obv
-        goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + cv[None, :], mask=ok[:, None], other=0.).to(tl.float32) \
-            * tl.load(zo + (r[:, None] * HV + i_h) * DV + cv[None, :], mask=ok[:, None], other=0.)
+        goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + cv[None, :], mask=ok[:, None], other=0.)
         gbl = -tl.load(gdv + i_b * sdb + r[:, None] * sdn + i_h * sdh + cv[None, :], mask=ok[:, None], other=0.)
         uu = tl.load(u + (i_h * TP + t[:, None]) * DV + cv[None, :])
         hs = tl.load(hku + ((i_h * NT + c) * DK + ck[None, :]) * DV + cv[:, None])  # [BV, BK]
@@ -462,7 +456,7 @@ def _rows(x):
 
 
 def _shapes(m):
-    assert all(x.is_contiguous() for x in (m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, m.zo, m.zg))
+    assert all(x.is_contiguous() for x in (m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh))
     hv, tp, dk = m.q.shape
     C = m.tinv.shape[-1]
     return hv, tp // C, C, dk, m.u.shape[-1]
@@ -475,25 +469,22 @@ def _config(name, DK, DV):
     return BK, BV, nw, ns
 
 
-def delta_jvp(m, dq, dk, dv, db, dg, dz):
-    """``layers._delta_core_jvp`` on CUDA, with the output norm and gate after it:
-    ``dy = do · zo + dz · zg`` (``[b, N, Hv, dv]``, in ``dz``'s dtype)."""
-    dq, dk, dv, db, dg, dz = map(_rows, (dq, dk, dv, db, dg, dz))
+def delta_jvp(m, dq, dk, dv, db, dg):
+    """``layers._delta_core_jvp`` on CUDA."""
+    dq, dk, dv, db, dg = map(_rows, (dq, dk, dv, db, dg))
     b, N, hv, DV = dv.shape
     _, NT, C, DK, _ = _shapes(m)
     BK, BV, nw, ns = _config("jvp", DK, DV)
-    out = torch.empty(b, N, hv, DV, device=dv.device, dtype=dz.dtype)
+    out = torch.empty(b, N, hv, DV, device=dv.device, dtype=torch.float32)
     _jvp[(DV // BV, b * hv)](
-        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, m.zo, m.zg, dq, dk, dv, db, dg, dz, out,
-        *dq.stride()[:3], *dk.stride()[:3], *dv.stride()[:3], *db.stride()[:2], *dg.stride()[:2], *dz.stride()[:3],
-        *out.stride()[:3],
+        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, dq, dk, dv, db, dg, out,
+        *dq.stride()[:3], *dk.stride()[:3], *dv.stride()[:3], *db.stride()[:2], *dg.stride()[:2], *out.stride()[:3],
         m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     return out
 
 
 def delta_vjp(m, go):
-    """``layers._delta_core_vjp`` on CUDA, from the cotangents at the gate (``gy``, any dtype):
-    the kernels take ``gy · zo`` as they load it."""
+    """``layers._delta_core_vjp`` on CUDA."""
     go = _rows(go)
     b, N, hv, DV = go.shape
     _, NT, C, DK, _ = _shapes(m)
@@ -503,13 +494,13 @@ def delta_vjp(m, go):
     gdv, gbp = torch.empty(b, N, hv, DV, **f32), torch.empty(DV // BV, b, N, hv, **f32)
     gks = (torch.empty if DV == BV else torch.zeros)(b, N, hv, DK, **f32)
     _vjp_r[(DV // BV, b * hv)](
-        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.tinv, m.qkd, m.zo, go, gdv, gbp, gks,
+        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.tinv, m.qkd, go, gdv, gbp, gks,
         *go.stride()[:3], *gdv.stride()[:3], *gbp.stride()[:3], *gks.stride()[:3],
         m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     BK, BV, nw, ns = _config("vjp_k", DK, DV)
     gq, gk, gcp = torch.empty(b, N, hv, DK, **f32), torch.empty(b, N, hv, DK, **f32), torch.empty(DK // BK, b, N, hv, **f32)
     _vjp_k[(DK // BK, NT, b * hv)](
-        m.q, m.k, m.u, m.gc, m.hku, m.zo, go, gdv, gks, gq, gk, gcp,
+        m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
         m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     return gq, gk, gdv, gbp.sum(0), gcp.sum(0)

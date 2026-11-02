@@ -771,12 +771,9 @@ def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
         dkk = _l2_jvp(dk0.view(b, N, hk, dk), m.k0, m.rk0)
     db = m.db * F.linear(xn, m.w_b).float()  # [b, N, Hv]
     dg = (m.dga * F.linear(xn, m.w_a).float()).cumsum(1)
-    dz = F.linear(xn, m.w_z).view(b, N, hv, dv)
-    if cuda:  # the gate in the kernel's last step
-        dy = kernels.delta_jvp(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg, dz)
-    else:
-        dy = (_delta_core_jvp(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg) * m.zo + dz.float() * m.zg).to(dt)
-    return F.linear(dy.reshape(b, N, -1), m.w_out).float()
+    do = (kernels.delta_jvp if cuda else _delta_core_jvp)(m, dq, dkk, dvv.view(b, N, hv, dv), db, dg)
+    dy = do * m.zo + F.linear(xn, m.w_z).view(b, N, hv, dv) * m.zg  # the output norm and gate
+    return F.linear(dy.reshape(b, N, -1).to(dt), m.w_out).float()
 
 
 def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
@@ -788,8 +785,7 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     gy = (G.to(dt) @ m.w_out).view(b, N, hv, dv)
     gx = ((gy * m.zg).reshape(b, N, -1).to(dt) @ m.w_z).float()
     cuda = kernels is not None and G.is_cuda
-    # the output's cotangent, gy · zo (on CUDA, as the kernels load gy)
-    gdq, gdk, gdv, gbeta, gdgc = kernels.delta_vjp(m, gy) if cuda else _delta_core_vjp(m, gy.float() * m.zo)
+    gdq, gdk, gdv, gbeta, gdgc = (kernels.delta_vjp if cuda else _delta_core_vjp)(m, gy * m.zo)
     gdg = gdgc.flip(1).cumsum(1).flip(1)
     gx = gx + ((gbeta * m.db).to(dt) @ m.w_b + (gdg * m.dga).to(dt) @ m.w_a).float()
     if cuda:  # the L2 norms and the convolution in one kernel
