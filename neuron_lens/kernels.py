@@ -3,9 +3,8 @@ sparse MLP's experts (the first product, gathering its rows, and the sum over ea
 
 DeltaNet: ``delta_jvp`` and ``delta_vjp`` run
 ``layers._delta_core_jvp`` and ``layers._delta_core_vjp`` (the reference, and the path off CUDA).
-The map takes each chunk on its own in parallel (``_jvp_c``), then walks the chunks forward with
-the tangent state in registers, one program per tangent copy, value head and block of value
-features (``_jvp_s``); the transpose walks them back for ``gr`` (``_vjp_r``), then takes the
+The map walks the chunks forward, one program per tangent copy, value head and block of value
+features, its state in registers; the transpose walks them back for ``gr`` (``_vjp_r``), then takes the
 queries' and keys' cotangents chunk by chunk in parallel (``_vjp_k``). The document's
 constants are shared by every tangent copy, so they mostly come from L2. Products take TF32, as
 ``02_fit.py`` sets for torch's.
@@ -21,80 +20,14 @@ import triton.language as tl
 # the experts' first product: rows, columns and inner block, num_warps, num_stages (jvp, vjp)
 MOE = {"jvp": (128, 64, 64, 8, 3), "vjp": (128, 128, 64, 8, 3)}
 # per DeltaNet kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100)
-DOT = tl.float32  # the products' operands: fp32 (TF32 products), or tl.bfloat16
-CONFIG = {"jvp_c": (64, 64, 4, 1), "jvp_s": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
+CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
 
 
 @triton.jit
-def _dot(a, b, acc, DOT: tl.constexpr):
-    return tl.dot(a.to(DOT), b.to(DOT), acc)
-
-
-@triton.jit
-def _jvp_c(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, dq, dk, dv, db, dg, x0, out,
-           sqb, sqn, sqh, skb, skn, skh, svb, svn, svh, sbb, sbn, sgb, sgn, sob, son, soh,
-           S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
-           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr, DOT: tl.constexpr):
-    """One chunk on its own, as if no tangent came before: ``x0 = L⁻¹ r`` and ``o0 = dW U + W x0``
-    (to ``x0`` and ``out``, rows as ``out``'s)."""
-    i_v, c, i_bh = tl.program_id(0), tl.program_id(1), tl.program_id(2)
-    i_b, i_h = i_bh // HV, i_bh % HV
-    i_hk = i_h // REP
-    NK: tl.constexpr = DK // BK
-    TP: tl.constexpr = NT * C
-    oc = tl.arange(0, C)
-    obk = tl.arange(0, BK)
-    ov = i_v * BV + tl.arange(0, BV)
-    t = c * C + oc
-    r = t - S
-    ok = (r >= 0) & (r < N)
-    g = tl.load(gc + i_h * TP + t)
-    g_prev = tl.load(gc + i_h * TP + c * C - 1, mask=c > 0, other=0.)
-    qd = tl.exp(g - g_prev)
-    dec = tl.exp(tl.where(oc[:, None] >= oc[None, :], g[:, None] - g[None, :], float("-inf")))
-    dgv = tl.load(dg + i_b * sgb + r * sgn + i_h, mask=ok, other=0.)
-    dbv = tl.load(db + i_b * sbb + r * sbn + i_h, mask=ok, other=0.)
-    e = dgv[:, None] - dgv[None, :]  # the decay's move, Γ_ts (dgc_t − dgc_s)
-    sq = (i_h * NT + c) * C * C + oc[:, None] * C + oc[None, :]
-    fv = (i_h * TP + t[:, None]) * DV + ov[None, :]
-    a1 = tl.zeros([C, C], dtype=tl.float32)
-    dcu = tl.zeros([C, BV], dtype=tl.float32)
-    for kb in tl.static_range(NK):
-        ck = kb * BK + obk
-        kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :])
-        dkk = tl.load(dk + i_b * skb + r[:, None] * skn + i_hk * skh + ck[None, :], mask=ok[:, None], other=0.)
-        a1 = _dot(dkk, tl.trans(kk), a1, DOT)
-        a1 = _dot(kk, tl.trans(dkk), a1, DOT)
-        dcu = _dot(dkk * qd[:, None], tl.load(hku + ((i_h * NT + c) * DK + ck[:, None]) * DV + ov[None, :]), dcu, DOT)
-    a1 = tl.where(oc[:, None] > oc[None, :], a1 * dec, 0.) + e * tl.load(kkd + sq)
-    uu = tl.load(u + fv)
-    dcu = _dot(a1, uu, dcu, DOT) + dgv[:, None] * tl.load(kh + fv)
-    dvv = tl.load(dv + i_b * svb + r[:, None] * svn + i_h * svh + ov[None, :], mask=ok[:, None], other=0.)
-    bt = tl.load(beta + i_h * TP + t)
-    x = _dot(tl.load(tinv + sq), dbv[:, None] * tl.load(vmc + fv) + bt[:, None] * (dvv - dcu), None, DOT)
-    rows = i_b * sob + r[:, None] * son + i_h * soh + ov[None, :]
-    tl.store(x0 + rows, x, mask=ok[:, None])
-    qk = tl.load(qkd + sq)
-    o = _dot(qk, x, None, DOT) + dgv[:, None] * tl.load(qh + fv)
-    a0 = tl.zeros([C, C], dtype=tl.float32)
-    for kb in tl.static_range(NK):
-        ck = kb * BK + obk
-        qq = tl.load(q + (i_h * TP + t[:, None]) * DK + ck[None, :])
-        kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :])
-        dqq = tl.load(dq + i_b * sqb + r[:, None] * sqn + i_hk * sqh + ck[None, :], mask=ok[:, None], other=0.)
-        dkk = tl.load(dk + i_b * skb + r[:, None] * skn + i_hk * skh + ck[None, :], mask=ok[:, None], other=0.)
-        a0 = _dot(dqq, tl.trans(kk), a0, DOT)
-        a0 = _dot(qq, tl.trans(dkk), a0, DOT)
-        o = _dot(dqq * qd[:, None], tl.load(hku + ((i_h * NT + c) * DK + ck[:, None]) * DV + ov[None, :]), o, DOT)
-    tl.store(out + rows, _dot(a0 * dec + e * qk, uu, o, DOT), mask=ok[:, None])
-
-
-@triton.jit
-def _jvp_s(k, u, gc, wk, wq, dk, dg, x0, out, skb, skn, skh, sgb, sgn, sob, son, soh,
-           S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
-           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr, DOT: tl.constexpr):
-    """The tangent state forward over the chunks: ``x = x0 − wk H``, ``out += wq H``, and
-    ``H ← Γ H + ((dk − dgc k) ⊙ kd)ᵀ u + (k ⊙ kd)ᵀ x``."""
+def _jvp(q, k, u, vmc, beta, gc, hku, tinv, qkd, kkd, qh, kh, dq, dk, dv, db, dg, out,
+         sqb, sqn, sqh, skb, skn, skh, svb, svn, svh, sbb, sbn, sgb, sgn, sob, son, soh,
+         S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
+         DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
     i_v, i_bh = tl.program_id(0), tl.program_id(1)
     i_b, i_h = i_bh // HV, i_bh % HV
     i_hk = i_h // REP
@@ -103,29 +36,43 @@ def _jvp_s(k, u, gc, wk, wq, dk, dg, x0, out, skb, skn, skh, sgb, sgn, sob, son,
     oc = tl.arange(0, C)
     obk = tl.arange(0, BK)
     ov = i_v * BV + tl.arange(0, BV)
-    h0 = tl.zeros([BK, BV], dtype=tl.float32)  # H by blocks of key features
+    lower = oc[:, None] >= oc[None, :]
+    strict = oc[:, None] > oc[None, :]
+    # the tangent state, Σ Γ ((dk − dgc k) uᵀ + k xᵀ), by blocks of key features
+    h0 = tl.zeros([BK, BV], dtype=tl.float32)
     if NK > 1:
         h1 = tl.zeros([BK, BV], dtype=tl.float32)
     if NK > 2:
         h2 = tl.zeros([BK, BV], dtype=tl.float32)
         h3 = tl.zeros([BK, BV], dtype=tl.float32)
-    for c in range(1, NT):  # the first chunk has no tangent before it
+    for c in range(NT):
         t = c * C + oc
         r = t - S
         ok = (r >= 0) & (r < N)
-        # bring H to this chunk's start: the previous chunk's writes
-        tp_ = t - C
-        rp = tp_ - S
-        okp = (rp >= 0) & (rp < N)
-        g_end = tl.load(gc + i_h * TP + c * C - 1)
-        g_pp = tl.load(gc + i_h * TP + c * C - C - 1, mask=c > 1, other=0.)
-        kd = tl.exp(g_end - tl.load(gc + i_h * TP + tp_))
-        cd = tl.exp(g_end - g_pp)
-        dgp = tl.load(dg + i_b * sgb + rp * sgn + i_h, mask=okp, other=0.)
-        rowsp = i_b * sob + rp[:, None] * son + i_h * soh + ov[None, :]
-        xp = tl.load(x0 + rowsp, mask=okp[:, None], other=0.)
-        for kb in tl.static_range(NK):  # the previous chunk's x, with its state term
+        g = tl.load(gc + i_h * TP + t)
+        g_end = tl.load(gc + i_h * TP + c * C + C - 1)
+        g_prev = tl.load(gc + i_h * TP + c * C - 1, mask=c > 0, other=0.)
+        qd = tl.exp(g - g_prev)
+        kd = tl.exp(g_end - g)
+        cd = tl.exp(g_end - g_prev)
+        dec = tl.exp(tl.where(lower, g[:, None] - g[None, :], float("-inf")))
+        dgv = tl.load(dg + i_b * sgb + r * sgn + i_h, mask=ok, other=0.)
+        dbv = tl.load(db + i_b * sbb + r * sbn + i_h, mask=ok, other=0.)
+        a0 = tl.zeros([C, C], dtype=tl.float32)
+        a1 = tl.zeros([C, C], dtype=tl.float32)
+        o = tl.zeros([C, BV], dtype=tl.float32)
+        dcu = tl.zeros([C, BV], dtype=tl.float32)
+        for kb in tl.static_range(NK):
             ck = kb * BK + obk
+            qq = tl.load(q + (i_h * TP + t[:, None]) * DK + ck[None, :])
+            kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :])
+            dqq = tl.load(dq + i_b * sqb + r[:, None] * sqn + i_hk * sqh + ck[None, :], mask=ok[:, None], other=0.)
+            dkk = tl.load(dk + i_b * skb + r[:, None] * skn + i_hk * skh + ck[None, :], mask=ok[:, None], other=0.)
+            a0 += tl.dot(dqq, tl.trans(kk)) + tl.dot(qq, tl.trans(dkk))
+            a1 += tl.dot(dkk, tl.trans(kk)) + tl.dot(kk, tl.trans(dkk))
+            hs = tl.load(hku + ((i_h * NT + c) * DK + ck[:, None]) * DV + ov[None, :])
+            o += tl.dot(dqq * qd[:, None], hs)
+            dcu += tl.dot(dkk * qd[:, None], hs)
             if kb == 0:
                 hb = h0
             elif kb == 1:
@@ -134,14 +81,27 @@ def _jvp_s(k, u, gc, wk, wq, dk, dg, x0, out, skb, skn, skh, sgb, sgn, sob, son,
                 hb = h2
             else:
                 hb = h3
-            xp = _dot(-tl.load(wk + (i_h * TP + tp_[:, None]) * DK + ck[None, :]), hb, xp, DOT)
-        uu = tl.load(u + (i_h * TP + tp_[:, None]) * DV + ov[None, :])
+            o += tl.dot(qq * qd[:, None], hb)
+            dcu += tl.dot(kk * qd[:, None], hb)
+        sq = (i_h * NT + c) * C * C + oc[:, None] * C + oc[None, :]
+        e = dgv[:, None] - dgv[None, :]  # the decay's move, Γ_ts (dgc_t − dgc_s)
+        qk = tl.load(qkd + sq)
+        a0 = a0 * dec + e * qk
+        a1 = tl.where(strict, a1 * dec, 0.) + e * tl.load(kkd + sq)
+        fv = (i_h * TP + t[:, None]) * DV + ov[None, :]
+        uu = tl.load(u + fv)
+        o += dgv[:, None] * tl.load(qh + fv) + tl.dot(a0, uu)
+        dcu += dgv[:, None] * tl.load(kh + fv) + tl.dot(a1, uu)
+        dvv = tl.load(dv + i_b * svb + r[:, None] * svn + i_h * svh + ov[None, :], mask=ok[:, None], other=0.)
+        bt = tl.load(beta + i_h * TP + t)
+        x = tl.dot(tl.load(tinv + sq), dbv[:, None] * tl.load(vmc + fv) + bt[:, None] * (dvv - dcu))
+        o += tl.dot(qk, x)
+        tl.store(out + i_b * sob + r[:, None] * son + i_h * soh + ov[None, :], o, mask=ok[:, None])
         for kb in tl.static_range(NK):
             ck = kb * BK + obk
-            kk = tl.load(k + (i_h * TP + tp_[:, None]) * DK + ck[None, :]) * kd[:, None]
-            dkk = tl.load(dk + i_b * skb + rp[:, None] * skn + i_hk * skh + ck[None, :], mask=okp[:, None], other=0.)
-            upd = _dot(tl.trans(dkk * kd[:, None] - dgp[:, None] * kk), uu, None, DOT)
-            upd = _dot(tl.trans(kk), xp, upd, DOT)
+            kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :]) * kd[:, None]
+            dkk = tl.load(dk + i_b * skb + r[:, None] * skn + i_hk * skh + ck[None, :], mask=ok[:, None], other=0.)
+            upd = tl.dot(tl.trans(dkk * kd[:, None] - dgv[:, None] * kk), uu) + tl.dot(tl.trans(kk), x)
             if kb == 0:
                 h0 = h0 * cd + upd
             elif kb == 1:
@@ -150,29 +110,13 @@ def _jvp_s(k, u, gc, wk, wq, dk, dg, x0, out, skb, skn, skh, sgb, sgn, sob, son,
                 h2 = h2 * cd + upd
             else:
                 h3 = h3 * cd + upd
-        # this chunk's output
-        rows = i_b * sob + r[:, None] * son + i_h * soh + ov[None, :]
-        o = tl.load(out + rows, mask=ok[:, None], other=0.)
-        for kb in tl.static_range(NK):
-            ck = kb * BK + obk
-            if kb == 0:
-                hb = h0
-            elif kb == 1:
-                hb = h1
-            elif kb == 2:
-                hb = h2
-            else:
-                hb = h3
-            o = _dot(tl.load(wq + (i_h * TP + t[:, None]) * DK + ck[None, :]), hb, o, DOT)
-        tl.store(out + rows, o, mask=ok[:, None])
 
 
 @triton.jit
 def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
            sgb, sgn, sgh, sdb, sdn, sdh, spv, spb, spn, ssb, ssn, ssh,
            S, N, HV: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
-           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr,
-         DOT: tl.constexpr):
+           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
     """``gr = L⁻ᵀ Wᵀ go``, back over the chunks: stores ``β gr`` (the values' cotangent), this
     value block's part of β's, ``gr · (V − C U)``, and adds its part of the keys' cotangent
     through the state, ``(u ⊙ kd) Aᵀ``, to ``gks``."""
@@ -203,7 +147,7 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
         cd = tl.exp(g_end - g_prev)
         goc = tl.load(go + i_b * sgb + r[:, None] * sgn + i_h * sgh + ov[None, :], mask=ok[:, None], other=0.)
         sq = (i_h * NT + c) * C * C + oc[:, None] * C + oc[None, :]
-        rhs = _dot(tl.trans(tl.load(qkd + sq)), goc, None, DOT)
+        rhs = tl.dot(tl.trans(tl.load(qkd + sq)), goc)
         fv = (i_h * TP + t[:, None]) * DV + ov[None, :]
         uu = tl.load(u + fv) * kd[:, None]
         for kb in tl.static_range(NK):
@@ -217,13 +161,13 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
                 ab = a2
             else:
                 ab = a3
-            rhs = _dot(kk, ab, rhs, DOT)
+            rhs = tl.dot(kk, ab, rhs)
             gs = gks + i_b * ssb + r[:, None] * ssn + i_h * ssh + ck[None, :]
             if DV == BV:
-                tl.store(gs, _dot(uu, tl.trans(ab), None, DOT), mask=ok[:, None])
+                tl.store(gs, tl.dot(uu, tl.trans(ab)), mask=ok[:, None])
             else:
-                tl.atomic_add(gs, _dot(uu, tl.trans(ab), None, DOT), mask=ok[:, None])
-        x = tl.where(ok[:, None], _dot(tl.trans(tl.load(tinv + sq)), rhs, None, DOT), 0.)
+                tl.atomic_add(gs, tl.dot(uu, tl.trans(ab)), mask=ok[:, None])
+        x = tl.where(ok[:, None], tl.dot(tl.trans(tl.load(tinv + sq)), rhs), 0.)
         bt = tl.load(beta + i_h * TP + t)
         tl.store(gdv + i_b * sdb + r[:, None] * sdn + i_h * sdh + ov[None, :], bt[:, None] * x, mask=ok[:, None])
         tl.store(gbp + i_v * spv + i_b * spb + r * spn + i_h, tl.sum(x * tl.load(vmc + fv), 1), mask=ok)
@@ -232,7 +176,7 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
             ck = kb * BK + obk
             qq = tl.load(q + (i_h * TP + t[:, None]) * DK + ck[None, :]) * qd[:, None]
             kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :]) * qd[:, None]
-            upd = _dot(tl.trans(kk), -xb, _dot(tl.trans(qq), goc, None, DOT), DOT)
+            upd = tl.dot(tl.trans(kk), -xb, tl.dot(tl.trans(qq), goc))
             if kb == 0:
                 a0 = a0 * cd + upd
             elif kb == 1:
@@ -247,8 +191,7 @@ def _vjp_r(q, k, u, vmc, beta, gc, tinv, qkd, go, gdv, gbp, gks,
 def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
            sgb, sgn, sgh, sdb, sdn, sdh, ssb, ssn, ssh, sqb, sqn, sqh, spk, spb, spn,
            S, N, HV: tl.constexpr, REP: tl.constexpr, NT: tl.constexpr, C: tl.constexpr,
-           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr,
-         DOT: tl.constexpr):
+           DK: tl.constexpr, DV: tl.constexpr, BK: tl.constexpr, BV: tl.constexpr):
     """One chunk's cotangents of the queries (``gq``, through W) and keys (through C as readers,
     ``gkh``; as writers, ``gkt``, with ``_vjp_r``'s state term) on a block of key features, added
     into the key head's (two value heads per key head add onto zeros, either first:
@@ -276,18 +219,18 @@ def _vjp_k(q, k, u, gc, hku, go, gdv, gks, gq, gk, gcp,
         gbl = -tl.load(gdv + i_b * sdb + r[:, None] * sdn + i_h * sdh + cv[None, :], mask=ok[:, None], other=0.)
         uu = tl.load(u + (i_h * TP + t[:, None]) * DV + cv[None, :])
         hs = tl.load(hku + ((i_h * NT + c) * DK + ck[None, :]) * DV + cv[:, None])  # [BV, BK]
-        p = _dot(goc, tl.trans(uu), p, DOT)
-        pb = _dot(gbl, tl.trans(uu), pb, DOT)
-        gqc = _dot(goc * qd[:, None], hs, gqc, DOT)
-        gkh = _dot(gbl * qd[:, None], hs, gkh, DOT)
+        p = tl.dot(goc, tl.trans(uu), p)
+        pb = tl.dot(gbl, tl.trans(uu), pb)
+        gqc = tl.dot(goc * qd[:, None], hs, gqc)
+        gkh = tl.dot(gbl * qd[:, None], hs, gkh)
     p = p * dec
     pb = tl.where(oc[:, None] > oc[None, :], pb * dec, 0.)
     qq = tl.load(q + (i_h * TP + t[:, None]) * DK + ck[None, :])
     kk = tl.load(k + (i_h * TP + t[:, None]) * DK + ck[None, :])
-    gqc = _dot(p, kk, gqc, DOT)
-    gkh = _dot(pb, kk, gkh, DOT)
+    gqc = tl.dot(p, kk, gqc)
+    gkh = tl.dot(pb, kk, gkh)
     gkt = tl.load(gks + i_b * ssb + r[:, None] * ssn + i_h * ssh + ck[None, :], mask=ok[:, None], other=0.)
-    gkt = _dot(tl.trans(pb), kk, _dot(tl.trans(p), qq, gkt, DOT), DOT)
+    gkt = tl.dot(tl.trans(pb), kk, tl.dot(tl.trans(p), qq, gkt))
     rows = i_b * sqb + r[:, None] * sqn + (i_h // REP) * sqh + ck[None, :]
     if REP == 1:
         tl.store(gq + rows, gqc, mask=ok[:, None])
@@ -396,7 +339,7 @@ def _rows(x):
 
 
 def _shapes(m):
-    assert all(x.is_contiguous() for x in (m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, m.wk, m.wq))
+    assert all(x.is_contiguous() for x in (m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh))
     hv, tp, dk = m.q.shape
     C = m.tinv.shape[-1]
     return hv, tp // C, C, dk, m.u.shape[-1]
@@ -410,23 +353,16 @@ def _config(name, DK, DV):
 
 
 def delta_jvp(m, dq, dk, dv, db, dg):
-    """``layers._delta_core_jvp`` on CUDA: the chunks on their own (``_jvp_c``), then the state
-    (``_jvp_s``)."""
+    """``layers._delta_core_jvp`` on CUDA."""
     dq, dk, dv, db, dg = map(_rows, (dq, dk, dv, db, dg))
     b, N, hv, DV = dv.shape
     _, NT, C, DK, _ = _shapes(m)
-    x0, out = (torch.empty(b, N, hv, DV, device=dv.device, dtype=torch.float32) for _ in range(2))
-    BK, BV, nw, ns = _config("jvp_c", DK, DV)
-    _jvp_c[(DV // BV, NT, b * hv)](
-        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, dq, dk, dv, db, dg, x0, out,
+    BK, BV, nw, ns = _config("jvp", DK, DV)
+    out = torch.empty(b, N, hv, DV, device=dv.device, dtype=torch.float32)
+    _jvp[(DV // BV, b * hv)](
+        m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.hku, m.tinv, m.qkd, m.kkd, m.qh, m.kh, dq, dk, dv, db, dg, out,
         *dq.stride()[:3], *dk.stride()[:3], *dv.stride()[:3], *db.stride()[:2], *dg.stride()[:2], *out.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, DOT=DOT,
-        num_warps=nw, num_stages=ns)
-    BK, BV, nw, ns = _config("jvp_s", DK, DV)
-    _jvp_s[(DV // BV, b * hv)](
-        m.k, m.u, m.gc, m.wk, m.wq, dk, dg, x0, out, *dk.stride()[:3], *dg.stride()[:2], *out.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, DOT=DOT,
-        num_warps=nw, num_stages=ns)
+        m.s0, N, HV=hv, REP=hv // dq.shape[2], NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     return out
 
 
@@ -443,7 +379,7 @@ def delta_vjp(m, go, hk: int):
     _vjp_r[(DV // BV, b * hv)](
         m.q, m.k, m.u, m.vmc, m.beta, m.gc, m.tinv, m.qkd, go, gdv, gbp, gks,
         *go.stride()[:3], *gdv.stride()[:3], *gbp.stride()[:3], *gks.stride()[:3],
-        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, DOT=DOT, num_warps=nw, num_stages=ns)
+        m.s0, N, HV=hv, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     BK, BV, nw, ns = _config("vjp_k", DK, DV)
     assert hv // hk <= 2
     new = torch.empty if hv == hk else torch.zeros
@@ -451,5 +387,5 @@ def delta_vjp(m, go, hk: int):
     _vjp_k[(DK // BK, NT, b * hv)](
         m.q, m.k, m.u, m.gc, m.hku, go, gdv, gks, gq, gk, gcp,
         *go.stride()[:3], *gdv.stride()[:3], *gks.stride()[:3], *gq.stride()[:3], *gcp.stride()[:3],
-        m.s0, N, HV=hv, REP=hv // hk, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, DOT=DOT, num_warps=nw, num_stages=ns)
+        m.s0, N, HV=hv, REP=hv // hk, NT=NT, C=C, DK=DK, DV=DV, BK=BK, BV=BV, num_warps=nw, num_stages=ns)
     return gq, gk, gdv, gbp.sum(0), gcp.sum(0)
