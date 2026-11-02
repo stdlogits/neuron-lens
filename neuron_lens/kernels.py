@@ -13,7 +13,7 @@ import triton
 import triton.language as tl
 
 # per kernel: key and value feature blocks, num_warps, num_stages (tuned on an H100)
-CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (64, 64, 4, 1), "vjp_k": (64, 64, 4, 1)}
+CONFIG = {"jvp": (64, 64, 4, 1), "vjp_r": (128, 128, 8, 2), "vjp_k": (64, 32, 2, 1)}
 
 
 @triton.jit

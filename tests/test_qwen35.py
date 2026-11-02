@@ -75,7 +75,7 @@ def mlp_out(block, x):
     return x + block.mlp(block.post_attention_layernorm(x))
 
 
-@pytest.mark.parametrize("moe,chunk", [(True, 64), (False, 64), (True, 5)])
+@pytest.mark.parametrize("moe,chunk", [(True, 32), (False, 32), (True, 5)])
 def test_estimates_match_brute_force(moe, chunk, monkeypatch):
     """Chunks of 5 split the 24 positions into five, with padding: DeltaNet's products cross
     chunks through their states."""

@@ -72,7 +72,7 @@ try:
 except ImportError:  # no Triton (macOS): the cores run in torch
     kernels = None
 
-CHUNK = 64  # DeltaNet's chunk length (positions) for the derivative's decayed products
+CHUNK = 32  # DeltaNet's chunk length (positions) for the derivative's chunked passes
 
 
 class Norm(NamedTuple):
