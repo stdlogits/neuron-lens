@@ -4,7 +4,7 @@ import types
 import pytest
 import torch
 import torch.autograd.forward_ad as fwAD
-from transformers import Qwen3Config, Qwen3Model
+from transformers import Qwen3Config, Qwen3ForCausalLM, Qwen3Model
 
 from neuron_lens.rules import HALF_RULE_BETA, relp_rules
 from neuron_lens.transport import (
@@ -116,22 +116,31 @@ def test_split_half_is_zero_for_equal_halves_and_nan_for_one():
     assert acc.split_half("out") == [0.0, 0.0]
 
 
-def test_r_lens_matches_drowse():
+def test_lenses_match_drowse():
+    """Both lenses at both targets, and their split-half differences, against Drowse's own RelP
+    fits (``fit_lens``, which takes a causal LM: the realistic model under a head)."""
     pytest.importorskip("drowse")
-    from drowse.lens.fit import fit_jacobian_lens
+    from drowse.lens.fit import fit_lens
 
-    model = tiny_model()
+    model = realistic_model()
+    lm = Qwen3ForCausalLM(model.config).eval().requires_grad_(False)
+    lm.model = model
     torch.manual_seed(1)
     rows = [torch.randint(0, 50, (n,)).tolist() for n in (SKIP_FIRST + 9, SKIP_FIRST + 5, SKIP_FIRST + 12)]
     tok = types.SimpleNamespace(pad_token_id=0)
-    ref = fit_jacobian_lens(model, tok, ["x"] * len(rows), model.layers, dim_batch=4,
-                            skip_first=SKIP_FIRST, input_id_rows=rows, max_seq_len=64, kind="R")
-    assert ref.key.kind == "R"
-    acc = Accumulator({"out": N_LAYERS - 1}, D)
-    for i, row in enumerate(rows):
-        r_lens_doc(model, torch.tensor(row), acc, i % 2, dim_batch=6)
-    for layer in range(N_LAYERS - 1):
-        assert torch.allclose(acc.mean("out")[layer], ref.jacobians[layer], atol=1e-5), layer
+    for kind, lens_doc, out_layers in (("R", r_lens_doc, N_LAYERS - 1), ("S", s_lens_doc, N_LAYERS)):
+        ref = fit_lens(lm, tok, ["x"] * len(rows), kind=kind, dim_batch=4, skip_first=SKIP_FIRST,
+                       input_id_rows=rows, max_seq_len=64)
+        assert ref.lens.kind == kind and ref.lens.sites == ("out", "mid")
+        acc = Accumulator({"out": out_layers, "mid": N_LAYERS}, D)
+        for i, row in enumerate(rows):
+            lens_doc(model, torch.tensor(row), acc, i % 2, dim_batch=6)
+        for site in ("out", "mid"):
+            layers = ref.lens.layers(site)
+            assert layers == list(range(acc.mean(site).shape[0])), (kind, site)
+            for layer in layers:
+                assert torch.allclose(acc.mean(site)[layer], ref.lens.matrix(layer, site), atol=1e-5), (kind, site, layer)
+            assert acc.split_half(site) == pytest.approx([ref.split_half[site][l] for l in layers], abs=1e-5)
 
 
 def test_relp_rules_keep_values_and_unpatch():
@@ -172,7 +181,7 @@ def test_relp_norm_tangent_holds_rms_constant():
 
 def _tiny_r_fit(n_docs: int = 3):
     model = tiny_model()
-    acc = Accumulator({"out": N_LAYERS - 1}, D)
+    acc = Accumulator({"out": N_LAYERS - 1, "mid": N_LAYERS}, D)
     for i in range(n_docs):
         r_lens_doc(model, torch.randint(0, 50, (SKIP_FIRST + 6 + i,)), acc, i % 2, dim_batch=8)
     meta = {"lens": "R", "model": "test/tiny", "layers": N_LAYERS, "model_layers": N_LAYERS,
@@ -183,7 +192,7 @@ def _tiny_r_fit(n_docs: int = 3):
 def test_r_lens_exports_to_drowse(tmp_path):
     pytest.importorskip("drowse")
     from drowse.lens.relp import RELP_RULES
-    from drowse.lens.store import load_local_lens
+    from drowse.lens.store import lens_split_half, load_local_lens
 
     from neuron_lens.lenses import drowse_home, save_drowse_lens
 
@@ -192,12 +201,22 @@ def test_r_lens_exports_to_drowse(tmp_path):
     assert path.parent.name == "r"  # Drowse's R-lens directory, local:r
     with drowse_home(tmp_path):
         lens, sidecar = load_local_lens("test/tiny", "r")
-    assert lens.n_prompts == 3 and lens.key.label == "R:out"
+    assert lens.n_prompts == 3 and lens.key.label == "R:out" and lens.sites == ("out", "mid")
     assert sidecar["kind"] == "R" and sidecar["estimator_policy"]["rules"] == dict(RELP_RULES)
     assert sidecar["estimator_policy"]["skip_first_positions"] == SKIP_FIRST
     assert sidecar["usable_prompt_count"] == 3 and sidecar["corpus_spec"] == "file:t.jsonl"
-    for layer in range(N_LAYERS - 1):
-        assert torch.equal(lens.jacobians[layer], acc.mean("out")[layer])
+    for site in ("out", "mid"):
+        assert lens.layers(site) == list(range(acc.mean(site).shape[0]))
+        for layer in lens.layers(site):
+            assert torch.equal(lens.matrix(layer, site), acc.mean(site)[layer])
+        recorded = lens_split_half(sidecar, site)
+        assert [recorded[layer] for layer in lens.layers(site)] == pytest.approx(acc.split_half(site))
+
+    save_drowse_lens([meta], acc, tmp_path / "even", half=0)  # one half: no split-half to record
+    with drowse_home(tmp_path / "even"):
+        lens, sidecar = load_local_lens("test/tiny", "r")
+    assert lens.n_prompts == 2 and lens_split_half(sidecar, "out") == {}
+    assert torch.equal(lens.matrix(0, "mid"), acc.mean("mid", 0)[0])
 
 
 def test_load_r_lens_reads_a_fit_home(tmp_path, monkeypatch):

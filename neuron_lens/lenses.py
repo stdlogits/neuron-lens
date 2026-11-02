@@ -46,21 +46,21 @@ def load_r_lens(model_id: str, fit: str | None):
 
 
 def merge(lenses: list):
-    """Prompt-weighted mean of lenses over the same layers: exactly the lens a single fit
-    over the union of their (disjoint) corpora would give, since the estimator is a mean
-    of per-prompt Jacobians. The lenses must be the same kind at the same site; the merge
-    keeps that key."""
+    """Prompt-weighted mean of lenses over the same sites and layers: exactly the lens a single
+    fit over the union of their (disjoint) corpora would give, since the estimator is a mean
+    of per-prompt Jacobians. The lenses must be the same kind; the merge keeps it."""
     from drowse.lens.jlens import JacobianLens
 
     key = lenses[0].key
     if any(lens.key != key for lens in lenses):
         raise ValueError("lenses are of different kinds: " + ", ".join(sorted({lens.key.label for lens in lenses})))
-    layers = lenses[0].source_layers
-    if any(lens.source_layers != layers for lens in lenses):
-        raise ValueError("lenses cover different source layers")
+    layers = {site: lenses[0].layers(site) for site in lenses[0].sites}
+    if any({site: lens.layers(site) for site in lens.sites} != layers for lens in lenses):
+        raise ValueError("lenses cover different sites or layers")
     total = sum(lens.n_prompts for lens in lenses)
-    jac = {l: sum(lens.jacobians[l] * (lens.n_prompts / total) for lens in lenses) for l in layers}
-    return JacobianLens(jac, n_prompts=total, d_model=lenses[0].d_model, key=key)
+    jac = {site: {l: sum(lens.matrix(l, site) * (lens.n_prompts / total) for lens in lenses) for l in ls}
+           for site, ls in layers.items()}
+    return JacobianLens(jac.get("out"), mid=jac.get("mid"), n_prompts=total, d_model=lenses[0].d_model, key=key)
 
 
 def load_lens(spec: str, model_id: str) -> dict | None:
@@ -117,8 +117,9 @@ def load_fits(paths: list[Path], lens: str, model_id: str | None = None) -> tupl
 
 
 def save_drowse_lens(metas: list[dict], acc: Accumulator, home: Path, half: int | None = None) -> Path:
-    """Write an R-lens fit as a Drowse lens (``local/r``) under the Drowse home ``home``: all
-    its documents, or one half of them (0 even, 1 odd) for a split-half comparison."""
+    """Write an R-lens fit as a Drowse lens (``local/r``) under the Drowse home ``home``, at each
+    site the fit holds (Drowse's ``out`` and ``mid`` are its targets): all its documents, with
+    their split-half difference, or one half of them (0 even, 1 odd) for a split-half comparison."""
     from drowse.lens.jlens import JacobianLens
     from drowse.lens.key import LensKey
     from drowse.lens.store import LensProvenance, save_lens
@@ -126,9 +127,13 @@ def save_drowse_lens(metas: list[dict], acc: Accumulator, home: Path, half: int 
     meta = metas[0]
     if meta["lens"] != "R" or meta["layers"] != meta["model_layers"]:
         raise ValueError("Drowse holds R-lenses of the whole model only")
-    J = acc.mean("out", half)
+    sites = [site for site in ("out", "mid") if (site, 0) in acc.sums]
+    jac = {site: dict(enumerate(acc.mean(site, half))) for site in sites}
     n = sum(acc.n_docs) if half is None else acc.n_docs[half]
-    lens = JacobianLens({l: J[l] for l in range(J.shape[0])}, n_prompts=n, d_model=J.shape[-1], key=LensKey("R"))
+    d = jac[sites[0]][0].shape[-1]
+    lens = JacobianLens(jac.get("out"), mid=jac.get("mid"), n_prompts=n, d_model=d, key=LensKey("R"))
+    split_half = ({site: dict(enumerate(acc.split_half(site))) for site in sites}
+                  if half is None and all(acc.n_docs) else None)
     corpora = sorted({(m["corpus_spec"], m["rows_sha256"]) for m in metas})
     sha = corpora[0][1] if len(corpora) == 1 else hashlib.sha256(repr(corpora).encode()).hexdigest()
     provenance = LensProvenance(
@@ -136,4 +141,4 @@ def save_drowse_lens(metas: list[dict], acc: Accumulator, home: Path, half: int 
         seq_len=meta["seq_len"], dim_batch=meta["dim_batch"], skip_first=SKIP_FIRST,
         usable_prompt_count=n, model_layer_count=meta["model_layers"])
     with drowse_home(home):
-        return save_lens(lens, meta["model"], provenance)
+        return save_lens(lens, meta["model"], provenance, split_half=split_half)

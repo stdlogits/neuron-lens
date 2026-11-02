@@ -1,7 +1,9 @@
 """Export R-lens fits (``02_fit.py --lens R``) to a Drowse home,
 so Drowse and ``lens_compare.py`` (``R:<name>``) can load them.
-Several fits (shards, corpora) are summed into one lens. ``--half`` exports only the even (0) or
-odd (1) documents, so ``lens_compare.py`` can compare the halves neuron by neuron.
+Several fits (shards, corpora) are summed into one lens, at every target the fits hold (Drowse's
+``out`` and ``mid`` sites), with its split-half difference by layer, which Drowse lists with the
+lens. ``--half`` exports only the even (0) or odd (1) documents, so ``lens_compare.py`` can
+compare the halves neuron by neuron.
 
     python scripts/04_export_rlens.py data/fits/r-qwen3-8b-L36-dclm.pt --name dclm
     python scripts/04_export_rlens.py data/fits/r-qwen3-8b-L36-dclm.pt --name dclm-even --half 0
@@ -23,8 +25,10 @@ def main() -> None:
     path = save_drowse_lens(metas, acc, LENS_HOMES / args.name, half=args.half)
     n = sum(acc.n_docs) if args.half is None else acc.n_docs[args.half]
     print(f"{n} documents -> {path}")
-    print("split-half by layer (‖even − odd‖ / ‖mean‖): "
-          + " ".join(f"{x:.2f}" for x in acc.split_half("out")))
+    for site in ("out", "mid"):
+        if (site, 0) in acc.sums:
+            print(f"{site} split-half by layer (‖even − odd‖ / ‖mean‖): "
+                  + " ".join(f"{x:.2f}" for x in acc.split_half(site)))
 
 
 if __name__ == "__main__":

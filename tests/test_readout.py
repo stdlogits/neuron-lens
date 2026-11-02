@@ -63,13 +63,16 @@ def test_layer_reads_matches_read_and_read_z_on_both_poles():
     assert torch.allclose(out["skew"], c.pow(3).mean(0) / c.pow(2).mean(0).pow(1.5), atol=1e-4)
 
 
-def test_merge_is_prompt_weighted():
+def test_merge_is_prompt_weighted_at_every_site():
     JacobianLens = pytest.importorskip("drowse.lens.jlens").JacobianLens
-    a = JacobianLens({0: torch.ones(2, 2)}, n_prompts=1, d_model=2)
-    b = JacobianLens({0: torch.zeros(2, 2)}, n_prompts=3, d_model=2)
+    a = JacobianLens({0: torch.ones(2, 2)}, mid={0: torch.ones(2, 2), 1: torch.zeros(2, 2)}, n_prompts=1, d_model=2)
+    b = JacobianLens({0: torch.zeros(2, 2)}, mid={0: torch.zeros(2, 2), 1: torch.ones(2, 2)}, n_prompts=3, d_model=2)
     m = merge([a, b])
-    assert m.n_prompts == 4
+    assert m.n_prompts == 4 and m.sites == ("out", "mid")
     assert torch.allclose(m.jacobians[0], torch.full((2, 2), 0.25))
+    assert torch.allclose(m.matrix(1, "mid"), torch.full((2, 2), 0.75))
+    with pytest.raises(ValueError, match="different sites"):
+        merge([a, JacobianLens({0: torch.zeros(2, 2)}, n_prompts=3, d_model=2)])
 
 
 def test_merge_keeps_the_lens_kind_and_refuses_mixed_kinds():

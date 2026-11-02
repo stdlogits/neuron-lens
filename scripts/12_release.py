@@ -5,10 +5,10 @@ rebuilt on every run.
 
 **Model, ``stdlogits/rs-lenses``.** Per model, ``<model>/r-lens/lens.pt`` is the stacked-Jacobian
 dictionary of ``camilablank/workspace-lenses`` (``J``, ``n_prompts``, ``source_layers``,
-``d_model``, ``provenance``, with the target layer's row the identity), which Drowse fetches as
-``drowse lens fetch <model> workspace-r --repo <repo>``. ``<model>/r-lens/mid.pt`` is the R-lens
-from each layer's MLP input in that layout, and ``<model>/s-lens/{mid,out}.pt`` hold the S-lens to
-each layer's MLP input and output (``K``, ``layers``). Gemma 4 12B adds the same under
+``d_model``, ``provenance``, with the target layer's row the identity). ``<model>/r-lens/mid.pt``
+is the R-lens from each layer's MLP input in that layout, and ``<model>/s-lens/{mid,out}.pt`` hold
+the S-lens to each layer's MLP input and output (``K``, ``layers``). Drowse fetches the text lenses
+as ``drowse lens fetch <model> rs-r`` (both R files) and ``rs-s`` (both S files). Gemma 4 12B adds the same under
 ``image/`` and ``audio/``, fitted on image and audio documents; their S-lenses are seeded in the
 subspace the embedder reaches, so ``K[L]`` is ``[d, k]`` with ``basis`` ``[k, d]`` (``K_full = K @
 basis``). All are fp32 means over both halves of the documents; ``provenance`` (where the corpus
@@ -407,8 +407,8 @@ img = torch.load(hf_hub_download("{REPO}", "gemma-4-12b/image/s-lens/mid.pt"), w
 K_img = img["K"][8] @ img["basis"]   # [3840, 3840]: image embeddings -> Gemma 4's layer 8 MLP input
 ```
 
-With [Drowse](https://github.com/stdlogits/drowse), the R-lens is a workspace source:
-`drowse lens fetch Qwen/Qwen3-8B workspace-r --repo {REPO}`.
+With [Drowse](https://github.com/stdlogits/drowse) (6.0 or later), the text lenses are lens sources:
+`drowse lens fetch Qwen/Qwen3-8B rs-r` (the R-lens, both files) and `rs-s` (the S-lens).
 
 ## Notes
 

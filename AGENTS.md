@@ -73,8 +73,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §8 records why.
 - **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass: both
-  lenses against brute-force Jacobians of the model under `relp_rules`, and the R-lens against
-  Drowse's RelP fit (loosen that test only for a deliberate change). Supporting another architecture
+  lenses against brute-force Jacobians of the model under `relp_rules`, and both against
+  Drowse's RelP fits (loosen that test only for a deliberate change). Supporting another architecture
   means composing its layers from `layers.py`'s components, adding a component (its map, transpose
   and autograd rule) where one is missing, and its geometry in `arch.py`, with a test file of tiny
   random models; `layers.check` refuses what the components don't cover.
@@ -112,12 +112,11 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `08_reads.py` and the stages after it, record the comparison in findings, and rerun
   `12_release.py`.
 - **Drowse** ([github.com/stdlogits/drowse](https://github.com/stdlogits/drowse)) loads exported R-lenses
-  (`R:<name>` specs in `lens_compare.py`). It always writes an R-lens to `local/r` under
-  `$DROWSE_HOME` (lens format v7, Drowse 5.4), so each export gets its own home under
-  `data/lenses/<name>/` and never overwrites another, or the user's default home. Fitting lives
-  here; exact agreement with Drowse's fit is not required. A home written before 5.4 (v6, lens
-  at `jlens/local/relp`) is read only after `python scripts/migrate_lens_v7.py --home <home>`
-  in the Drowse checkout.
+  (`R:<name>` specs in `lens_compare.py`), both targets with their split-half differences, and
+  fetches the released ones (`drowse lens fetch <model> rs-r`, `rs-s`). It always writes an R-lens
+  to `local/r` under `$DROWSE_HOME` (lens format v7, Drowse 6.0), so each export gets its own home
+  under `data/lenses/<name>/` and never overwrites another, or the user's default home. Fitting
+  lives here; exact agreement with Drowse's fit is not required.
 
 ## Method notes
 

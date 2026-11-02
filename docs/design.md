@@ -83,15 +83,16 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   Supporting another architecture means composing it from these components, adding one where a part
   is new.
 - **Tests** (`tests/test_transport.py`, on tiny Qwen3 models, one with grouped-query attention): both
-  lenses and both targets match brute-force Jacobians of the patched model (1e-4), and the R-lens
-  matches Drowse's own RelP fit (1e-5) and loads in Drowse. `tests/test_arch.py` and
+  lenses and both targets match brute-force Jacobians of the patched model (1e-4) and Drowse's own
+  RelP fits (1e-5, split-half differences included), and the R-lens loads in Drowse. `tests/test_arch.py` and
   `tests/test_gemma4.py` do the same for small random Gemma 4 models, images, sound and a binding
   sliding window included, and `tests/test_qwen35.py` for small Qwen3.5 models, MoE and dense,
   through HF's own delta-rule kernel. Estimator changes must pass them.
 - **Fit files** (`data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`) hold even- and odd-half
   sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
   corpus), and shard across GPUs (`--shard i/n`); `lenses.load_fits` adds shards and halves.
-  `04_export_rlens.py` writes an R-lens to its own Drowse home under `data/lenses/<name>/`.
+  `04_export_rlens.py` writes an R-lens to its own Drowse home under `data/lenses/<name>/`, both
+  targets with their split-half differences.
 
 ## Cost and precision
 
@@ -422,8 +423,8 @@ Lenses:
   [LessWrong](https://www.lesswrong.com/posts/nc9dHfcB22JdMzGbr/j-lens-jacobian-filtering-enables-more-faithful-workspace))
   filters noisy gradients; ω-J-lenses (Ostrow et al. 2026, [arXiv:2610.31955](https://arxiv.org/abs/2610.31955))
   give a theory of what the J-lens finds.
-- [Drowse](https://github.com/stdlogits/drowse): the R-lens implementation this estimator is tested
-  against and exports to.
+- [Drowse](https://github.com/stdlogits/drowse): the lens implementation this estimator is tested
+  against, which loads the released lenses and the exported R-lenses.
 
 Rules for gated, mixture and recurrent layers (Qwen3.5):
 - AttnLRP (Achtibat et al. 2024, [arXiv:2402.05602](https://arxiv.org/abs/2402.05602)) and its
