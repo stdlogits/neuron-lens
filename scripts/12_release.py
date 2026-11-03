@@ -65,6 +65,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                       "reads": "every pole's weight-only reads through both lenses",
                       "legible": "which reads hold at every pole's top firings",
                       "labels": "every pole's labels, by Claude Haiku 5.5",
+                      "edges": "every pole's strongest direct weight edges from earlier poles and to later ones",
                       "image": "every pole's image read and write, the images that drive it, and its cross-modal ranks",
                       "audio": "every pole's audio read and write, the sounds that drive it, and its cross-modal ranks"},
           "heads": {"acts": "every head's output statistics, top firings and attention patterns",
@@ -542,6 +543,7 @@ Neurons and heads get the same tables, one row per pole or per head:
 | `drivers` | the tokens that drive each pole hardest | the tokens that drive each head, as query and as key |
 | `legible` | which reads hold at the pole's top firings | which reads hold at the head's top firings |
 | `labels` | Claude Haiku's labels: where it fires, what it writes | where it fires, what it attends to, what it writes |
+| `edges` (Qwen3-8B) | the earlier poles whose writes push it most, and the later poles it pushes most | |
 | `image`, `audio` (Gemma 4) | the patch or sound it reads, its write in media contexts, the images or sounds that drive it, and whether its media label is its text concept too | |
 | `media` (Gemma 4) | | how each head attends in image and audio contexts, and which carry what an image or sound shows |
 
@@ -703,6 +705,22 @@ steered text 61% of the time [0.52, 0.69] (chance 25%). Firing labels at confide
 labels late (80% picked at L28-L35, 41% at L0-L8). Gemma 4's neuron labels are not checked blind yet.
 
 ![Random poles read blind](figures/14_lens_blind.png)
+
+### `qwen3-8b-neurons-edges`: direct weight edges
+
+What a neuron writes reaches every later layer's MLP input unchanged, so each pole has a direct edge to
+every pole of a later layer (§17). Per pole, its 16 strongest in-edges (`in_*`, from earlier poles) and
+out-edges (`out_*`, to later ones), strongest first: `_layer`, `_neuron`, `_pole` name the other pole;
+`_cos` is the cosine of the earlier pole's write with the later pole's read direction, and `_push` is
+`cos · act_top · ‖w‖ / rms`, how far one of the earlier pole's top firings moves the later pole's
+normalized input along its read direction (`rms` the residual's median RMS at the later layer's MLP
+input). Positive: the earlier pole's firing drives the later pole; negative: it pushes against it.
+Edges rank by |push| among those with |cos| ≥ 5/√d = 0.078; `−1` and NaN fill shorter lists.
+
+Edges are wiring, not traffic: a pole's push ranks every upstream neuron's effect when it fires at
+Spearman 0.88, but its in-edges are a tenth of the 16 units that contribute most there, which are mostly
+units firing with it (§17). At L1-L3, 49-78% of top firings have a negative gate, where the read
+direction points the wrong way, and in-edges there are unreliable.
 
 ### `gemma-4-12b-neurons-image`, `gemma-4-12b-neurons-audio`: images and sound
 

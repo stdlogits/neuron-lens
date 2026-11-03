@@ -201,6 +201,20 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **Legibility tests** (`09_legible.py`): each unit's reads scored on its own top firings against
   mismatched pairs, at a 5% false discovery rate (§7, §12).
 
+## Edges
+
+`16_edges.py` (Qwen3-8B) links poles through the residual stream, from the weights. A pole A of layer
+`L` writes `±W_down[:, n]`, and that write reaches every later MLP input unchanged; a pole B of layer
+`M > L` reads `c = â ± b̂` after the norm. The edge is `cos(w_A, c_B)`, and its `push` is
+`cos · act_top_A · ‖w_A‖ / rms_M`, the move of one of A's top firings along B's read direction in B's
+normalized input (`rms_M` the median RMS of the residual entering layer M's MLP). Each pole keeps its 16
+strongest in- and out-edges by |push|, among `|cos| ≥ 5/√d`: without that floor, neurons with huge
+activations top many lists at chance cosines. Edges are direct paths at one position, and `push` holds
+the source at its typical top firing; `checks/edges_in_context.py` splits each sampled pole's activation
+at its top firings over the embedding, every head and every upstream neuron (RelP's rules: the norm's
+scale and SiLU's ratio held, the half rule over gate and up), which shows how far the edges name what
+drives it (§17).
+
 ## Labels
 
 `10_labels.py` writes an evidence card per neuron (both poles) or per head and has Claude Haiku 5.5

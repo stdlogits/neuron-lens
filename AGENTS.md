@@ -10,7 +10,8 @@ A catalog of what every MLP neuron (two poles each) and attention head of two mo
 Qwen3-8B (36 layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads). Each unit is
 read from three sides: the weights through two lenses (a neuron's write and read direction; a head's
 OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
-heads get the same tables: `acts`, `drivers`, `reads`, `legible`, and `labels`.
+heads get the same tables: `acts`, `drivers`, `reads`, `legible`, and `labels`; Qwen3-8B's neurons also
+get `edges`, the direct weight edges between poles.
 Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, per-neuron
 `image` and `audio` tables and a `media` table of heads. `NEURON_LENS_MODEL` selects the model for
 every stage (Qwen3-8B by default). The lenses and the catalog are released on the Hugging Face Hub
@@ -34,7 +35,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `python -m neuron_lens.catalog`); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; then `11` figures → `12` release).
+  `14` media tables → `15` optimised media reads; for Qwen3-8B, `16` edges, after `06`; then `11`
+  figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -149,6 +151,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
   L13-L20; findings §11). These bands are a prior: weigh each unit's sides by its own q-values
   in `legible`. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
+- **Edges** (`edges`, findings §17) are wiring, not traffic: what a pole's firing would push into each
+  later pole, directly at one position. What drives a pole when it fires is mostly units firing with it,
+  which the edges rarely list; `checks/edges_in_context.py explain` gives a pole's sources in context.
+  Rank edges within a pole, not across the model (early hub neurons top many lists).
 - **In context.** Before about L21, a firing's effect varies by context, and a write read describes
   the pole's average push (what steering shows), not what one firing does (findings §4).
 - **Undertrained tokens.** Token reads cover `catalog.kept()`: tokens seen 5+ times in

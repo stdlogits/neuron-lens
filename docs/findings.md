@@ -1,6 +1,6 @@
 # Findings
 
-What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12) and Gemma 4 12B
+What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17) and Gemma 4 12B
 (§13-§16, in text, images and sound), and how far each way of reading them goes. Each section gives
 its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
 and the overview in the [README](../README.md).
@@ -35,6 +35,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§14](#14-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
 | [§15](#15-one-concept-in-text-images-and-sound) | 4,378 poles keep their image label on every text test; 18 hold one concept across all three modalities |
 | [§16](#16-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
+| [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -402,9 +403,10 @@ token's exact footprint on the MLP input, at its own position and summed over la
   about 0.10), while the S-lens read's driver hits peak at L8 and fall by L11. The cause is open
   (candidates: read-write alignment, the norm weight's selectivity, how much context L8 neurons use).
 
-**Limits.** Drivers are measured at one position of 8 contexts. The S-lens footprint averages over
-contexts, so it reads a direction on average: on the Qwen3-0.6B prototype a pole's exact top 20
-tokens of 6,000 were 70% right at L0, 25% at L1 and about 0% from L5.
+**Limits.** At L1-L3, 49-78% of top firings have a negative gate, where the read direction `â ± b̂`
+points the wrong way (§17). Drivers are measured at one position of 8 contexts. The S-lens footprint
+averages over contexts, so it reads a direction on average: on the Qwen3-0.6B prototype a pole's exact
+top 20 tokens of 6,000 were 70% right at L0, 25% at L1 and about 0% from L5.
 
 ## §7. Which reads hold: the legibility census
 
@@ -1097,6 +1099,80 @@ over heads (*label writers*). Per-head values are in `heads/media`.
 **Limits.** 64 documents a modality in one prompt; zeroing a head measures what the model loses
 without it, not all it does. With the model near chance on sound, the audio results say little.
 
+## §17. Direct edges between neurons
+
+What feeds a neuron? The residual stream is a sum: what a neuron writes reaches every later layer's MLP
+input unchanged, so the direct path from one pole to a later one is a number from the weights. This
+section builds those edges for Qwen3-8B and asks how much of what drives a pole when it fires they name.
+
+**Setup.**
+- **Edges** (`16_edges.py`; weights only, MPS, fp32, 5 minutes). For a pole A of layer L and a pole B
+  of a later layer M: `cos`, the cosine of A's write `±W_down[:, n]` with B's read direction `â ± b̂`,
+  and `push = cos · act_top_A · ‖w_A‖ / rms_M`, how far one of A's top firings moves B's normalized MLP
+  input along B's read direction (`rms_M`: the median RMS of the residual entering layer M's MLP over
+  64 documents, 0.1 at L0, 1.0 at L12, 6.6 at L28 and 26 at L35). Each pole keeps its 16 strongest
+  in-edges (from earlier poles) and out-edges (to later ones) by |push| among those with
+  |cos| ≥ 5/√d = 0.078, which random directions reach about once in 3.5 million (the `edges` table).
+- **In context** (`checks/edges_in_context.py`; MPS, fp32, 16 minutes). §3's 32 random neurons a layer
+  at L1-L35, both poles, at their first 5 top firings (2,228 poles). At a firing, B's MLP input is the
+  normalized sum of the embedding, every head's write at layers up to M and every neuron's below M.
+  Holding the norm's scale and SiLU's ratio `silu(g)/g` (RelP's rules), the half rule splits B's
+  activation exactly over these sources (largest error 3·10⁻⁵).
+
+**The wiring is real.** Against the layer before alone, the median pole's strongest |cos| is 0.13
+(0.10-0.17 by band), against 0.063 for the same writes under a random rotation. 93% of poles have an
+in-edge above the floor (L0's have none to have), half of them strongest from the layer before. A
+concept pole is wired from its concept: L14 n1561 + (animals, pets, livestock) has in-edges from L12
+n7934 − (dogs, pets, veterinary), L9 n11117 + (pet words), L11 n9841 − (animals, birds, bees) and L10
+n10730 + (animal and rodent nouns).
+
+Shares of the activation at the pole's top firings (medians over poles of each pole's mean):
+
+| band | heads | neurons | top 16 neuron poles | firing among them | the 16 in-edges | 16 random poles | in-edge sources firing | recall (control) | ρ |
+|---|---|---|---|---|---|---|---|---|---|
+| L1-L8 | 0.33 | 0.66 | 0.54 | 0.61 | 0.06 | 0.00 | 0.04 | 0.09 (0.00) | 0.88 |
+| L9-L12 | 0.25 | 0.75 | 0.69 | 0.70 | 0.13 | 0.00 | 0.06 | 0.10 (0.00) | 0.89 |
+| L13-L20 | 0.51 | 0.50 | 0.54 | 0.76 | 0.07 | 0.00 | 0.04 | 0.09 (0.00) | 0.87 |
+| L21-L27 | 0.42 | 0.58 | 0.39 | 0.78 | 0.06 | 0.00 | 0.06 | 0.10 (0.00) | 0.87 |
+| L28-L35 | 0.19 | 0.81 | 0.46 | 0.80 | 0.09 | 0.00 | 0.10 | 0.10 (0.00) | 0.88 |
+
+*Firing*: at `act_top / 4` or more in its pole (the `acts` tables' rate threshold). *Recall*: the share
+of the 16 largest |contributions| that are in-edges (control: another pole's in-edges). *ρ*: Spearman
+over every upstream neuron, in the pole it is in, between its push and its contribution.
+
+- **A pole's direct input is concentrated.** The 16 upstream neuron poles that contribute most carry
+  39-69% of its activation, and 61-80% of them are firing there themselves. Heads carry a third, half at
+  L13-L20; the embedding 2% at most (at L1), under 0.5% from L7.
+- **The edges get the direction right, not the traffic.** An edge's push ranks every upstream neuron's
+  contribution at Spearman 0.87-0.89: the weights say what each would do. But the in-edges are 9-10% of
+  the 16 largest contributors and carry 6-13% of the activation, because their sources fire at only
+  4-10% of the pole's top firings. What drives a pole is which units fire with it, which no list from
+  the weights can know (the same gap as between global weights and attribution graphs over transcoder
+  features; Ameisen et al. 2025).
+- **In context the sources read as one concept.** `explain 14 1561 +` gives the animal pole's sources
+  at its five top firings: L12 n7934 − (11%), then animal, veterinary, pet and young-animal poles from
+  L4-L13 (L12 n7182 −, L11 n2301 −, L13 n12072 +, L10 n11987 +, L4 n12138 + "vet", L10 n4140 − cats),
+  topical copy heads (L12h18, L14h7, L14h6: +11.5%) and two heads that suppress topical nouns (L14h5,
+  L12h8: −9%). Three of its ten largest neuron sources are among its 16 in-edges (L12 n7934 −,
+  L12 n7182 −, L11 n2301 −).
+- **At L1-L3 the read direction misleads.** ρ is −0.27 at L1, −0.61 at L2 and 0.52 at L3, and
+  0.86-0.91 from L4: at L1-L3, 49-78% of top firings ride SiLU's negative lobe (the gate below 0; 14%
+  at L4, 2% or less from L5), where `â ± b̂` points the wrong way. Every weight-only read of those
+  layers' read directions (§6) inherits this.
+- **Early hubs.** A few L0-L1 neurons sit in most early in-lists: the 1% most-listed sources hold 59% of
+  the in-list entries at L0-L8 (10-23% later), and L0 n11466 − (甩, "fling") is in 45% of L1-L8 poles'
+  lists. Shared lists show as recall's control at L1-L2 (0.06).
+
+**What this means.** The edges are the model's wiring: what a pole's firing would do to each later pole,
+the counterpart of a write read (§3), and like it an average that leaves the context out (§4). Which
+units drive a pole when it fires is the context's: a list of what feeds a pole needs activations, its
+sources at its top firings, which `explain` gives one pole at a time.
+
+**Limits.** Direct paths at one position: what heads carry between positions, and paths through other
+units, are not edges. Heads are sources in context but have no weight edges. `push` holds each source
+at its typical top firing. 32 random neurons a layer, 5 firings each. Qwen3-8B only: Gemma 4's norms
+rescale each write per position.
+
 ## Open questions
 
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
@@ -1107,3 +1183,7 @@ without it, not all it does. With the model near chance on sound, the audio resu
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).
 - Labels in words for Gemma 4, with its image and sound exemplars on the cards (§14), and media reads
   per slot, which would say where in an image a neuron looks.
+- Every pole's sources at its top firings, neurons and heads (§17's `explain` for the whole catalog),
+  and weight edges for heads (OV writes into neurons, neurons into QK).
+- Whether a pole's read direction should follow its gate's sign at L1-L3, where half or more of top
+  firings ride SiLU's negative lobe (§17).

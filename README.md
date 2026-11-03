@@ -137,9 +137,11 @@ And some heads, read from the weights:
 
 Neurons and heads get the same five tables, one row per pole or per head: `reads` (weight-only lens
 reads), `acts` (activation statistics and top firings), `drivers` (exact token drivers), `legible`
-(which reads hold at the unit's own top firings) and `labels` (Claude Haiku's labels in words). Gemma
-4 adds `image` and `audio` tables per neuron and a `media` table of heads in image and audio contexts.
-The [dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents every column.
+(which reads hold at the unit's own top firings) and `labels` (Claude Haiku's labels in words).
+Qwen3-8B's neurons add `edges`: each pole's strongest direct weight edges from earlier poles and to
+later ones. Gemma 4 adds `image` and `audio` tables per neuron and a `media` table of heads in image
+and audio contexts. The [dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents
+every column.
 
 **Which reads to trust where.** No single read works at every depth. The early layers are best read
 from their input side, the late ones from their write side, and the middle is hard from both
@@ -399,6 +401,15 @@ prefers the right label only 55% of the time, and no head carries it
 ([§16](docs/findings.md#16-attention-heads-in-image-and-audio-contexts)).
 
 ![Heads in image and audio contexts](docs/figures/24_heads_media.png)
+
+### 17. What feeds a neuron: the wiring is in the weights, the traffic is in the context
+
+What a neuron writes reaches every later neuron's input unchanged, so the weights give an edge between
+every pair of poles: how far one pole's firing pushes a later one. Concept poles are wired from their
+concept (an L14 animals pole from L12's dogs-and-pets pole), and an edge ranks every upstream neuron's
+actual effect at Spearman 0.88. But when a pole fires, a few units drive it, and they are units firing
+with it: its 16 largest sources carry about half its activation, its 16 weight edges about a tenth.
+Heads carry a third (half at L13-L20) ([§17](docs/findings.md#17-direct-edges-between-neurons)).
 
 ### Limits
 

@@ -5,9 +5,10 @@
 - ``heads/<table>.parquet``: a row per query head, with ``layer``, ``head`` and ``kv_head`` in front.
 
 Tables, each from one pipeline stage: ``acts`` (``06_activations.py``), ``drivers``
-(``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``) and ``labels``
-(``10_labels.py``). Token reads cover the kept tokens (``kept``) and list 64 of them: ``*_ids``
-(the model's token ids), ``*_val`` (their scores) and ``*_str`` (the top 8 decoded, `` | ``-joined).
+(``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``), ``labels``
+(``10_labels.py``) and, for Qwen3-8B's neurons, ``edges`` (``16_edges.py``). Token reads cover the
+kept tokens (``kept``) and list 64 of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores)
+and ``*_str`` (the top 8 decoded, `` | ``-joined).
 
 The model is Qwen3-8B unless ``NEURON_LENS_MODEL`` names another (``google/gemma-4-12B``): every
 stage reads it from here.
@@ -29,7 +30,7 @@ import torch
 from neuron_lens.paths import DATA
 
 MODEL = os.environ.get("NEURON_LENS_MODEL", "Qwen/Qwen3-8B")
-TABLES = ("acts", "drivers", "reads", "legible", "labels")
+TABLES = ("acts", "drivers", "reads", "legible", "labels", "edges")
 TOP = 64  # tokens kept per read: signal holds to rank 64 (findings §7)
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3
@@ -228,15 +229,24 @@ def head_entry(layer: int, head: int, model: str = MODEL) -> dict:
     return {k: v[0] for k, v in t.slice(layer * n_heads + head, 1).to_pydict().items()}
 
 
+def edge_list(e: dict, side: str, k: int = 6) -> str:
+    """A pole's first ``k`` edges on one side (``in``, ``out``) as ``L12 n7934 − 1.23`` (the push)."""
+    rows = zip(*(e[f"{side}_{c}"] for c in ("layer", "neuron", "pole", "push")))
+    return " | ".join(f"L{l} n{n} {'+' if p > 0 else '−'} {v:.2f}" for l, n, p, v in list(rows)[:k] if l >= 0)
+
+
 def show(e: dict) -> None:
     for k, v in e.items():
-        if k.endswith(("_ids", "_val")) or k.startswith(("top_", "src_pos")):
+        if k.endswith(("_ids", "_val")) or k.startswith(("top_", "src_pos", "in_", "out_")):
             continue
         if k == "contexts":
             for c in str(v).split(" ‖ "):
                 print(f"  {'context':14s} {c}")
         else:
             print(f"  {k:14s} {v:.4g}" if isinstance(v, float) else f"  {k:14s} {v}")
+    for side in ("in", "out"):
+        if f"{side}_layer" in e:
+            print(f"  {side + ' edges':14s} {edge_list(e, side)}")
 
 
 def main() -> None:
