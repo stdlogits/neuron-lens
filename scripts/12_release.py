@@ -359,8 +359,8 @@ Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
 
 - **The R-lens predicts what steering a neuron does.** Correlated with the measured change in
   log-probabilities when a neuron's write is added at about its typical activation, the R-lens read of
-  the write reaches, for Qwen3-8B, a median r of 0.46-0.51 at L4-L8 and 0.9 or more from L22 (another
-  neuron's read: ±0.04), ahead of Neuronpedia's J-lens by 0.03-0.12 from L4 to L23. Before about L21 it
+  the write reaches, for Qwen3-8B, a median r of 0.45-0.50 at L4-L8 and 0.9 or more from L22 (another
+  neuron's read: ±0.04), ahead of Neuronpedia's J-lens by 0.03-0.13 from L4 to L23. Before about L21 it
   reads a neuron's average push, which is what steering shows, not what one firing does in context (§4).
 
 ![Lens reads against steering](figures/07_steering.png)
@@ -875,9 +875,12 @@ Per model folder (`qwen3-8b/`, `gemma-4-12b/`):
   `(layer, neuron)`, 32 random per layer plus named ones, or {g['causal_picks']:,} of Gemma 4's, 24 random
   per layer. Per neuron and pole: `steer` `[neuron, pole, dose, vocab]`, the mean change in log-probs
   over positions 16-63 of 16 64-token DCLM contexts (`contexts`) when the write is added there at 1× and
-  4× `alpha` (the pole's typical high activation); `ablate_pos` and `ablate_win`, clean − ablated
-  log-probs with the neuron zeroed at its peak in 8 top documents, at that position and summed over the
-  next 8; `dlogp_next`, the next token's change per document; `fired`, the activation there. bf16.
+  4× `alpha` (the pole's `act_top`); `ablate_pos` and `ablate_win`, clean − ablated log-probs with the
+  neuron zeroed at its peak in its first 8 top documents, at that position and summed over the next 8;
+  `top_doc` (rows of `docs.parquet`) and `top_pos`, where each of those ablations was made, as in the
+  `acts` table (−1 where the pole never fired); `dlogp_next`, the next token's change per document;
+  `fired`, the activation there. Every input is in the file, so it can be re-measured from it alone.
+  bf16 (Qwen3-8B's on MPS); weak effects differ by device (§3).
 - `gemma-4-12b/media/{{image,audio}}_docs.parquet`: each image or sound document's `source`, `labels`,
   `caption`, `ref` (JSON: the dataset, config, split and revision, the row's own identifiers, the media
   file's path and its bytes' SHA-1) and `link`. The images and sounds are not re-hosted;

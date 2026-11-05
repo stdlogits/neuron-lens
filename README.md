@@ -195,10 +195,10 @@ selective for the chat slice fire on ChatGPT's register (" delve", "As of 2021")
 
 Add a pole's write vector, at about its typical activation, to 48 positions of 16 web documents,
 measure the change in next-token log-probabilities, and correlate it with the lens's read of the same
-vector. The R-lens reaches a median r of 0.46-0.51 at L4-L8, 0.64-0.74 at L12-L16 and 0.9 or more from
-L22, against ±0.04 for another neuron's read. It leads the J-lens by 0.03-0.12 from L4 to L23; the logit
-lens trails until about L20 (L8: 0.51 against 0.12). From L5, 92-100% of random poles' writes predict
-their own steering effect, against 0-5% for mismatched pairs
+vector. The R-lens reaches a median r of 0.45-0.50 at L4-L8, 0.65-0.75 at L12-L16 and 0.9 or more from
+L22, against ±0.04 for another neuron's read. It leads the J-lens by 0.03-0.13 from L4 to L23; the logit
+lens trails until about L20 (L8: 0.49 against 0.12). From L5, 94-100% of random poles' writes predict
+their own steering effect, against 0-6% for mismatched pairs
 ([§3](docs/findings.md#3-a-writes-lens-read-predicts-what-steering-it-does)).
 
 ![Lens reads against steering](docs/figures/07_steering.png)

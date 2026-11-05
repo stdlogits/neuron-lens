@@ -18,7 +18,7 @@ The residual stream runs from the input tokens through the embedding `W_E`, laye
 
 ![Each side of a neuron reads at its own depth: inputs early, outputs late, a dark middle](03_depth_map.png)
 
-The input side reads early: the S-lens names the firing token for 78% of L0's poles and 14-58% at L1-L8, and almost none at L10-L20. The write side reads late: the R-lens write predicts the next token after a firing for at most 2% of poles before L23, rising to 35-37% at L28-L30. In between, 77-86% of L13-L20's poles are dark. Amplified, the write side reads nearly everywhere: from L5, 92-100% of random poles' writes predict the effect of steering them.
+The input side reads early: the S-lens names the firing token for 78% of L0's poles and 14-58% at L1-L8, and almost none at L10-L20. The write side reads late: the R-lens write predicts the next token after a firing for at most 2% of poles before L23, rising to 35-37% at L28-L30. In between, 77-86% of L13-L20's poles are dark. Amplified, the write side reads nearly everywhere: from L5, 94-100% of random poles' writes predict the effect of steering them.
 
 ## 4. The lenses are stable: fits on two halves of the corpus differ by under 6%
 
@@ -30,7 +30,7 @@ Split-half difference of each lens target by layer: the R-lens from each layer's
 
 ![An R-lens fitted on chat predicts steering as well as the web-text lens](05_chat_lens.png)
 
-Median r with 1× steering for the chat-fitted lens and the DCLM lens's two halves: within 0.04 at every layer (the chat lens is lowest against them at L12-L18), though its top tokens differ (findings §1).
+Median r with 1× steering for the chat-fitted lens and the DCLM lens's two halves: within 0.04 at every layer but L3 (0.06, where the chat lens is highest; it is lowest at L12-L17), though its top tokens differ (findings §1).
 
 ## 6. Early poles are quiet or work at the first token; from L5 every pole fires
 
@@ -42,13 +42,13 @@ Left: median act_top by layer (log scale), flat at 3-5 from L5 to L20 and rising
 
 ![A neuron's write, read through the R-lens, predicts what steering it does](07_steering.png)
 
-Median r between each lens's write read and the measured effect, by layer. Left, steering at 1× the pole's typical activation: the R-lens reaches 0.46-0.51 at L4-L8 and 0.9 or more from L22, leads the J-lens by up to 0.12 from L4 to L23, and the logit lens trails until about L20 (L8: 0.51 against 0.12). Right, ablating the pole where it fires: far lower before L21, partly because this ran in bf16 and partly because a firing's effect depends on its context (figure 9).
+Median r between each lens's write read and the measured effect, by layer. Left, steering at 1× the pole's typical activation: the R-lens reaches 0.45-0.50 at L4-L8 and 0.9 or more from L22, leads the J-lens by up to 0.13 from L4 to L23, and the logit lens trails until about L20 (L8: 0.49 against 0.12). Right, ablating the pole where it fires: far lower before L21, partly because this ran in bf16 and partly because a firing's effect depends on its context (figure 9).
 
 ## 8. Amplified, nearly every write does what the lens says; in context, few do
 
 ![Amplified, nearly every write does what the lens says; in context, few do](08_amplified_vs_in_context.png)
 
-From L5, 92-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles predict what follows their own firings, rising to 31-32% at L28-L29. The gap is the difference between a write's average push and a firing's effect in its context (figure 9).
+From L5, 94-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles predict what follows their own firings, rising to 31-32% at L28-L29. The gap is the difference between a write's average push and a firing's effect in its context (figure 9).
 
 ## 9. A firing's effect is linear but depends on context; the lens reads its average
 
@@ -108,7 +108,7 @@ Shares of each layer's heads: an OV read passes, only a token mode or attention 
 
 ![Qwen3-8B and Gemma 4 12B read alike: inputs early, writes late, a dark middle](18_two_models.png)
 
-Both models against relative depth (layer / last layer). Left: median r between the R-lens read of a pole's write and its 1× steering effect. In Qwen3-8B it predicts steering from L4 (0.46-0.51 at L4-L8); in Gemma 4 12B it stays at 0.09 or less through L10 (relative depth 0.21), jumps to 0.40 at L11 and reaches 0.9 at L34 (Qwen3-8B: L22). The logit lens (dashed) trails the R-lens in both until late. Right: a weight-only read passes for 80% of Qwen3-8B's L0 poles and 84-88% of Gemma's L0-L1, for at most 7% of Qwen3-8B's L13-L20 and 4% of Gemma's L15-L30, and again late, mostly through the R-lens write (39% at Qwen3-8B's L29, 41% at Gemma's L33). Dark peaks mid-network: 86% at Qwen3-8B's L18 and 85% at Gemma's L22 (relative depth 0.51 and 0.47).
+Both models against relative depth (layer / last layer). Left: median r between the R-lens read of a pole's write and its 1× steering effect. In Qwen3-8B it predicts steering from L4 (0.45-0.50 at L4-L8); in Gemma 4 12B it stays at 0.09 or less through L10 (relative depth 0.21), jumps to 0.40 at L11 and reaches 0.9 at L34 (Qwen3-8B: L22). The logit lens (dashed) trails the R-lens in both until late. Right: a weight-only read passes for 80% of Qwen3-8B's L0 poles and 84-88% of Gemma's L0-L1, for at most 7% of Qwen3-8B's L13-L20 and 4% of Gemma's L15-L30, and again late, mostly through the R-lens write (39% at Qwen3-8B's L29, 41% at Gemma's L33). Dark peaks mid-network: 86% at Qwen3-8B's L18 and 85% at Gemma's L22 (relative depth 0.51 and 0.47).
 
 ## 19. Gemma 4 12B: a neuron's write, read through the R-lens, predicts steering from L11
 

@@ -14,6 +14,13 @@
 The documents are the first full-length ones of the DCLM, code and chat activation slices
 (128 tokens). Eager attention, bf16.
 
+Position 0 attends only to itself, so everything at position 0 (L6's sink neurons, dim 2276 after
+L6) depends on the first token alone: the 128 documents carry 65 first tokens, and all 32 chat
+documents share ``<|im_start|>``. The position-0 columns count each first token once (its documents'
+median), so one first token near the cutoff moves the share by 1/65, not by its documents' count.
+bf16 kernels round differently with the batch shape, so the L0 trigger is also run at batches 8 and
+16, listing the first tokens whose dim 2276 lands within 15% of the cutoff.
+
     python scripts/checks/sinks.py
 """
 import torch
@@ -29,6 +36,7 @@ SINK_DIM = 2276
 SINK_NEURONS = (5723, 8518, 422)  # L6, He's dims
 LAYERS = (6, 9, 15, 21, 27, 33)
 BATCH = 32
+SINK_CUT = 2000  # |dim 2276| after L6 past which position 0 holds a sink (clean: about 12,000)
 
 
 def main() -> None:
@@ -37,6 +45,11 @@ def main() -> None:
     for name, k in SLICES.items():
         rows += lens_docs(act_file(name), tok, 4 * k, SEQ, SEQ)[:k]
     ids = torch.tensor(rows)
+    firsts, inv = ids[:, 0].unique(return_inverse=True)
+
+    def by_first(v: torch.Tensor) -> torch.Tensor:
+        """Each first token's values once: the median over its documents (position 0 sees only that token)."""
+        return torch.stack([v[inv == k].median(0).values for k in range(len(firsts))])
     dev = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="eager").to(dev).eval()
     for p in model.parameters():
@@ -54,7 +67,7 @@ def main() -> None:
         lambda m, x, o: cap.setdefault("h20", []).append((o[0] if isinstance(o, tuple) else o)[..., SINK_DIM].float().cpu()))
     model.model.norm.register_forward_pre_hook(lambda m, x: cap.setdefault("hf", []).append(x[0].float().cpu()))
 
-    def run(pre=None, post=None, at: list[tuple[int, int]] | None = None) -> dict:
+    def run(pre=None, post=None, at: list[tuple[int, int]] | None = None, batch: int = BATCH) -> dict:
         """One pass with optional hooks on L0-L5; attention on position 0 (and on ``at`` positions)."""
         hooks = [layers[l].mlp.down_proj.register_forward_pre_hook(f) for l, f in (pre or [])]
         hooks += [layers[l].mlp.register_forward_hook(f) for l, f in (post or [])]
@@ -64,21 +77,22 @@ def main() -> None:
         nll = []
         try:
             with torch.no_grad():
-                for i in range(0, len(ids), BATCH):
-                    b = ids[i:i + BATCH]
+                for i in range(0, len(ids), batch):
+                    b = ids[i:i + batch]
                     out = model(b.to(dev), output_attentions=True)
                     lp = torch.log_softmax(out.logits[:, :-1].float(), -1)
                     nll.append(-lp.gather(2, b[:, 1:, None].to(dev)).squeeze(-1).cpu())
                     for l, a in enumerate(out.attentions):
                         att0[l] += a[:, :, 1:, 0].float().mean((1, 2)).sum().item()
                         for d, t in (at or []):
-                            if i <= d < i + BATCH:
+                            if i <= d < i + batch:
                                 atts[l].append((a[d - i, :, t + 1:, t].float().mean().item(), a[d - i, :, t + 1:, 0].float().mean().item()))
         finally:
             for h in hooks:
                 h.remove()
-        h6 = torch.cat(cap["h6"])
-        return {"a6": torch.cat(cap["a6"]).median(0).values, "h6": h6.median().item(), "sink": (h6.abs() > 2000).float().mean().item(),
+        t6 = by_first(torch.cat(cap["h6"]))
+        return {"a6": by_first(torch.cat(cap["a6"])).median(0).values, "t6": t6, "h6": t6.median().item(),
+                "sink": (t6.abs() > SINK_CUT).float().mean().item(),
                 "att0": {l: v / len(ids) for l, v in att0.items()}, "atts": atts, "nll": torch.cat(nll),
                 "h20": torch.cat(cap["h20"]), "hf": torch.cat(cap["hf"])}
 
@@ -123,9 +137,10 @@ def main() -> None:
         def f(m, x):
             x[0][:, 0].index_fill_(1, idx, 0)
         return f
-    lines += ["", f"formation: per condition, L6 n{'/n'.join(map(str, SINK_NEURONS))} at position 0 (median), dim {SINK_DIM} after "
-              f"L6 (median), share of documents with a sink (|dim| > 2000), attention on position 0 at "
-              f"L{'/'.join(map(str, LAYERS))}, NLL of token 1 (predicted at position 0) / token 2 / tokens 3+",
+    lines += ["", f"formation: per condition, medians over the {len(firsts)} first tokens of L6 n{'/n'.join(map(str, SINK_NEURONS))} "
+              f"at position 0 and dim {SINK_DIM} after L6, share of first tokens with a sink (|dim| > {SINK_CUT}), "
+              f"attention on position 0 at L{'/'.join(map(str, LAYERS))}, NLL of token 1 (predicted at position 0) / "
+              f"token 2 / tokens 3+",
               row("clean", clean)]
     for name, ls, p in ([(f"L{l} MLP zeroed at 0", (l,), 0) for l in range(6)]
                         + [("L2+L3 MLP zeroed at 0", (2, 3), 0), ("L0-L5 MLP zeroed at 0", tuple(range(6)), 0),
@@ -144,7 +159,13 @@ def main() -> None:
         o[:, 0] = got["m"][state["i"]:state["i"] + len(o)]
         state["i"] += len(o)
         return o
-    lines.append(row("L0 MLP at 0 <- same token at 1", run(post=[(0, patch)])))
+    lines.append(row("L0 MLP at 0 <- same token at 1", trig := run(post=[(0, patch)])))
+    for b in (8, 16, BATCH):  # the bf16 batch shape moves values near the cutoff
+        state["i"] = 0
+        r = trig if b == BATCH else run(post=[(0, patch)], batch=b)
+        near = [(tok.decode([firsts[k].item()]), round(v)) for k, v in enumerate(r["t6"].tolist())
+                if abs(abs(v) - SINK_CUT) < 0.15 * SINK_CUT]
+        lines.append(f"    batch {b:2d}: first tokens with a sink {r['sink']:.3f}; within 15% of the cutoff: {near}")
     # Attribution of dim 2276 after L6 to L0's neurons at position 0.
     class Stop(Exception):
         pass

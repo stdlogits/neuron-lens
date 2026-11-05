@@ -474,7 +474,7 @@ def fig_depth_map() -> None:
            "The input side reads early: the S-lens names the firing token for 78% of L0's poles and 14-58% at L1-L8, "
            "and almost none at L10-L20. The write side reads late: the R-lens write predicts the next token after a "
            "firing for at most 2% of poles before L23, rising to 35-37% at L28-L30. In between, 77-86% of L13-L20's "
-           "poles are dark. Amplified, the write side reads nearly everywhere: from L5, 92-100% of random poles' "
+           "poles are dark. Amplified, the write side reads nearly everywhere: from L5, 94-100% of random poles' "
            "writes predict the effect of steering them.")
 
 
@@ -516,7 +516,8 @@ def fig_chat_lens() -> None:
            "7), for a lens fitted on 500 chat conversations and the two halves of the DCLM lens of record (which "
            "overlap almost exactly).", "findings §1; data/summary/causal_lens_chat-vs-dclm_qwen3-8b.json",
            "Median r with 1× steering for the chat-fitted lens and the DCLM lens's two halves: within 0.04 at every "
-           "layer (the chat lens is lowest against them at L12-L18), though its top tokens differ (findings §1).")
+           "layer but L3 (0.06, where the chat lens is highest; it is lowest at L12-L17), though its top tokens differ "
+           "(findings §1).")
 
 
 def fig_activations() -> None:
@@ -580,8 +581,8 @@ def fig_steering() -> None:
            "log-probabilities; 32 random neurons a layer, both poles. Band: the R-lens's interquartile range.",
            "findings §3, §4; data/summary/causal_lens_qwen3-8b.json",
            "Median r between each lens's write read and the measured effect, by layer. Left, steering at 1× the "
-           "pole's typical activation: the R-lens reaches 0.46-0.51 at L4-L8 and 0.9 or more from L22, leads the "
-           "J-lens by up to 0.12 from L4 to L23, and the logit lens trails until about L20 (L8: 0.51 against 0.12). "
+           "pole's typical activation: the R-lens reaches 0.45-0.50 at L4-L8 and 0.9 or more from L22, leads the "
+           "J-lens by up to 0.13 from L4 to L23, and the logit lens trails until about L20 (L8: 0.49 against 0.12). "
            "Right, ablating the pole where it fires: far lower before L21, partly because this ran in bf16 and partly "
            "because a firing's effect depends on its context (figure 9).")
 
@@ -606,7 +607,7 @@ def fig_amplified() -> None:
            "steering effect. "
            "Orange: of all poles, the share whose write promotes the token after their top firings, net of chance.",
            "findings §4; data/summary/causal_lens_qwen3-8b.json (steering), legible_qwen3-8b.json (in context)",
-           "From L5, 92-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles "
+           "From L5, 94-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles "
            "predict what follows their own firings, rising to 31-32% at L28-L29. The gap is the difference between a "
            "write's average push and a firing's effect in its context (figure 9).")
 

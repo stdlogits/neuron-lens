@@ -21,7 +21,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 |---|---|
 | [§1](#1-the-lenses-stability-and-corpus-dependence) | both lenses' halves agree within 0.06; a chat-fitted lens changes tokens, not concepts or causal scores |
 | [§2](#2-activations-over-15m-positions) | scale, near-silent L1, first-position L2-L3, language and code selectivity at the ends of the network |
-| [§3](#3-a-writes-lens-read-predicts-what-steering-it-does) | the R-lens read of a write predicts steering (r 0.46-0.51 at L4-L8, 0.9+ from L22), ahead of the J-lens |
+| [§3](#3-a-writes-lens-read-predicts-what-steering-it-does) | the R-lens read of a write predicts steering (r 0.45-0.50 at L4-L8, 0.9+ from L22), ahead of the J-lens |
 | [§4](#4-steering-is-not-what-a-firing-does) | before L21 a firing's effect depends on its context; the lens and steering read its average |
 | [§5](#5-prediction-and-suppression) | late poles fire before the word they promote; suppression from L32; two signs of one neuron |
 | [§6](#6-the-input-side) | the S-lens names early neurons' tokens through L8, the R-lens read from L9; exact drivers in between |
@@ -88,9 +88,10 @@ DCLM lens's 500-document halves, so both sides carry the same noise:
 | L24 | 0.78 (0.96) | 0.84 (0.97) |
 | L34 | 0.96 (1.00) | 0.96 (1.00) |
 
-- **Every causal score is the same.** Steering prediction (§3) is within 0.04 at every layer, ablation
-  identical, persona names (§10) equal from L6 (the DCLM lens is better at L0-L5: 15% of names in the
-  top 10 against 9%), fused personas within 0.02. The chat lens is no better on chat-format tests.
+- **Every causal score is the same.** Steering prediction (§3) is within 0.04 at every layer but L3
+  (0.06), ablation identical, persona names (§10) equal from L6 (the DCLM lens is better at L0-L5: 15%
+  of names in the top 10 against 9%), fused personas within 0.02. The chat lens is no better on
+  chat-format tests.
 - **Clear neurons read the same concept in another order** (L8 n1931 +: 圣经, Bible, 基督徒,
   Scripture under both). **Weak, diffuse writes drift toward each corpus's register:** markdown bold
   and `...⏎` under chat, `...⏎⏎` and curly quotes under DCLM. Where a read's top probability is low,
@@ -162,47 +163,54 @@ Python only, and chat is one synthetic dataset.
 ## §3. A write's lens read predicts what steering it does
 
 **Setup** (`checks/causal_lens.py`, MPS, bf16). 32 random neurons per layer plus the named ones
-(`neuron_lens/known.py`), 1,194 neurons, both poles. **Steering** adds `±α·W_down[:, n]` to layer
-`L`'s MLP output at positions 16-63 of 16 DCLM documents of 64 tokens, at 1× and 4× the pole's typical
-top activation from a pilot (about 0.6× the full pass's `act_top`), and records the mean change in
-log-probabilities. **Score:** Pearson r over the tokens seen 5+ times between that change and a lens's
-logits for the write. **Control:** the next random neuron's read from the same layer. Medians over the
-random picks (64 poles a layer).
+(`neuron_lens/known.py`), 1,194 neurons, both poles. **Steering** adds `±α·W_down[:, n]` to layer `L`'s
+MLP output at positions 16-63 of 16 DCLM documents of 64 tokens, at 1× and 4× the pole's typical top
+activation (`act_top` in the `acts` table, the median of its 24 top firings), and records the mean
+change in log-probabilities. **Score:** Pearson r over the tokens seen 5+ times between that change and
+a lens's logits for the write. **Control:** the next random neuron's read from the same layer. Medians
+over the random picks (64 poles a layer).
 
 | layer | logit lens | J-lens | R-lens | control |
 |---|---|---|---|---|
-| L0 | 0.09 | 0.38 | 0.35 | 0.01 |
-| L4 | 0.09 | 0.38 | 0.46 | −0.01 |
-| L8 | 0.12 | 0.42 | 0.51 | 0.01 |
-| L12 | 0.25 | 0.58 | 0.64 | −0.03 |
-| L16 | 0.36 | 0.65 | 0.74 | 0.00 |
+| L0 | 0.08 | 0.37 | 0.33 | −0.01 |
+| L4 | 0.09 | 0.37 | 0.45 | 0.00 |
+| L8 | 0.12 | 0.39 | 0.49 | 0.01 |
+| L12 | 0.25 | 0.57 | 0.65 | −0.02 |
+| L16 | 0.36 | 0.66 | 0.74 | 0.01 |
 | L20 | 0.59 | 0.81 | 0.87 | 0.01 |
-| L24 | 0.83 | 0.92 | 0.94 | 0.00 |
-| L28 | 0.90 | 0.96 | 0.98 | −0.01 |
-| L32 | 0.94 | 0.99 | 0.99 | −0.01 |
+| L24 | 0.83 | 0.92 | 0.95 | 0.00 |
+| L28 | 0.90 | 0.96 | 0.97 | −0.01 |
+| L32 | 0.94 | 0.98 | 0.99 | −0.01 |
 
 ![Lens reads against steering and ablation](figures/07_steering.png)
 
 - **A read of one write vector, with no forward pass, predicts what adding it does downstream**. The
-  R-lens reaches 0.46-0.51 at L4-L8, 0.64-0.74 at L12-L16 and 0.9 or more from L22; controls stay
+  R-lens reaches 0.45-0.50 at L4-L8, 0.65-0.75 at L12-L16 and 0.9 or more from L22; controls stay
   within ±0.04.
-- **The R-lens leads the J-lens from L4 to L23** by 0.03-0.12 (L7: 0.51 against 0.39), and in top-10
+- **The R-lens leads the J-lens from L4 to L23** by 0.03-0.13 (L7: 0.50 against 0.37), and in top-10
   overlap. The J-lens leads at L0, they tie at L1-L3 and converge from L24. The logit lens, which
   ignores the later layers, trails until about L20.
-- **Nearly every pole has a specific effect when amplified.** From L5, 92-100% of random poles' writes
-  predict their own steering effect (r past 0.26, the 99th percentile of mismatched pairs pooled over
-  layers), against 0-5% of mismatched pairs. L1-L3 are lower (32-57% of the poles that fire pass; median
-  r about 0.16 at L1-L2) because their poles barely fire, so their doses are tiny.
-- **Named concept poles show the R-lens's largest leads:** L8 n5315 − ("nature") at r 0.64 against
-  0.10 for the J-lens; steering it raises ` trees`, ` vegetation`, ` gardens` and 植物, while the
+- **Nearly every pole has a specific effect when amplified.** From L5, 94-100% of random poles' writes
+  predict their own steering effect (r past 0.24, the 99th percentile of mismatched pairs pooled over
+  layers), against 0-6% of mismatched pairs. L1-L3 are lower (32-58% of the poles that fire pass; median
+  r 0.08 at L1 and 0.14 at L2) because their poles barely fire, so their doses are tiny.
+- **Named concept poles show the R-lens's largest leads:** L8 n5315 − ("nature") at r 0.60 against
+  0.14 for the J-lens (at 4×); steering it raises ` trees`, ` vegetation`, ` gardens` and 植物, while the
   J-lens reads its write as brackets. Named poles are otherwise no more readable than random ones.
-- **Ablation where a pole fires** (zeroing the neuron at its peak in its top 8 documents) agrees far
-  less before L21 (r under 0.15 to L16, 0.87 at L32), and the lenses tie there. §4 explains why.
+- **Ablation where a pole fires** (zeroing the neuron at its peak in its first 8 top documents, the
+  `acts` table's `top_doc` and `top_pos`) agrees far less before L21 (r under 0.15 to L16, 0.87 at L32),
+  and the lenses tie there. §4 explains why.
 
-**Limits.** Doses come from a pilot; 16 held-out DCLM documents of 64 tokens, the lens corpus's source
-(the chat lens ties, §1). Pearson r over 100k tokens is dominated by small changes; the top-10 overlap
-complements it. bf16 rounds weak poles' writes partly away, so the ablation numbers are lower bounds
-(§4).
+**Limits.** 16 held-out DCLM documents of 64 tokens, the lens corpus's source (the chat lens ties, §1).
+Pearson r over 100k tokens is dominated by small changes; the top-10 overlap complements it. bf16 rounds
+weak poles' writes partly away, so the ablation numbers are lower bounds (§4), and weak effects depend
+on the device: re-run on an RTX 4090 at the same firings (390 poles of six layers), ablations measured
+on MPS reproduce at a median r of 0.997 for the strongest quarter of effects and 0.55 for the weakest.
+An earlier version of this sample took its doses and ablation sites from a 6,999-document pilot of the
+activation pass that was not released ([issue #2](https://github.com/stdlogits/neuron-lens/issues/2));
+measured again from the released tables, steering at 1× moved by 0.02 or less except at L1 (0.15 to
+0.08), at 4× (doses now about 1.5× larger) by up to 0.08, and ablation by 0.05 or less.
+`causal/causal.pt` now holds every input it was measured from, `top_doc` and `top_pos` included.
 
 ## §4. Steering is not what a firing does
 
@@ -212,7 +220,7 @@ in real text?
 **In context, writes rarely predict what comes next before L22.** For every pole, the census (§7)
 tests whether its write read promotes the tokens that follow its top firings. Before L22, 1-4% of
 poles do (net of chance); from L23 it rises to 31-32% at L28-L29, and is 17-25% at L32-L35, where
-suppression takes over (§5). Amplified, 92-100% do from L5 (§3).
+suppression takes over (§5). Amplified, 94-100% do from L5 (§3).
 
 ![Amplified against in context](figures/08_amplified_vs_in_context.png)
 
@@ -231,8 +239,8 @@ activation pass over the same documents, which the released `acts` match up to b
 | band | removed vs first-order | one context vs the pole's other 23 | lens vs one context | lens vs the mean of 24 | steering vs the mean firing effect | steering vs lens |
 |---|---|---|---|---|---|---|
 | L0-L8 | 0.92 | 0.05 | 0.03 | 0.11 | 0.08 | 0.40 |
-| L9-L12 | 0.97 | 0.08 | 0.05 | 0.16 | 0.16 | 0.59 |
-| L13-L20 | 0.98 | 0.11 | 0.09 | 0.28 | 0.28 | 0.76 |
+| L9-L12 | 0.97 | 0.08 | 0.05 | 0.16 | 0.17 | 0.59 |
+| L13-L20 | 0.98 | 0.11 | 0.09 | 0.28 | 0.29 | 0.76 |
 | L21-L27 | 0.99 | 0.36 | 0.27 | 0.57 | 0.57 | 0.94 |
 | L28-L35 | 1.00 | 0.78 | 0.66 | 0.86 | 0.87 | 0.99 |
 
@@ -249,7 +257,7 @@ Every control (another pole's values) is within 0.01 of zero.
 - **The lens reads the shared part.** Against one context, the weight-only read gets 60-85% of the
   correlation the pole's own other firings get, in every band.
 - **Lens and steering agree with each other, not with firings.** Before L21 the lens predicts steering
-  at 0.40-0.76, while steering predicts the pole's mean firing effect at 0.08-0.28. From L28 all agree.
+  at 0.40-0.76, while steering predicts the pole's mean firing effect at 0.08-0.29. From L28 all agree.
 - **Precision matters.** In bf16 a weak pole's write partly rounds away in the residual: on five test
   neurons, removed against first-order was r 0.05-0.77 in bf16 and 0.83-0.99 in fp32.
 
@@ -506,7 +514,7 @@ training", "been programmed"), L16 n6934 + " upon" in "Once upon a time", L26 n4
 "suicide". The explainers judged that the descriptions rest on activations everywhere, with the weight
 reads agreeing on about 40% of cards from L12 and a quarter or fewer before. Its score sets and
 scorers' answers were not kept, so these numbers stand as recorded; the scripts rebuild the same 197
-cards from the current catalog and draw fresh held-out sets.
+cards from the current catalog (their steering from §3's current sample) and draw fresh held-out sets.
 
 **The blind test** (`checks/lens_blind.py`): 160 random poles, 32 per band, explainers that never see
 steering, in four arms: **lens** (only the eight weight-only reads, plain and `_z`, 12 tokens each),
@@ -576,8 +584,8 @@ explainers' prompt carried the depth priors.
 The largest activations in the model all act through two residual dimensions that the output ignores.
 
 **Setup.** `checks/entropy_neurons.py` (ablations on 16,128 positions of 128 web, code and chat
-documents; MPS), `checks/sinks.py` (128 documents with 65 distinct first tokens) and
-`checks/external_crosscheck.py --sink`.
+documents; MPS), `checks/sinks.py` (128 documents with 65 distinct first tokens; position 0 sees only
+its own token, so its values count each first token once) and `checks/external_crosscheck.py --sink`.
 
 **Two dimensions set the output's temperature.** The final norm's weight is about 1e-4 on residual
 dimensions 1838 and 2276 (median 2.0 elsewhere), so writes there move no logit directly. But they hold
@@ -590,18 +598,18 @@ at the first position and write 95-96% of their squared norm onto dimension 2276
 residual's norm from 44 to 12,091 (these are Muyu He's three dimensions, here with their poles). Later
 layers' heads attend to that position by default. The trigger is layer 0's MLP output at position 0:
 
-| at position 0 | L6 n5723 | documents with a sink | attention on position 0 at L9 / L21 / L33 | loss on token 2 / tokens 3+ |
+| at position 0 | L6 n5723 | first tokens with a sink | attention on position 0 at L9 / L21 / L33 | loss on token 2 / tokens 3+ |
 |---|---|---|---|---|
 | clean | 5,664 | 100% | 0.63 / 0.49 / 0.77 | 2.95 / 2.40 |
-| L0's MLP zeroed | 39 | 20% | 0.03 / 0.04 / 0.03 | 8.02 / 2.74 |
-| L0's MLP given the same token's output at position 1 | 448 | 9% | 0.54 / 0.42 / 0.66 | 6.05 / 2.56 |
+| L0's MLP zeroed | 39 | 38% | 0.03 / 0.04 / 0.03 | 8.02 / 2.74 |
+| L0's MLP given the same token's output at position 1 | 262 | 17% | 0.54 / 0.42 / 0.66 | 6.05 / 2.56 |
 | L0-L5's MLPs zeroed | 0 | 0% | 0.01 / 0.00 / 0.00 | 8.80 / 3.06 |
-| L0's top 300 neurons (by attribution) zeroed | 4,096 | 97% | 0.61 / 0.48 / 0.75 | 3.23 / 2.43 |
+| L0's top 300 neurons (by attribution) zeroed | 4,016 | 95% | 0.61 / 0.48 / 0.75 | 3.23 / 2.43 |
 | control: L0's MLP zeroed at position 5 | 5,664 | 100% | 0.62 / 0.49 / 0.76 | 2.95 / 2.43 |
 
 - **Without L0's MLP at position 0 the sink mostly fails** and attention to position 0 collapses.
 - **It is the MLP's response to being first,** not a few neurons: L0's top 300 neurons removed, the sink
-  still forms in 97% of documents.
+  still forms for 95% of first tokens.
 - **A smaller sink suffices:** halving it (zeroing L5) leaves the attention unchanged.
 
 **A second sink on the year after a date.** Three L16 neurons (n2271 +, n1875 +, n1756 +; up to 5,984)
@@ -632,7 +640,12 @@ the readout ignores the two dimensions where these poles act. Their descriptions
 and on this measurement; `null_share` flags them only together with the activation scale.
 
 **Limits.** 16,128 positions, and the second sink's clearing rests on 11 positions. Poles are ablated
-one at a time, though the four L34 poles fire together.
+one at a time, though the four L34 poles fire together. The sink share uses a cutoff (|dim 2276| over
+2,000 after L6; clean, about 12,000), and under the position-1 swap four first tokens land within 15% of
+it, among them the chat slice's shared `<|im_start|>`: 1,776 here at batches of 8, 16 and 32 (MPS,
+bf16), 1,904-2,008 on another GPU. There it crossed the cutoff with the batch size, taking all 32 chat
+documents with it, so the earlier count over documents moved from 9% to 34%
+([issue #2](https://github.com/stdlogits/neuron-lens/issues/2)). `checks/sinks.py` lists these tokens.
 
 ## §10. Outside labels
 

@@ -4,22 +4,28 @@
 
 - **steering:** ``s·α·W_down[:, n]`` added to layer ``L``'s MLP output at every valid position
   (``[16, T)``, as the lenses) of neutral contexts (the first full-length documents of the DCLM
-  activation slice), at ``α`` = 1× and 4× the pole's typical high activation (the median of its top
-  documents' extremes in the activation statistics). Saved: the mean change in log-probs over
+  activation slice), at ``α`` = 1× and 4× the pole's typical high activation (``act_top`` in the
+  catalog's ``acts`` table). Saved: the mean change in log-probs over
   the valid positions and contexts, ``[V]`` per pole and dose, against an unsteered row in the
   same batch (so batch-shape differences in bf16 kernels do not enter). Adding at every position and
   averaging over outputs sums over offsets, as the R-lens does.
 - **ablation in context:** the neuron set to 0 at the position where the pole peaks in each of its
-  top documents. Saved: what the firing contributes (clean − ablated log-probs) at that
-  position and summed over it and the next ``WINDOW`` positions, averaged over contexts, and
-  the change in log-prob of the token that actually comes next.
+  first ``--top-contexts`` top documents (the ``acts`` table's ``top_doc`` and ``top_pos``). Saved:
+  what the firing contributes (clean − ablated log-probs) at that position and summed over it and
+  the next ``WINDOW`` positions, averaged over contexts, and the change in log-prob of the token that
+  actually comes next.
+
+The doses and ablation sites come from the catalog (the ``acts`` tables; documents from
+``catalog.documents``), and every input is saved with the results: the steering contexts, ``α``, and
+each ablation's document and position (``top_doc``, ``top_pos``: rows of ``docs.parquet``), so the file
+reproduces on its own. ``measure`` saves its progress every ``--save-minutes`` and resumes when rerun.
 
 ``score`` (any device) compares each lens's read of ``s·W_down[:, n]`` (its logits
 ``W_U (γ ⊙ norm(J_L w))``) with those vectors: the Pearson correlation over the vocabulary (tokens
 seen 5+ times in the activation corpora) and the top-10 overlap, per layer and lens. The control
 pairs each pole's vectors with the read of the next random neuron of the same layer: what any
 write of that layer shares (the common mode). A pole's read **predicts** a target when its r passes
-the 99th percentile of the control's, pooled over layers (§3: from L5, 92-100% of random poles' writes
+the 99th percentile of the control's, pooled over layers (§3: from L5, 94-100% of random poles' writes
 predict their 1× steering); the per-layer share of poles that do, and of control pairs (chance).
 The per-layer medians and shares use the random picks only; the named poles are listed one by one.
 
@@ -28,8 +34,9 @@ RMSNorm before the residual, so the push is added after it: ``s·α·γ_post ⊙
 norm's scale at each position, the write as it reaches the residual (the lenses' LN rule; the layer
 scalar is the model's own); log-probs are after the final softcap; no named poles, random ones only.
 
-    python scripts/checks/causal_lens.py measure [--acts data/acts/qwen3-8b.pt]
+    python scripts/checks/causal_lens.py measure
     python scripts/checks/causal_lens.py score --lenses logit,J,R:dclm
+    python scripts/checks/causal_lens.py score --lenses R:dclm-even,R:dclm-odd,R:chat --tag chat-vs-dclm  # §1
     NEURON_LENS_MODEL=google/gemma-4-12B python scripts/checks/causal_lens.py measure --per-layer 24
     NEURON_LENS_MODEL=google/gemma-4-12B python scripts/checks/causal_lens.py score --lenses logit,hub
 """
@@ -37,13 +44,13 @@ import argparse
 import json
 import random
 import time
-from pathlib import Path
 
+import pyarrow.parquet as pq
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens import arch
-from neuron_lens.catalog import MODEL, acts_path
+from neuron_lens.catalog import MODEL, column, documents, neuron_table
 from neuron_lens.corpus import lens_docs
 from neuron_lens.known import EXTERNAL, KNOWN
 from neuron_lens.paths import CORPUS_DIR, DATA, SUMMARY
@@ -86,6 +93,17 @@ def lsm_chunks(lm_head, h: torch.Tensor, chunk: int = 1024):
         yield s, torch.log_softmax(arch.cap(MODEL, lm_head(h[s:s + chunk]).float()), dim=-1)
 
 
+def catalog_top(layers, f: int, k: int) -> dict:
+    """Per layer: each pole's ``act_top`` ``[2, f]`` and its first ``k`` top firings (``top_doc``,
+    ``top_pos``, ``top_val``, ``[2, f, k]``), from the catalog's ``acts`` tables (``+`` poles first)."""
+    out = {}
+    for layer in layers:
+        t = pq.read_table(neuron_table("acts", layer), columns=["act_top", "top_doc", "top_pos", "top_val"])
+        out[layer] = {"act_top": torch.from_numpy(t.column("act_top").to_numpy().copy()).view(2, f),
+                      **{c: column(t, c, k).view(2, f, k) for c in ("top_doc", "top_pos", "top_val")}}
+    return out
+
+
 def measure(args) -> None:
     device = args.device
     tok = AutoTokenizer.from_pretrained(args.model)
@@ -95,30 +113,55 @@ def measure(args) -> None:
     model, lm_head = decoder_stack(lm), lm.lm_head
     gemma = arch.is_gemma4(args.model)
     L, f = len(model.layers), model.config.intermediate_size
-    acts = torch.load(args.acts, weights_only=False, map_location="cpu")
-    st = {f"top_{k}": v for k, v in acts["state"]["top"].items() if k in ("val", "doc", "pos")}
-    flat, start = acts["tokens"], acts["doc_start"]
-    tokens = [flat[start[i]:start[i + 1]] for i in range(len(start) - 1)]
     picks = sample_neurons(L, f, args.per_layer)
     if args.layers:
         picks = [(l, n) for l, n in picks if l in {int(x) for x in args.layers.split(',')}]
+    K = args.top_contexts
+    top = catalog_top(sorted({l for l, _ in picks}), f, K)
+    tokens = documents(args.model)
     ctx = lens_docs(CORPUS_DIR / "act-dclm.jsonl", tok, 4 * args.contexts, args.ctx_len, args.ctx_len)[:args.contexts]
     ctx = torch.tensor(ctx, device=device)
     C, T = ctx.shape
     V = lm_head.weight.shape[0]
-    out = {"meta": {"model": args.model, "acts": args.acts.name, "per_layer": args.per_layer,
-                    "contexts": C, "ctx_len": T, "doses": list(DOSES), "window": WINDOW,
-                    "top_contexts": args.top_contexts},
-           "picks": picks, "contexts": ctx.cpu()}
+    P = len(picks)
+    meta = {"model": args.model, "contexts_from": "catalog", "docs": len(tokens), "per_layer": args.per_layer,
+            "contexts": C, "ctx_len": T, "doses": list(DOSES), "window": WINDOW, "top_contexts": K}
+    path = CAUSAL / f"{arch.stem(args.model)}-causal.pt"
+    partial = path.with_name(f"{path.stem}-partial.pt")
+    if partial.exists():
+        out = torch.load(partial, weights_only=False)
+        assert out["meta"] == meta and out["picks"] == picks and torch.equal(out["contexts"], ctx.cpu()), \
+            f"{partial} is another run's"
+        print(f"resuming {partial}: steering done at {out['done']['steer']}, ablation at {out['done']['ablate']}",
+              flush=True)
+    else:
+        out = {"meta": meta, "picks": picks, "contexts": ctx.cpu(),
+               "alpha": torch.tensor([[top[l]["act_top"][p, n].clamp_min(0).item() for p in (0, 1)] for l, n in picks]),
+               "steer": torch.zeros(P, 2, len(DOSES), V, dtype=torch.float16),
+               "ablate_pos": torch.zeros(P, 2, V, dtype=torch.float16),
+               "ablate_win": torch.zeros(P, 2, V, dtype=torch.float16),
+               "dlogp_next": torch.full((P, 2, K), float("nan")),
+               "fired": torch.zeros(P, 2, K),
+               "top_doc": torch.full((P, 2, K), -1, dtype=torch.int32),
+               "top_pos": torch.full((P, 2, K), -1, dtype=torch.int16),
+               "done": {"steer": [], "ablate": []}}
+    CAUSAL.mkdir(parents=True, exist_ok=True)
+    saved = time.perf_counter()
+
+    def checkpoint() -> None:
+        nonlocal saved
+        if time.perf_counter() - saved > 60 * args.save_minutes:
+            torch.save(out, partial)
+            saved = time.perf_counter()
 
     # Steering: conditions (pick, pole, dose), args.cond_batch per forward pass, one layer at a time.
-    alpha = {(l, n, p): st["top_val"][l, p, :, n].median().clamp_min(0).item()
-             for l, n in picks for p in (0, 1)}
-    steer = torch.zeros(len(picks), 2, len(DOSES), V, dtype=torch.float16)
+    alpha, steer = out["alpha"], out["steer"]
     t0 = time.perf_counter()
     for layer in range(L):
         conds = [(i, p, di) for i, (l, n) in enumerate(picks) if l == layer
                  for p in (0, 1) for di in range(len(DOSES))]
+        if not conds or layer in out["done"]["steer"]:
+            continue
         blk = model.layers[layer]
         wd = blk.mlp.down_proj.weight  # [d, f]
         if gemma:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
@@ -127,7 +170,7 @@ def measure(args) -> None:
             part = conds[s:s + args.cond_batch]
             # Row 0 is unsteered: the reference, at the same batch shape as the steered rows.
             delta = torch.stack([torch.zeros_like(wd[:, 0])] + [
-                (1 - 2 * p) * DOSES[di] * alpha[(layer, picks[i][1], p)] * wd[:, picks[i][1]]
+                (1 - 2 * p) * DOSES[di] * alpha[i, p].item() * wd[:, picks[i][1]]
                 for i, p, di in part])  # [1 + n_c, d]
             rows = delta.repeat_interleave(C, 0)[:, None, :]
             posmask = (torch.arange(T, device=device) >= SKIP_FIRST)[None, :, None].to(rows.dtype)
@@ -148,28 +191,27 @@ def measure(args) -> None:
                 for c, (i, p, di) in enumerate(part, 1):
                     steer[i, p, di] = (mean[c] - mean[0]).half().cpu()
             hook.remove()
+        out["done"]["steer"].append(layer)
+        checkpoint()
         print(f"{time.strftime('%H:%M:%S')} steer L{layer}: {len(conds)} conditions, "
               f"{time.perf_counter() - t0:.0f}s", flush=True)
-    out["steer"], out["alpha"] = steer, torch.tensor([[alpha[(l, n, p)] for p in (0, 1)] for l, n in picks])
 
     # Ablation in context: per (pick, pole), its top documents; clean and ablated rows side by side.
-    K = args.top_contexts
-    at_pos = torch.zeros(len(picks), 2, V, dtype=torch.float16)
-    in_win = torch.zeros(len(picks), 2, V, dtype=torch.float16)
-    dnext = torch.full((len(picks), 2, K), float("nan"))
-    fired = torch.zeros(len(picks), 2, K)
     t0 = time.perf_counter()
     for layer in range(L):
+        if layer in out["done"]["ablate"] or not any(l == layer for l, _ in picks):
+            continue
         jobs = []  # (pick index, pole, context slot, doc, pos)
         for i, (l, n) in enumerate(picks):
             if l != layer:
                 continue
             for p in (0, 1):
                 for j in range(K):
-                    v = st["top_val"][layer, p, j, n].item()
+                    v = top[layer]["top_val"][p, n, j].item()
                     if v > 0:
-                        jobs.append((i, p, j, int(st["top_doc"][layer, p, j, n]), int(st["top_pos"][layer, p, j, n])))
-                        fired[i, p, j] = v
+                        d, pos = int(top[layer]["top_doc"][p, n, j]), int(top[layer]["top_pos"][p, n, j])
+                        jobs.append((i, p, j, d, pos))
+                        out["fired"][i, p, j], out["top_doc"][i, p, j], out["top_pos"][i, p, j] = v, d, pos
         sums_pos, sums_win, counts = {}, {}, {}
         for s in range(0, len(jobs), args.ctx_batch):
             part = jobs[s:s + args.ctx_batch]
@@ -200,17 +242,18 @@ def measure(args) -> None:
                     sums_win[(i, p)] = sums_win.get((i, p), 0) + diff.sum(0)
                     counts[(i, p)] = counts.get((i, p), 0) + 1
                     if pos + 1 < len(seqs[r]):
-                        dnext[i, p, j] = diff[0, seqs[r][pos + 1]].item()
+                        out["dlogp_next"][i, p, j] = diff[0, seqs[r][pos + 1]].item()
             hook.remove()
         for key, c in counts.items():
-            at_pos[key] = (sums_pos[key] / c).half().cpu()
-            in_win[key] = (sums_win[key] / c).half().cpu()
+            out["ablate_pos"][key] = (sums_pos[key] / c).half().cpu()
+            out["ablate_win"][key] = (sums_win[key] / c).half().cpu()
+        out["done"]["ablate"].append(layer)
+        checkpoint()
         print(f"{time.strftime('%H:%M:%S')} ablate L{layer}: {len(jobs)} contexts, "
               f"{time.perf_counter() - t0:.0f}s", flush=True)
-    out.update({"ablate_pos": at_pos, "ablate_win": in_win, "dlogp_next": dnext, "fired": fired})
-    CAUSAL.mkdir(parents=True, exist_ok=True)
-    path = CAUSAL / f"{args.model.split('/')[-1].lower()}-causal.pt"
+    del out["done"]
     torch.save(out, path)
+    partial.unlink(missing_ok=True)
     print(f"-> {path}", flush=True)
 
 
@@ -225,7 +268,7 @@ def score(args) -> None:
     from neuron_lens.neurons import directions
     from neuron_lens.weights import tensors
 
-    saved = torch.load(CAUSAL / f"{args.model.split('/')[-1].lower()}-causal.pt", weights_only=False)
+    saved = torch.load(CAUSAL / f"{arch.stem(args.model)}-causal.pt", weights_only=False)
     picks = saved["picks"]
     tok = AutoTokenizer.from_pretrained(args.model)
     nv = len(tok)  # rows past the tokenizer are padding
@@ -314,7 +357,7 @@ def score(args) -> None:
         lines.append(f"  L{l} n{n} {'+' if sign > 0 else '−'} [{named[pole]}]  " + "   ".join(cells))
     text = "\n".join(lines)
     print(text)
-    stem = f"causal_lens_{args.model.split('/')[-1].lower()}"
+    stem = f"causal_lens_{args.tag + '_' if args.tag else ''}{arch.stem(args.model)}"
     (SUMMARY / f"{stem}.log").write_text(text + "\n")
     table = {name: {s: {"layer": [], "pass_threshold": round(thr[name, s], 4)} for s in specs} for name in targets}
     for (l, name, s), st in stats.items():
@@ -328,15 +371,16 @@ def score(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=("measure", "score"))
-    ap.add_argument("--acts", type=Path, default=acts_path())
     ap.add_argument("--per-layer", type=int, default=32)
     ap.add_argument("--contexts", type=int, default=16)
     ap.add_argument("--ctx-len", type=int, default=64)
     ap.add_argument("--top-contexts", type=int, default=8)
     ap.add_argument("--cond-batch", type=int, default=16)
     ap.add_argument("--ctx-batch", type=int, default=64)
+    ap.add_argument("--save-minutes", type=float, default=10)
     ap.add_argument("--lenses", default="logit,J,R:dclm" if MODEL == arch.QWEN else "logit,hub")
     ap.add_argument("--layers", default=None, help="measure only these layers (a,b,c)")
+    ap.add_argument("--tag", default="", help="score: name the summary causal_lens_<tag>_<model>")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
     args = ap.parse_args()
     args.model = MODEL
