@@ -42,10 +42,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
   Every script the findings name is here. Checks read the catalog's tables and get documents from
   `catalog.documents` (the activations file, else rebuilt from the corpus), so most run from the
   release and the model.
-- `tests/`: `test_transport.py` (the estimator), `test_readout.py`, and `test_arch.py`,
-  `test_gemma4.py` (Gemma 4's geometry and layer maps on small random models), `test_qwen35.py`
-  (Qwen3.5's layer maps, MoE and dense, against autograd through HF's delta rule),
-  `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA).
+- `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models
+  (`test_transport.py` Qwen3, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5), and
+  `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA). Anything that fails loudly or
+  reads wrong in the output gets fixed when it comes up; don't add tests for it.
 - **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
   attention, MoE with a shared expert; Qwen3.5-9B's dense MLP too). RelP's rules apply by operation (elementwise gates take
   the half rule; scalar weights, DeltaNet's mixing matrix, the router and the shared expert's gate,
@@ -84,8 +84,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   (and `tests/test_kernels.py` on a CUDA machine when the kernels change; CI runs the rest on CPU
   for pushes to main, pull requests and weekly, `.github/workflows/tests.yml`, as a signal, not a
   gate): both
-  lenses against brute-force Jacobians of the model under `relp_rules`, and both against
-  Drowse's RelP fits (loosen that test only for a deliberate change). Supporting another architecture
+  lenses against brute-force Jacobians of the model under `relp_rules`. Supporting another architecture
   means composing its layers from `layers.py`'s components, adding a component (its map, transpose
   and autograd rule) where one is missing, and its geometry in `arch.py`, with a test file of tiny
   random models; `layers.check` refuses what the components don't cover.

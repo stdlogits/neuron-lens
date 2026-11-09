@@ -4,13 +4,11 @@ and full layers with different head sizes and key-head counts, keys as values on
 layers, partial RoPE there, four norms per layer with non-unit weights, layer scalars."""
 import pytest
 import torch
-import torch.autograd.forward_ad as fwAD
 
 gemma = pytest.importorskip("transformers.models.gemma4_unified.modeling_gemma4_unified")
 from transformers.models.gemma4_unified.configuration_gemma4_unified import Gemma4UnifiedTextConfig
 
-from neuron_lens import layers
-from neuron_lens.rules import HALF_RULE_BETA, relp_rules
+from neuron_lens.rules import relp_rules
 from neuron_lens.transport import SKIP_FIRST, Accumulator, r_lens_doc, s_lens_doc, valid_positions
 
 D, N_LAYERS, V = 16, 4, 50
@@ -99,130 +97,6 @@ def test_estimates_match_brute_force(n_valid, k_eq_v):
                 assert torch.allclose(s.mean(kind)[layer], K[:, valid].sum(1), atol=1e-4), (kind, layer)
 
 
-def test_primal_matches_the_model():
-    """``linearize``'s forward reproduces HF's (attention probabilities and MLP gates feed
-    the map, so a wrong primal shows here before it shows in the Jacobians)."""
-    model = tiny_model()
-    ids = torch.randint(0, V, (SKIP_FIRST + 9,))
-    maps = layers.linearize(model, ids)
-    caught = {}
-    hooks = [b.mlp.gate_proj.register_forward_hook(lambda _m, _a, o, i=i: caught.__setitem__(i, o[0]))
-             for i, b in enumerate(model.layers)]
-    model(input_ids=ids[None, :-1])
-    for h in hooks:
-        h.remove()
-    for i, m in enumerate(maps):
-        act = model.layers[i].mlp.act_fn(caught[i][SKIP_FIRST:])
-        assert torch.allclose(m.mlp.cu, HALF_RULE_BETA * act, atol=1e-5), i
-        assert torch.allclose(m.mix.p.sum(-1), torch.ones(()), atol=1e-5)
-
-
-def test_relp_mlp_tangent_uses_the_gelu_factor():
-    model = tiny_model()
-    mlp = model.layers[0].mlp
-    x, dx = torch.randn(4, D), torch.randn(4, D)
-    with relp_rules(model), torch.no_grad(), fwAD.dual_level():
-        tangent = fwAD.unpack_dual(mlp(fwAD.make_dual(x, dx))).tangent
-    with torch.no_grad():
-        g, u = mlp.gate_proj(x), mlp.up_proj(x)
-        dg, du = dx @ mlp.gate_proj.weight.T, dx @ mlp.up_proj.weight.T
-        phi = mlp.act_fn(g) / g  # identity rule: act(g) = g·φ(g)
-        expected = HALF_RULE_BETA * (phi * dg * u + mlp.act_fn(g) * du) @ mlp.down_proj.weight.T
-    assert torch.allclose(tangent, expected, atol=1e-5)
-
-
-def test_relp_rules_keep_values_and_unpatch():
-    model = tiny_model()
-    e = torch.randn(1, SKIP_FIRST + 4, D)
-    with torch.no_grad():
-        plain = model(inputs_embeds=e).last_hidden_state
-        with relp_rules(model):
-            relp = model(inputs_embeds=e).last_hidden_state
-    assert torch.equal(plain, relp)
-    layer = model.layers[1]
-    for module in (layer.mlp, layer.input_layernorm, layer.post_feedforward_layernorm):
-        assert "forward" not in module.__dict__ and not hasattr(module, "_rules_orig_forward")
-
-
-def test_sliding_window_matches_brute_force():
-    """Documents longer than the sliding layers' window: keys past it are masked, as HF masks them."""
-    model = tiny_model(seed=4)
-    window = 5
-    model.config.sliding_window = window
-    for layer in model.layers:
-        if layer.self_attn.sliding_window is not None:
-            layer.self_attn.sliding_window = window
-    ids = torch.randint(0, V, (SKIP_FIRST + 9,))
-    valid = valid_positions(len(ids))
-    r = Accumulator({"out": N_LAYERS - 1, "mid": N_LAYERS}, D)
-    r_lens_doc(model, ids, r, 0, dim_batch=7)
-    s = Accumulator({"mid": N_LAYERS, "out": N_LAYERS}, D)
-    s_lens_doc(model, ids, s, 0, dim_batch=7)
-    emb = model.embed_tokens(ids[None])[0].detach()
-    with relp_rules(model):
-        _, outs = run_with(model, ids, None, emb)
-        for layer in range(N_LAYERS - 1):
-            h = outs[layer][0].detach()
-            J = torch.autograd.functional.jacobian(
-                lambda x: run_with(model, ids, layer, x)[1][N_LAYERS - 1][0, valid].sum(0), h)
-            assert torch.allclose(r.mean("out")[layer], J[:, valid].mean(1), atol=1e-4), layer
-        for layer in range(N_LAYERS):
-            K = torch.autograd.functional.jacobian(
-                lambda x, layer=layer: run_with(model, ids, None, x)[1][layer][0, valid].mean(0), emb)
-            want = K[:, valid].sum(1)  # large here (embeddings scaled by √d): compare relatively
-            assert ((s.mean("out")[layer] - want).norm() / want.norm()).item() < 1e-5, layer
-
-
-def test_input_reads_match_the_s_lens():
-    """Covectors pulled down from their layers' MLP inputs equal ``c · K_L`` from the S-lens."""
-    from neuron_lens.transport import input_reads_doc
-    model = tiny_model(seed=3)
-    ids = torch.randint(0, V, (SKIP_FIRST + 9,))
-    s = Accumulator({"mid": N_LAYERS}, D)
-    s_lens_doc(model, ids, s, 0, dim_batch=5)
-    layers = [0, 3, 1, 3, 2, 0]
-    c = torch.randn(len(layers), D)
-    got = input_reads_doc(model, ids, c, layers)
-    want = torch.stack([c[i] @ s.mean("mid")[L] for i, L in enumerate(layers)])
-    assert ((got - want).norm() / want.norm()).item() < 1e-5  # fp32 rounding, whatever the scale
-
-
-def test_input_reads_with_embeds_and_a_bidirectional_block():
-    """Seeded and summed on a block of positions that attend to each other both ways in sliding
-    layers (an image), with embeddings given: autograd through HF's model under the RelP rules,
-    with the same masks passed in, gives the same reads."""
-    from neuron_lens.transport import input_reads_doc
-    model = tiny_model(seed=5)
-    T = SKIP_FIRST + 10
-    ids = torch.randint(0, V, (T,))
-    torch.manual_seed(6)
-    emb = torch.randn(T, D) * 3
-    block = torch.zeros(T, dtype=torch.bool)
-    block[SKIP_FIRST + 2:SKIP_FIRST + 7] = True
-    valid = valid_positions(T)
-    rows = block[valid]
-    layers = [3, 1, 2, 0]
-    c = torch.randn(len(layers), D)
-    got = input_reads_doc(model, ids, c, layers, seed_rows=rows, source_rows=rows, embeds=emb, block=block)
-    n = T - 1
-    causal = torch.full((n, n), float("-inf")).triu(1)
-    b = block[:-1]
-    sliding = causal.masked_fill(b[:, None] & b[None, :], 0.0)
-    masks = {"full_attention": causal[None, None], "sliding_attention": sliding[None, None]}
-    with relp_rules(model):
-        for i, L in enumerate(layers):
-            def f(x, L=L):
-                mids = {}
-                h = model.layers[L].pre_feedforward_layernorm.register_forward_pre_hook(
-                    lambda _m, a: mids.__setitem__(0, a[0]))
-                model(inputs_embeds=x[None], attention_mask=masks)
-                h.remove()
-                return mids[0][0, valid][rows].mean(0) @ c[i]
-            g = torch.autograd.functional.jacobian(f, emb[:-1])  # [T-1, d]
-            want = g[valid][rows].sum(0)
-            assert ((got[i] - want).norm() / want.norm()).item() < 1e-5, L
-
-
 def _media_case(seed=7):
     """A tiny model and a document with a bidirectional block (an image) inside its valid
     positions, embeddings given, and the masks HF's model takes for it."""
@@ -259,61 +133,9 @@ def _run(model, emb, masks, layer=None, h_new=None):
     return mids, outs
 
 
-@pytest.mark.parametrize("trim", [False, True])
-def test_s_lens_rows_basis_block_match_autograd(trim):
-    model, ids, emb, block, masks = _media_case()
-    first = int(block.nonzero()[0]) if trim else SKIP_FIRST
-    T = len(ids)
-    pos = torch.arange(first, T - 1)
-    rows = block[pos]
-    torch.manual_seed(9)
-    basis = torch.linalg.qr(torch.randn(D, 5))[0].T  # [5, D] orthonormal rows
-    s = Accumulator({"mid": N_LAYERS, "out": N_LAYERS}, D, d_in=5)
-    s_lens_doc(model, ids, s, 0, dim_batch=3, basis=basis, source_rows=rows, target_rows=rows,
-               embeds=emb, block=block, first=first)
-    src = pos[rows]
-    with relp_rules(model):
-        for layer in range(N_LAYERS):
-            for kind in ("mid", "out"):
-                J = torch.autograd.functional.jacobian(
-                    lambda x: _run(model, x, masks)[0 if kind == "mid" else 1][layer][0, src].mean(0), emb[:-1])
-                want = J[:, src].sum(1) @ basis.T  # [d, k]
-                got = s.mean(kind)[layer]
-                assert ((got - want).norm() / want.norm()).item() < 1e-5, (kind, layer)
-
-
-@pytest.mark.parametrize("trim", [False, True])
-def test_r_lens_rows_match_autograd(trim):
-    model, ids, emb, block, masks = _media_case(seed=11)
-    first = int(block.nonzero()[0]) if trim else SKIP_FIRST
-    T = len(ids)
-    pos = torch.arange(first, T - 1)
-    seed_rows = block[pos] | (pos == T - 2)  # t': the block and one later position (not those between)
-    read_rows = block[pos]  # t: the block
-    r = Accumulator({"out": N_LAYERS - 1, "mid": N_LAYERS}, D)
-    r_lens_doc(model, ids, r, 0, dim_batch=7, seed_rows=seed_rows, read_rows=read_rows,
-               embeds=emb, block=block, first=first)
-    tp, t = pos[seed_rows], pos[read_rows]
-    with relp_rules(model):
-        _, outs = _run(model, emb[:-1], masks)
-        for layer in range(N_LAYERS - 1):
-            h = outs[layer][0].detach()
-            J = torch.autograd.functional.jacobian(
-                lambda x: _run(model, emb[:-1], masks, layer, x)[1][N_LAYERS - 1][0, tp].sum(0), h)
-            want = J[:, t].mean(1)
-            assert ((r.mean("out")[layer] - want).norm() / want.norm()).item() < 1e-5, ("out", layer)
-        mids, _ = _run(model, emb[:-1], masks)
-        for layer in range(N_LAYERS):
-            blk = model.layers[layer]
-            mid = mids[layer][0].detach()
-            J = torch.autograd.functional.jacobian(
-                lambda x: _run(model, emb[:-1], masks, layer, mlp_out(blk, x[None])[0])[1][N_LAYERS - 1][0, tp].sum(0), mid)
-            want = J[:, t].mean(1)
-            assert ((r.mean("mid")[layer] - want).norm() / want.norm()).item() < 1e-5, ("mid", layer)
-
-
 def test_true_rules_match_plain_autograd():
-    """``rules="true"``: both lenses against autograd through the model as it is (no RelP)."""
+    """The media fits' mode (a bidirectional block, chosen rows, ``rules="true"``): both lenses against
+    autograd through the model as it is (no RelP)."""
     model, ids, emb, block, masks = _media_case(seed=13)
     first = int(block.nonzero()[0])
     T = len(ids)

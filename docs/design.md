@@ -82,12 +82,10 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   (projection biases, other norms or activations, Qwen3-Next's fused DeltaNet projections).
   Supporting another architecture means composing it from these components, adding one where a part
   is new.
-- **Tests** (`tests/test_transport.py`, on tiny Qwen3 models, one with grouped-query attention): both
-  lenses and both targets match brute-force Jacobians of the patched model (1e-4) and Drowse's own
-  RelP fits (1e-5, split-half differences included), and the R-lens loads in Drowse. `tests/test_arch.py` and
-  `tests/test_gemma4.py` do the same for small random Gemma 4 models, images, sound and a binding
-  sliding window included, and `tests/test_qwen35.py` for small Qwen3.5 models, MoE and dense,
-  through HF's own delta-rule kernel. Estimator changes must pass them.
+- **Tests** (`tests/test_transport.py`, on a tiny Qwen3 model with grouped-query attention): both
+  lenses and both targets match brute-force Jacobians of the patched model (1e-4). `tests/test_gemma4.py` does the
+  same for small random Gemma 4 models, the media fits' mode included, and `tests/test_qwen35.py` for small Qwen3.5
+  models, MoE and dense, through HF's own delta-rule kernel. Estimator changes must pass them.
 - **Fit files** (`data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`) hold even- and odd-half
   sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
   corpus), and shard across GPUs (`--shard i/n`); `lenses.load_fits` adds shards and halves.

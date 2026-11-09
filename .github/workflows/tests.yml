@@ -34,7 +34,7 @@ jobs:
           activate-environment: true
       # the CPU wheel, not the default one with its CUDA libraries
       - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: uv pip install -e ".[drowse]" pytest
+      - run: uv pip install -e . pytest
       # the Gemma 4 and Qwen3.5 tests skip when transformers lacks these models; fail instead
       - run: python -c "import transformers.models.gemma4_unified.modeling_gemma4_unified, transformers.models.qwen3_5_moe.modeling_qwen3_5_moe"
       - run: pytest -q -rs

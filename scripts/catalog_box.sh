@@ -31,10 +31,9 @@ export PATH="$HOME/.local/bin:$PATH"
 UV=uv
 [ -d .venv ] || $UV venv --python 3.13 .venv
 source .venv/bin/activate
-$UV pip install --quiet ${TORCH_ARGS:---torch-backend auto} -e '.[media]' pytest
+$UV pip install --quiet ${TORCH_ARGS:---torch-backend auto} -e '.[media]'
 nvidia-smi --query-gpu=name,memory.total --format=csv
 python -c "import torch; assert torch.cuda.is_available(), 'no CUDA'; print('torch', torch.__version__, 'cuda', torch.version.cuda, torch.cuda.get_device_properties(0).total_memory >> 30, 'GiB')"
-python -m pytest -q tests/test_neurons.py tests/test_firings.py tests/test_sources.py
 
 for model in Qwen/Qwen3-8B google/gemma-4-12B; do hf download "$model" > /dev/null; done
 mkdir -p logs

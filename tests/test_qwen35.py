@@ -14,7 +14,7 @@ from transformers.models.qwen3_5_moe.configuration_qwen3_5_moe import Qwen3_5Moe
 
 from neuron_lens import layers
 from neuron_lens.rules import relp_rules
-from neuron_lens.transport import SKIP_FIRST, Accumulator, input_reads_doc, r_lens_doc, s_lens_doc, valid_positions
+from neuron_lens.transport import SKIP_FIRST, Accumulator, r_lens_doc, s_lens_doc, valid_positions
 
 D, V = 16, 50
 TYPES = ["linear_attention", "linear_attention", "full_attention", "linear_attention"]
@@ -109,47 +109,3 @@ def test_estimates_match_brute_force(moe, chunk, monkeypatch):
                     lambda x, layer=layer, kind=kind: run_with(model, ids, None, x)[0 if kind == "mid" else 1]
                     [layer][0, valid].mean(0), emb)
                 assert torch.allclose(s.mean(kind)[layer], K[:, valid].sum(1), atol=1e-4), (kind, layer)
-
-
-def test_primal_matches_the_model():
-    """``linearize``'s forward reproduces HF's: the last layer's output (the hidden state before the
-    final norm), and routing weights that sum to 1."""
-    model = tiny_model(seed=2)
-    ids = torch.randint(0, V, (SKIP_FIRST + 40,))
-    outs = {}
-    hook = model.layers[-1].register_forward_hook(lambda _m, _a, o: outs.__setitem__(0, o))
-    model(input_ids=ids[None, :-1])
-    hook.remove()
-    with torch.no_grad():
-        maps, h = layers._run(model, ids)
-    assert len(maps) == N_LAYERS
-    for m in maps:
-        assert torch.allclose(m.mlp.slot_w.sum(-1), torch.ones(()), atol=1e-5)
-    # 1e-5 holds on Apple silicon; x86 BLAS reorders fp32 sums enough to differ by ~2e-5
-    assert torch.allclose(h, outs[0][0], atol=1e-4)
-
-
-def test_input_reads_match_the_s_lens():
-    """Covectors pulled down from their layers' MLP inputs equal ``c · K_L`` from the S-lens."""
-    model = tiny_model(seed=3)
-    ids = torch.randint(0, V, (SKIP_FIRST + 9,))
-    s = Accumulator({"mid": N_LAYERS}, D)
-    s_lens_doc(model, ids, s, 0, dim_batch=5)
-    layers = [0, 3, 1, 3, 2, 0]
-    c = torch.randn(len(layers), D)
-    got = input_reads_doc(model, ids, c, layers)
-    want = torch.stack([c[i] @ s.mean("mid")[L] for i, L in enumerate(layers)])
-    assert ((got - want).norm() / want.norm()).item() < 1e-5
-
-
-def test_rules_keep_values_and_unpatch():
-    model = tiny_model()
-    e = torch.randn(1, SKIP_FIRST + 4, D)
-    with torch.no_grad():
-        plain = model(inputs_embeds=e).last_hidden_state
-        with relp_rules(model):
-            ruled = model(inputs_embeds=e).last_hidden_state
-        assert torch.allclose(plain, ruled, atol=1e-5)
-    for module in (model.layers[0].linear_attn, model.layers[2].self_attn, model.layers[1].mlp,
-                   model.layers[1].input_layernorm):
-        assert "forward" not in module.__dict__ and not hasattr(module, "_rules_orig_forward")

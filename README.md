@@ -521,7 +521,7 @@ Sound is the same with `audio` for `image`: `read_wave` and `opt_wave` hold 640 
 
 ```bash
 uv pip install -e ".[plots]"     # add the drowse extra (Drowse >= 6.0) to export lenses to Drowse
-python -m pytest -q              # estimator tests: brute-force Jacobians, agreement with Drowse
+python -m pytest -q              # estimator tests: brute-force Jacobians
 ```
 
 The pipeline, in run order. `NEURON_LENS_MODEL` picks the model (Qwen3-8B by default;
