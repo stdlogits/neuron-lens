@@ -207,7 +207,7 @@ A head's token maps are read between its own read and write points (§11): a tok
   the layer (`after`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
   logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS, so
   `after = before · s + mlp`. They average over every top firing, so they stay off the label cards.
-- **Sources** (`18_sources.py`, the `sources` table). The exact RelP split of each of a pole's first 5
+- **Sources** (`17_firings.py`, the same pass, the `sources` table). The exact RelP split of each of a pole's first 5
   top firings over the embedding, heads and upstream neurons (`driven_*`), and the upstream poles active there
   by lift over their rate (`with_*`). The residual is a sum of writes for any model: `sources.Stream` takes each write as
   the residual sees it, times what rescales it at that position (a norm after the attention or the MLP) and the layer scalars

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# First steps on a rented CUDA box, from a fresh checkout of this repo:
+# First steps on a CUDA machine, from a fresh checkout of this repo:
 #
 #   git clone https://github.com/stdlogits/neuron-lens && cd neuron-lens
 #   DOCS=1000 bash scripts/gpu_box.sh
@@ -30,7 +30,7 @@ case "$MODEL" in
     Qwen/Qwen3.5*|Qwen/Qwen3.6*) QWEN35=1; CORPUS_ROWS="${CORPUS_ROWS:-4000}" ;;
     *) QWEN35=0; CORPUS_ROWS="${CORPUS_ROWS:-$DOCS}" ;;
 esac
-# Rented boxes have up to ~200 cores; torch's CPU ops on small tensors then spend their time
+# Large machines have up to ~200 cores; torch's CPU ops on small tensors then spend their time
 # in thread spin-waits (the tests took minutes per case, and a CPU-side step stalled the GPU).
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 

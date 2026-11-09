@@ -2,7 +2,7 @@
 and how much of that push does its lens read capture?
 
 **Poles.** §3's random neurons (``causal_lens.random_neurons``: 32 a layer, seed 0), both poles. A pole
-is measured at its top firings, the strongest position in each of its top documents (``catalog.TOP``; the ``acts``
+is measured at its top firings, the strongest position in each of its ``FIRINGS`` (24) top documents (the ``acts``
 table's ``top_doc``, ``top_pos``, ``top_val``; positions from 1), those where it fired (``top_val > 0``),
 and is scored if it fired in at least 2 (Qwen3-8B: 2,290 of 2,304 poles).
 
@@ -71,6 +71,7 @@ from neuron_lens.weights import tensors
 
 STEM = arch.stem(MODEL)
 PER_LAYER = 32  # §3's random picks
+FIRINGS = 24  # §4's window over the stored top firings
 EPS = 0.25
 WINDOW = 8  # positions after the firing, 9 in all
 MIN_FIRINGS = 2
@@ -87,7 +88,7 @@ def firings(layer: int, neurons: list[int]) -> tuple[torch.Tensor, ...]:
     """``(doc, pos, val)``, each ``[n, 2, K]``: the neurons' top firings per pole (``+``, ``−``) from ``acts``."""
     t = pq.read_table(neuron_table("acts", layer), columns=["top_doc", "top_pos", "top_val"])
     rows = torch.tensor(neurons + [t.num_rows // 2 + n for n in neurons])
-    return tuple(column(t, k)[rows].view(2, len(neurons), -1).transpose(0, 1) for k in ("top_doc", "top_pos", "top_val"))
+    return tuple(column(t, k, FIRINGS)[rows].view(2, len(neurons), -1).transpose(0, 1) for k in ("top_doc", "top_pos", "top_val"))
 
 
 class Reads:
@@ -123,8 +124,8 @@ def measure(args) -> None:
     docs = documents()
     reads = Reads(dev)
     picks = random_neurons(L, f, PER_LAYER)
-    P, K = len(picks), pq.read_schema(neuron_table("acts", 0)).field("top_val").type.list_size
-    meta = {"model": MODEL, "dtype": args.dtype, "per_layer": PER_LAYER, "eps": EPS, "window": WINDOW,
+    P, K = len(picks), FIRINGS
+    meta ={"model": MODEL, "dtype": args.dtype, "per_layer": PER_LAYER, "eps": EPS, "window": WINDOW,
             "lens": f"R_out:{reads.fit}", "contexts": K, "kept": Vk}
     path = out_path(args.dtype)
     if path.exists():

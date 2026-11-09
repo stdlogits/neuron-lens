@@ -556,8 +556,7 @@ take about 1.5× as long.
 | `09_legible.py` | which reads hold at each unit's top firings | ~30 min on a Mac |
 | `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$105 for the neurons, under $1 for the heads (Batch API) |
 | `16_edges.py` | every pole's strongest direct weight edges | minutes |
-| `17_firings.py` | the residual, the MLP output and the model's prediction at every pole's top firings | under 1 h on an H100 (estimate) |
-| `18_sources.py` | what drives every pole when it fires, and what fires with it | 1-3 h on an H100 (estimate) |
+| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`) | 1-3 h on an H100 (estimate) |
 | `13_media_activations.py` | Gemma 4: every pole's activation over the labelled images and sounds; its exemplars | ~50 min per modality on an H100, and 220 GB of RAM for the images |
 | `14_media_tables.py` | Gemma 4: the per-layer image and audio tables | ~15 min on an H100 |
 | `15_media_optimised.py` | Gemma 4: the optimised patches and sounds | ~25 min per modality on an H100 |
@@ -565,7 +564,7 @@ take about 1.5× as long.
 | `12_release.py` | release the lenses and the catalog on the Hub | |
 
 An Apple-silicon Mac runs everything but the lens fits and the GPU passes, which want a CUDA card (24
-GB is enough for the text passes); `scripts/catalog_box.sh` sets up a rented box and runs them in order. `scripts/checks/` holds the analyses behind the findings, each
+GB is enough for the text passes); `scripts/catalog_box.sh` sets up a GPU machine and runs them in order. `scripts/checks/` holds the analyses behind the findings, each
 named in its findings section (steering and per-context linearization, prediction and suppression, read
 depth, driver precision, the description pilot and the blind tests, sinks and entropy neurons, outside
 labels, heads' ablation, copying, census and lens sides; for Gemma 4, the media lens tests, the
@@ -592,7 +591,6 @@ python scripts/08_reads.py
 python scripts/09_legible.py
 python scripts/16_edges.py
 python scripts/17_firings.py
-python scripts/18_sources.py
 python scripts/13_media_activations.py --modalities audio --batch 32   # then image: one at a time
 python scripts/checks/crossmodal.py
 python scripts/14_media_tables.py

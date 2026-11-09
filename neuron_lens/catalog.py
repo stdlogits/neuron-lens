@@ -7,7 +7,7 @@
 Tables, each from one pipeline stage: ``acts`` (``06_activations.py``), ``drivers``
 (``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``), ``labels``
 (``10_labels.py``), and for neurons ``firings`` (``17_firings.py``), ``edges`` (``16_edges.py``) and
-``sources`` (``18_sources.py``). Token reads cover the kept tokens (``kept``) and
+``sources`` (the same stage). Token reads cover the kept tokens (``kept``) and
 list ``TOP`` of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores) and ``*_str`` (the top
 8 decoded, `` | ``-joined). A list with fewer entries than ``TOP`` is padded with ``−1`` and NaN.
 
@@ -37,6 +37,7 @@ MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrai
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3
 N_CONTEXTS = 5  # top contexts kept in the acts tables; the rest stay held out for scoring
 HELD_OUT = 24  # label checks draw held-out firings from ranks past N_CONTEXTS up to this (findings §8)
+TYPICAL = 24  # act_top, a unit's typical high activation, is the median over its top this many documents (the definition doses and rates rest on)
 
 
 def catalog_dir(model: str = MODEL):

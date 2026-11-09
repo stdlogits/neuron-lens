@@ -1,5 +1,5 @@
 """How the three relations between units compare (findings §17): wired to (``edges``, ``16_edges.py``), driven by
-and fires with (``sources``, ``18_sources.py``), per pole, by band.
+and fires with (``sources``, ``17_firings.py``), per pole, by band.
 
 For each pole's top ``K`` of each list: the share of its driven-by sources that are in its wired-to list, in its
 fires-with list, in either; and the same against the next pole's lists, the control. Writes

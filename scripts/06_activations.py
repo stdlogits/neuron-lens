@@ -59,6 +59,7 @@ from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
     TOP,
+    TYPICAL,
     acts_path,
     catalog_dir,
     context,
@@ -464,7 +465,7 @@ def _neuron_layer(layer: int) -> None:
                            "q50", "q90", "q99", "q999", "mean", "std", "neg_lobe", "peak_tokens", "next_tokens", "contexts")}
     for p in range(2):
         val = top["val"][layer, p]  # [K, f]
-        act_top = val.median(0).values.clamp_min(0).double()
+        act_top = val[:TYPICAL].median(0).values.clamp_min(0).double()
         acc["act_top"].append(act_top)
         acc["act_max"].append(val[0].double())
         acc["pos_share"].append(E[p, 0] / n)
@@ -513,7 +514,7 @@ def head_tables(saved: dict, device) -> None:
     n = n_s.sum()
     E_s = past(st["h_count"].double().reshape(len(n_s), L, NB, H)).transpose(1, 2)  # [S, len(EDGES), L, H]
     E = E_s.sum(0)
-    out_top = top["h_val"].median(-1).values.double()  # [L, H]
+    out_top = top["h_val"][..., :TYPICAL].median(-1).values.double()  # [L, H]
     cols = head_keys(L, H, arch.groups(MODEL))
     cols["out_top"] = pa.array(out_top.flatten().float().numpy())
     cols["out_max"] = pa.array(top["h_val"][..., 0].flatten().numpy())

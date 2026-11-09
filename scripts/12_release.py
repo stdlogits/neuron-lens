@@ -43,7 +43,7 @@ import torch
 from huggingface_hub import HfApi
 
 from neuron_lens import arch
-from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept
+from neuron_lens.catalog import MODEL, TOP, TYPICAL, catalog_dir, kept
 from neuron_lens.paths import CORPUS_DIR, DATA, FITS, ROOT, SUMMARY
 from neuron_lens.rules import HALF_RULE_BETA
 from neuron_lens.transport import SKIP_FIRST, Accumulator
@@ -609,7 +609,7 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
 - **`_z`** reads are layer-contrastive: each token's score z-scored across the layer's poles or heads,
   which removes the hub tokens that top most raw reads. **`_neg`**: a head read's bottom.
 - **Firings.** A unit's firing in a document is its strongest position there; its top firings are the
-  24 documents where that is largest. `contexts` show the first 5, the firing token in `⟦ ⟧` and, for
+  {TOP} documents where that is largest. `contexts` show the first 5, the firing token in `⟦ ⟧` and, for
   heads, the token it attends to most (past position 0) in `⟪ ⟫`.
 - **Tests** (`legible`) score a read on the tokens of the unit's own top firings, as a mean z, against
   mismatched pairs: another unit of the layer scored on the same tokens. `_q` is the Benjamini-Hochberg
@@ -656,7 +656,7 @@ Over every document of four slices, up to 256 tokens each, in bf16: DCLM held ou
 corpus, FineWeb-2 Chinese, codeparrot Python, and UltraChat dialogues ({q['docs']:,} documents and
 {q['positions']:,} positions for Qwen3-8B, {g['docs']:,} and {g['positions']:,} for Gemma 4; `docs.parquet`).
 
-- `act_top`: the median of the {TOP} top firings, the pole's typical high activation; `act_max`.
+- `act_top`: the median of the {TYPICAL} top firings, the pole's typical high activation; `act_max`.
 - `rate`: the share of positions past `act_top / 4`, from exact counts on a quarter-octave grid (linear
   between its points); `rate_<slice>` per slice; `pos_share`: where the pole's sign holds; `q50`-`q999`:
   quantiles of the activation times the pole's sign, from the same counts; `mean`, `std`.

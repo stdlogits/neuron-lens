@@ -37,7 +37,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; `16` edges, `17` firings and `18` sources, after `06`;
+  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`;
   then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
@@ -202,15 +202,15 @@ by `scripts/12_release.py`, one card per repo covering both models.
   (default 10) and resume when rerun; `06_activations.py` rerun after a complete pass rebuilds the
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
-- The catalog's GPU stages: `scripts/catalog_box.sh` installs on a rented box (a GH200 works) and starts
-  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for each model, then
-  `08`, `09`, `16` and the `measure` halves of the causal checks (`MEDIA=1` adds `13`, `14`). Its header has the
-  commands to copy the results back. The checks' `score` halves run where the comparison lenses are.
+- The catalog's GPU stages: `scripts/catalog_box.sh` installs on a GPU machine and starts
+  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17` for each model, then
+  `08`, `09`, `16` and the `measure` half of `checks/edges_in_context.py` (`MEDIA=1` adds `13`, `14`). Its header has the
+  commands to copy the results back. The `score` half runs where the comparison lenses are.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,
   runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
   torch's default of one thread per core makes CPU ops on small tensors spin for minutes. Run one
-  process per GPU (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`) and copy `data/fits/` off rented
-  boxes before destroying them.
+  process per GPU (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`) and copy `data/fits/` off a
+  temporary machine before it goes.
 
 ## Recording results
 
