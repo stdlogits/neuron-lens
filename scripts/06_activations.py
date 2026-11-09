@@ -8,7 +8,8 @@ One forward pass per batch of documents, eager attention in bf16, over every doc
   sum and sum of squares, and exact counts of each pole's activation (``±act``) past every point
   of a quarter-octave grid from 2⁻¹⁰ to 2¹⁰ (rates and quantiles interpolate between them); per
   pole, the top ``TOP`` documents by its extreme in the document, with the position and the gate
-  pre-activation there (``neg_lobe``: the share of its firings on SiLU's negative lobe, below zero);
+  pre-activation there (``neg_lobe``: the activation-weighted share of its firings on SiLU's negative lobe,
+  below zero);
 - **heads,** at each layer's ``o_proj`` input, from position 16 (where the lenses start; a head
   with few keys attends sharply): the norm of each head's output ``W_O^h z``, counted on the same
   grid, and its top ``TOP`` documents, each with the position it attends to most past the sink
@@ -479,8 +480,8 @@ def _neuron_layer(layer: int) -> None:
         peak = flat[start[docs] + poss]  # [K, f]
         after = start[docs] + poss + 1  # the token after each firing; past its document's end, none
         following = torch.where(after < start[docs + 1], flat[after.clamp_max(len(flat) - 1)].long(), -1)
-        fires = val > 0
-        acc["neg_lobe"].append(((top["gate"][layer, p] < 0) & fires).sum(0).double() / fires.sum(0).clamp_min(1))
+        size = val.clamp_min(0)  # activation-weighted, so a pole's weak tail of top firings doesn't decide its side
+        acc["neg_lobe"].append((size * (top["gate"][layer, p] < 0)).sum(0).double() / size.sum(0).clamp_min(1e-9))
         for nn in range(f):
             fired = (val[:, nn] > 0).nonzero().squeeze(1).tolist()
             c = Counter(int(peak[j, nn]) for j in fired)
