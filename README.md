@@ -144,7 +144,7 @@ Neurons and heads get the same five tables, one row per pole or per head: `reads
 reads), `acts` (activation statistics and top firings), `drivers` (exact token drivers), `legible`
 (which reads hold at the unit's own top firings) and `labels` (Claude Haiku's labels in words).
 Neurons add `firings` (what the residual holds, what the MLP layer writes and what the model predicts where a pole
-fires), `edges` (each pole's strongest direct weight edges from earlier poles and to later ones) and `sources` (what drives
+fires, and how much the pole amplifies what it reads and adds off it), `edges` (each pole's strongest direct weight edges from earlier poles and to later ones) and `sources` (what drives
 a pole when it fires, and what fires with it). Gemma 4 adds `image` and `audio` tables, per neuron and per head. The [dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents
 every column.
 

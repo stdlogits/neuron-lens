@@ -721,6 +721,8 @@ The residual at a pole's {TOP} top firings, averaged (each firing scaled by its 
 layer's whole MLP output there, through `out`: what the layer writes when the pole fires, the pole and the neurons firing with it;
 `after_R`, `after_S`, the residual after the layer, through `out`; and `pred`, the model's mean next-token logit there. Each has a `_z`
 variant across the layer's poles that fired. `n_firings`: how many firings went in; a pole with none has `−1`, NaN and empty previews.
+`parallel`, `orthogonal`, means over the firings: how much the pole's write amplifies (positive) or suppresses (negative) the part of the
+residual it reads, as a multiple of that part, and how much it adds off that direction, on the same scale.
 
 ### `<model>-neurons-sources`: what drives a pole, and what fires with it
 

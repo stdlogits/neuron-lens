@@ -10,23 +10,19 @@ where ``top_val > 0``), per layer and pole, a running sum of
 
 ``before`` and ``mlp`` share the firing's scale, ``1 / rms(before)``, and so stay additive: the residual
 after the layer is ``before · s + mlp`` (``s`` Gemma 4's ``layer_scalar``, 1 for Qwen3).
+
+Also per firing, what the pole does to the part of the residual it reads. Under RelP's rules (the norm's scale ``k = 1 / rms``
+and ``φ(g) / g`` held) the activation is exactly linear in the residual ``x``, ``a = c · x`` with
+``c = ½ (φ(g) / g) k (u r_gate + g r_up)``, and the neuron's whole contribution is the rank-one map ``x → w (c · x)`` (``w`` its
+write as the residual sees it). Along ``c`` that map multiplies the residual by ``parallel = c · w``, positive where the
+pole amplifies what it reads, negative where it suppresses it; off ``c`` it adds ``orthogonal = √(‖c‖²‖w‖² − (c · w)²)`` of the
+same size. Both are numbers per unit of what the pole reads, unchanged by rescaling ``up`` against ``down``.
 """
 import torch
 
 from neuron_lens import arch
 
 SITES = ("before", "mlp", "pred")
-
-
-def gather(tensors: list[torch.Tensor]) -> list[torch.Tensor]:
-    """``tensors`` on the CPU, in one transfer per dtype: a transfer each would stop the GPU for each. Each comes
-    back a view of a shared buffer, so what stays around needs a ``clone``."""
-    out = [None] * len(tensors)
-    for dt in {t.dtype for t in tensors}:
-        at = [i for i, t in enumerate(tensors) if t.dtype == dt]
-        for i, part in zip(at, torch.cat([tensors[i].flatten() for i in at]).cpu().split([tensors[i].numel() for i in at])):
-            out[i] = part.view(tensors[i].shape)
-    return out
 
 
 def firing_plan(doc: torch.Tensor, pos: torch.Tensor, val: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -38,9 +34,20 @@ def firing_plan(doc: torch.Tensor, pos: torch.Tensor, val: torch.Tensor) -> tupl
     return d[order].int(), pos[row, k][order].int(), row[order].int()
 
 
+def weights(lay) -> dict:
+    """What ``parallel`` and ``orthogonal`` need from a decoder layer's weights: the read rows (``gate``, ``up``, each times
+    ``norm``), the activation, and per neuron the inner products of those rows and its write ``w``, in fp32."""
+    norm = arch.mid_norm(lay).weight.float()
+    gate, up, w = lay.mlp.gate_proj.weight.float(), lay.mlp.up_proj.weight.float(), arch.mlp_write(lay).T
+    rg, ru = gate * norm, up * norm
+    dot = lambda a, b: (a * b).sum(1)
+    return {"gate": gate, "up": up, "norm": norm, "act": lay.mlp.act_fn, "gw": dot(rg, w), "uw": dot(ru, w), "gg": dot(rg, rg),
+            "uu": dot(ru, ru), "gu": dot(rg, ru), "ww": dot(w, w)}
+
+
 class Accumulator:
-    """Running sums ``[2f, d]`` per site and layer, on the CPU. ``begin`` a batch of documents ``a..b`` (rows ``0..``
-    of the batch), run the forward pass with ``hooks`` on, ``flush`` its firings into the sums."""
+    """Running sums ``[2f, d]`` per site and layer, on the CPU; ``hooks`` adds to them during a forward pass.
+    Between ``begin`` and the end of each batch, documents ``a..b`` are rows ``0..`` of the batch."""
 
     def __init__(self, plan: dict[int, tuple], f: int, d: int, device):
         self.plan = {l: tuple(t.to(device) for t in p) for l, p in plan.items()}
@@ -48,9 +55,9 @@ class Accumulator:
         self.dev = device
         self.sum = {site: {l: torch.zeros(2 * f, d) for l in self.layers} for site in SITES}
         self.count = {l: torch.zeros(2 * f) for l in self.layers}
-        self.scale, self.scalar = {}, {l: 1.0 for l in self.layers}
+        self.gain = {l: torch.zeros(2 * f, 2) for l in self.layers}  # parallel, orthogonal, summed
+        self.scale, self.scalar, self.weights, self.map = {}, {l: 1.0 for l in self.layers}, {}, {}
         self.a = self.b = 0
-        self.out = []  # (site, layer, pole rows, [n, d]), on the GPU until the batch ends
 
     def begin(self, a: int, b: int) -> None:
         self.a, self.b = a, b
@@ -64,27 +71,34 @@ class Accumulator:
         bi, p, r = self._firings(l)
         v = x[bi, p].float()
         self.scale[l] = torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))
-        self.out.append(("before", l, r, v * self.scale[l]))
+        self.map[l] = self.self_map(l, v, r.long(), self.scale[l][:, 0])
+        r = r.long().cpu()
+        self.sum["before"][l].index_add_(0, r, (v * self.scale[l]).cpu())
+        self.count[l].index_add_(0, r, torch.ones(len(r)))
 
-    def mlp(self, l: int, out: torch.Tensor, scalar) -> None:
+    def self_map(self, l: int, x: torch.Tensor, row: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
+        """``[n, 2]``: at firings of poles ``row`` with residual ``x`` and norm scale ``k``, ``parallel`` and ``orthogonal``."""
+        w = self.weights[l]
+        n = row % (len(w["ww"]))
+        g, u = (w["gate"][n] * w["norm"] * x).sum(-1) * k, (w["up"][n] * w["norm"] * x).sum(-1) * k
+        s = w["act"](g) / g
+        cg, cu = 0.5 * s * u * k, 0.5 * s * g * k  # the read at this firing: c = cg r_gate + cu r_up
+        par = cg * w["gw"][n] + cu * w["uw"][n]
+        size2 = (cg.square() * w["gg"][n] + cu.square() * w["uu"][n] + 2 * cg * cu * w["gu"][n]) * w["ww"][n]
+        return torch.stack([par, (size2 - par.square()).clamp_min(0).sqrt()], 1)
+
+    def mlp(self, l: int, out: torch.Tensor, scalar, post) -> None:
         bi, p, r = self._firings(l)
         v = out[bi, p].float() * (1 if scalar is None else scalar.float().reshape(()))
-        self.out.append(("mlp", l, r, v * self.scale[l]))
+        r = r.long().cpu()
+        self.sum["mlp"][l].index_add_(0, r, (v * self.scale[l]).cpu())
+        self.gain[l].index_add_(0, r, (self.map[l] if post is None else self.map[l] * post[bi, p].float()[:, None]).cpu())
 
     def pred(self, x: torch.Tensor) -> None:
         for l in self.layers:
             bi, p, r = self._firings(l)
             v = x[bi, p].float()
-            self.out.append(("pred", l, r, v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))))
-
-    def flush(self) -> None:
-        got = gather([t for *_, r, v in self.out for t in (r, v)])
-        for (site, l, *_), r, v in zip(self.out, got[::2], got[1::2]):
-            r = r.long()
-            self.sum[site][l].index_add_(0, r, v)
-            if site == "before":
-                self.count[l].index_add_(0, r, torch.ones(len(r)))
-        self.out = []
+            self.sum["pred"][l].index_add_(0, r.long().cpu(), (v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))).cpu())
 
     def hooks(self, stack) -> list:
         out = []
@@ -92,8 +106,9 @@ class Accumulator:
             lay = stack.layers[l]
             module, scalar = arch.mlp_output(lay)
             self.scalar[l] = 1.0 if scalar is None else float(scalar)
+            self.weights[l] = weights(lay)
             out.append(arch.mid_norm(lay).register_forward_pre_hook(lambda m, a, l=l: self.before(l, a[0])))
-            out.append(module.register_forward_hook(lambda m, a, o, l=l, s=scalar: self.mlp(l, o, s)))
+            out.append(module.register_forward_hook(lambda m, a, o, l=l, s=scalar, lay=lay: self.mlp(l, o, s, arch.mlp_scale(lay, a[0]))))
         out.append(stack.norm.register_forward_pre_hook(lambda m, a: self.pred(a[0])))
         return out
 
@@ -104,8 +119,12 @@ class Accumulator:
         m["after"] = m["before"] * self.scalar[l] + m["mlp"]
         return m
 
+    def gains(self, l: int) -> torch.Tensor:
+        """``[2f, 2]``: the layer's ``parallel`` and ``orthogonal``, each pole's mean over its firings (NaN without any)."""
+        return torch.where(self.count[l] > 0, self.gain[l].T / self.count[l].clamp_min(1), torch.tensor(float("nan"))).T
+
     def state(self) -> dict:
-        return {"sum": self.sum, "count": self.count}
+        return {"sum": self.sum, "count": self.count, "gain": self.gain}
 
     def load(self, state: dict) -> None:
-        self.sum, self.count = state["sum"], state["count"]
+        self.sum, self.count, self.gain = state["sum"], state["count"], state["gain"]

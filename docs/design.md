@@ -207,6 +207,13 @@ A head's token maps are read between its own read and write points (§11): a tok
   the layer (`after`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
   logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS, so
   `after = before · s + mlp`. They average over every top firing, so they stay off the label cards.
+- **What a pole does to what it reads** (`parallel`, `orthogonal`, in the `firings` table). Under RelP's rules a firing's
+  activation is exactly linear in the residual, `a = c · x` with `c = ½ (φ(g) / g) k (u r_gate + g r_up)` (`k` the norm's scale,
+  `g`, `u` the gate and up values there), so the neuron's contribution is the rank-one map `x → w (c · x)`. `parallel = c · w` is
+  the factor it adds along what it reads (positive amplifies, negative suppresses: the residual's component along `c` becomes
+  `1 + parallel` times itself). `orthogonal = √(‖c‖²‖w‖² − (c · w)²)` is what it adds off that direction, on the same scale. Both are means
+  over the pole's firings, cannot be read from the weights alone (scaling `up` against `down` leaves the model unchanged but not
+  `‖w‖ / ‖r‖`), and neither depends on the size of the input. `parallel` needs no metric on the residual; `orthogonal` uses the Euclidean one the lenses read in.
 - **Sources** (`17_firings.py`, the same pass, the `sources` table). The exact RelP split of each of a pole's first 5
   top firings over the embedding, heads and upstream neurons (`driven_*`), and the upstream poles active there
   by lift over their rate (`with_*`). The residual is a sum of writes for any model: `sources.Stream` takes each write as

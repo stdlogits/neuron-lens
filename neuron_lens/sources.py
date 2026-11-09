@@ -19,7 +19,7 @@ import torch
 
 from neuron_lens import arch
 from neuron_lens.catalog import N_CONTEXTS, TOP, column, fixed, neuron_keys, neuron_table
-from neuron_lens.firings import firing_plan, gather
+from neuron_lens.firings import firing_plan
 from neuron_lens.rules import norm_eps
 
 RANK = 256  # candidates kept per firing for driven-by
@@ -35,6 +35,8 @@ class Stream:
         self.n_heads = stack.config.num_attention_heads
         self.heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd]
         self.neurons = [arch.mlp_write(lay) for lay in self.layers]  # [d, f]
+        self.head_dim = self.heads[0].shape[1] // self.n_heads
+        self.all_heads, self.all_neurons = torch.cat(self.heads, 1), torch.cat(self.neurons, 1)  # a layer's sources are a prefix of these
         self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=self.neurons[0].device)
 
     def hooks(self, cap: dict, at: Callable, upto: int | None = None) -> list:
@@ -72,30 +74,26 @@ class Stream:
             v = cap[key, l][u] * self.scalars[l:M].prod()
             return v * cap[scale, l][u][:, None] if (scale, l) in cap else v
         return split(rg, ru, x, inv, cap["emb"][u] * self.scalars[:M].prod(),
-                     [reaching("z", "attn", l) for l in range(M + 1)], [reaching("a", "mlp", l) for l in range(M)],
-                     self.neurons[:M], self.heads[:M + 1], self.n_heads, lay.mlp.act_fn)
+                     torch.cat([reaching("z", "attn", l) for l in range(M + 1)], 1),
+                     torch.cat([reaching("a", "mlp", l) for l in range(M)], 1) if M else x[:, :0],
+                     self.all_neurons[:, :M * self.neurons[0].shape[1]], self.all_heads[:, :(M + 1) * self.heads[0].shape[1]],
+                     self.head_dim, lay.mlp.act_fn)
 
 
 def split(rg: torch.Tensor, ru: torch.Tensor, x: torch.Tensor, inv: torch.Tensor, emb: torch.Tensor,
-          z: list[torch.Tensor], acts: list[torch.Tensor], downs: list[torch.Tensor], wos: list[torch.Tensor],
-          n_heads: int, act: Callable) -> dict:
+          z: torch.Tensor, acts: torch.Tensor, downs: torch.Tensor, wos: torch.Tensor, head_dim: int, act: Callable) -> dict:
     """Per firing (rows): ``rg``, ``ru`` ``[N, d]``, the neuron's gate and up rows times the norm's weight;
     ``x`` ``[N, d]``, the residual entering the norm; ``inv`` ``[N, 1]``, the norm's scale; ``emb`` the
-    embedding, ``z[l]`` ``[N, H·hd]`` the heads' pre-``o_proj`` outputs at layers ≤ ``M``, ``acts[l]`` ``[N, f]``
-    the activations at layers < ``M``, these three scaled as they reach ``x``; ``downs``, ``wos`` the writes as
-    the residual sees them; ``act`` the MLP's activation. Returns ``g``, ``a`` ``[N]`` and the shares ``emb`` ``[N]``,
-    ``heads`` ``[N, (M + 1)·H]``, ``neurons`` ``[N, M·f]``, which sum to 1 over the three."""
+    embedding, ``z`` ``[N, (M + 1)·H·hd]`` the heads' pre-``o_proj`` outputs at layers ≤ ``M``, ``acts`` ``[N, M·f]``
+    the activations at layers < ``M``, these three scaled as they reach ``x``; ``downs`` ``[d, M·f]``, ``wos``
+    ``[d, (M + 1)·H·hd]`` the writes as the residual sees them; ``act`` the MLP's activation. Returns ``g``, ``a``
+    ``[N]`` and the shares ``emb`` ``[N]``, ``heads`` ``[N, (M + 1)·H]``, ``neurons`` ``[N, M·f]``, which sum to 1 over the three."""
     g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
     a = act(g) * u
     share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
     e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
-    heads = []
-    for zl, wo in zip(z, wos):
-        per = lambda r: ((r @ wo) * zl).view(len(rg), n_heads, -1).sum(-1) * inv
-        heads.append(share(per(rg), per(ru)))
-    neurons = [share((rg @ w) * al * inv, (ru @ w) * al * inv) for al, w in zip(acts, downs)]
-    return {"g": g, "a": a, "emb": e, "heads": torch.cat(heads, 1),
-            "neurons": torch.cat(neurons, 1) if neurons else torch.zeros(len(rg), 0, device=rg.device)}
+    per = lambda r: ((r @ wos) * z).view(len(rg), -1, head_dim).sum(-1) * inv
+    return {"g": g, "a": a, "emb": e, "heads": share(per(rg), per(ru)), "neurons": share((rg @ downs) * acts * inv, (ru @ downs) * acts * inv)}
 
 
 def merged(rows: torch.Tensor, ids: torch.Tensor, vals: torch.Tensor, n_ids: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -166,37 +164,32 @@ class Sources:
 
     @torch.inference_mode()
     def split(self) -> None:
-        done = {M: self.layer(M, row, u) for M, (row, u) in self.pending.items() if len(row)}
+        for M, (row, u) in self.pending.items():
+            if len(row):
+                self.layer(M, row, u)
         self.cap.clear()
-        got = iter(gather([t for parts in done.values() for t in parts]))
-        for M, parts in done.items():
-            self.record(M, *(next(got) for _ in parts))
 
-    def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> list[torch.Tensor]:
-        """A layer's firings of this batch, ``split`` and ranked, on the GPU, in ``record``'s order."""
+    def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> None:
         cap, f = self.cap, self.f
         s = self.flow.sources(cap, M, row.long() % f, u)
+        d = self.dense[M]
+        r = row.long().cpu()
+        d["heads"].index_add_(0, r, s["heads"].cpu())
+        d["emb"].index_add_(0, r, s["emb"].cpu())
+        d["neurons"].index_add_(0, r, s["neurons"].sum(1).cpu())
+        d["n"].index_add_(0, r, torch.ones(len(r)))
+        d["err"].append((s["emb"] + s["heads"].sum(1) + s["neurons"].sum(1) - 1).abs().amax().item())
+        if M == 0:
+            return
         acts = torch.cat([cap["a", l][u] for l in range(M)], 1)  # [N, M·f]
         pid = (torch.arange(M, device=self.dev)[:, None] * 2 * f + torch.arange(f, device=self.dev)).flatten() + f * (acts < 0)  # [N, M·f]
         top = s["neurons"].abs().topk(min(RANK, s["neurons"].shape[1]), dim=1).indices
-        driven = pid.gather(1, top).int(), s["neurons"].gather(1, top)
+        self.sparse[M]["driven"].append((r, pid.gather(1, top).int().cpu(), s["neurons"].gather(1, top).cpu()))
         fires = (acts.abs() >= FIRE * self.act_top[pid]) & (self.act_top[pid] > 0)  # a silent pole doesn't fire at zero
         lift = fires / self.rate[pid].clamp_min(self.rate_floor)
         top = lift.topk(min(RANK_WITH, lift.shape[1]), dim=1).indices
         n, k = fires.gather(1, top).nonzero(as_tuple=True)
-        err = (s["emb"] + s["heads"].sum(1) + s["neurons"].sum(1) - 1).abs().amax()
-        return [row, s["heads"], s["emb"], s["neurons"].sum(1), err[None], *driven, row[n], pid.gather(1, top)[n, k].int()]
-
-    def record(self, M: int, row, heads, emb, neurons, err, driven_id, driven_val, with_row, with_id) -> None:
-        d = self.dense[M]
-        r = row.long()
-        d["heads"].index_add_(0, r, heads)
-        d["emb"].index_add_(0, r, emb)
-        d["neurons"].index_add_(0, r, neurons)
-        d["n"].index_add_(0, r, torch.ones(len(r)))
-        d["err"].append(err.item())
-        self.sparse[M]["driven"].append((r.clone(), driven_id.clone(), driven_val.clone()))
-        self.sparse[M]["with"].append((with_row.clone(), with_id.clone()))
+        self.sparse[M]["with"].append((r[n.cpu()].int(), pid.gather(1, top)[n, k].int().cpu()))
 
     def state(self) -> dict:
         return {"dense": self.dense, "sparse": self.sparse}

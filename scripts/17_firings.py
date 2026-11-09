@@ -18,6 +18,10 @@ the residual at those positions, read through the lenses:
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
 score z-scored across the layer's poles that fired (for ``pred``, the logit). ``n_firings`` counts a pole's firings;
 a pole without any has ``−1``, NaN and empty previews.
+
+``parallel``, ``orthogonal``: the pole's own write against what it reads, mean over its firings. ``parallel`` is how much
+its write amplifies (positive) or suppresses (negative) the part of the residual it reads, as a multiple of that part;
+``orthogonal`` is how much it adds off that direction, on the same scale (``neuron_lens.firings``).
 ``pred`` is the mean logit, with the size it has (Gemma 4: the softcap on the mean, not on each firing's logits);
 the other reads are directions (scale-free, as every lens read).
 
@@ -119,7 +123,6 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
         src.locate(a, b, T)
         with torch.inference_mode():
             stack(input_ids=ids.to(args.device), attention_mask=mask.to(args.device))
-        acc.flush()
         src.split()
         tokens += int(mask.sum())
         last = i + 1 == len(batches)
@@ -162,6 +165,8 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
         m = {k: v[fired].to(dev) for k, v in acc.means(l).items()}
         cols = neuron_keys(l, len(fired) // 2)
         cols["n_firings"] = pa.array(acc.count[l].to(torch.int16).numpy())
+        gains = acc.gains(l)
+        cols["parallel"], cols["orthogonal"] = pa.array(gains[:, 0].numpy()), pa.array(gains[:, 1].numpy())
         add = lambda name, ids, val: put(cols, name, widen(keep[ids], fired, -1), widen(val, fired, float("nan")))
         for site, J, K in (("before", J_mid[l], K_mid[l]), ("mlp", J_out[l] if l < len(J_out) else None, K_out[l]),
                            ("after", J_out[l] if l < len(J_out) else None, K_out[l])):
