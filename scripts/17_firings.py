@@ -13,6 +13,8 @@ read through the lenses. ``neurons/firings/L<layer>.parquet``, a row per pole:
 
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
 score z-scored across the layer's poles (for ``pred``, the logit). ``n_firings`` counts a pole's firings.
+``pred`` is the mean logit, with the size it has (Gemma 4: the softcap on the mean, not on each firing's logits);
+the other reads are directions (scale-free, as every lens read).
 
 **On the cards.** These average over every top firing, so they must stay off the label evidence cards,
 which hold firings past ``N_CONTEXTS`` out for scoring (AGENTS.md).
@@ -25,6 +27,7 @@ Runs from the ``acts`` tables and documents, in bf16 (as ``06_activations.py``),
 ``--docs N`` is a smoke test: only the first N documents, printing what it collected, writing no table.
 """
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
@@ -53,22 +56,34 @@ def layer_plan(layer: int) -> tuple:
     return firing_plan(column(t, "top_doc").long(), column(t, "top_pos").long(), column(t, "top_val"))
 
 
+def fingerprint(docs: list[torch.Tensor], plans: dict) -> str:
+    """A hash of the documents and every layer's firing list: a checkpoint is only good for these."""
+    h = hashlib.sha256()
+    for d in docs:
+        h.update(d.numpy().tobytes())
+    for l in sorted(plans):
+        for t in plans[l]:
+            h.update(t.numpy().tobytes())
+    return h.hexdigest()
+
+
 def collect(args, layers: list[int], docs: list[torch.Tensor]) -> Accumulator:
     lm, stack = arch.load_model(MODEL, args.device, eager=False)
     cfg = stack.config
-    acc = Accumulator({l: layer_plan(l) for l in layers}, cfg.intermediate_size, cfg.hidden_size, args.device)
-    meta = {"model": MODEL, "layers": layers, "docs": len(docs), "top": TOP}
-    next_batch = 0
+    plans = {l: layer_plan(l) for l in layers}
+    acc = Accumulator(plans, cfg.intermediate_size, cfg.hidden_size, args.device)
+    meta = {"model": MODEL, "layers": layers, "top": TOP, "sha256": fingerprint(docs, plans)}
+    next_doc = 0
     if STATE.exists() and args.docs is None:
         saved = torch.load(STATE, weights_only=False, map_location="cpu")
         if saved["meta"] != meta:
             raise SystemExit(f"{STATE} was collected with {saved['meta']}, not {meta}: move it to start afresh")
         acc.load(saved["state"])
-        next_batch = saved["next_batch"]
+        next_doc = saved["next_doc"]
     hooks = acc.hooks(stack)
-    batches = list(range(0, len(docs), args.batch_docs))
+    batches = list(range(next_doc, len(docs), args.batch_docs))
     saved_at, t0, tokens = time.monotonic(), time.perf_counter(), 0
-    for i, a in enumerate(batches[next_batch:], next_batch):
+    for i, a in enumerate(batches):
         b = min(a + args.batch_docs, len(docs))
         T = max(len(d) for d in docs[a:b])
         ids, mask = torch.zeros(b - a, T, dtype=torch.long), torch.zeros(b - a, T, dtype=torch.long)
@@ -82,7 +97,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> Accumulator:
         if args.docs is None and (last or time.monotonic() - saved_at > 60 * args.save_minutes):
             STATE.parent.mkdir(parents=True, exist_ok=True)
             tmp = STATE.with_suffix(".tmp")
-            torch.save({"meta": meta, "state": acc.state(), "next_batch": i + 1}, tmp)
+            torch.save({"meta": meta, "state": acc.state(), "next_doc": b}, tmp)
             os.replace(tmp, STATE)
             saved_at = time.monotonic()
         if i % 20 == 0 or last:
@@ -118,7 +133,7 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
             s = s_tops(cov / cov.norm(dim=1, keepdim=True).clamp_min(1e-9), emb, (1,), TOP)
             for kind, name in (("raw", f"{site}_S"), ("z", f"{site}_S_z")):
                 put(cols, name, keep[s[kind, 1][0]], s[kind, 1][1])
-        r = layer_reads(m["pred"].T, unembed, gamma, None, signs=(1,), k=TOP, kz=TOP, softcap=CAP)
+        r = layer_reads(m["pred"].T, unembed, gamma, None, signs=(1,), k=TOP, kz=TOP, softcap=CAP, renorm=False)
         put(cols, "pred", keep[r["ids"][1]], r["probs"][1])
         put(cols, "pred_z", keep[r["zids"][1]], r["z"][1])
         write(cols, neuron_table("firings", l))

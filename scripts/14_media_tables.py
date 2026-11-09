@@ -48,7 +48,7 @@ from huggingface_hub import hf_hub_download
 
 from neuron_lens import arch
 from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept, lobe_signs, neuron_keys, put, vocab, write
-from neuron_lens.neurons import directions, softcap
+from neuron_lens.neurons import directions, read_rows, softcap
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads
 from neuron_lens.weights import tensors

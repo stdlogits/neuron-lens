@@ -10,7 +10,8 @@
 # if it cannot, for example TORCH_ARGS="--index-url https://download.pytorch.org/whl/cu128"), downloads
 # the models, rebuilds the corpora at the revisions in data/corpus/*.provenance.json and the token
 # counts, and starts scripts/catalog_queue.sh detached. Progress is in logs/catalog_queue.log, each
-# stage's output in logs/<stage>.log. Every stage resumes when the queue is rerun.
+# stage's output in logs/<stage>.log. A rerun of the queue resumes 06, 17 and 18 from their checkpoints
+# (the media stages, with MEDIA=1, restart).
 #
 # When the queue is done, copy the results to the machine that keeps the catalog and destroy the box:
 #
@@ -33,10 +34,15 @@ python -m pytest -q tests/test_neurons.py tests/test_firings.py tests/test_sourc
 
 for model in Qwen/Qwen3-8B google/gemma-4-12B; do hf download "$model" > /dev/null; done
 mkdir -p logs
-if [ ! -s data/corpus/act-dclm.jsonl ]; then
-    python scripts/05_act_corpus.py --docs dclm=40000,zh=8000,code=8000,chat=8000
-    NEURON_LENS_MODEL=google/gemma-4-12B python scripts/05_act_corpus.py --docs chat=8000
-fi
+build() {  # a slice's file, unless it is already complete
+    local model="$1" name="$2" n="$3" file="$4"
+    [ -s "$file" ] && [ "$(wc -l < "$file")" -ge "$n" ] || NEURON_LENS_MODEL="$model" python scripts/05_act_corpus.py --docs "$name=$n"
+}
+build Qwen/Qwen3-8B dclm 40000 data/corpus/act-dclm.jsonl
+build Qwen/Qwen3-8B zh 8000 data/corpus/act-zh.jsonl
+build Qwen/Qwen3-8B code 8000 data/corpus/act-code.jsonl
+build Qwen/Qwen3-8B chat 8000 data/corpus/act-chat.jsonl
+build google/gemma-4-12B chat 8000 data/corpus/act-chat-gemma-4-12b.jsonl
 [ -s data/token_counts.pt ] || python scripts/03_token_counts.py
 [ -s data/token_counts-gemma-4-12b.pt ] || NEURON_LENS_MODEL=google/gemma-4-12B python scripts/03_token_counts.py
 

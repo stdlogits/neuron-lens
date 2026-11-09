@@ -5,7 +5,8 @@ where ``top_val > 0``), per layer and pole, a running sum of
 
 - ``before``: the residual entering the norm that feeds the layer's MLP (the input ``mid`` targets read);
 - ``mlp``: the layer's MLP output as it reaches the residual;
-- ``pred``: the final residual, normalized: its mean through the unembedding is the mean logit there.
+- ``pred``: the final residual, normalized as the final norm does: through the unembedding, the mean of it is the
+  model's mean logit there (for Gemma 4, the softcap is applied to the mean, not to each firing's logits).
 
 ``before`` and ``mlp`` share the firing's scale, ``1 / rms(before)``, and so stay additive: the residual
 after the layer is ``before · s + mlp`` (``s`` Gemma 4's ``layer_scalar``, 1 for Qwen3).

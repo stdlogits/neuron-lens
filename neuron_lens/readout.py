@@ -93,9 +93,11 @@ def layer_reads(
     kz: int = 8,
     chunk: int = 1024,
     softcap: float | None = None,
+    renorm: bool = True,
 ) -> dict:
     """Every column's read on each sign (pole), from one unembedding product kept whole.
     With ``softcap`` (Gemma), the logits are the model's: ``softcap · tanh(logits / softcap)``.
+    ``renorm=False`` keeps each column's size (columns already on the final norm's scale, before its weight).
 
     Per sign ``s``: the top-``k`` probabilities and ids of ``softmax(s · logits)`` and the
     top-``kz`` ids and values by layer-contrastive z (each token's logit z-scored across the
@@ -103,7 +105,8 @@ def layer_reads(
     skew and kurtosis of its logits over the vocabulary, for sign ``+`` (a pole's skew is ``s``
     times it). Returns CPU tensors ``{"ids": {s: [n, k]}, "probs", "zids", "z", "skew": [n], "kurt"}``.
     """
-    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32))
+    gamma = gamma.to(vectors.device, torch.float32)
+    t = rms_norm_columns(transport(vectors, jacobian), gamma) if renorm else transport(vectors, jacobian) * gamma[:, None]
     logits = unembed @ t.to(unembed.dtype)
     n = logits.shape[1]
     if softcap:  # in place, a chunk of columns at a time (a whole fp32 copy is 7 GB for Gemma 4)
