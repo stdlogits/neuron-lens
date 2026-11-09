@@ -22,7 +22,9 @@ primal once per document and keeps each layer's constants. The S-lens pushes tan
 the maps, the R-lens pulls cotangents down through their transposes, ``dim_batch`` basis
 directions at a time, so each layer is a few matrix products over ``dim_batch × positions`` rows,
 written out by hand (no autograd). On CUDA the layer steps are compiled, which fuses the
-elementwise work between the products.
+elementwise work between the products. With every direction of ``d_model`` going through a gated
+MLP, each layer's map is multiplied out first (``layers.contract``), so the sweep runs a layer at a
+time, every block of directions through it, instead of a block at a time.
 
 One end is fixed in each lens, so ``d_model`` basis directions of that end cover every layer
 at the other. The seed goes at every valid position and the read is averaged over them.
@@ -118,6 +120,25 @@ def _step(step, device: torch.device):
     return _compiled(step) if device.type == "cuda" else step
 
 
+def _blocks(k: int, dim_batch: int) -> list[tuple[int, int]]:
+    return [(s, min(dim_batch, k - s)) for s in range(0, k, dim_batch)]
+
+
+def _sweeps(maps: list, order, blocks: list[tuple[int, int]], contract: bool):
+    """``(layer, its map, block index)`` in sweep order: each block through every layer in turn, or, with
+    ``contract``, each layer's map multiplied out once and every block through it."""
+    from neuron_lens import layers
+    if not contract:
+        return ((layer, maps[layer], i) for i in range(len(blocks)) for layer in order)
+    return ((layer, m, i) for layer, m in ((l, layers.contract(maps[l])) for l in order) for i in range(len(blocks)))
+
+
+def _contracts(maps: list, tangents: int, d: int) -> bool:
+    """Whether a sweep of ``tangents`` directions should multiply its MLPs out (``layers.contract``)."""
+    from neuron_lens import layers
+    return tangents == d and all(isinstance(m.mlp, layers.GatedMLP) for m in maps)
+
+
 def _seed(b: int, N: int, d: int, start: int, device) -> torch.Tensor:
     """``[b, N, d]``: basis direction ``start + i`` at every valid position, in copy ``i``."""
     x = torch.zeros(b, N, d, device=device)
@@ -152,20 +173,18 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     k = d if basis is None else basis.shape[0]
     src = None if source_rows is None else source_rows.to(dev).float()[None, :, None]
     w = None if target_rows is None else (target_rows.to(dev).float() / target_rows.sum())[None, :, None]
-    for start in range(0, k, dim_batch):
-        b = min(dim_batch, k - start)
-        if basis is None:
-            X = _seed(b, N, d, start, dev)
-        else:
-            X = basis[start:start + b].to(dev, torch.float32)[:, None].expand(b, N, d).contiguous()
-        if src is not None:
-            X = X * src
-        for layer, m in enumerate(maps):
-            X, *ests = step(m, X, w)
-            for kind, e in zip(("mid", "out"), ests):
-                if kind in kinds:
-                    s = acc.sums[(kind, half)]
-                    s[layer, :, start:start + b] += e.mT.to(s.device)
+    blocks = _blocks(k, dim_batch)
+    X = [_seed(b, N, d, start, dev) if basis is None else
+         basis[start:start + b].to(dev, torch.float32)[:, None].expand(b, N, d).contiguous() for start, b in blocks]
+    if src is not None:
+        X = [x * src for x in X]
+    for layer, m, i in _sweeps(maps, range(len(maps)), blocks, _contracts(maps, k, d)):
+        X[i], *ests = step(m, X[i], w)
+        start, b = blocks[i]
+        for kind, e in zip(("mid", "out"), ests):
+            if kind in kinds:
+                s = acc.sums[(kind, half)]
+                s[layer, :, start:start + b] += e.mT.to(s.device)
     acc.n_docs[half] += 1
 
 
@@ -190,19 +209,17 @@ def r_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     last = 0 if "mid" in kinds else 1  # layer 0's map matters only for its mid
     seeds = None if seed_rows is None else seed_rows.to(dev).float()[None, :, None]
     row_w = None if read_rows is None else read_rows.to(dev).float() / read_rows.sum()
-    for start in range(0, d, dim_batch):
-        b = min(dim_batch, d - start)
-        G = _seed(b, N, d, start, dev)
-        if seeds is not None:
-            G = G * seeds
-        for layer in range(len(maps) - 1, last - 1, -1):
-            G, mid, est = vjp(maps[layer], G, None, row_w)
-            if "mid" in kinds:
-                s = acc.sums[("mid", half)]
-                s[layer, start:start + b] += mid.to(s.device)
-            if layer > 0 and "out" in kinds:
-                s = acc.sums[("out", half)]
-                s[layer - 1, start:start + b] += est.to(s.device)
+    blocks = _blocks(d, dim_batch)
+    G = [_seed(b, N, d, start, dev) * (1 if seeds is None else seeds) for start, b in blocks]
+    for layer, m, i in _sweeps(maps, range(len(maps) - 1, last - 1, -1), blocks, _contracts(maps, d, d)):
+        G[i], mid, est = vjp(m, G[i], None, row_w)
+        start, b = blocks[i]
+        if "mid" in kinds:
+            s = acc.sums[("mid", half)]
+            s[layer, start:start + b] += mid.to(s.device)
+        if layer > 0 and "out" in kinds:
+            s = acc.sums[("out", half)]
+            s[layer - 1, start:start + b] += est.to(s.device)
     acc.n_docs[half] += 1
 
 

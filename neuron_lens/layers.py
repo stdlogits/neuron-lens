@@ -174,12 +174,17 @@ class GatedMLP(NamedTuple):
     cu: torch.Tensor  # [N, d_ff]: the up projection's factor (β·act(g); or act(g))
 
 
+class Contracted(NamedTuple):
+    """A gated MLP's map as one matrix per row, ``[N, d, d]`` (``contract``)."""
+    m: torch.Tensor
+
+
 class Layer(NamedTuple):
     n1: Norm
     mix: Attention | DeltaNet
     post1: Norm | None
     n2: Norm
-    mlp: GatedMLP | MoE
+    mlp: GatedMLP | MoE | Contracted
     post2: Norm | None
     s: torch.Tensor | None  # []: the layer scalar
 
@@ -800,11 +805,33 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
 
 # --------------------------------------------------------------------------------- the MLPs
 
-def _mlp_jvp(m: GatedMLP, xn):
+def contract(m: Layer, chunk: int = 64) -> Layer:
+    """The layer with its gated MLP's map multiplied out, one ``[d, d]`` matrix per row:
+    ``W_d (diag(cg) W_g + diag(cu) W_u)``. Building them is one matrix product over the rows and
+    each tangent then costs one ``d × d`` product where the map costs three through ``d_ff``, so the
+    whole map costs ``N d² (2 d_ff + 2 d)`` for all ``d`` tangents against ``6 N d² d_ff``: it pays
+    from about ``3 d / 8`` tangents. ``chunk`` rows are built at a time, for memory."""
+    g = m.mlp
+    if not isinstance(g, GatedMLP):
+        return m
+    N, d = g.cg.shape[0], g.wg.shape[1]
+    parts = []
+    for s in range(0, N, chunk):
+        cg, cu = g.cg[s:s + chunk].T, g.cu[s:s + chunk].T  # [f, n]
+        rows = (cg[..., None] * g.wg[:, None] + cu[..., None] * g.wu[:, None]).flatten(1)  # [f, n·d]
+        parts.append((g.wd @ rows).unflatten(1, (cg.shape[1], d)).transpose(0, 1))  # [n, d, d]
+    return m._replace(mlp=Contracted(torch.cat(parts)))
+
+
+def _mlp_jvp(m: GatedMLP | Contracted, xn):
+    if isinstance(m, Contracted):
+        return (xn.transpose(0, 1) @ m.m.mT).transpose(0, 1).float()
     return F.linear(m.cg * F.linear(xn, m.wg) + m.cu * F.linear(xn, m.wu), m.wd).float()
 
 
-def _mlp_vjp(m: GatedMLP, G):
+def _mlp_vjp(m: GatedMLP | Contracted, G):
+    if isinstance(m, Contracted):
+        return (G.to(m.m.dtype).transpose(0, 1) @ m.m).transpose(0, 1).float()
     gp = G.to(m.wd.dtype) @ m.wd
     return ((m.cg * gp) @ m.wg + (m.cu * gp) @ m.wu).float()
 
