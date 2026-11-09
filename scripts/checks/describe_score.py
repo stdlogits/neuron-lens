@@ -54,6 +54,7 @@ from describe_cards import FDR, NAME, OUT, TESTS
 from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
+    HELD_OUT,
     N_CONTEXTS,
     context,
     documents,
@@ -88,7 +89,7 @@ def make(args) -> None:
             if e["act_top"] < lb.SILENT:
                 silent.append(lb.pole_id(l, n, s))
                 continue
-            held = [j for j, v in enumerate(e["top_val"]) if v > 0][N_CONTEXTS:]  # the card showed the first
+            held = [j for j, v in enumerate(e["top_val"]) if v > 0 and j < HELD_OUT][N_CONTEXTS:]  # the card showed the first
             scored.append({"layer": l, "neuron": n, "sign": s, "id": lb.pole_id(l, n, s), "act_top": e["act_top"],
                            "pos": [(int(e["top_doc"][j]), int(e["top_pos"][j]), float(e["top_val"][j]))
                                    for j in rng.sample(held, min(N_POS, len(held)))]})

@@ -10,10 +10,11 @@ A catalog of what every MLP neuron (two poles each) and attention head of two mo
 Qwen3-8B (36 layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads). Each unit is
 read from three sides: the weights through two lenses (a neuron's write and read direction; a head's
 OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
-heads get the same tables: `acts`, `drivers`, `reads`, `legible`, and `labels`; Qwen3-8B's neurons also
-get `edges`, the direct weight edges between poles.
+heads get the same tables: `acts`, `drivers`, `reads`, `legible`, and `labels`; neurons also get `firings`
+(what the residual holds where they fire), `edges` (direct weight edges between poles) and `sources` (what drives
+them when they fire).
 Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, per-neuron
-`image` and `audio` tables and a `media` table of heads. `NEURON_LENS_MODEL` selects the model for
+`image` and `audio` tables per neuron and per head. `NEURON_LENS_MODEL` selects the model for
 every stage (Qwen3-8B by default). The lenses and the catalog are released on the Hugging Face Hub
 by `scripts/12_release.py`, one card per repo covering both models.
 
@@ -32,11 +33,12 @@ by `scripts/12_release.py`, one card per repo covering both models.
   audio documents and reads its embedders backwards, `media_sets.py` streams the labelled image and
   audio collections; `corpus.py` the corpora (`act_file` names each slice's file); `catalog.py` holds
   the catalog's layout, the kept tokens and the table helpers (and browses it:
-  `python -m neuron_lens.catalog`); `stats.py` the shared statistics; `known.py` named neurons.
+  `python -m neuron_lens.catalog`); `firings.py` and `sources.py` the activation-side passes (the residual at a pole's firings; the exact split of
+  an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; for Qwen3-8B, `16` edges and `18` sources, after `06`;
-  `17` firings, after `06`; then `11` figures → `12` release).
+  `14` media tables → `15` optimised media reads; `16` edges, `17` firings and `18` sources, after `06`;
+  then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -59,9 +61,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   release staging folders, and outside data (`data/external/`). `neuron_lens/paths.py` names
   them. The catalog lives in `data/catalog/<model>/`, laid out as the release:
   `neurons/<table>/L<layer>.parquet` (a row per pole, the + poles first) and
-  `heads/<table>.parquet` (a row per head), key columns in front. Per model: `token_counts.pt`
-  (Qwen3-8B) or `token_counts-<model>.pt`; the chat slice `act-chat.jsonl` (Qwen3-8B) or
-  `act-chat-<model>.jsonl`, the other slices shared; Gemma's media sources in
+  `heads/<table>.parquet` (a row per head), key columns in front. Per model: `token_counts-<model>.pt` and
+  the chat slice `act-chat-<model>.jsonl`, the other slices shared; Gemma's media sources in
   `data/corpus/media-<modality>.provenance.json`. `data/summary/release_<model>.json` holds what the
   Hub cards say about each model's release, so either model's run rebuilds both cards.
 
@@ -73,7 +74,15 @@ by `scripts/12_release.py`, one card per repo covering both models.
   checks. A head's input is read with the S-lens on both circuits (findings §11).
 - **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
   firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
-  card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded.
+  card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded (`HELD_OUT`
+  for the label checks' held-out firings).
+- **One format.** A token list is `<name>_ids`, `_val`, `_str`; a list of poles is `<name>_layer`, `_neuron`, `_pole`; shorter lists
+  are padded with −1, NaN and an empty preview. Parallel sources get parallel names: R-lens and S-lens reads differ only by
+  `_R` / `_S`, weight reads and firing reads share their `_z` meaning, modalities get a table each, and every model has the same
+  columns and the same file names, so nothing is special-cased for the default model.
+- **Another model in the catalog** comes through `arch.py` and `neurons.py`: what a layer's heads and neurons write as the
+  residual sees them, and what rescales that on the way (`attn_norm`, `mlp_norm`, `layer_scale`). The stages read those instead of
+  branching on the model. Analyses in `scripts/checks/` tied to one model's named units or findings section may stay that model's.
 - **One token mask.** Every token read covers `catalog.kept()`: tokens seen 5+ times in the
   activation corpora, without byte-fallback pieces.
 - **Description cards stay leak-free.** `10_labels.py check` and `checks/lens_blind.py` hold out a
@@ -163,7 +172,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **In context.** Before about L21, a firing's effect varies by context, and a write read describes
   the pole's average push (what steering shows), not what one firing does (findings §4).
 - **Undertrained tokens.** Token reads cover `catalog.kept()`: tokens seen 5+ times in
-  `data/token_counts.pt` (`03_token_counts.py`, over the activation corpora), without byte-fallback
+  `data/token_counts-<model>.pt` (`03_token_counts.py`, over the activation corpora), without byte-fallback
   pieces. Undertrained tokens push some early neurons to huge activations.
 - **Descriptions are soft:** weighted labels with a confidence and scores, not one hard label.
   In the docs, let the wording say what is measured and what is interpretation ("suggests",
@@ -194,7 +203,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
 - The catalog's GPU stages: `scripts/catalog_box.sh` installs on a rented box (a GH200 works) and starts
-  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for Qwen3-8B, then `06`, `17` for Gemma 4, then
+  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for each model, then
   `08`, `09`, `16` and the `measure` halves of the causal checks (`MEDIA=1` adds `13`, `14`). Its header has the
   commands to copy the results back. The checks' `score` halves run where the comparison lenses are.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,

@@ -151,16 +151,16 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
 | `write_S` | `w · K_L^out (W_E[v] − ē)`: the tokens whose footprint the write imitates |
 | `read_R` | `softmax(W_U · norm(J_L^mid c))`: what the residual says when it drives the pole |
 | `read_S` | `c · K_L^mid (W_E[v] − ē)`: the input tokens that drive the pole |
-| `w_norm`, `cos_ab` | `‖W_down[:, n]‖`, `cos(a, b)` |
-| `cos_gate`, `cos_up` | the cosine of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
+| `w_norm`, `cos_gate_up` | `‖W_down[:, n]‖`, `cos(a, b)` |
+| `cos_write_gate`, `cos_write_up` | the cosine of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
 | `vocab_skew`, `vocab_kurt` | of the pole's logit-lens logits: prediction and suppression neurons (Gurnee et al. 2024; §5) |
 | `null_share` | the write's share in the bottom 1% of singular directions of `W_U diag(γ)`: entropy neurons (Stolfo et al. 2024; §9) |
 
 - **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write with its components along
   the neuron's gate and up rows removed (`neurons.orthogonal_write`), the part that adds something
-  beyond anything it reads (§18).
+  beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
 - **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
-  `neg_lobe` past a half) reads the negative of `â ± b̂` (`neurons.read_rows`), and its `read_*`, `cos_gate`, `cos_up`
+  `neg_lobe` past a half) reads the negative of `â ± b̂` (`neurons.read_rows`), and its `read_*`, `cos_write_gate`, `cos_write_up`
   and in-edges follow it (§17).
 - **Layer-contrastive reads** (`_z`) z-score each token's score across the layer's poles (S-lens rows
   as unit vectors), which removes hub tokens. Raw `read_S` keeps literal tokens early; `read_S_z`
@@ -205,11 +205,13 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **Firing reads** (`17_firings.py`, the `firings` table). Per pole, the mean over its top firings of the residual
   entering the MLP (`before`, through `mid`), the layer's MLP output there (`mlp`, through `out`), the residual after
   the layer (`after`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
-  logit), each with a `_z` variant across the layer's poles. Each firing is scaled by its own residual's RMS, so
+  logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS, so
   `after = before · s + mlp`. They average over every top firing, so they stay off the label cards.
-- **Sources** (`18_sources.py`, the `sources` table, Qwen3-8B). The exact RelP split of each of a pole's first 5
+- **Sources** (`18_sources.py`, the `sources` table). The exact RelP split of each of a pole's first 5
   top firings over the embedding, heads and upstream neurons (`driven_*`), and the upstream poles active there
-  by lift over their rate (`with_*`).
+  by lift over their rate (`with_*`). The residual is a sum of writes for any model: `sources.Stream` takes each write as
+  the residual sees it, times what rescales it at that position (a norm after the attention or the MLP) and the layer scalars
+  it passes through.
 - **Drivers** (`07_drivers.py`): every kept token at position 24 of 8 documents (4 web, 2 code, 2 chat),
   before the documents' own next 16 tokens. Per pole, the 64 tokens with the largest mean activation at
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and
@@ -219,16 +221,18 @@ A head's token maps are read between its own read and write points (§11): a tok
 
 ## Edges
 
-`16_edges.py` (Qwen3-8B) links poles through the residual stream, from the weights. A pole A of layer
-`L` writes `±W_down[:, n]`, and that write reaches every later MLP input unchanged; a pole B of layer
+`16_edges.py` links poles through the residual stream, from the weights. A pole A of layer
+`L` writes `±w_A` (`neurons.directions`), and that write reaches every later MLP input; a pole B of layer
 `M > L` reads `c = â ± b̂` after the norm. The edge is `cos(w_A, c_B)`, and its `push` is
-`cos · act_top_A · ‖w_A‖ / rms_M`, the move of one of A's top firings along B's read direction in B's
-normalized input (`rms_M` the median RMS of the residual entering layer M's MLP). Each pole keeps its 16
+`cos · act_top_A · ‖w_A‖ · gain / rms_M`, the move of one of A's top firings along B's read direction in B's
+normalized input (`rms_M` the median RMS of the residual entering layer M's MLP; `gain` is 1 for Qwen3, and for
+Gemma 4 the layer scalars between A and M times the median scale of the norm after A's MLP, which varies by position,
+so `push` holds it at a typical value as it does `act_top` and `rms_M`). Each pole keeps its 64
 strongest in- and out-edges by |push|, among `|cos| ≥ 5/√d`: without that floor, neurons with huge
 activations top many lists at chance cosines. Edges are direct paths at one position, and `push` holds
 the source at its typical top firing; `checks/edges_in_context.py` splits each sampled pole's activation
 at its top firings over the embedding, every head and every upstream neuron (RelP's rules: the norm's
-scale and SiLU's ratio held, the half rule over gate and up), which shows how far the edges name what
+scale and the activation's ratio held, the half rule over gate and up), which shows how far the edges name what
 drives it (§17).
 
 ## Labels

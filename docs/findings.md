@@ -1091,7 +1091,7 @@ spread over the keys; within the media, attention to the same slot, the other sl
 neighbours; each head zeroed in turn, the rise in the right label's loss minus a wrong one's, as a z
 over documents (*content carriers*); and the head's output at the article read through the R-lens
 `mid`, as the right class's mean percentile among the classes, against 200 label shuffles with BH
-over heads (*label writers*). Per-head values are in `heads/media`.
+over heads (*label writers*). Per-head values are in `heads/image` and `heads/audio`.
 
 - **The model knows what it sees, but barely what it hears.** The right label's loss is below a wrong
   one's for 97% of images (3.64 against 10.29 nats), 55% of sounds (6.48 against 6.56).
@@ -1125,7 +1125,7 @@ section builds those edges for Qwen3-8B and asks how much of what drives a pole 
   input along B's read direction (`rms_M`: the median RMS of the residual entering layer M's MLP over
   64 documents, 0.1 at L0, 1.0 at L12, 6.6 at L28 and 26 at L35). Each pole keeps its 16 strongest
   in-edges (from earlier poles) and out-edges (to later ones) by |push| among those with
-  |cos| ≥ 5/√d = 0.078, which random directions reach about once in 3.5 million (the `edges` table).
+  |cos| ≥ 5/√d = 0.078, which random directions reach about once in 1.7 million (the `edges` table).
 - **In context** (`checks/edges_in_context.py`; MPS, fp32, 16 minutes). §3's 32 random neurons a layer
   at L1-L35, both poles, at their first 5 top firings (2,228 poles). At a firing, B's MLP input is the
   normalized sum of the embedding, every head's write at layers up to M and every neuron's below M.
@@ -1189,10 +1189,12 @@ sources at its top firings, which `explain` gives one pole at a time.
 
 **Limits.** Direct paths at one position: what heads carry between positions, and paths through other
 units, are not edges. Heads are sources in context but have no weight edges. `push` holds each source
-at its typical top firing. 32 random neurons a layer, 5 firings each. Qwen3-8B only: Gemma 4's norms
-rescale each write per position.
+at its typical top firing. 32 random neurons a layer, 5 firings each. Measured on Qwen3-8B. Gemma 4's `edges` and `sources` tables come
+from the same code, with each write taken at the scale its norm gives it (in `edges`, that norm's typical scale); they aren't measured here.
 
 ## §18. What a write adds beyond what it reads
+
+The question this section tests, what an MLP adds beyond amplifying what it receives, and the idea of reading the part of an output orthogonal to its input, came from [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty).
 
 **Setup** (`checks/write_parts.py`; Qwen3-8B, MPS, fp32). Weights, 512 random neurons a layer: the cosine of a neuron's write with its
 gate and up rows, and the top 12 of the R-lens read of the write, orthogonal to the read direction `â ± b̂` or to the whole gate-up plane
@@ -1216,7 +1218,7 @@ orthogonal-to-read-direction list and the orthogonal-to-plane list for the same 
 
 - **The self-alignment is with `up`.** Through L14 a neuron's write leans on the direction its `up` row carries; the gate row's cosine is
   small. At L18-L22 the two sizes close; by L30 the `up` alignment is gone, and it reverses at the last layers. Subtracting only the read
-  direction leaves half of this in, which is why the plane is the version in the catalog. `cos_up`, `cos_gate` keep it per pole.
+  direction leaves half of this in, which is why the plane is the version in the catalog. `cos_write_up`, `cos_write_gate` keep it per pole.
 - **Effect sizes.** Steering, medians by band: the orthogonal part's effect is 84-100% of the whole write's, the along-read part's 8-34%; `r(whole, orth)` 0.94-1.00.
   `r(along, orth)` is about 0 at every depth, but any two orthogonal vectors would tend to that, and no random-split control was run.
 - **Meaning, blind.** Orthogonal part against the pole's own read, per rater, among 240 real poles (same / related / different / unclear): rater 1,
@@ -1240,8 +1242,7 @@ lens read of a pole's input at early layers is uninformative for many (§6). §2
 - Whether J++ filtering (Ayonrinde 2026) or a longer context improves early and mid-network reads.
 - The same catalog for Qwen3-8B-Base, as a neuron-by-neuron diff of what post-training changed.
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).
-- Labels in words for Gemma 4, with its image and sound exemplars on the cards (§14), and media reads
+- Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads
   per slot, which would say where in an image a neuron looks.
-- Every pole's sources at its top firings, neurons and heads (§17's `explain` for the whole catalog),
-  and weight edges for heads (OV writes into neurons, neurons into QK).
+- Weight edges for heads (OV writes into neurons, neurons into QK), and sources for heads (§17's `sources` covers neurons).
 - Whether the firing-averaged RelP direction (the gate's and `up`'s weights set by each firing's activation) improves on the sign flip at L1-L3 (§17).

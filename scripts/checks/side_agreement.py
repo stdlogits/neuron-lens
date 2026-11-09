@@ -1,6 +1,6 @@
 """Do a pole's weight-only reads match where it fires? Every pole of the catalog, no model (findings §5, §6).
 
-Each pole's top firings are the catalog's (``acts``: the strongest position in each of its top 24
+Each pole's top firings are the catalog's (``acts``: the strongest position in each of its top
 documents, ``06_activations.py``), those with a positive value; at each, the peak token and the token
 after it (none past the document's end). Token lists are the catalog's top 10 (``08_reads.py``, over
 ``catalog.kept()``); a firing on a token outside them counts as a miss.

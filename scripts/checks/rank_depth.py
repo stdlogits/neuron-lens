@@ -2,7 +2,7 @@
 often that token shows up in the pole's behaviour, against a mismatched pole. It set the catalog's
 ``TOP``. No model.
 
-Each pole's top firings are the catalog's (``acts``: the strongest position in each of its top 24
+Each pole's top firings are the catalog's (``acts``: the strongest position in each of its top
 documents), those with a positive value. A pole's read hits at rank r when its rank-r token is
 - for writes (``write_R``, ``write_R_z``): the token after one of its firings (none past the
   document's end);

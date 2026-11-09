@@ -63,6 +63,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens.catalog import (
     MODEL,
+    HELD_OUT,
     N_CONTEXTS,
     acts_path,
     context,
@@ -162,7 +163,7 @@ def cards(args) -> None:
             cards["contexts"][i] = "\n".join(lines)
             cards["both"][i] = "\n".join(head + lens + lines[len(head):])
             fired = [j for j, v in enumerate(e["top_val"]) if v > 0]
-            held = fired[N_CONTEXTS:]  # the contexts card showed the first N_CONTEXTS
+            held = [j for j in fired if j < HELD_OUT][N_CONTEXTS:]  # the contexts card showed the first N_CONTEXTS
             pos = [] if silent else [(int(e["top_doc"][j]), int(e["top_pos"][j]), float(e["top_val"][j]))
                                      for j in sorted(rng.sample(held, min(N_POS, len(held))))]
             poles[i] = {"id": pid, "layer": l, "neuron": n, "sign": s, "band": band_of(l),

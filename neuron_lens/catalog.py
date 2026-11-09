@@ -36,6 +36,7 @@ TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top fi
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3
 N_CONTEXTS = 5  # top contexts kept in the acts tables; the rest stay held out for scoring
+HELD_OUT = 24  # label checks draw held-out firings from ranks past N_CONTEXTS up to this (findings §8)
 
 
 def catalog_dir(model: str = MODEL):

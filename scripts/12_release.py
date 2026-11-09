@@ -75,7 +75,8 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                     "reads": "every head's OV and QK circuits read per token",
                     "legible": "which reads hold at every head's top firings",
                     "labels": "every head's labels, by Claude Haiku 5.5",
-                    "media": "every head in image and audio contexts"}}
+                    "image": "every head in image contexts",
+                    "audio": "every head in audio contexts"}}
 OPTIMISED = {"image": "the patch that most raises each of the best-labelled poles",
              "audio": "the 40 ms of sound that most raises each of the best-labelled poles"}
 RULES = {"ln_rule": "decoder-layer RMSNorm rsqrt held constant", "identity_rule": "act(g) as (act(g)/g)·dg",
@@ -543,9 +544,10 @@ Neurons and heads get the same tables, one row per pole or per head:
 | `drivers` | the tokens that drive each pole hardest | the tokens that drive each head, as query and as key |
 | `legible` | which reads hold at the pole's top firings | which reads hold at the head's top firings |
 | `labels` | Claude Haiku's labels: where it fires, what it writes | where it fires, what it attends to, what it writes |
-| `edges` (Qwen3-8B) | the earlier poles whose writes push it most, and the later poles it pushes most | |
-| `image`, `audio` (Gemma 4) | the patch or sound it reads, its write in media contexts, the images or sounds that drive it, and whether its media label is its text concept too | |
-| `media` (Gemma 4) | | how each head attends in image and audio contexts, and which carry what an image or sound shows |
+| `firings` | what the residual holds, what the MLP layer writes and what the model predicts at the pole's top firings | |
+| `edges` | the earlier poles whose writes push it most, and the later poles it pushes most | |
+| `sources` | what drives the pole when it fires, and the poles that fire with it | |
+| `image`, `audio` (Gemma 4) | the patch or sound it reads, its write in media contexts, the images or sounds that drive it, and whether its media label is its text concept too | how each head attends in those contexts, and which carry what an image or sound shows |
 
 | config | rows | what |
 |---|---|---|
@@ -633,13 +635,13 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
 |---|---|---|
 | `write_R`, `write_R_z` | the R-lens, `softmax(W_U · norm(J^out_L w))`; `_val` are probabilities (the logit lens at the last layer) | the write `w` (Qwen3-8B: `±W_down[:, n]`) |
 | `write_S`, `write_S_z` | the S-lens to the layer's output: tokens whose footprint the write imitates | the write |
-| `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18) |
+| `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18; the idea is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s) |
 | `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` |
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
 
 `â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight, normalized: `â ± b̂`
 is a heuristic direction for each pole, its negative for a pole whose top firings ride SiLU's negative
-lobe (`acts`' `neg_lobe` past a half; §17). Also per row: `w_norm`, `cos_ab`, `cos_gate`, `cos_up` (the
+lobe (`acts`' `neg_lobe` past a half; §17). Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
 cosine of the pole's write with the gate and up sides of what it reads, positive where it writes toward
 them; §18), `null_share` (the share of the
 write in the bottom 1% of singular directions of `W_U diag(γ)`, where entropy neurons write; Stolfo et
@@ -718,28 +720,28 @@ The residual at a pole's {TOP} top firings, averaged (each firing scaled by its 
 `before_R`, `before_S`, the residual entering the MLP, through `mid`: what the pole's input holds where it fires; `mlp_R`, `mlp_S`, the
 layer's whole MLP output there, through `out`: what the layer writes when the pole fires, the pole and the neurons firing with it;
 `after_R`, `after_S`, the residual after the layer, through `out`; and `pred`, the model's mean next-token logit there. Each has a `_z`
-variant across the layer's poles. `n_firings`: how many firings went in.
+variant across the layer's poles that fired. `n_firings`: how many firings went in; a pole with none has `−1`, NaN and empty previews.
 
-### `qwen3-8b-neurons-sources`: what drives a pole, and what fires with it
+### `<model>-neurons-sources`: what drives a pole, and what fires with it
 
 At a pole's first 5 top firings, the exact RelP split of its activation over the embedding, the heads and earlier neurons (§17). `driven_*`:
 the {TOP} upstream poles with the largest mean share, `driven_head_*` the same of the heads, and `emb_share`, `heads_share`,
 `neurons_share` each kind's mean share. `with_*`: the {TOP} earlier poles active at `act_top / 4` or more at the pole's firings, by lift
-(`with_lift`, the share of those firings where they are active over their overall `rate`), with that share (`with_co`). The three relations
-differ: of a pole's top 16 driven-by sources, a median of 25-44% are in its top 16 wired-to or fires-with lists (32 random neurons a layer, L6-L30).
+(`with_lift`, the share of those firings where they are active over their overall `rate`), with that share (`with_co`). `n_contexts`: the firings used. The three relations
+differ, on Qwen3-8B: of a pole's top 16 driven-by sources, a median of 25-44% are in its top 16 wired-to or fires-with lists (32 random neurons a layer, L6-L30).
 
-### `qwen3-8b-neurons-edges`: direct weight edges
+### `<model>-neurons-edges`: direct weight edges
 
-What a neuron writes reaches every later layer's MLP input unchanged, so each pole has a direct edge to
+What a neuron writes reaches every later layer's MLP input, so each pole has a direct edge to
 every pole of a later layer (§17). Per pole, its {TOP} strongest in-edges (`in_*`, from earlier poles) and
 out-edges (`out_*`, to later ones), strongest first: `_layer`, `_neuron`, `_pole` name the other pole;
 `_cos` is the cosine of the earlier pole's write with the later pole's read direction, and `_push` is
-`cos · act_top · ‖w‖ / rms`, how far one of the earlier pole's top firings moves the later pole's
+`cos · act_top · ‖w‖ · gain / rms`, how far one of the earlier pole's top firings moves the later pole's
 normalized input along its read direction (`rms` the residual's median RMS at the later layer's MLP
-input). Positive: the earlier pole's firing drives the later pole; negative: it pushes against it.
+input; `gain` is 1 for Qwen3-8B and, for Gemma 4, the layer scalars between the two poles times the typical scale of the norm after the earlier MLP). Positive: the earlier pole's firing drives the later pole; negative: it pushes against it.
 Edges rank by |push| among those with |cos| ≥ 5/√d = 0.078; `−1` and NaN fill shorter lists.
 
-Edges are wiring, not traffic: a pole's push ranks every upstream neuron's effect when it fires at
+Edges are wiring, not traffic: on Qwen3-8B, a pole's push ranks every upstream neuron's effect when it fires at
 Spearman 0.88, but its in-edges are a tenth of the 16 units that contribute most there, which are mostly
 units firing with it (§17). At L1-L3, 49-78% of top firings have a negative gate, where the read
 direction points the wrong way, and in-edges there are unreliable.
@@ -758,7 +760,7 @@ and one linear map. One row per pole, beside the text tables:
 | `write_R`, `write_R_z` | the write through the modality's R-lens: what it makes the model say in image or audio contexts |
 | `label`, `label_z`, `label_mean`, `labels_str` | its top labels by the z of its mean activation over each label's documents (labels on 8 or more documents: {media['image']['labels_scored']:,} for images, {media['audio']['labels_scored']:,} for sound) |
 | `sig`, `stable`, `auroc_heldout` | the top label past the shuffled-label null's 99th percentile for its layer; in the top 5 of both halves of the documents; chosen on even documents, its AUROC on odd ones |
-| `top_docs`, `top_vals` | the {TOP} documents with its largest mean activation (rows of `media/<modality>_docs.parquet`) |
+| `top_doc`, `top_val` | the {TOP} documents with its largest mean activation (rows of `media/<modality>_docs.parquet`) |
 | `text_fire_rank`, `text_read_rank`, `text_write_rank` | for a reliable label, its rank among the modality's labels on the text side (1 first, 0.5 chance): firing on the label's words, the text S-lens read, the text R-lens write |
 
 A media read sums over a document's 64 slots, so it is one pattern wherever it sits, not a map of
@@ -869,7 +871,7 @@ Gemma 4 12B: its write labels are at chance, so read them as guesses.
 
 {head_labels["gemma-4-12b"]}
 
-### `gemma-4-12b-heads-media`: heads in image and audio contexts
+### `gemma-4-12b-heads-image`, `gemma-4-12b-heads-audio`: heads in image and audio contexts
 
 64 labelled images (mini-ImageNet) and 64 sounds (ESC-50, the classes in turn), each in the media prompt
 and followed by ` a <label>`, its own and another class's (§16). Per head and modality: `read`,
@@ -922,7 +924,7 @@ heads.query("layer == 20 and head == 17")[["ov_R_str", "qk_S_str", "duplicate", 
 base = "hf://datasets/{DATASET}/gemma-4-12b"
 image = pd.read_parquet(f"{{base}}/neurons/image/L33.parquet").query("neuron == 6099 and pole == 1").iloc[0]
 docs = pd.read_parquet(f"{{base}}/media/image_docs.parquet")
-image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_docs"][:4], ["labels", "link"]]
+image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4], ["labels", "link"]]
 ```
 
 ## Limits
@@ -951,7 +953,7 @@ repositories, under their licenses) and
 [UltraChat-200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k) (MIT). The media
 documents' labels and captions come from their source datasets, under those datasets' terms (some
 non-commercial); the images and sounds themselves are only linked. By [@_a9lim](https://x.com/_a9lim)
-and [@treetowntree](https://x.com/treetowntree) with Claude (Anthropic), {date}.
+and [@treetowntree](https://x.com/treetowntree) with Claude (Anthropic), {date}. [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) suggested the orthogonal write read.
 """
 
 

@@ -66,6 +66,7 @@ import pyarrow.parquet as pq
 from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
+    HELD_OUT,
     N_CONTEXTS,
     acts_path,
     context,
@@ -600,7 +601,7 @@ def check(args) -> None:
             other, third = rng.sample([x for x in pool if x is not r], 2)
             ctx = []
             for src, truth in ((r, 1), (other, 0)):
-                held = list(range(N_CONTEXTS, len(src["top_doc"])))
+                held = list(range(N_CONTEXTS, min(HELD_OUT, len(src["top_doc"]))))
                 for j in rng.sample(held, CHECK_SHOWN):
                     ctx.append((context(tok, docs[src["top_doc"][j]], src["top_pos"][j], src["src_pos"][j], after=0), truth))
             rng.shuffle(ctx)

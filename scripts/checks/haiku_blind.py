@@ -45,6 +45,7 @@ def cards(args) -> None:
     from transformers import AutoTokenizer
 
     from neuron_lens.catalog import (
+        HELD_OUT,
         N_CONTEXTS,
         acts_path,
         context,
@@ -89,7 +90,7 @@ def cards(args) -> None:
                 for j, c in zip(fired[:N_CONTEXTS], shown):
                     checked += 1
                     matched += context(tok, tokens[e["top_doc"][j]], int(e["top_pos"][j])) == c
-            held = fired[N_CONTEXTS:]
+            held = [j for j in fired if j < HELD_OUT][N_CONTEXTS:]
             pos = [] if silent else [(int(e["top_doc"][j]), int(e["top_pos"][j]), float(e["top_val"][j]))
                                      for j in sorted(rng.sample(held, min(lb.N_POS, len(held))))]
             poles[pid] = {"id": pid, "layer": layer, "neuron": n, "sign": s, "band": lb.band_of(layer),
