@@ -44,9 +44,9 @@ build() {  # a slice's file, unless it is already complete
 build Qwen/Qwen3-8B dclm 40000 data/corpus/act-dclm.jsonl
 build Qwen/Qwen3-8B zh 8000 data/corpus/act-zh.jsonl
 build Qwen/Qwen3-8B code 8000 data/corpus/act-code.jsonl
-build Qwen/Qwen3-8B chat 8000 data/corpus/act-chat.jsonl
+build Qwen/Qwen3-8B chat 8000 data/corpus/act-chat-qwen3-8b.jsonl
 build google/gemma-4-12B chat 8000 data/corpus/act-chat-gemma-4-12b.jsonl
-[ -s data/token_counts.pt ] || python scripts/03_token_counts.py
+[ -s data/token_counts-qwen3-8b.pt ] || python scripts/03_token_counts.py
 [ -s data/token_counts-gemma-4-12b.pt ] || NEURON_LENS_MODEL=google/gemma-4-12B python scripts/03_token_counts.py
 
 setsid nohup bash scripts/catalog_queue.sh >> logs/catalog_queue.log 2>&1 < /dev/null &

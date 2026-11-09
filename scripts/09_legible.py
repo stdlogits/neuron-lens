@@ -285,7 +285,7 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     cols = head_keys(L, H, arch.groups(MODEL))
     for t in HEAD_TESTS:
         cols[f"{t}_z"], cols[f"{t}_q"] = pa.array(stat[t].flatten().numpy()), pa.array(q[t].flatten().numpy())
-    cols |= {f"{t}_p": pa.array(pval[t].flatten().numpy()) for t in HEAD_TESTS}  # after Qwen's columns
+    cols |= {f"{t}_p": pa.array(pval[t].flatten().numpy()) for t in HEAD_TESTS}
     cols |= {"cur_mode": pa.array(cur_mode.flatten().numpy()), "src_mode": pa.array(src_mode.flatten().numpy()),
              "pattern": pa.array(pattern.flatten().numpy()), "dark": pa.array(dark.flatten().numpy())}
     write(cols, head_table("legible"))

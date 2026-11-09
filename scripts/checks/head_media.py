@@ -27,7 +27,7 @@ shows" / "...It sounds like"), followed by `` a <label>`` (``an`` before a vowel
   share of ``PERMS`` label shuffles that score as high; legible at a 5% false discovery rate
   (Benjamini-Hochberg over all heads).
 
-Per head into ``data/catalog/gemma-4-12b/heads/media.parquet`` (columns ``<modality>_<score>``);
+Per head into ``data/catalog/gemma-4-12b/heads/<modality>.parquet``;
 the summary in ``data/summary/head_media_gemma-4-12b.{log,json}``, beside the text patterns
 (``heads/acts``) and ``head_patterns.py``'s ablation of in-context copying, when present.
 
@@ -273,7 +273,10 @@ def main() -> None:
 
     out_dir = catalog_dir(MODEL) / "heads"
     out_dir.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.table({k: pa.array(v.numpy()) for k, v in cols.items()}), out_dir / "media.parquet")
+    keys = ("layer", "head", "kv_head")
+    for m in sorted({k.split("_")[0] for k in cols if k not in keys}):
+        pq.write_table(pa.table({k: pa.array(cols[k].numpy()) for k in keys} | {k[len(m) + 1:]: pa.array(v.numpy()) for k, v in cols.items() if k.startswith(f"{m}_")}),
+                       out_dir / f"{m}.parquet")
 
     pat_path, abl_path = head_table("acts", MODEL), DATA / "heads" / f"{arch.stem(MODEL)}-ablate-copy.pt"
     pat = pq.read_table(pat_path, columns=["sink", "prev", "induction", "duplicate"]).to_pydict() if pat_path.exists() else None

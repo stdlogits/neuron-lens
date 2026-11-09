@@ -4,7 +4,7 @@ figure's caption. Figures 1-17 are Qwen3-8B's (findings §1-§12; 1 and 2 are sc
 sets Qwen3-8B and Gemma 4 12B side by side, and 19-25 are Gemma 4 12B's: steering, the census, its
 image and sound reads, the cross-modal check and its heads in media contexts (findings §13-§16), from
 ``data/summary`` and Gemma's catalog tables (``data/catalog/gemma-4-12b``: ``neurons/image_optimised``,
-``neurons/audio_optimised``, ``heads/media`` and the ``read_png`` column of the image tables the gallery
+``neurons/audio_optimised``, ``heads/image``, ``heads/audio`` and the ``read_png`` column of the image tables the gallery
 draws). No image or sound from a dataset is drawn: only lens reads and optimised patterns.
 
     python scripts/11_figures.py              # every figure and the README
@@ -1174,7 +1174,10 @@ def fig_crossmodal() -> None:
 
 
 def fig_heads_media() -> None:
-    t = pq.read_table(catalog_dir(GEMMA) / "heads" / "media.parquet").to_pandas()
+    keys = ["layer", "head", "kv_head"]
+    image, audio = (pq.read_table(catalog_dir(GEMMA) / "heads" / f"{m}.parquet").to_pandas().add_prefix(f"{m}_").rename(columns={f"{m}_{k}": k for k in keys})
+                    for m in ("image", "audio"))
+    t = image.merge(audio, on=keys)
     fig, (a, b) = figure(2)
     colors = {"image": 6, "audio": 1}
     for mod, slot in colors.items():
@@ -1204,7 +1207,7 @@ def fig_heads_media() -> None:
     finish(fig, "24_heads_media", "Single heads carry what an image shows into the text; for sound, none does",
            "64 labelled images and 64 sounds (mini-ImageNet, ESC-50), each followed by ' a <label>': attention from the "
            "text after the media to its slots, and each head zeroed in turn (right; dashed: z = 3).",
-           "findings §16; data/summary/head_media_gemma-4-12b.json; heads/media",
+           "findings §16; data/summary/head_media_gemma-4-12b.json; heads/image, heads/audio",
            "Left: attention from the text after the image or sound to its 64 slots, as a multiple of an even spread over "
            "the keys, for the layer's strongest head and its median head. The text reads images most at L23-L31 and L44 "
            f"(up to {t.image_read_ratio.max():.2f} of an even spread) and sounds most at L0-L10 (L{aud.layer}h{aud.head}: "

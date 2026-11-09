@@ -11,7 +11,7 @@ its first ``N_CONTEXTS`` top firings (the firings the cards show, so these can s
 - **fires with** (``with_*``): the earlier poles active at ``act_top / 4`` or more at the pole's firings,
   by ``with_lift``, the share of the firings where they are active over their overall ``rate``; ``with_co``, that share.
 
-``n_firings``: the firings used. Each list is built from ``RANK`` candidates a firing (``RANK_WITH`` for
+``n_contexts``: the firings used. Each list is built from ``RANK`` candidates a firing (``RANK_WITH`` for
 fires-with), a source outside them counting 0 at that firing; ``with_*`` needs a source active at two of the pole's firings (one, if the pole has only one),
 and its ``rate`` is at least one position in the corpus. The pass checkpoints every ``--save-minutes`` and drops the checkpoint with its tables.
 Per layer in ``data/summary/sources_<model>.json``: each kind's share and the decomposition's largest
@@ -129,7 +129,7 @@ class Pass:
         f, L, H = self.f, self.L, self.H
         d = self.dense[M]
         n = d["n"].clamp_min(1)
-        cols = neuron_keys(M, f) | {"n_firings": pa.array(d["n"].numpy(), pa.int16())}
+        cols = neuron_keys(M, f) | {"n_contexts": pa.array(d["n"].numpy(), pa.int16())}
         for k in ("emb", "neurons"):
             cols[f"{k}_share"] = pa.array((d[k] / n).numpy())
         mean_heads = d["heads"] / n[:, None]

@@ -45,7 +45,7 @@ def main() -> None:
             f = s.num_rows // 2
             d = ids(s, "driven", args.k, f)
             w, fw = ids(e, "in", args.k, f), ids(s, "with", args.k, f)
-            used = torch.from_numpy(s.column("n_firings").to_numpy().copy()) > 0
+            used = torch.from_numpy(s.column("n_contexts").to_numpy().copy()) > 0
             acc["w"].append(share(d, w)[used]); acc["f"].append(share(d, fw)[used])
             acc["either"].append(share(d, torch.cat([w, fw], 1))[used])
             acc["w_c"].append(share(d, w.roll(1, 0))[used]); acc["f_c"].append(share(d, fw.roll(1, 0))[used])

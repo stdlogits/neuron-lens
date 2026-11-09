@@ -36,11 +36,11 @@ def lens_docs(path: Path, tok, n: int, seq_len: int, min_len: int, full: bool = 
 
 def act_file(name: str, model: str | None = None) -> Path:
     """An activation slice's JSONL (``05_act_corpus.py``). The chat slice is rendered for its model
-    (in the chat template, or as plain turns), so models after Qwen3-8B have their own:
+    (in the chat template, or as plain turns), so each model has its own:
     ``act-chat-<model>.jsonl``. The other slices are shared."""
     from neuron_lens.catalog import MODEL
     model = model or MODEL
-    if name == "chat" and model != "Qwen/Qwen3-8B":
+    if name == "chat":
         return CORPUS_DIR / f"act-chat-{model.split('/')[-1].lower()}.jsonl"
     return CORPUS_DIR / f"act-{name}.jsonl"
 

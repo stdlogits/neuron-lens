@@ -12,7 +12,8 @@ read through the lenses. ``neurons/firings/L<layer>.parquet``, a row per pole:
 - ``pred``: the model's own mean logit there, its prediction of what comes next.
 
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
-score z-scored across the layer's poles (for ``pred``, the logit). ``n_firings`` counts a pole's firings.
+score z-scored across the layer's poles that fired (for ``pred``, the logit). ``n_firings`` counts a pole's firings;
+a pole without any has ``−1``, NaN and empty previews.
 ``pred`` is the mean logit, with the size it has (Gemma 4: the softcap on the mean, not on each firing's logits);
 the other reads are directions (scale-free, as every lens read).
 
@@ -96,6 +97,13 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> Accumulator:
     return acc
 
 
+def widen(x: torch.Tensor, fired: torch.Tensor, pad) -> torch.Tensor:
+    """``[n, k]`` rows of the poles that fired as ``[2f, k]``, the others padded."""
+    out = torch.full((len(fired), x.shape[1]), pad, dtype=x.dtype)
+    out[fired] = x.cpu()
+    return out
+
+
 def tables(acc: Accumulator, layers: list[int], dev) -> None:
     keep = kept()
     nm = arch.names(MODEL)
@@ -109,21 +117,23 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
     K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)
     for l in layers:
         t0 = time.perf_counter()
-        m = {k: v.to(dev) for k, v in acc.means(l).items()}
-        cols = neuron_keys(l, m["before"].shape[0] // 2)
-        cols["n_firings"] = pa.array(acc.count[l].numpy())
+        fired = acc.count[l] > 0
+        m = {k: v[fired].to(dev) for k, v in acc.means(l).items()}
+        cols = neuron_keys(l, len(fired) // 2)
+        cols["n_firings"] = pa.array(acc.count[l].to(torch.int16).numpy())
+        add = lambda name, ids, val: put(cols, name, widen(keep[ids], fired, -1), widen(val, fired, float("nan")))
         for site, J, K in (("before", J_mid[l], K_mid[l]), ("mlp", J_out[l] if l < len(J_out) else None, K_out[l]),
                            ("after", J_out[l] if l < len(J_out) else None, K_out[l])):
             r = layer_reads(m[site].T, unembed, gamma, J, signs=(1,), k=TOP, kz=TOP, softcap=CAP)
-            put(cols, f"{site}_R", keep[r["ids"][1]], r["probs"][1])
-            put(cols, f"{site}_R_z", keep[r["zids"][1]], r["z"][1])
+            add(f"{site}_R", r["ids"][1], r["probs"][1])
+            add(f"{site}_R_z", r["zids"][1], r["z"][1])
             cov = m[site] @ K.to(dev)
             s = s_tops(cov / cov.norm(dim=1, keepdim=True).clamp_min(1e-9), emb, (1,), TOP)
             for kind, name in (("raw", f"{site}_S"), ("z", f"{site}_S_z")):
-                put(cols, name, keep[s[kind, 1][0]], s[kind, 1][1])
+                add(name, s[kind, 1][0], s[kind, 1][1])
         r = layer_reads(m["pred"].T, unembed, gamma, None, signs=(1,), k=TOP, kz=TOP, softcap=CAP, renorm=False)
-        put(cols, "pred", keep[r["ids"][1]], r["probs"][1])
-        put(cols, "pred_z", keep[r["zids"][1]], r["z"][1])
+        add("pred", r["ids"][1], r["probs"][1])
+        add("pred_z", r["zids"][1], r["z"][1])
         write(cols, neuron_table("firings", l))
         print(f"{time.strftime('%H:%M:%S')} firings L{l} in {time.perf_counter() - t0:.0f}s", flush=True)
 

@@ -510,7 +510,7 @@ image = pd.read_parquet(f"{base}/neurons/image/L33.parquet").query("neuron == 60
 image[["label", "labels_str", "sig", "stable", "text_fire_rank", "text_read_rank", "text_write_rank"]]
 Image.open(io.BytesIO(image["read_png"]["bytes"]))            # its read direction, in pixels
 docs = pd.read_parquet(f"{base}/media/image_docs.parquet")
-docs.loc[image["top_docs"][:8], ["labels", "link"]]            # the images that drive it, at their sources
+docs.loc[image["top_doc"][:8], ["labels", "link"]]            # the images that drive it, at their sources
 opt = pd.read_parquet(f"{base}/neurons/image_optimised.parquet").query("layer == 20 and gain > 0")
 Image.open(io.BytesIO(opt.iloc[0]["opt_png"]["bytes"]))      # a patch that drives its neuron
 ```

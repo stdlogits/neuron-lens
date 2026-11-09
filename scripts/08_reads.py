@@ -20,7 +20,7 @@ top most raw reads (findings §6).
   drives the pole;
 - ``read_S``: the read direction through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
   input tokens that drive the pole (legible at L0-L8);
-- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_ab``, ``cos_gate``, ``cos_up`` (the cosine of the
+- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_gate_up``, ``cos_write_gate``, ``cos_write_up`` (the cosine of the
   pole's write with the gate and up sides of what it reads: positive where it writes toward them; §18),
   ``null_share`` (the share of the write's
   squared norm in the bottom 1% of right-singular directions of ``W_U diag(γ)``, where entropy
@@ -121,11 +121,11 @@ def neurons(layers: list[int], dev) -> None:
         del w
         lobe = lobe_signs(layer)
         cols = neuron_keys(layer, f)
-        w_norm, cos_ab = wd.norm(dim=0).cpu(), (a * b).sum(1)
+        w_norm, cos_gate_up = wd.norm(dim=0).cpu(), (a * b).sum(1)
         cos_gate, cos_up = write_cosines(wd.cpu(), a, b, lobe)
         cols["w_norm"] = pa.array(torch.cat([w_norm, w_norm]).numpy())
-        cols["cos_ab"] = pa.array(torch.cat([cos_ab, cos_ab]).numpy())
-        cols["cos_gate"], cols["cos_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
+        cols["cos_gate_up"] = pa.array(torch.cat([cos_gate_up, cos_gate_up]).numpy())
+        cols["cos_write_gate"], cols["cos_write_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
         cols["null_share"] = pa.array(torch.cat([((null.T @ wd).pow(2).sum(0) / wd.pow(2).sum(0)).cpu()] * 2).numpy())
         logit = layer_reads(wd, unembed, gamma, None, signs=(1,), k=1, kz=1, softcap=CAP)
         cols["vocab_skew"] = pa.array(torch.cat([logit["skew"], -logit["skew"]]).numpy())

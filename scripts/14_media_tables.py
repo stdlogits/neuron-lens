@@ -22,7 +22,7 @@ row per pole with ``layer``, ``neuron``, ``pole`` in front, and no forward pass:
   ``label``, ``label_z``, ``label_mean`` (the top label by z, its z and the label's mean activation),
   ``labels_str`` (the top 8, `` | ``-joined), ``sig`` (above the shuffled-label null's 99th
   percentile for the layer), ``stable`` (in the top 5 of both halves), ``auroc_heldout`` (chosen on
-  even documents, scored on odd), and ``top_docs``, ``top_vals``: the 16 documents with the largest
+  even documents, scored on odd), and ``top_doc``, ``top_val``: the ``TOP`` documents with the largest
   mean activation, rows of ``<modality>_docs.parquet``;
 - across modalities (``checks/crossmodal.py``, for poles with a reliable concept label): the label's
   rank among the modality's labels on the text side, 1 first and 0.5 chance: ``text_fire_rank``
@@ -200,9 +200,9 @@ def main() -> None:
                 cols[k] = pa.array(torch.cat([e[p][k][layer] for p in (1, -1)]).numpy())
             cols["auroc_heldout"] = pa.array(torch.cat([e[p]["auroc_heldout"][layer] for p in (1, -1)]).float().numpy())
             tv = {p: ex["top_docs"][p] for p in (1, -1)}
-            cols["top_docs"] = pa.FixedSizeListArray.from_arrays(
+            cols["top_doc"] = pa.FixedSizeListArray.from_arrays(
                 pa.array(torch.cat([tv[p][1][layer] for p in (1, -1)]).int().flatten().numpy()), tv[1][1].shape[-1])
-            cols["top_vals"] = pa.FixedSizeListArray.from_arrays(
+            cols["top_val"] = pa.FixedSizeListArray.from_arrays(
                 pa.array(torch.cat([tv[p][0][layer] for p in (1, -1)]).float().flatten().numpy()), tv[1][0].shape[-1])
             for key, col in (("fire", "text_fire_rank"), ("s_read", "text_read_rank"), ("r_write", "text_write_rank")):
                 cols[col] = pa.array([xm.get((layer, n, p), {}).get(key, float("nan")) for p in (1, -1) for n in range(f)],

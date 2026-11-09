@@ -148,7 +148,7 @@ def lens_means(model_id: str, r_fit: str | None = None, s_fit: str | None = None
 
 def counts_path(model_id: str):
     """``03_token_counts.py``'s output for this model's tokenizer."""
-    return DATA / "token_counts.pt" if model_id == QWEN else DATA / f"token_counts-{stem(model_id)}.pt"
+    return DATA / f"token_counts-{stem(model_id)}.pt"
 
 
 def load_model(model_id: str, dev: str, eager: bool = True):

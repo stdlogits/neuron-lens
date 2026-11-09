@@ -101,9 +101,9 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16).to(dev).eval()
     gamma = model.model.norm.weight.float()
     eps = model.config.rms_norm_eps
-    keep = (torch.load(DATA / "token_counts.pt", weights_only=False)["counts"] >= 5).nonzero().squeeze(1)
+    keep = (torch.load(DATA / "token_counts-qwen3-8b.pt", weights_only=False)["counts"] >= 5).nonzero().squeeze(1)
     wu = model.lm_head.weight
-    logf = torch.load(DATA / "token_counts.pt", weights_only=False)["counts"][keep].float().log().to(dev)
+    logf = torch.load(DATA / "token_counts-qwen3-8b.pt", weights_only=False)["counts"][keep].float().log().to(dev)
     # Valid positions: past the first, with a next token.
     valid = torch.zeros(ids.shape, dtype=torch.bool)
     valid[:, 1:-1] = True

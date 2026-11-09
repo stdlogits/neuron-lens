@@ -67,7 +67,7 @@ def main() -> None:
     tok = AutoTokenizer.from_pretrained(MODEL)
     dev = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     r = residual_norms(tok, dev)
-    keep = (torch.load(DATA / "token_counts.pt", weights_only=False)["counts"] >= 5).nonzero().squeeze(1)
+    keep = (torch.load(DATA / "token_counts-qwen3-8b.pt", weights_only=False)["counts"] >= 5).nonzero().squeeze(1)
     pos = torch.full((len(tok),), -1, dtype=torch.long)
     pos[keep] = torch.arange(len(keep))
     head = tensors(MODEL, readout_names())

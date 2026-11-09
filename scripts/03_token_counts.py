@@ -2,8 +2,7 @@
 
 Every document of each ``data/corpus/act-<slice>.jsonl`` (``05_act_corpus.py``: held-out DCLM,
 Chinese web text, Python and chat transcripts), whole, tokenized with the model's tokenizer
-(``NEURON_LENS_MODEL``; Qwen3-8B's is shared by all Qwen3 sizes). Writes ``data/token_counts.pt``
-(Qwen3-8B) or ``data/token_counts-<model>.pt`` ``{"counts": [vocab] int64 (all slices), "by_slice":
+(``NEURON_LENS_MODEL``). Writes ``data/token_counts-<model>.pt`` ``{"counts": [vocab] int64 (all slices), "by_slice":
 {slice: [vocab]}, "tokenizer"}``. The mask is ``counts >= 5``; the Chinese slice keeps common Chinese
 tokens in it, which a DCLM-only count dropped.
 

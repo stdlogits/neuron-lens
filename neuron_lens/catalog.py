@@ -6,10 +6,10 @@
 
 Tables, each from one pipeline stage: ``acts`` (``06_activations.py``), ``drivers``
 (``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``), ``labels``
-(``10_labels.py``), ``firings`` (``17_firings.py``) and, for Qwen3-8B's neurons, ``edges``
-(``16_edges.py``) and ``sources`` (``18_sources.py``). Token reads cover the kept tokens (``kept``) and
+(``10_labels.py``), and for neurons ``firings`` (``17_firings.py``), ``edges`` (``16_edges.py``) and
+``sources`` (``18_sources.py``). Token reads cover the kept tokens (``kept``) and
 list ``TOP`` of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores) and ``*_str`` (the top
-8 decoded, `` | ``-joined).
+8 decoded, `` | ``-joined). A list with fewer entries than ``TOP`` is padded with ``−1`` and NaN.
 
 The model is Qwen3-8B unless ``NEURON_LENS_MODEL`` names another (``google/gemma-4-12B``): every
 stage reads it from here.
@@ -154,7 +154,7 @@ def column(table: pa.Table, name: str, k: int | None = None) -> torch.Tensor:
 
 def joined(ids: torch.Tensor, k: int = 8, model: str = MODEL) -> pa.Array:
     v = vocab(model)
-    return pa.array([" | ".join(v[i] for i in row[:k]) for row in ids.tolist()])
+    return pa.array([" | ".join(v[i] for i in row[:k] if i >= 0) for row in ids.tolist()])
 
 
 def put(cols: dict, name: str, ids: torch.Tensor, val: torch.Tensor) -> None:
@@ -237,24 +237,24 @@ def head_entry(layer: int, head: int, model: str = MODEL) -> dict:
     return {k: v[0] for k, v in t.slice(layer * n_heads + head, 1).to_pydict().items()}
 
 
-def edge_list(e: dict, side: str, k: int = 6) -> str:
-    """A pole's first ``k`` edges on one side (``in``, ``out``) as ``L12 n7934 − 1.23`` (the push)."""
-    rows = zip(*(e[f"{side}_{c}"] for c in ("layer", "neuron", "pole", "push")))
+def edge_list(e: dict, side: str, k: int = 6, value: str = "push") -> str:
+    """A pole's first ``k`` related poles on one side (``in``, ``out``, ``driven``, ``with``) as ``L12 n7934 − 1.23``."""
+    rows = zip(*(e[f"{side}_{c}"] for c in ("layer", "neuron", "pole", value)))
     return " | ".join(f"L{l} n{n} {'+' if p > 0 else '−'} {v:.2f}" for l, n, p, v in list(rows)[:k] if l >= 0)
 
 
 def show(e: dict) -> None:
     for k, v in e.items():
-        if k.endswith(("_ids", "_val")) or k.startswith(("top_", "src_pos", "in_", "out_")):
+        if k.endswith(("_ids", "_val")) or k.startswith(("top_", "src_pos", "in_", "out_", "driven_", "with_")):
             continue
         if k == "contexts":
             for c in str(v).split(" ‖ "):
                 print(f"  {'context':14s} {c}")
         else:
             print(f"  {k:14s} {v:.4g}" if isinstance(v, float) else f"  {k:14s} {v}")
-    for side in ("in", "out"):
+    for side, value, name in (("in", "push", "in edges"), ("out", "push", "out edges"), ("driven", "share", "driven by"), ("with", "lift", "fires with")):
         if f"{side}_layer" in e:
-            print(f"  {side + ' edges':14s} {edge_list(e, side)}")
+            print(f"  {name:14s} {edge_list(e, side, value=value)}")
 
 
 def main() -> None:

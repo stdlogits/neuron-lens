@@ -127,7 +127,7 @@ def cards(poles: list[tuple[int, int, int]], causal: dict) -> list[str]:
         t = tables[l]
         e = t.slice(n if s > 0 else t.num_rows // 2 + n, 1).to_pylist()[0]
         lines = [f"### {pole_id(l, n, s)}",
-                 f"- layer {l} of {n_layers}; ‖W_down[:, n]‖ {e['w_norm']:.3f}, cos(gate, up) {e['cos_ab']:+.2f}"]
+                 f"- layer {l} of {n_layers}; ‖W_down[:, n]‖ {e['w_norm']:.3f}, cos(gate, up) {e['cos_gate_up']:+.2f}"]
         lines += [f"- {title}: {e[f'{key}_str']}" for key, title in READS if e[f"{key}_str"]]
         lines.append("- at this layer, the share of all poles whose read holds at their own top firings: "
                      + ", ".join(f"{k} {x:.2f}" for k, x in shares[l].items()))

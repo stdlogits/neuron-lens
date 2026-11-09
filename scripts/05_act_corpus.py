@@ -9,8 +9,8 @@
   model is seen in the speaker frame it was trained for (a base model without one, as Gemma 4
   12B, sees plain ``User:`` / ``Assistant:`` turns).
 
-Each slice goes to ``data/corpus/act-<slice>.jsonl`` (``text`` and ``id``; the chat slice of a
-model other than Qwen3-8B to ``act-chat-<model>.jsonl``, ``corpus.act_file``) with a provenance record
+Each slice goes to ``data/corpus/act-<slice>.jsonl`` (``text`` and ``id``; the chat slice, rendered for
+its model, to ``act-chat-<model>.jsonl``, ``corpus.act_file``) with a provenance record
 at the dataset revision used; a provenance record already in place fixes that revision, so a rebuild
 gives the catalog's rows. Only the DCLM slice is a uniform sample. ``NEURON_LENS_MODEL`` picks
 the model whose chat template renders the chat slice.
