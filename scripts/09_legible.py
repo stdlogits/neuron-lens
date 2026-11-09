@@ -2,7 +2,7 @@
 its top firings (pipeline stage 9; findings §7, §12).
 
 Every test scores a read on the tokens of the unit's own top firings (``06_activations.py``: the
-strongest position in each of its top 24 documents) as a mean z, against mismatched pairs: another
+strongest position in each of its top documents) as a mean z, against mismatched pairs: another
 unit of the layer scored on this unit's tokens. A unit's p-value on a test is the share of its
 layer's mismatched pairs that score as high, and a test passes at a false discovery rate of 5%
 (Benjamini-Hochberg over the layer's units for neurons, over all heads for heads). Units with fewer
@@ -13,6 +13,8 @@ than 3 usable firings are not scored. Columns give the z and q-value of each tes
 - ``write_R``: the write's R-lens read promotes the tokens that follow the firings;
 - ``write_S``: the write's S-lens read names the peak tokens (early neurons write back what they
   detect);
+- ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up
+  rows (§18), reported alongside and left out of ``dark``;
 - ``read_R``, ``read_S``: the read direction's R-lens (from the MLP input) and S-lens reads name the
   peak tokens;
 - ``silent``: no firing, or ``act_top`` under 0.05; ``cur_mode``, ``next_mode``: the share of top
@@ -58,13 +60,14 @@ from neuron_lens.catalog import (
     head_table,
     kept,
     kept_index,
+    lobe_signs,
     neuron_keys,
     neuron_table,
     write,
 )
 from neuron_lens import arch
 from neuron_lens.heads import norm_derivative
-from neuron_lens.neurons import directions
+from neuron_lens.neurons import directions, orthogonal_write, read_rows
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
 from neuron_lens.stats import bh, modal_share, null_p
@@ -82,6 +85,7 @@ NULL_Q = 0.99
 CHUNK = 2048
 BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers))  # Qwen3-8B's five, else quarters
 NEURON_TESTS = ("write_R", "write_S", "read_R", "read_S")
+ORTH_TESTS = ("write_orth_R", "write_orth_S")  # alongside: not part of ``dark``
 HEAD_TESTS = ("ov_R", "ov_copy", "ov_S", "qk_S")
 PATTERN = {"prev": 0.5, "self": 0.5, "induction": 0.3, "duplicate": 0.3}
 
@@ -164,13 +168,19 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         a, b = w["gate"], w["up"]
         a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
         del w
-        c = torch.cat([a + b, a - b]).to(dev)
+        orth = orthogonal_write(wd.cpu(), a, b).to(dev)
+        ro = rms_norm_columns(transport(orth, J_out[layer] if layer < len(J_out) else None), gamma).T
+        so = (K_out[layer].to(dev).T @ orth).T
+        so = so / so.norm(dim=1, keepdim=True)
+        c = read_rows(a, b, lobe_signs(layer)).to(dev)
         rr = rms_norm_columns(transport(c.T, J_mid[layer]), gamma).T
         cs = c @ K_mid[layer].to(dev)
         stats = {"write_R": mean_z(torch.cat([r, -r]).half(), unembed, k_nxt, ok_nxt, perm),
                  "write_S": mean_z(torch.cat([sw, -sw]).half(), emb, k_cur, ok_cur, perm),
                  "read_R": mean_z(rr.half(), unembed, k_cur, ok_cur, perm),
-                 "read_S": mean_z((cs / cs.norm(dim=1, keepdim=True)).half(), emb, k_cur, ok_cur, perm)}
+                 "read_S": mean_z((cs / cs.norm(dim=1, keepdim=True)).half(), emb, k_cur, ok_cur, perm),
+                 "write_orth_R": mean_z(torch.cat([ro, -ro]).half(), unembed, k_nxt, ok_nxt, perm),
+                 "write_orth_S": mean_z(torch.cat([so, -so]).half(), emb, k_cur, ok_cur, perm)}
         cur_mode, next_mode = modal_share(cur, fired), modal_share(nxt, fired & (nxt >= 0))
         cols = neuron_keys(layer, f)
         cols |= {"silent": pa.array(silent.numpy()), "cur_mode": pa.array(cur_mode.numpy()), "next_mode": pa.array(next_mode.numpy())}
@@ -183,9 +193,10 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
             q = torch.ones(2 * f)
             q[ok] = bh(null_p(m[ok], n))
             cols[f"{test}_z"], cols[f"{test}_q"] = pa.array(m.numpy()), pa.array(q.numpy())
-            passed.append(q <= FDR)
+            if test in NEURON_TESTS:
+                passed.append(q <= FDR)
             thr = n[~n.isnan()].quantile(NULL_Q).item()
-            row[test] = passed[-1].float().mean().item()
+            row[test] = (q <= FDR).float().mean().item()
             row[f"{test}_net"] = (((m > thr) & ~silent).float().mean() - ((n > thr) & ~silent).float().mean()).item()
         any_test = torch.stack(passed).any(0)
         dark = ~silent & ~any_test & (cur_mode < PAST) & (next_mode < PAST)
@@ -196,7 +207,7 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         per.append(row)
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: " + " ".join(f"{k} {row[k]:.2f}" for k in
               ("silent", *NEURON_TESTS, "dark")) + f" in {time.perf_counter() - t0:.0f}s", flush=True)
-    keys = ("silent", "token_detector", "next_detector", *NEURON_TESTS, "any_test", "dark")
+    keys = ("silent", "token_detector", "next_detector", *NEURON_TESTS, *ORTH_TESTS, "any_test", "dark")
     lines = [(f"neurons, {MODEL}: {2 * f * L:,} poles; share of each band's poles (mean over layers) passing each test at "
               f"a {FDR:.0%} false discovery rate; in brackets, the share past the {NULL_Q:.0%} point of mismatched pairs net "
               "of theirs. Detectors: a third of top firings share a token. Dark: fires, but no test and no detector."), "",

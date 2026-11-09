@@ -3,12 +3,12 @@
 The residual stream is a sum: what a neuron of layer L writes reaches every later layer's MLP input
 unchanged, so the direct path from a pole A to a pole B of a later layer M is one number from the
 weights, the size of A's write along B's read direction. Per pole, ``neurons/edges/L<layer>.parquet``
-lists the ``K`` poles of earlier layers whose writes push it most (``in_*``) and the ``K`` poles of
+lists the ``TOP`` poles of earlier layers whose writes push it most (``in_*``) and the ``TOP`` poles of
 later layers it pushes most (``out_*``), each as ``_layer``, ``_neuron``, ``_pole``, ``_push`` and
 ``_cos``, strongest first (``−1`` and NaN where fewer clear the floor):
 
-- ``cos``: the cosine of A's write ``±W_down[:, n]`` with B's read direction ``â ± b̂`` (gate and up
-  rows times the MLP input norm's weight, normalized; ``neurons.directions``, as ``08_reads.py``);
+- ``cos``: the cosine of A's write ``±W_down[:, n]`` with B's read direction (``neurons.read_rows``, as
+  ``08_reads.py``: ``â ± b̂``, gate and up rows times the MLP input norm's weight, normalized);
 - ``push``: ``cos · act_top_A · ‖w_A‖ / rms_M``, how far one of A's top firings moves B's normalized
   MLP input along B's read direction; ``rms_M`` is the median RMS of the residual entering layer M's
   MLP (``RMS_DOCS`` catalog documents, positions from 1). Positive: A's firing drives B's pole;
@@ -25,7 +25,7 @@ measures (§17). Per band into ``data/summary/edges_<model>.{log,json}``.
 
 Qwen3-8B only: Gemma 4's post-feedforward norm and layer scalars rescale each write per position.
 
-    python scripts/16_edges.py [--k 16] [--device mps]
+    python scripts/16_edges.py [--device mps]
 """
 import argparse
 import json
@@ -37,17 +37,18 @@ import torch
 from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
+    TOP,
     documents,
     fixed,
+    lobe_signs,
     neuron_keys,
     neuron_table,
     write,
 )
-from neuron_lens.neurons import directions
+from neuron_lens.neurons import directions, read_rows
 from neuron_lens.paths import SUMMARY
 
 STEM = arch.stem(MODEL)
-K = 16
 SIGMAS = 5.0
 RMS_DOCS = 64
 
@@ -78,7 +79,7 @@ def poles(layer: int, dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     act = torch.from_numpy(pq.read_table(neuron_table("acts", layer), columns=["act_top"]).column(0).to_numpy().copy()).float()
     a = w["gate"] / w["gate"].norm(dim=1, keepdim=True)
     b = w["up"] / w["up"].norm(dim=1, keepdim=True)
-    read = torch.cat([a + b, a - b])
+    read = read_rows(a, b, lobe_signs(layer))
     return (w["write"] / norm).to(dev), (act * torch.cat([norm, norm])).to(dev), (read / read.norm(dim=1, keepdim=True)).to(dev)
 
 
@@ -184,19 +185,18 @@ def summary(ins: list, outs: list, rms: torch.Tensor, prev: torch.Tensor, k: int
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--k", type=int, default=K)
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cuda")
     args = ap.parse_args()
     if arch.is_gemma4(MODEL):
         raise SystemExit("16_edges.py reads Qwen3's residual, where each write is fixed; Gemma 4's norms rescale it per position")
-    ins, outs, rms, prev = compute(args.k, args.device)
+    ins, outs, rms, prev = compute(TOP, args.device)
     f = ins[0][0].shape[0] // 2
     for layer, (i, o) in enumerate(zip(ins, outs)):
         cols = neuron_keys(layer, f)
         columns(cols, "in", i, f)
         columns(cols, "out", o, f)
         write(cols, neuron_table("edges", layer))
-    summary(ins, outs, rms, prev, args.k, directions(MODEL, 0)["write"].shape[0])
+    summary(ins, outs, rms, prev, TOP, directions(MODEL, 0)["write"].shape[0])
 
 
 if __name__ == "__main__":

@@ -12,12 +12,17 @@ top most raw reads (findings §6).
 - ``write_S``: the write through the S-lens to the layer's output, tokens ``v`` by
   ``±w · K^out_L (e_v − ē)``: those whose footprint the write imitates (legible to about L8, where
   early neurons write back the tokens they detect; §6, §7);
+- ``write_orth_R``, ``write_orth_S``: the same of the write with its components along the neuron's gate
+  and up rows removed, what it adds beyond anything it reads (§18);
 - ``read_R``: the read direction ``â ± b̂`` (gate and up rows times the post-attention norm weight,
-  normalized) through the R-lens from the layer's MLP input (``J^mid_L``): what the residual says
-  when it drives the pole;
+  normalized; its negative for the poles on SiLU's negative lobe, ``acts``' ``neg_lobe`` past a half,
+  §17) through the R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it
+  drives the pole;
 - ``read_S``: the read direction through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
   input tokens that drive the pole (legible at L0-L8);
-- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_ab``, ``null_share`` (the share of the write's
+- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_ab``, ``cos_gate``, ``cos_up`` (the cosine of the
+  pole's write with the gate and up sides of what it reads: positive where it writes toward them; §18),
+  ``null_share`` (the share of the write's
   squared norm in the bottom 1% of right-singular directions of ``W_U diag(γ)``, where entropy
   neurons write; Stolfo et al. 2024), and ``vocab_skew``, ``vocab_kurt`` of ``W_U · norm(w)`` over
   the vocabulary (Gurnee et al. 2024's prediction and suppression neurons).
@@ -68,6 +73,7 @@ from neuron_lens.catalog import (
     head_keys,
     head_table,
     kept,
+    lobe_signs,
     neuron_keys,
     neuron_table,
     put,
@@ -75,9 +81,9 @@ from neuron_lens.catalog import (
 )
 from neuron_lens import arch
 from neuron_lens.heads import copy_score, norm_derivative, own_token_z, rope_mean
-from neuron_lens.neurons import directions, softcap
+from neuron_lens.neurons import directions, orthogonal_write, read_rows, softcap, write_cosines
 from neuron_lens.paths import DATA, SUMMARY
-from neuron_lens.readout import layer_reads
+from neuron_lens.readout import layer_reads, s_tops
 from neuron_lens.stats import auroc, spearman
 from neuron_lens.weights import tensors
 
@@ -90,26 +96,6 @@ MIN_OCC = 10  # key occurrences for a token's in-context attention
 CHUNK = 2048
 BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers))  # Qwen3-8B's five, else quarters
 CAP = softcap(MODEL)
-
-
-def s_tops(cov: torch.Tensor, emb: torch.Tensor, signs: tuple[int, ...]) -> dict:
-    """S-lens reads of unit covector rows ``cov`` ``[n, d]`` over the kept embeddings: per sign, the
-    top raw scores and the top layer-contrastive z (each token's score z-scored across the rows)."""
-    n, dev = len(cov), cov.device
-    s1, s2 = torch.zeros(len(emb), device=dev), torch.zeros(len(emb), device=dev)
-    for s in range(0, n, CHUNK):
-        sc = (cov[s:s + CHUNK].half() @ emb.T).float()
-        s1 += sc.sum(0)
-        s2 += sc.pow(2).sum(0)
-    mean = s1 / n
-    std = (s2 / n - mean.pow(2)).clamp_min(1e-12).sqrt()
-    out = {(k, sign): [] for k in ("raw", "z") for sign in signs}
-    for s in range(0, n, CHUNK):
-        sc = (cov[s:s + CHUNK].half() @ emb.T).float()
-        for sign in signs:
-            out["raw", sign].append((sign * sc).topk(TOP, dim=1))
-            out["z", sign].append((sign * (sc - mean) / std).topk(TOP, dim=1))
-    return {k: (torch.cat([x.indices for x in v]).cpu(), torch.cat([x.values for x in v]).cpu()) for k, v in out.items()}
 
 
 def neurons(layers: list[int], dev) -> None:
@@ -133,10 +119,13 @@ def neurons(layers: list[int], dev) -> None:
         a, b = w["gate"], w["up"]
         a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
         del w
+        lobe = lobe_signs(layer)
         cols = neuron_keys(layer, f)
         w_norm, cos_ab = wd.norm(dim=0).cpu(), (a * b).sum(1)
+        cos_gate, cos_up = write_cosines(wd.cpu(), a, b, lobe)
         cols["w_norm"] = pa.array(torch.cat([w_norm, w_norm]).numpy())
         cols["cos_ab"] = pa.array(torch.cat([cos_ab, cos_ab]).numpy())
+        cols["cos_gate"], cols["cos_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
         cols["null_share"] = pa.array(torch.cat([((null.T @ wd).pow(2).sum(0) / wd.pow(2).sum(0)).cpu()] * 2).numpy())
         logit = layer_reads(wd, unembed, gamma, None, signs=(1,), k=1, kz=1, softcap=CAP)
         cols["vocab_skew"] = pa.array(torch.cat([logit["skew"], -logit["skew"]]).numpy())
@@ -145,16 +134,25 @@ def neurons(layers: list[int], dev) -> None:
         put(cols, "write_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
         put(cols, "write_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
         sw = (K_out[layer].to(dev).T @ wd).T  # [f, d_in]: each write as a covector on the embeddings
-        s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, (1, -1))
+        s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
         for kind, name in (("raw", "write_S"), ("z", "write_S_z")):
             put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
-        c = torch.cat([a + b, a - b]).to(dev)  # [2f, d]: the read directions, + poles then −
+        orth = orthogonal_write(wd.cpu(), a, b).to(dev)
+        r = layer_reads(orth, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
+        put(cols, "write_orth_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
+        put(cols, "write_orth_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
+        so = (K_out[layer].to(dev).T @ orth).T
+        s = s_tops(so / so.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
+        for kind, name in (("raw", "write_orth_S"), ("z", "write_orth_S_z")):
+            put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
+        del orth, so
+        c = read_rows(a, b, lobe).to(dev)  # [2f, d]: the read directions, + poles then −
         reads = [layer_reads(c[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP)
                  for i in (0, 1)]
         put(cols, "read_R", keep[torch.cat([r["ids"][1] for r in reads])], torch.cat([r["probs"][1] for r in reads]))
         put(cols, "read_R_z", keep[torch.cat([r["zids"][1] for r in reads])], torch.cat([r["z"][1] for r in reads]))
         cs = c @ K_mid[layer].to(dev)
-        s = s_tops(cs / cs.norm(dim=1, keepdim=True), emb, (1,))  # unit rows, as the R side's norm
+        s = s_tops(cs / cs.norm(dim=1, keepdim=True), emb, (1,), TOP)  # unit rows, as the R side's norm
         for kind, name in (("raw", "read_S"), ("z", "read_S_z")):
             put(cols, name, keep[s[kind, 1][0]], s[kind, 1][1])
         write(cols, neuron_table("reads", layer))

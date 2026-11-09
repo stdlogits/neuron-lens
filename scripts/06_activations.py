@@ -7,10 +7,11 @@ One forward pass per batch of documents, eager attention in bf16, over every doc
   position 1 (position 0 is the attention sink, where activations are massive): per slice, the
   sum and sum of squares, and exact counts of each pole's activation (``±act``) past every point
   of a quarter-octave grid from 2⁻¹⁰ to 2¹⁰ (rates and quantiles interpolate between them); per
-  pole, the top ``TOP_DOCS`` documents by its extreme in the document, with the position;
+  pole, the top ``TOP`` documents by its extreme in the document, with the position and the gate
+  pre-activation there (``neg_lobe``: the share of its firings on SiLU's negative lobe, below zero);
 - **heads,** at each layer's ``o_proj`` input, from position 16 (where the lenses start; a head
   with few keys attends sharply): the norm of each head's output ``W_O^h z``, counted on the same
-  grid, and its top ``TOP_DOCS`` documents, each with the position it attends to most past the sink
+  grid, and its top ``TOP`` documents, each with the position it attends to most past the sink
   and the output vector. Also each head's mean attention from those queries to position 0
   (``sink``), the position before (``prev``) and itself (``self``);
 - **QK statistics** for ``08_reads.py`` (findings §11): per head, the mean query after ``q_norm``;
@@ -81,7 +82,6 @@ SEQ = 256
 NEURON_FROM, HEAD_FROM = 1, SKIP_FIRST
 EDGES = torch.tensor([0.0] + [2.0 ** (k / 4) for k in range(-40, 41)])  # counts of |x| past each
 NB = len(EDGES) + 1  # bins: 0 is x = 0, i is (EDGES[i-1], EDGES[i]], the last past 2¹⁰
-TOP_DOCS = 24
 FLUSH = 50  # batches between moving the device's running sums into the float64 totals
 CHUNK = 2048  # positions per counting step
 REP_SEQS, REP_LEN = 64, 64
@@ -117,10 +117,11 @@ class Collector:
                       for k, (shape, integer, per) in self.spec.items()}
         self.seg = {k: torch.zeros(shape, dtype=torch.int32 if integer else torch.float32, device=device)
                     for k, (shape, integer, per) in self.spec.items()}
-        k = TOP_DOCS
+        k = TOP
         self.top = {"val": torch.full((L, 2, k, f), -torch.inf, device=device),
                     "doc": torch.zeros((L, 2, k, f), dtype=torch.int32, device=device),
                     "pos": torch.zeros((L, 2, k, f), dtype=torch.int16, device=device),
+                    "gate": torch.zeros((L, 2, k, f), dtype=torch.float16, device=device),
                     "h_val": torch.full((L, H, k), -torch.inf, device=device),
                     "h_doc": torch.zeros((L, H, k), dtype=torch.int32, device=device),
                     "h_pos": torch.zeros((L, H, k), dtype=torch.int16, device=device),
@@ -183,11 +184,15 @@ class Collector:
             self.seg["sumsq"][l] += xc.pow(2).sum(0)
         self.count(self.seg["count"][l], xb, poles=True)
         f = a.shape[-1]
+        gate = self.stash.pop(("gate", l))  # [B, T, f]: gate_proj's output
+        B = a.shape[0]
         for p, sign in enumerate((1, -1)):
             ext, pos = (a * sign).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, f]
             vals = torch.cat([self.top["val"][l, p], ext.float()])
-            v, i = vals.topk(TOP_DOCS, dim=0)
+            v, i = vals.topk(TOP, dim=0)
             self.top["val"][l, p] = v
+            g = gate[torch.arange(B, device=a.device)[:, None], pos, torch.arange(f, device=a.device)[None, :]].half()  # [B, f]
+            self.top["gate"][l, p] = torch.cat([self.top["gate"][l, p], g]).gather(0, i)
             self.top["doc"][l, p] = torch.cat([self.top["doc"][l, p], self.ctx["doc"][:, None].expand(-1, f)]).gather(0, i)
             self.top["pos"][l, p] = torch.cat([self.top["pos"][l, p], pos.to(torch.int16)]).gather(0, i)
 
@@ -237,7 +242,7 @@ class Collector:
         src = rows.argmax(-1)
         o = torch.einsum("bhi,dhi->bhd", zh[bi, t, hi], self.wo[l])
         vals = torch.cat([self.top["h_val"][l], v.T], 1)  # [H, K + B]
-        keep = vals.topk(TOP_DOCS, dim=1).indices
+        keep = vals.topk(TOP, dim=1).indices
         for k, new in (("h_val", v.T), ("h_doc", self.ctx["doc"][None, :].expand(H, -1)), ("h_pos", t.T.to(torch.int16)),
                        ("h_src", src.T.to(torch.int16))):
             self.top[k][l] = torch.cat([self.top[k][l], new], 1).gather(1, keep)
@@ -259,6 +264,7 @@ class Collector:
         hs = []
         for l, layer in enumerate(model.layers):
             at = layer.self_attn
+            hs.append(layer.mlp.gate_proj.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)))
             hs.append(layer.mlp.down_proj.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0])))
             hs.append(layer.input_layernorm.register_forward_pre_hook(
                 lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
@@ -309,7 +315,7 @@ def collect(args, docs: list) -> dict:
     rows = [r for _, _, r in docs]
     slice_of = [s for s, _, _ in docs]
     meta = {"model": MODEL, "slices": list(ACT_SLICES), "docs": len(rows), "rows_sha256": rows_sha256(rows), "seq_len": SEQ,
-            "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP_DOCS,
+            "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP,
             "batch_docs": args.batch_docs, "dtype": "bfloat16", "attention": "eager"}
     col = Collector(model, len(ACT_SLICES), device)
     plan = plan_batches(slice_of, args.batch_docs)
@@ -454,7 +460,7 @@ def _neuron_layer(layer: int) -> None:
     std = (st["sumsq"][:, layer].sum(0) / n - mean.pow(2)).clamp_min(0).sqrt()
     cols = neuron_keys(layer, f)
     acc = {k: [] for k in ("act_top", "act_max", "pos_share", "rate", *[f"rate_{s}" for s in ACT_SLICES],
-                           "q50", "q90", "q99", "q999", "mean", "std", "peak_tokens", "contexts")}
+                           "q50", "q90", "q99", "q999", "mean", "std", "neg_lobe", "peak_tokens", "next_tokens", "contexts")}
     for p in range(2):
         val = top["val"][layer, p]  # [K, f]
         act_top = val.median(0).values.clamp_min(0).double()
@@ -471,15 +477,21 @@ def _neuron_layer(layer: int) -> None:
         acc["std"].append(std)
         docs, poss = top["doc"][layer, p].long(), top["pos"][layer, p].long()
         peak = flat[start[docs] + poss]  # [K, f]
+        after = start[docs] + poss + 1  # the token after each firing; past its document's end, none
+        following = torch.where(after < start[docs + 1], flat[after.clamp_max(len(flat) - 1)].long(), -1)
+        fires = val > 0
+        acc["neg_lobe"].append(((top["gate"][layer, p] < 0) & fires).sum(0).double() / fires.sum(0).clamp_min(1))
         for nn in range(f):
             fired = (val[:, nn] > 0).nonzero().squeeze(1).tolist()
             c = Counter(int(peak[j, nn]) for j in fired)
             acc["peak_tokens"].append(" | ".join(f"{dec(t)!r}×{k}" for t, k in c.most_common(5)))
+            c = Counter(int(following[j, nn]) for j in fired if following[j, nn] >= 0)
+            acc["next_tokens"].append(" | ".join(f"{dec(t)!r}×{k}" for t, k in c.most_common(5)))
             acc["contexts"].append(" ‖ ".join(
                 context(tok, flat[start[docs[j, nn]]:start[docs[j, nn] + 1]], int(poss[j, nn])) for j in fired[:N_CONTEXTS]))
     for k, v in acc.items():
         cols[k] = pa.array(v) if isinstance(v[0], str) else pa.array(torch.cat(v).float().numpy())
-    for k in ("doc", "pos", "val"):
+    for k in ("doc", "pos", "val", "gate"):
         cols[f"top_{k}"] = fixed(torch.cat([top[k][layer, 0].T, top[k][layer, 1].T]))
     fv, ft = extra["first_val"][layer], extra["first_tok"][layer]  # [2, K, f]
     cols["first_max"] = pa.array(fv[:, 0].flatten().numpy())

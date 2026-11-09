@@ -47,7 +47,7 @@ import torch
 from huggingface_hub import hf_hub_download
 
 from neuron_lens import arch
-from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept, neuron_keys, put, vocab, write
+from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept, lobe_signs, neuron_keys, put, vocab, write
 from neuron_lens.neurons import directions, softcap
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads
@@ -176,7 +176,7 @@ def main() -> None:
             a, b = w["gate"], w["up"]
             a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
             del w
-            c = torch.cat([a + b, a - b])  # [2f, d]: the read directions, + poles then −
+            c = read_rows(a, b, lobe_signs(layer))  # [2f, d]: the read directions, + poles then −
             coords = c @ S["K"][layer].float().to(dev)  # [2f, k]
             cols = neuron_keys(layer, f)
             cols["read_S_basis"] = pa.FixedSizeListArray.from_arrays(pa.array(coords.half().cpu().flatten().numpy()), coords.shape[1])

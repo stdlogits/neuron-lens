@@ -34,6 +34,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 
+from neuron_lens.catalog import TOP
 from neuron_lens.media import processed, slot_token
 from neuron_lens.media_sets import audio_collection, image_collection
 from neuron_lens.paths import DATA
@@ -54,8 +55,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--scale", type=float, default=1.0, help="multiplies every source's item count")
-    ap.add_argument("--top-labels", type=int, default=32)
-    ap.add_argument("--top-docs", type=int, default=16)
+    ap.add_argument("--top-labels", type=int, default=TOP)
+    ap.add_argument("--top-docs", type=int, default=TOP)
     ap.add_argument("--min-docs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--modalities", default="audio,image")

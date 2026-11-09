@@ -65,6 +65,7 @@ from neuron_lens.catalog import (
     neuron_table,
 )
 from neuron_lens.paths import SUMMARY
+from neuron_lens.sources import split
 from neuron_lens.stats import spearman
 from neuron_lens.transport import decoder_stack
 
@@ -151,25 +152,16 @@ class Model:
         inv = torch.rsqrt(x.pow(2).mean(-1) + norm.variance_epsilon)[:, None]  # [B, 1]: the norm's scale, held
         rg = lay.mlp.gate_proj.weight[neuron] * norm.weight  # [B, d]: read rows times the norm weight
         ru = lay.mlp.up_proj.weight[neuron] * norm.weight
-        g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
-        s = torch.nn.functional.silu(g) / g
-        a = s * g * u
-        share = lambda gx, ux: 0.5 * s[:, None] * (g[:, None] * ux + u[:, None] * gx) / a[:, None]
-        emb = share((rg * got["emb"]).sum(-1, keepdim=True) * inv, (ru * got["emb"]).sum(-1, keepdim=True) * inv)[:, 0]
-        heads = []
-        for l in range(M + 1):
-            wo = stack.layers[l].self_attn.o_proj.weight  # [d, H·hd]
-            per = lambda r: ((r @ wo) * got["z"][l]).view(B, self.H, -1).sum(-1) * inv
-            heads.append(share(per(rg), per(ru)))
+        got_s = split(rg, ru, x, inv, got["emb"], got["z"], got["a"], self.downs[:M],
+                      [stack.layers[l].self_attn.o_proj.weight for l in range(M + 1)], self.H)
+        emb, heads, neurons, g, a = got_s["emb"], got_s["heads"], got_s["neurons"], got_s["g"], got_s["a"]
         acts = torch.cat(got["a"], 1)  # [B, M·f]
-        neurons = torch.cat([share((rg @ self.downs[l]) * got["a"][l] * inv, (ru @ self.downs[l]) * got["a"][l] * inv)
-                             for l in range(M)], 1)
         sign = acts.sign()
         pid = (torch.arange(M, device=dev)[:, None] * 2 * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
         a_hat, b_hat = (r / r.norm(dim=1, keepdim=True) for r in (rg, ru))
         c_b = a_hat + pole[:, None] * b_hat
         cos = torch.cat([c_b / c_b.norm(dim=1, keepdim=True) @ self.unit[l] for l in range(M)], 1) * sign
-        return {"emb": emb, "heads": torch.cat(heads, 1), "neurons": neurons, "acts": acts, "pid": pid,
+        return {"emb": emb, "heads": heads, "neurons": neurons, "acts": acts, "pid": pid,
                 "cos": cos, "push": cos * self.size.flatten()[pid], "g": g, "a": a}
 
     def fires(self, src: dict, r: int, q: torch.Tensor) -> torch.Tensor:

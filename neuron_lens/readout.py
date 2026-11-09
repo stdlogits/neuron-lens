@@ -135,3 +135,23 @@ def layer_reads(
         out["kurt"].append((c.pow(4).mean(0) / var.pow(2)).cpu())
     return {key: {s: torch.cat(v[s]) for s in signs} if isinstance(v, dict) else torch.cat(v)
             for key, v in out.items()}
+
+
+def s_tops(cov: torch.Tensor, emb: torch.Tensor, signs: tuple[int, ...], k: int, chunk: int = 2048) -> dict:
+    """S-lens reads of unit covector rows ``cov`` ``[n, d]`` over the kept embeddings: per sign, the
+    top raw scores and the top layer-contrastive z (each token's score z-scored across the rows)."""
+    n, dev = len(cov), cov.device
+    s1, s2 = torch.zeros(len(emb), device=dev), torch.zeros(len(emb), device=dev)
+    for s in range(0, n, chunk):
+        sc = (cov[s:s + chunk].half() @ emb.T).float()
+        s1 += sc.sum(0)
+        s2 += sc.pow(2).sum(0)
+    mean = s1 / n
+    std = (s2 / n - mean.pow(2)).clamp_min(1e-12).sqrt()
+    out = {(kind, sign): [] for kind in ("raw", "z") for sign in signs}
+    for s in range(0, n, chunk):
+        sc = (cov[s:s + chunk].half() @ emb.T).float()
+        for sign in signs:
+            out["raw", sign].append((sign * sc).topk(k, dim=1))
+            out["z", sign].append((sign * (sc - mean) / std).topk(k, dim=1))
+    return {key: (torch.cat([x.indices for x in v]).cpu(), torch.cat([x.values for x in v]).cpu()) for key, v in out.items()}

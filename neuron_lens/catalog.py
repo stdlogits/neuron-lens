@@ -6,9 +6,10 @@
 
 Tables, each from one pipeline stage: ``acts`` (``06_activations.py``), ``drivers``
 (``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``), ``labels``
-(``10_labels.py``) and, for Qwen3-8B's neurons, ``edges`` (``16_edges.py``). Token reads cover the
-kept tokens (``kept``) and list 64 of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores)
-and ``*_str`` (the top 8 decoded, `` | ``-joined).
+(``10_labels.py``), ``firings`` (``17_firings.py``) and, for Qwen3-8B's neurons, ``edges``
+(``16_edges.py``) and ``sources`` (``18_sources.py``). Token reads cover the kept tokens (``kept``) and
+list ``TOP`` of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores) and ``*_str`` (the top
+8 decoded, `` | ``-joined).
 
 The model is Qwen3-8B unless ``NEURON_LENS_MODEL`` names another (``google/gemma-4-12B``): every
 stage reads it from here.
@@ -30,8 +31,8 @@ import torch
 from neuron_lens.paths import DATA
 
 MODEL = os.environ.get("NEURON_LENS_MODEL", "Qwen/Qwen3-8B")
-TABLES = ("acts", "drivers", "reads", "legible", "labels", "edges")
-TOP = 64  # tokens kept per read: signal holds to rank 64 (findings §7)
+TABLES = ("acts", "drivers", "reads", "legible", "labels", "edges", "firings", "sources")
+TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top firings, edges, sources, media labels and documents (findings §7)
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3
 N_CONTEXTS = 5  # top contexts kept in the acts tables; the rest stay held out for scoring
@@ -94,6 +95,13 @@ def corpus_doc_tokens(model: str = MODEL, seq_len: int = 256) -> list[list[int]]
 
 def neuron_table(table: str, layer: int, model: str = MODEL):
     return catalog_dir(model) / "neurons" / table / f"L{layer:02d}.parquet"
+
+
+def lobe_signs(layer: int, model: str = MODEL) -> torch.Tensor:
+    """``[2f]``: +1 for the poles whose top firings ride SiLU's positive side, −1 for those on its
+    negative lobe (``acts``' ``neg_lobe`` past a half), which read the opposite direction (findings §17)."""
+    t = pq.read_table(neuron_table("acts", layer, model), columns=["neg_lobe"])
+    return 1 - 2 * (torch.from_numpy(t.column(0).to_numpy().copy()) > 0.5).float()
 
 
 def head_table(table: str, model: str = MODEL):

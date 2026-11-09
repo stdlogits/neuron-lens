@@ -206,6 +206,19 @@ def attn_scale(layer, attn_out: torch.Tensor) -> torch.Tensor | None:
     return torch.rsqrt(attn_out.float().pow(2).mean(-1) + norm_eps(layer.post_attention_layernorm))
 
 
+def mid_norm(layer):
+    """The norm that feeds a decoder layer's MLP (its input is the residual the ``mid`` lens targets read)."""
+    return layer.pre_feedforward_layernorm if hasattr(layer, "pre_feedforward_layernorm") else layer.post_attention_layernorm
+
+
+def mlp_output(layer):
+    """``(module, scalar)``: the module whose output is the layer's MLP write, and what multiplies it on
+    the way to the residual (Gemma 4's ``layer_scalar``; ``None`` for Qwen3)."""
+    if hasattr(layer, "pre_feedforward_layernorm"):
+        return layer.post_feedforward_layernorm, layer.layer_scalar
+    return layer.mlp, None
+
+
 def bos(tok) -> list[int]:
     """``[bos]`` if the tokenizer starts every document with it (Gemma), else ``[]`` (Qwen3)."""
     return [tok.bos_token_id] if tok.bos_token_id is not None and tok("a")["input_ids"][0] == tok.bos_token_id else []
