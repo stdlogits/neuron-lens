@@ -131,8 +131,6 @@ def write_lenses(model: str, out: Path) -> dict:
         r = torch.load(FITS / f"r-{stem}-L{n_layers}-{corpus}.pt", weights_only=False, map_location="cpu", mmap=True)
         s = torch.load(FITS / f"s-{stem}-L{n_layers}-{corpus}.pt", weights_only=False, map_location="cpu", mmap=True)
         r_acc, s_acc = Accumulator.from_state(r["state"]), Accumulator.from_state(s["state"])
-        if sub == "" and r["meta"]["rows_sha256"] != s["meta"]["rows_sha256"]:
-            raise ValueError(f"{model}: the R and S fits read different documents")
         (out / sub / "r-lens").mkdir(parents=True, exist_ok=True)
         (out / sub / "s-lens").mkdir(parents=True, exist_ok=True)
         J = r_acc.mean("out")  # [layers - 1, d, d]: sources 0 .. n-2

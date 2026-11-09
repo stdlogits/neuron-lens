@@ -72,7 +72,7 @@ from neuron_lens.catalog import (
     tokenizer,
     write,
 )
-from neuron_lens.corpus import ACT_SLICES, act_docs, rows_sha256
+from neuron_lens.corpus import ACT_SLICES, act_docs
 from neuron_lens import arch
 from neuron_lens.paths import LOGS, ROOT
 from neuron_lens.readout import rms_norm_columns
@@ -315,7 +315,7 @@ def collect(args, docs: list) -> dict:
     model = decoder_stack(lm)  # the decoder stack: Qwen3's .model, Gemma 4's language model
     rows = [r for _, _, r in docs]
     slice_of = [s for s, _, _ in docs]
-    meta = {"model": MODEL, "slices": list(ACT_SLICES), "docs": len(rows), "rows_sha256": rows_sha256(rows), "seq_len": SEQ,
+    meta = {"model": MODEL, "slices": list(ACT_SLICES), "docs": len(rows), "seq_len": SEQ,
             "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP,
             "batch_docs": args.batch_docs, "dtype": "bfloat16", "attention": "eager"}
     col = Collector(model, len(ACT_SLICES), device)

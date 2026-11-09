@@ -46,8 +46,7 @@ DIM_BATCH = 256
 
 class Accumulator:
     """Sums of per-document estimates, ``[layer, d_out, d_in]`` per target, in two halves
-    (even and odd documents). The fit format is ``{"meta", "state", "next_doc",
-    "done_sha256"}`` with ``state = {"sums": {(target, half): tensor}, "n_docs": [even, odd]}``."""
+    (even and odd documents). The fit format is ``{"meta", "state", "next_doc"}`` with ``state = {"sums": {(target, half): tensor}, "n_docs": [even, odd]}``."""
 
     def __init__(self, layers: dict[str, int], d: int, device="cpu", d_in: int | None = None):
         """``d_in``: the S-lens's source width when it is seeded in a subspace (``basis``)."""

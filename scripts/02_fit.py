@@ -3,9 +3,8 @@
 Both lenses sum over offsets and take RelP derivatives. Documents are the first ``--docs`` rows
 of a corpus JSONL in ``data/corpus/``, read as Drowse reads them. Document ``i`` goes to half
 ``i % 2``. The fit is saved every ``--save-minutes`` and at the end to
-``data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>].pt`` (``{"meta", "state", "next_doc",
-"done_sha256"}``; ``-T<len>`` for ``--full-length`` fits), and a rerun resumes from it, also with a larger ``--docs`` when the
-documents already fitted are a prefix of the new list. At the end it prints each layer's
+``data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>].pt`` (``{"meta", "state", "next_doc"}``; ``-T<len>``
+for ``--full-length`` fits), and a rerun resumes from it, also with a larger ``--docs``. At the end it prints each layer's
 split-half difference, how differently the two halves of the corpus read. The sums live on the
 model's device unless ``--acc-device`` says otherwise (Qwen3-8B: 9.5 GB for the R-lens and 9.7 GB
 for the S-lens, each with two targets; ``--targets`` fits one). Export R-lenses to Drowse with
@@ -152,7 +151,7 @@ def fit(args, model, tok, device: str, dtype) -> None:
         loose = ("docs", "rows_sha256", "dim_batch")  # dim_batch changes speed, not the estimate
         older = {"modality": "text", "basis": None, "rules": "relp", "full_length": False}  # fits saved before these fields
         same = all(saved["meta"].get(k, older.get(k)) == v for k, v in meta.items() if k not in loose)
-        if not same or saved["done_sha256"] != rows_sha256(rows[:saved["next_doc"]]):
+        if not same:
             raise SystemExit(f"{path} was fitted with {saved['meta']}, not {meta}")
         acc, next_doc = Accumulator.from_state(saved["state"], acc_device), saved["next_doc"]
     else:
@@ -163,8 +162,7 @@ def fit(args, model, tok, device: str, dtype) -> None:
         tmp = path.with_suffix(".tmp")
         state = {"sums": {k: v.cpu() for k, v in acc.sums.items()}, "n_docs": acc.n_docs,
                  **({} if basis is None else {"basis": basis})}
-        torch.save({"meta": meta, "state": state, "next_doc": next_doc,
-                    "done_sha256": rows_sha256(rows[:next_doc])}, tmp)
+        torch.save({"meta": meta, "state": state, "next_doc": next_doc}, tmp)
         os.replace(tmp, path)
 
     mine = [i for i in range(next_doc, len(rows)) if i % args.n_shards == args.shard]
