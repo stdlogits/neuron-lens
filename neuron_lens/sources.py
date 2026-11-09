@@ -33,11 +33,15 @@ class Stream:
     def __init__(self, stack):
         self.layers, self.embed = stack.layers, stack.embed_tokens
         self.n_heads = stack.config.num_attention_heads
-        self.heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd]
-        self.neurons = [arch.mlp_write(lay) for lay in self.layers]  # [d, f]
-        self.head_dim = self.heads[0].shape[1] // self.n_heads
-        self.all_heads, self.all_neurons = torch.cat(self.heads, 1), torch.cat(self.neurons, 1)  # a layer's sources are a prefix of these
-        self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=self.neurons[0].device)
+        heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd], hd may differ by layer (Gemma 4's full-attention layers)
+        self.all_heads = torch.cat(heads, 1)  # a layer's sources are a prefix of these
+        self.all_neurons = torch.cat([arch.mlp_write(lay) for lay in self.layers], 1)  # [d, L·f]
+        self.neurons = self.all_neurons.split(stack.config.intermediate_size, 1)  # per layer, views of it
+        dev = self.all_neurons.device
+        self.head_end = torch.tensor([w.shape[1] for w in heads]).cumsum(0).tolist()  # layer l's heads end at this column
+        self.head_of = torch.cat([l * self.n_heads + torch.arange(w.shape[1], device=dev) // (w.shape[1] // self.n_heads)
+                                  for l, w in enumerate(heads)])  # the head each column of all_heads belongs to
+        self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=dev)
 
     def hooks(self, cap: dict, at: Callable, upto: int | None = None) -> list:
         """Forward hooks filling ``cap`` during a pass, each value at the positions ``at`` picks from a
@@ -76,23 +80,25 @@ class Stream:
         return split(rg, ru, x, inv, cap["emb"][u] * self.scalars[:M].prod(),
                      torch.cat([reaching("z", "attn", l) for l in range(M + 1)], 1),
                      torch.cat([reaching("a", "mlp", l) for l in range(M)], 1) if M else x[:, :0],
-                     self.all_neurons[:, :M * self.neurons[0].shape[1]], self.all_heads[:, :(M + 1) * self.heads[0].shape[1]],
-                     self.head_dim, lay.mlp.act_fn)
+                     self.all_neurons[:, :M * self.neurons[0].shape[1]], self.all_heads[:, :self.head_end[M]],
+                     self.head_of[:self.head_end[M]], (M + 1) * self.n_heads, lay.mlp.act_fn)
 
 
 def split(rg: torch.Tensor, ru: torch.Tensor, x: torch.Tensor, inv: torch.Tensor, emb: torch.Tensor,
-          z: torch.Tensor, acts: torch.Tensor, downs: torch.Tensor, wos: torch.Tensor, head_dim: int, act: Callable) -> dict:
+          z: torch.Tensor, acts: torch.Tensor, downs: torch.Tensor, wos: torch.Tensor, head_of: torch.Tensor, n_heads: int,
+          act: Callable) -> dict:
     """Per firing (rows): ``rg``, ``ru`` ``[N, d]``, the neuron's gate and up rows times the norm's weight;
     ``x`` ``[N, d]``, the residual entering the norm; ``inv`` ``[N, 1]``, the norm's scale; ``emb`` the
-    embedding, ``z`` ``[N, (M + 1)·H·hd]`` the heads' pre-``o_proj`` outputs at layers ≤ ``M``, ``acts`` ``[N, M·f]``
+    embedding, ``z`` ``[N, C]`` the heads' pre-``o_proj`` outputs at layers ≤ ``M``, ``acts`` ``[N, M·f]``
     the activations at layers < ``M``, these three scaled as they reach ``x``; ``downs`` ``[d, M·f]``, ``wos``
-    ``[d, (M + 1)·H·hd]`` the writes as the residual sees them; ``act`` the MLP's activation. Returns ``g``, ``a``
-    ``[N]`` and the shares ``emb`` ``[N]``, ``heads`` ``[N, (M + 1)·H]``, ``neurons`` ``[N, M·f]``, which sum to 1 over the three."""
+    ``[d, C]`` the writes as the residual sees them; ``head_of`` ``[C]`` the head each of ``C`` columns belongs to, of
+    ``n_heads``; ``act`` the MLP's activation. Returns ``g``, ``a`` ``[N]`` and the shares ``emb`` ``[N]``, ``heads``
+    ``[N, n_heads]``, ``neurons`` ``[N, M·f]``, which sum to 1 over the three."""
     g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
     a = act(g) * u
     share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
     e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
-    per = lambda r: ((r @ wos) * z).view(len(rg), -1, head_dim).sum(-1) * inv
+    per = lambda r: torch.zeros(len(rg), n_heads, device=z.device).index_add_(1, head_of, (r @ wos) * z) * inv
     return {"g": g, "a": a, "emb": e, "heads": share(per(rg), per(ru)), "neurons": share((rg @ downs) * acts * inv, (ru @ downs) * acts * inv)}
 
 

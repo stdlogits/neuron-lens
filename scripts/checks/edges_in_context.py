@@ -224,6 +224,7 @@ def measure(args) -> None:
                 for name, value in v.items():
                     out[name][idx[j], p, k] = float(value)
         out["done"].append(M)
+        PATH.parent.mkdir(parents=True, exist_ok=True)
         torch.save(out, PATH)
         print(f"{time.strftime('%H:%M:%S')} L{M}: {len(rows)} firings, {time.perf_counter() - t0:.0f}s", flush=True)
     print(f"-> {PATH}", flush=True)

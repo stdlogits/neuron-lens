@@ -33,10 +33,10 @@ must firings_qwen3-8b "$Q" python scripts/17_firings.py && up firings_qwen3-8b "
 must acts_gemma "$G" python scripts/06_activations.py && up acts_gemma "$G" acts,docs
 run firings_gemma "$G" python scripts/17_firings.py && up firings_gemma "$G" firings,sources
 
-run reads_qwen3-8b "$Q" python scripts/08_reads.py --parts neurons && up reads_qwen3-8b "$Q" reads
+run reads_qwen3-8b "$Q" python scripts/08_reads.py && up reads_qwen3-8b "$Q" reads
 run legible_qwen3-8b "$Q" python scripts/09_legible.py && up legible_qwen3-8b "$Q" legible
 run edges_qwen3-8b "$Q" python scripts/16_edges.py && up edges_qwen3-8b "$Q" edges
-run reads_gemma "$G" python scripts/08_reads.py --parts neurons && up reads_gemma "$G" reads
+run reads_gemma "$G" python scripts/08_reads.py && up reads_gemma "$G" reads
 run legible_gemma "$G" python scripts/09_legible.py && up legible_gemma "$G" legible
 run edges_gemma "$G" python scripts/16_edges.py && up edges_gemma "$G" edges
 run edges_context_qwen3-8b "$Q" python scripts/checks/edges_in_context.py measure
