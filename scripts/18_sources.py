@@ -127,7 +127,7 @@ class Pass:
         pid = (torch.arange(M, device=self.dev)[:, None] * 2 * f + torch.arange(f, device=self.dev)).flatten() + f * (acts < 0)  # [N, M·f]
         top = s["neurons"].abs().topk(min(RANK, s["neurons"].shape[1]), dim=1).indices
         self.sparse[M]["driven"].append((r, pid.gather(1, top).cpu(), s["neurons"].gather(1, top).cpu()))
-        fires = acts.abs() >= FIRE * self.act_top[pid]
+        fires = (acts.abs() >= FIRE * self.act_top[pid]) & (self.act_top[pid] > 0)  # a silent pole doesn't fire at zero
         lift = fires / self.rate[pid].clamp_min(self.rate_floor)
         top = lift.topk(min(RANK_WITH, lift.shape[1]), dim=1).indices
         chosen = fires.gather(1, top)
@@ -173,8 +173,7 @@ class Pass:
             co = total / n[rows]
             lift = co / self.rate.cpu()[uids].clamp_min(self.rate_floor)
             wi, wl = top_by_row(rows, uids, lift, 2 * f, TOP)
-            wc, _ = top_by_row(rows, co, lift, 2 * f, TOP)
-            wc = torch.where(wi >= 0, wc, float("nan"))
+            _, wc = top_by_row(rows, uids, co, 2 * f, TOP, score=lift)
         else:
             di, dv, wi, wl, wc = (torch.full((2 * f, TOP), -1), torch.full((2 * f, TOP), float("nan")), torch.full((2 * f, TOP), -1),
                                   torch.full((2 * f, TOP), float("nan")), torch.full((2 * f, TOP), float("nan")))

@@ -15,8 +15,10 @@
 #
 # When the queue is done, copy the results to the machine that keeps the catalog and destroy the box:
 #
-#   rsync -av --include='*/' --include='*.parquet' --exclude='*' box:neuron-lens/data/catalog/ data/catalog/
+#   rsync -av --include='*/' --include='*.parquet' --include='*.pt' --exclude='*' box:neuron-lens/data/catalog/ data/catalog/
 #   rsync -av box:neuron-lens/data/acts/ data/acts/
+#   rsync -av box:neuron-lens/data/summary/ data/summary/
+#   rsync -av box:neuron-lens/logs/ logs/box/
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${HF_TOKEN:?export HF_TOKEN first (Gemma 4 is gated)}"

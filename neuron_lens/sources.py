@@ -21,9 +21,8 @@ def split(rg: torch.Tensor, ru: torch.Tensor, x: torch.Tensor, inv: torch.Tensor
     the activations at layers < ``M``. Returns ``g``, ``a`` ``[N]`` and the shares ``emb`` ``[N]``,
     ``heads`` ``[N, (M + 1)·H]``, ``neurons`` ``[N, M·f]``, which sum to 1 over the three."""
     g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
-    s = silu(g) / g
-    a = s * g * u
-    share = lambda gx, ux: 0.5 * s[:, None] * (g[:, None] * ux + u[:, None] * gx) / a[:, None]
+    a = silu(g) * u
+    share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
     e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
     heads = []
     for zl, wo in zip(z, wos):

@@ -23,6 +23,7 @@ run firings_gemma "$G" python scripts/17_firings.py
 if [ "${MEDIA:-0}" = 1 ]; then
     run media_image "$G" python scripts/13_media_activations.py --device cuda --modalities image
     run media_audio "$G" python scripts/13_media_activations.py --device cuda --modalities audio
+    run media_crossmodal "$G" python scripts/checks/crossmodal.py
     run media_tables "$G" python scripts/14_media_tables.py
 fi
 echo "$(date '+%F %T') QUEUE DONE"
