@@ -31,7 +31,9 @@ in-context output read. ``check`` tests the labels blind on ``CHECK_PER_BAND`` r
 The prompts are ``scripts/prompts/<model>/<side>.md``. Stages (under ``data/labels/<model>/<side>/``;
 nothing is sent to the API without an explicit stage):
 
-- ``cards``: ``cards/L<layer>.jsonl``, one card per neuron or head;
+- ``cards``: ``cards/L<layer>.jsonl``, one card per neuron or head; ``--flipped``, only the neurons with a pole on SiLU's
+  negative lobe (``acts``' ``neg_lobe`` past a half), whose input reads turned round when those poles began to be read
+  the right way (findings §17), for relabelling just those: ``shards`` lands the new labels on the table already there;
 - ``pilot``: one batch of ``--n`` random requests; measures tokens (thinking included) and the parse
   rate and projects the full run's cost into ``state.json``;
 - ``submit``: every request, in batches under the API's limits; refuses unless a pilot at the same
@@ -57,6 +59,7 @@ import os
 import random
 import re
 import time
+from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -207,7 +210,7 @@ def grouped(tokens: list[str], skip=()) -> tuple[str, set]:
     return " ‖ ".join(" | ".join(x) for x in tiers if x), set(count)
 
 
-def cards_layer(layer: int) -> int:
+def cards_layer(layer: int, flipped: bool = False) -> int:
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(MODEL)
@@ -234,8 +237,11 @@ def cards_layer(layer: int) -> int:
     keep = ["vocab_skew", "vocab_kurt", "act_top", "act_max", "rate", "rate_dclm", "rate_zh", "rate_code",
             "rate_chat", "contexts"] + [c for b in shown for c in (b + "_ids", f"{b}_val")]
     rows = t.select(keep).to_pylist()
+    lobe = t.column("neg_lobe").to_pylist()
     with open(OUT["neurons"] / "cards" / f"L{layer:02d}.jsonl", "w", encoding="utf-8") as fh:
         for n in range(f):
+            if flipped and lobe[n] <= 0.5 and lobe[f + n] <= 0.5:
+                continue
             lines = [f"## layer {layer}, neuron {n}", f"input reads at this depth: {ni}.", f"output reads at this depth: {no}."]
             for pole, r in ((1, rows[n]), (-1, rows[f + n])):
                 lines.append(f"\n### L{layer} n{n} {'+' if pole > 0 else '−'}")
@@ -354,7 +360,7 @@ def cards(args) -> None:
         return
     (OUT["neurons"] / "cards").mkdir(parents=True, exist_ok=True)
     with Pool(args.workers) as pool:
-        for layer in pool.imap_unordered(cards_layer, range(LAYERS)):
+        for layer in pool.imap_unordered(partial(cards_layer, flipped=args.flipped), range(LAYERS)):
             print(f"{time.strftime('%H:%M:%S')} L{layer:02d} cards", flush=True)
 
 
@@ -545,7 +551,8 @@ def retry(args) -> None:
 
 
 def shards(args) -> None:
-    """The labels table in catalog row order; a missing pole or head is a KeyError."""
+    """The labels table in catalog row order, new labels landing on the table already there (``cards --flipped`` covers
+    only some neurons); a pole or head missing from both is a KeyError."""
     side, fields = args.side, FIELDS[args.side]
     got = {}
     for path in sorted((OUT[side] / "labels").glob("L*.jsonl")):
@@ -563,9 +570,12 @@ def shards(args) -> None:
         return cols
     if side == "neurons":
         for layer in sorted({k[0] for k in got}):
-            f = sum(1 for k in got if k[0] == layer) // 2
-            rows = [got[(layer, n, 1)] for n in range(f)] + [got[(layer, n, -1)] for n in range(f)]
-            write(neuron_keys(layer, f) | columns(rows), neuron_table("labels", layer))
+            path = neuron_table("labels", layer)
+            have = {(r["layer"], r["neuron"], r["pole"]): r for r in pq.read_table(path).to_pylist()} if path.exists() else {}
+            have |= {k: v for k, v in got.items() if k[0] == layer}
+            f = len(have) // 2
+            rows = [have[(layer, n, 1)] for n in range(f)] + [have[(layer, n, -1)] for n in range(f)]
+            write(neuron_keys(layer, f) | columns(rows), path)
     else:
         keys = pq.read_table(head_table("reads"), columns=["layer", "head", "kv_head"])
         L, H = max(keys.column("layer").to_pylist()) + 1, keys.num_rows // (max(keys.column("layer").to_pylist()) + 1)
@@ -707,6 +717,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=60, help="pilot requests")
     ap.add_argument("--cap", type=float, default=90.0, help="most the projected full run may cost, dollars")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--flipped", action="store_true", help="cards: only the neurons with a pole on SiLU's negative lobe")
     args = ap.parse_args()
     if args.what == "check":
         args.side = "heads"
