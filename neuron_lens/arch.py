@@ -190,20 +190,54 @@ def padded(model_id: str) -> tuple[int, int]:
     return max(x.kv_heads for x in lay), max(x.head_dim for x in lay)
 
 
+def attn_norm(layer):
+    """The norm between a decoder layer's attention output and the residual (Gemma 4's post-attention
+    norm), or ``None`` where the heads write the residual directly (Qwen3)."""
+    return layer.post_attention_layernorm if hasattr(layer, "pre_feedforward_layernorm") else None
+
+
+def mlp_norm(layer):
+    """The norm between a decoder layer's MLP output and the residual (Gemma 4's post-feedforward
+    norm), or ``None`` where the neurons write the residual directly (Qwen3)."""
+    return getattr(layer, "post_feedforward_layernorm", None)
+
+
+def _scale(norm, x: torch.Tensor) -> torch.Tensor | None:
+    return None if norm is None else torch.rsqrt(x.float().pow(2).mean(-1) + norm_eps(norm))
+
+
 def head_write(layer) -> torch.Tensor:
     """``[d, H·hd]``: a decoder layer's ``W_O`` as its heads' outputs reach the residual, in fp32:
-    times Gemma 4's post-attention norm weight (whose scale ``attn_scale`` gives per position)."""
+    times the norm weight where a norm follows the attention (its scale per position: ``attn_scale``)."""
     w = layer.self_attn.o_proj.weight.float()
-    pa = getattr(layer, "post_attention_layernorm", None)
-    return pa.weight.float()[:, None] * w if hasattr(layer, "pre_feedforward_layernorm") else w
+    norm = attn_norm(layer)
+    return w if norm is None else norm.weight.float()[:, None] * w
 
 
 def attn_scale(layer, attn_out: torch.Tensor) -> torch.Tensor | None:
-    """``[B, T]``: Gemma 4's post-attention norm's scale at each position (held constant, the LN
-    rule), from the attention output; ``None`` for Qwen3, whose heads write the residual directly."""
-    if not hasattr(layer, "pre_feedforward_layernorm"):
-        return None
-    return torch.rsqrt(attn_out.float().pow(2).mean(-1) + norm_eps(layer.post_attention_layernorm))
+    """``[B, T]``: the scale of the norm after the attention at each position (held constant, the LN
+    rule), from the attention output; ``None`` where no norm follows it."""
+    return _scale(attn_norm(layer), attn_out)
+
+
+def mlp_write(layer) -> torch.Tensor:
+    """``[d, f]``: a decoder layer's ``W_down`` as its neurons' outputs reach the residual, in fp32:
+    times the norm weight where a norm follows the MLP (its scale per position: ``mlp_scale``)."""
+    w = layer.mlp.down_proj.weight.float()
+    norm = mlp_norm(layer)
+    return w if norm is None else norm.weight.float()[:, None] * w
+
+
+def mlp_scale(layer, mlp_out: torch.Tensor) -> torch.Tensor | None:
+    """``[B, T]``: the scale of the norm after the MLP at each position, from the MLP's output; ``None``
+    where no norm follows it."""
+    return _scale(mlp_norm(layer), mlp_out)
+
+
+def layer_scale(layer) -> float:
+    """What multiplies a decoder layer's whole output (Gemma 4's ``layer_scalar``; 1 otherwise)."""
+    s = getattr(layer, "layer_scalar", None)
+    return 1.0 if s is None else float(s)
 
 
 def mid_norm(layer):

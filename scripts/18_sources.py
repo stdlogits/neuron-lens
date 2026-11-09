@@ -13,7 +13,7 @@ its first ``N_CONTEXTS`` top firings (the firings the cards show, so these can s
 
 ``n_firings``: the firings used. Each list is built from ``RANK`` candidates a firing (``RANK_WITH`` for
 fires-with), a source outside them counting 0 at that firing; ``with_*`` needs a source active at two of the pole's firings (one, if the pole has only one),
-and its ``rate`` is at least one position in the corpus. The pass checkpoints every ``--save-minutes``. Qwen3-8B only: Gemma 4's norms rescale each write per position.
+and its ``rate`` is at least one position in the corpus. The pass checkpoints every ``--save-minutes`` and drops the checkpoint with its tables.
 Per layer in ``data/summary/sources_<model>.json``: each kind's share and the decomposition's largest
 error. ``checks/relations.py`` compares the three relations (driven by, wired to, fires with).
 
@@ -35,7 +35,7 @@ from neuron_lens import arch
 from neuron_lens.catalog import MODEL, N_CONTEXTS, TOP, column, documents, fixed, neuron_keys, neuron_table, write
 from neuron_lens.firings import firing_plan
 from neuron_lens.paths import DATA, LOGS, ROOT, SUMMARY
-from neuron_lens.sources import merged, split, top_by_row
+from neuron_lens.sources import Stream, merged, top_by_row
 from neuron_lens.transport import decoder_stack
 
 STEM = arch.stem(MODEL)
@@ -51,7 +51,7 @@ def acts_column(layer: int, name: str) -> torch.Tensor:
 
 class Pass:
     def __init__(self, stack, layers: list[int], dev, positions: int):
-        self.stack, self.layers, self.dev = stack, layers, dev
+        self.stack, self.layers, self.dev, self.flow = stack, layers, dev, Stream(stack)
         self.rate_floor = 1 / positions  # a pole seen firing at all fires at least once
         self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, stack.config.num_attention_heads
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
@@ -69,13 +69,7 @@ class Pass:
         self.at = None
 
     def hooks(self) -> list:
-        take = lambda key: (lambda m, a: self.cap.__setitem__(key, a[0][self.at].float()))
-        out = [self.stack.embed_tokens.register_forward_hook(lambda m, a, o: self.cap.__setitem__("emb", o[self.at].float()))]
-        for l, lay in enumerate(self.stack.layers):
-            out.append(lay.self_attn.o_proj.register_forward_pre_hook(take(("z", l))))
-            out.append(lay.post_attention_layernorm.register_forward_pre_hook(take(("x", l))))
-            out.append(lay.mlp.down_proj.register_forward_pre_hook(take(("a", l))))
-        return out
+        return self.flow.hooks(self.cap, lambda h: h[self.at])
 
     def batch(self, ids: torch.Tensor, mask: torch.Tensor, a: int) -> None:
         """One forward pass, keeping only the positions some firing sits at, then the split per layer."""
@@ -104,16 +98,8 @@ class Pass:
 
     @torch.inference_mode()
     def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> None:
-        cap, stack, f = self.cap, self.stack, self.f
-        lay = stack.layers[M]
-        norm = lay.post_attention_layernorm
-        x = cap["x", M][u]
-        inv = torch.rsqrt(x.pow(2).mean(-1) + norm.variance_epsilon)[:, None]
-        n = row.long() % f
-        rg, ru = lay.mlp.gate_proj.weight[n] * norm.weight, lay.mlp.up_proj.weight[n] * norm.weight
-        s = split(rg, ru, x, inv, cap["emb"][u], [cap["z", l][u] for l in range(M + 1)], [cap["a", l][u] for l in range(M)],
-                  [stack.layers[l].mlp.down_proj.weight for l in range(M)],
-                  [stack.layers[l].self_attn.o_proj.weight for l in range(M + 1)], self.H)
+        cap, f = self.cap, self.f
+        s = self.flow.sources(cap, M, row.long() % f, u)
         d = self.dense[M]
         r = row.long().cpu()
         d["heads"].index_add_(0, r, s["heads"].cpu())
@@ -126,12 +112,12 @@ class Pass:
         acts = torch.cat([cap["a", l][u] for l in range(M)], 1)  # [N, M·f]
         pid = (torch.arange(M, device=self.dev)[:, None] * 2 * f + torch.arange(f, device=self.dev)).flatten() + f * (acts < 0)  # [N, M·f]
         top = s["neurons"].abs().topk(min(RANK, s["neurons"].shape[1]), dim=1).indices
-        self.sparse[M]["driven"].append((r, pid.gather(1, top).cpu(), s["neurons"].gather(1, top).cpu()))
+        self.sparse[M]["driven"].append((r, pid.gather(1, top).int().cpu(), s["neurons"].gather(1, top).cpu()))
         fires = (acts.abs() >= FIRE * self.act_top[pid]) & (self.act_top[pid] > 0)  # a silent pole doesn't fire at zero
         lift = fires / self.rate[pid].clamp_min(self.rate_floor)
         top = lift.topk(min(RANK_WITH, lift.shape[1]), dim=1).indices
         chosen = fires.gather(1, top)
-        self.sparse[M]["with"].append((r, pid.gather(1, top).cpu(), chosen.float().cpu()))
+        self.sparse[M]["with"].append((r, pid.gather(1, top).int().cpu(), chosen.float().cpu()))
 
     def state(self) -> dict:
         return {"dense": self.dense, "sparse": self.sparse}
@@ -207,8 +193,6 @@ def main() -> None:
             p = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, start_new_session=True, env={**os.environ, "PYTHONUNBUFFERED": "1"})
         print(f"detached: pid {p.pid}, log {log}")
         return
-    if arch.is_gemma4(MODEL):
-        raise SystemExit("18_sources.py reads Qwen3's residual, where each write is fixed; Gemma 4's norms rescale it per position")
     n = arch.text_config(MODEL).num_hidden_layers
     lo, hi = (1, n - 1) if args.layers is None else map(int, args.layers.split("-"))
     layers = list(range(lo, hi + 1))
@@ -254,6 +238,7 @@ def main() -> None:
             write(p.table(M), neuron_table("sources", M))
     if args.docs is None:
         (SUMMARY / f"sources_{STEM}.json").write_text(json.dumps(summary))
+        STATE.unlink(missing_ok=True)
     else:
         print("smoke test done: no table written", flush=True)
         p.table(layers[-1])  # the merge, on the partial data

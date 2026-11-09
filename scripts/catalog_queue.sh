@@ -28,16 +28,19 @@ must firings_qwen3-8b "$Q" python scripts/17_firings.py
 must sources_qwen3-8b "$Q" python scripts/18_sources.py
 must acts_gemma "$G" python scripts/06_activations.py
 must firings_gemma "$G" python scripts/17_firings.py
+run sources_gemma "$G" python scripts/18_sources.py
 
 run reads_qwen3-8b "$Q" python scripts/08_reads.py --parts neurons
 run legible_qwen3-8b "$Q" python scripts/09_legible.py
 run edges_qwen3-8b "$Q" python scripts/16_edges.py
 run reads_gemma "$G" python scripts/08_reads.py --parts neurons
 run legible_gemma "$G" python scripts/09_legible.py
+run edges_gemma "$G" python scripts/16_edges.py
 run causal_qwen3-8b "$Q" python scripts/checks/causal_lens.py measure
 run causal_gemma "$G" python scripts/checks/causal_lens.py measure --per-layer 24
 run context_qwen3-8b "$Q" python scripts/checks/context_linearity.py measure
 run edges_context_qwen3-8b "$Q" python scripts/checks/edges_in_context.py measure
+run edges_context_gemma "$G" python scripts/checks/edges_in_context.py measure
 if [ "${MEDIA:-0}" = 1 ]; then
     run media_image "$G" python scripts/13_media_activations.py --device cuda --modalities image
     run media_audio "$G" python scripts/13_media_activations.py --device cuda --modalities audio

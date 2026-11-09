@@ -4,12 +4,12 @@
 both poles, at their first ``N_CONTEXTS`` top firings (the ``acts`` table's ``top_doc``, ``top_pos``:
 the firings the cards show), where they fired (``top_val > 0``).
 
-**The direct decomposition.** At a firing of pole B (layer M, position t), B's MLP input is the
-residual ``x`` there, normalized, and ``x`` is a sum: the embedding, every head's write at layers ≤ M
-and every neuron's at layers < M, all at t. Holding the norm's scale and SiLU's ratio ``s = silu(g)/g``
+**The direct decomposition** (``neuron_lens.sources``). At a firing of pole B (layer M, position t), B's MLP
+input is the residual ``x`` there, normalized, and ``x`` is a sum: the embedding, every head's write at layers ≤ M
+and every neuron's at layers < M, all at t. Holding the norm's scale and the activation's ratio ``s = φ(g)/g``
 (RelP's rules), B's gate and up pre-activations ``g``, ``u`` split exactly over these sources, and so
 does its activation by the half rule: source X contributes ``½ s (g u_X + u g_X)``, and the
-contributions sum to ``a = silu(g) u``. A share is a contribution over ``a`` (positive: it drives the
+contributions sum to ``a = φ(g) u``. A share is a contribution over ``a`` (positive: it drives the
 pole). An upstream neuron is in the pole its activation's sign gives, and *fires* at ``act_top / 4``
 or more there (the ``acts`` tables' rate threshold). The model runs in fp32 (bf16 rounds weak writes
 away; §4), up to layer M's MLP.
@@ -62,10 +62,11 @@ from neuron_lens.catalog import (
     edge_list,
     entry,
     head_entry,
+    lobe_signs,
     neuron_table,
 )
 from neuron_lens.paths import SUMMARY
-from neuron_lens.sources import split
+from neuron_lens.sources import Stream
 from neuron_lens.stats import spearman
 from neuron_lens.transport import decoder_stack
 
@@ -101,19 +102,22 @@ def in_edges(layer: int, neurons: list[int]) -> torch.Tensor:
 
 
 class Model:
-    """Qwen3-8B in fp32 with what the decomposition needs: each pole's write size (``act_top · ‖w‖``)
-    and activation scale (``act_top``), ``[L, 2f]``, and every layer's unit writes."""
+    """The model in fp32 with what the decomposition needs: each pole's write size (``act_top · ‖w‖``)
+    and activation scale (``act_top``), ``[L, 2f]``, every layer's unit writes, and the typical scale of the norm
+    after each layer's MLP (``16_edges.py``'s; 1 where none follows)."""
 
     def __init__(self, dev):
         lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(dev).eval().requires_grad_(False)
         self.stack, self.dev = decoder_stack(lm), dev
+        self.flow = Stream(self.stack)
         self.L, self.f = len(self.stack.layers), self.stack.config.intermediate_size
         self.H = self.stack.config.num_attention_heads
         self.act_top = torch.stack([torch.from_numpy(pq.read_table(neuron_table("acts", l), columns=["act_top"])
                                                      .column(0).to_numpy().copy()).float() for l in range(self.L)]).to(dev)
-        self.downs = [lay.mlp.down_proj.weight for lay in self.stack.layers]  # [d, f]
-        self.unit = [w / w.norm(dim=0) for w in self.downs]
-        self.size = self.act_top * torch.stack([w.norm(dim=0) for w in self.downs]).repeat(1, 2)
+        self.unit = [w / w.norm(dim=0) for w in self.flow.neurons]  # [d, f]
+        self.size = self.act_top * torch.stack([w.norm(dim=0) for w in self.flow.neurons]).repeat(1, 2)
+        saved = json.loads((SUMMARY / f"edges_{STEM}.json").read_text())
+        self.mlp_scale = torch.tensor(saved.get("mlp_scale", [1.0] * self.L), device=dev)
 
     @torch.inference_mode()
     def sources(self, M: int, neuron: torch.Tensor, pole: torch.Tensor, seqs: list[torch.Tensor]) -> dict:
@@ -127,16 +131,9 @@ class Model:
         mask = torch.zeros_like(ids)
         for r, s in enumerate(seqs):
             ids[r, :len(s)], mask[r, :len(s)] = s, 1
-        at = lambda h: h[torch.arange(B, device=dev), t]
-        got = {"z": [], "a": []}
+        cap = {}
         lay = stack.layers[M]
-        norm = lay.post_attention_layernorm
-        hooks = [stack.embed_tokens.register_forward_hook(lambda mod, a, o: got.__setitem__("emb", at(o)))]
-        hooks += [stack.layers[l].self_attn.o_proj.register_forward_pre_hook(lambda mod, a: got["z"].append(at(a[0])))
-                  for l in range(M + 1)]
-        hooks += [stack.layers[l].mlp.down_proj.register_forward_pre_hook(lambda mod, a: got["a"].append(at(a[0])))
-                  for l in range(M)]
-        hooks.append(norm.register_forward_pre_hook(lambda mod, a: got.__setitem__("x", at(a[0]))))
+        hooks = self.flow.hooks(cap, lambda h: h[torch.arange(B, device=dev), t], upto=M)
 
         def stop(mod, a):
             raise Stop
@@ -148,21 +145,19 @@ class Model:
         finally:
             for h in hooks:
                 h.remove()
-        x = got["x"]
-        inv = torch.rsqrt(x.pow(2).mean(-1) + norm.variance_epsilon)[:, None]  # [B, 1]: the norm's scale, held
-        rg = lay.mlp.gate_proj.weight[neuron] * norm.weight  # [B, d]: read rows times the norm weight
-        ru = lay.mlp.up_proj.weight[neuron] * norm.weight
-        got_s = split(rg, ru, x, inv, got["emb"], got["z"], got["a"], self.downs[:M],
-                      [stack.layers[l].self_attn.o_proj.weight for l in range(M + 1)], self.H)
-        emb, heads, neurons, g, a = got_s["emb"], got_s["heads"], got_s["neurons"], got_s["g"], got_s["a"]
-        acts = torch.cat(got["a"], 1)  # [B, M·f]
+        got = self.flow.sources(cap, M, neuron, torch.arange(B, device=dev))
+        emb, heads, neurons, g, a = got["emb"], got["heads"], got["neurons"], got["g"], got["a"]
+        acts = torch.cat([cap["a", l] for l in range(M)], 1)  # [B, M·f]
         sign = acts.sign()
         pid = (torch.arange(M, device=dev)[:, None] * 2 * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
-        a_hat, b_hat = (r / r.norm(dim=1, keepdim=True) for r in (rg, ru))
-        c_b = a_hat + pole[:, None] * b_hat
+        norm = arch.mid_norm(lay)
+        a_hat, b_hat = (r / r.norm(dim=1, keepdim=True) for r in (lay.mlp.gate_proj.weight[neuron] * norm.weight,
+                                                                  lay.mlp.up_proj.weight[neuron] * norm.weight))
+        c_b = (a_hat + pole[:, None] * b_hat) * lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]  # as read_rows
         cos = torch.cat([c_b / c_b.norm(dim=1, keepdim=True) @ self.unit[l] for l in range(M)], 1) * sign
-        return {"emb": emb, "heads": heads, "neurons": neurons, "acts": acts, "pid": pid,
-                "cos": cos, "push": cos * self.size.flatten()[pid], "g": g, "a": a}
+        gain = torch.stack([self.mlp_scale[l] * self.flow.scalars[l:M].prod() for l in range(M)])  # [M], as 16_edges.py
+        push = cos * self.size.flatten()[pid] * gain[pid.div(2 * f, rounding_mode="floor")]
+        return {"emb": emb, "heads": heads, "neurons": neurons, "acts": acts, "pid": pid, "cos": cos, "push": push, "g": g, "a": a}
 
     def fires(self, src: dict, r: int, q: torch.Tensor) -> torch.Tensor:
         """Whether each global pole id ``q`` is the pole its neuron is in at row ``r``'s firing, and
@@ -307,8 +302,6 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=12, help="explain: neuron sources to list (and half as many heads)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
     args = ap.parse_args()
-    if arch.is_gemma4(MODEL):
-        raise SystemExit("the edges are Qwen3's (16_edges.py)")
     {"measure": measure, "score": score, "explain": explain}[args.what](args)
 
 

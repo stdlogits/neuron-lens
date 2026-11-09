@@ -161,6 +161,7 @@ def main() -> None:
         print("smoke test done: no table written", flush=True)
         return
     tables(acc, layers, args.device)
+    STATE.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

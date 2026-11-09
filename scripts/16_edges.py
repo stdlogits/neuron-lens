@@ -1,29 +1,32 @@
 """Direct weight edges between neuron poles (pipeline stage 16; findings §17).
 
-The residual stream is a sum: what a neuron of layer L writes reaches every later layer's MLP input
-unchanged, so the direct path from a pole A to a pole B of a later layer M is one number from the
+The residual stream is a sum: what a neuron of layer L writes reaches every later layer's MLP input,
+so the direct path from a pole A to a pole B of a later layer M is one number from the
 weights, the size of A's write along B's read direction. Per pole, ``neurons/edges/L<layer>.parquet``
 lists the ``TOP`` poles of earlier layers whose writes push it most (``in_*``) and the ``TOP`` poles of
 later layers it pushes most (``out_*``), each as ``_layer``, ``_neuron``, ``_pole``, ``_push`` and
 ``_cos``, strongest first (``−1`` and NaN where fewer clear the floor):
 
-- ``cos``: the cosine of A's write ``±W_down[:, n]`` with B's read direction (``neurons.read_rows``, as
-  ``08_reads.py``: ``â ± b̂``, gate and up rows times the MLP input norm's weight, normalized);
-- ``push``: ``cos · act_top_A · ‖w_A‖ / rms_M``, how far one of A's top firings moves B's normalized
+- ``cos``: the cosine of A's write ``±w_A`` (``neurons.directions``) with B's read direction
+  (``neurons.read_rows``, as ``08_reads.py``: ``â ± b̂``, gate and up rows times the MLP input norm's weight,
+  normalized);
+- ``push``: ``cos · act_top_A · ‖w_A‖ · gain / rms_M``, how far one of A's top firings moves B's normalized
   MLP input along B's read direction; ``rms_M`` is the median RMS of the residual entering layer M's
   MLP (``RMS_DOCS`` catalog documents, positions from 1). Positive: A's firing drives B's pole;
-  negative: it pushes against it.
+  negative: it pushes against it. ``gain`` is what happens to the write between layers: the layer scalars from
+  A's layer to M, and, where a norm follows the MLP (Gemma 4), that norm's median scale at A's layer. The
+  scale varies by position, so for those models ``push`` holds it at its typical value, as it holds ``rms_M`` and
+  ``act_top``; ``cos`` doesn't depend on it.
 
 Edges rank by ``|push|`` among those with ``|cos| ≥ SIGMAS/√d``: random directions reach that about
-once in 3.5 million, against about 430,000 candidates a pole at most, and without the floor neurons
-with huge activations (undertrained tokens, findings §2) would top many lists at chance cosines.
+once in 1.7 million, against a pole's 430,000 candidates at most on Qwen3-8B and 1.4 million on Gemma 4 12B, and
+without the floor neurons with huge activations (undertrained tokens, findings §2) would top many lists at
+chance cosines.
 
 An edge is the direct path at one position: A's write reaches B where A fired. What a head carries
 between positions, and paths through other units, are not edges. ``push`` holds A at its typical top
 firing; whether A is active when B fires is the context's, which ``checks/edges_in_context.py``
 measures (§17). Per band into ``data/summary/edges_<model>.{log,json}``.
-
-Qwen3-8B only: Gemma 4's post-feedforward norm and layer scalars rescale each write per position.
 
     python scripts/16_edges.py [--device mps]
 """
@@ -54,21 +57,32 @@ RMS_DOCS = 64
 
 
 @torch.inference_mode()
-def residual_rms(dev) -> torch.Tensor:
-    """``[L]``: the median RMS of the residual entering each layer's MLP, over ``RMS_DOCS`` documents
-    spread through the catalog's (positions from 1)."""
+def residual_stats(dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """``(rms, mlp_scale, scalars)``, each ``[L]``: the median RMS of the residual entering each layer's MLP and
+    the median scale of the norm after its MLP (1 where none follows), over ``RMS_DOCS`` documents spread through
+    the catalog's (positions from 1), and each layer's scalar."""
     lm, stack = arch.load_model(MODEL, dev, eager=False)
     seen = [[] for _ in stack.layers]
-    hooks = [lay.post_attention_layernorm.register_forward_pre_hook(
-        lambda mod, a, i=i: seen[i].append(a[0][0, 1:].float().pow(2).mean(-1).sqrt().cpu()))
-        for i, lay in enumerate(stack.layers)]
+    scales = [[] for _ in stack.layers]
+
+    def keep_scale(mod, a, o, i):
+        s = arch.mlp_scale(stack.layers[i], o)
+        if s is not None:
+            scales[i].append(s[0, 1:].cpu())
+    hooks = []
+    for i, lay in enumerate(stack.layers):
+        hooks.append(arch.mid_norm(lay).register_forward_pre_hook(
+            lambda mod, a, i=i: seen[i].append(a[0][0, 1:].float().pow(2).mean(-1).sqrt().cpu())))
+        hooks.append(lay.mlp.register_forward_hook(lambda mod, a, o, i=i: keep_scale(mod, a, o, i)))
     docs = documents()
     for doc in docs[::len(docs) // RMS_DOCS][:RMS_DOCS]:
         stack(input_ids=doc[None].long().to(dev))
     for h in hooks:
         h.remove()
+    scalars = torch.tensor([arch.layer_scale(lay) for lay in stack.layers])
     del lm, stack
-    return torch.stack([torch.cat(s).median() for s in seen])
+    return (torch.stack([torch.cat(s).median() for s in seen]),
+            torch.stack([torch.cat(s).median() if s else torch.tensor(1.0) for s in scales]), scalars)
 
 
 def poles(layer: int, dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -90,11 +104,11 @@ def merge(best: tuple, new: tuple, k: int) -> tuple:
     return tuple(c.gather(1, top) for c in cat)
 
 
-def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor]:
+def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Every layer's in- and out-lists, ``(score, id, push, cos)`` each ``[2f, k]``; ids are
     ``layer · 2f + row`` (rows in table order), scores ``|push|`` or −1 below the floor. And the null,
     ``[L, 2, 2f]``: each pole's largest |cos| with the layer before's writes, and with them rotated at random."""
-    rms = residual_rms(dev)
+    rms, mlp_scale, scalars = residual_stats(dev)
     L = len(rms)
     units = [poles(layer, dev) for layer in range(L)]
     d, f = units[0][0].shape
@@ -114,7 +128,7 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor]:
             del c
             if l == m - 1:
                 prev[m, 0], prev[m, 1] = cos.abs().amax(1).cpu(), (read @ (rot @ w)).abs().amax(1).cpu()
-            push = cos * size / rms[m]
+            push = cos * size * (mlp_scale[l] * scalars[l + 1:m].prod()).item() / rms[m].item()  # ``size`` holds A's own scalar
             score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
             ids = l * 2 * f + torch.arange(2 * f, device=dev)
             top = score.topk(k, dim=1).indices
@@ -125,7 +139,7 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor]:
             outs[l] = merge(outs[l], (pick(score), ids, pick(push), pick(cos)), k)
             del cos, push, score
         print(f"{time.strftime('%H:%M:%S')} L{m}: in from L0-L{m - 1}, {time.perf_counter() - t0:.0f}s", flush=True)
-    return [tuple(t.cpu() for t in x) for x in ins], [tuple(t.cpu() for t in x) for x in outs], rms, prev
+    return [tuple(t.cpu() for t in x) for x in ins], [tuple(t.cpu() for t in x) for x in outs], rms, mlp_scale, prev
 
 
 def columns(cols: dict, side: str, lists: tuple, f: int) -> None:
@@ -140,7 +154,7 @@ def columns(cols: dict, side: str, lists: tuple, f: int) -> None:
     cols[f"{side}_cos"] = fixed(torch.where(ok, cos, float("nan")))
 
 
-def summary(ins: list, outs: list, rms: torch.Tensor, prev: torch.Tensor, k: int, d: int) -> None:
+def summary(ins: list, outs: list, rms: torch.Tensor, mlp_scale: torch.Tensor, prev: torch.Tensor, k: int, d: int) -> None:
     L, f = len(ins), ins[0][0].shape[0] // 2
     lines = [f"direct weight edges, {MODEL}: top {k} in and out per pole by |push| among |cos| >= {SIGMAS}/sqrt(d) "
              f"= {SIGMAS / d ** 0.5:.3f}; residual RMS at the MLP input "
@@ -180,23 +194,21 @@ def summary(ins: list, outs: list, rms: torch.Tensor, prev: torch.Tensor, k: int
     print(text)
     (SUMMARY / f"edges_{STEM}.log").write_text(text + "\n")
     (SUMMARY / f"edges_{STEM}.json").write_text(json.dumps({"model": MODEL, "k": k, "sigmas": SIGMAS,
-                                                            "rms": rms.tolist(), "bands": table}))
+                                                            "rms": rms.tolist(), "mlp_scale": mlp_scale.tolist(), "bands": table}))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cuda")
     args = ap.parse_args()
-    if arch.is_gemma4(MODEL):
-        raise SystemExit("16_edges.py reads Qwen3's residual, where each write is fixed; Gemma 4's norms rescale it per position")
-    ins, outs, rms, prev = compute(TOP, args.device)
+    ins, outs, rms, mlp_scale, prev = compute(TOP, args.device)
     f = ins[0][0].shape[0] // 2
     for layer, (i, o) in enumerate(zip(ins, outs)):
         cols = neuron_keys(layer, f)
         columns(cols, "in", i, f)
         columns(cols, "out", o, f)
         write(cols, neuron_table("edges", layer))
-    summary(ins, outs, rms, prev, TOP, directions(MODEL, 0)["write"].shape[0])
+    summary(ins, outs, rms, mlp_scale, prev, TOP, directions(MODEL, 0)["write"].shape[0])
 
 
 if __name__ == "__main__":

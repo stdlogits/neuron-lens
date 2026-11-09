@@ -16,7 +16,7 @@
 # When the queue is done, copy the results to the machine that keeps the catalog and destroy the box:
 #
 #   rsync -av --include='*/' --include='*.parquet' --include='*.pt' --exclude='*' box:neuron-lens/data/catalog/ data/catalog/
-#   rsync -av --exclude='*-firings.pt' --exclude='*-sources.pt' box:neuron-lens/data/acts/ data/acts/   # those checkpoints are 40-70 GB each and done with
+#   rsync -av box:neuron-lens/data/acts/ data/acts/
 #   rsync -av box:neuron-lens/data/causal/ data/causal/
 #   rsync -av box:neuron-lens/data/summary/ data/summary/
 #   rsync -av box:neuron-lens/logs/ logs/box/
