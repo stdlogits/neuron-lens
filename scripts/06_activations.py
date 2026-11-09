@@ -51,6 +51,7 @@ import sys
 import time
 from collections import Counter
 
+import numpy as np
 import pyarrow as pa
 import torch
 from transformers import AutoModelForCausalLM
@@ -90,6 +91,12 @@ REP_SEQS, REP_LEN = 64, 64
 FIRST_K = 3
 R_FIT = arch.fits(MODEL)[0]
 ACTS = acts_path()
+
+
+def bf16_bins() -> torch.Tensor:
+    """Every bf16 bit pattern's bin in ``count``: its bin among ``EDGES``, plus ``NB`` if it is negative."""
+    v = torch.from_numpy((np.arange(65536, dtype=np.uint32) << 16).view(np.float32).copy())  # a bf16 is the top half of a float
+    return ((v < 0).int() * NB + torch.bucketize(v.abs(), EDGES)).int()
 
 
 def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int) -> dict:
@@ -135,7 +142,7 @@ class Collector:
         self.wo = [arch.head_write(layer).view(d, H, g.head_dim) for layer, g in zip(model.layers, self.geo)]
         self.gram = [torch.einsum("dhi,dhj->hij", w, w) for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
         self.first_pos = 0  # the token's position in the first-position and repeated passes (1 after <bos>)
-        self.edges = EDGES.to(device)
+        self.edges, self.bins = EDGES.to(device), bf16_bins().to(device)
         self.ctx, self.stash = {}, {}
         self.mode = "main"
 
@@ -153,16 +160,16 @@ class Collector:
             t += self.seg[k].cpu().to(t.dtype)
             self.seg[k].zero_()
 
-    def count(self, cnt: torch.Tensor, x: torch.Tensor, poles: bool) -> None:
-        """Add the grid counts of ``x`` ``[P, n]`` into ``cnt`` (``[2, NB, n]`` with ``poles``, else ``[NB, n]``)."""
+    def count(self, cnt: torch.Tensor, x: torch.Tensor) -> None:
+        """Add the grid counts of ``x`` ``[P, n]`` into ``cnt``: bf16 by sign and bin (``[2, NB, n]``, read off a table
+        of every bit pattern), anything else by bin (``[NB, n]``)."""
         n = x.shape[1]
-        cols = torch.arange(n, device=x.device)
+        cols = torch.arange(n, device=x.device, dtype=torch.int32)
         flat = cnt.view(-1)
         for s in range(0, len(x), CHUNK):
-            xc = x[s:s + CHUNK].float()
-            b = torch.bucketize(xc.abs(), self.edges)
-            idx = (((xc < 0).long() * NB + b) if poles else b) * n + cols
-            flat.index_add_(0, idx.flatten(), torch.ones(idx.numel(), dtype=flat.dtype, device=x.device))
+            xc = x[s:s + CHUNK]
+            b = self.bins[xc.view(torch.int16).int() & 0xFFFF] if xc.dtype == torch.bfloat16 else torch.bucketize(xc.abs(), self.edges, out_int32=True)
+            flat.index_add_(0, (b * n + cols).flatten(), torch.ones(xc.numel(), dtype=flat.dtype, device=x.device))
 
     def neuron(self, l: int, a: torch.Tensor) -> None:  # a: [B, T, f]
         if self.mode == "first":
@@ -184,19 +191,22 @@ class Collector:
             xc = xb[s:s + CHUNK].float()
             self.seg["sum"][l] += xc.sum(0)
             self.seg["sumsq"][l] += xc.pow(2).sum(0)
-        self.count(self.seg["count"][l], xb, poles=True)
-        f = a.shape[-1]
+        self.count(self.seg["count"][l], xb)
         gate = self.stash.pop(("gate", l))  # [B, T, f]: gate_proj's output
         B = a.shape[0]
         for p, sign in enumerate((1, -1)):
             ext, pos = (a * sign).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, f]
-            vals = torch.cat([self.top["val"][l, p], ext.float()])
-            v, i = vals.topk(TOP, dim=0)
-            self.top["val"][l, p] = v
-            g = gate[torch.arange(B, device=a.device)[:, None], pos, torch.arange(f, device=a.device)[None, :]].half()  # [B, f]
-            self.top["gate"][l, p] = torch.cat([self.top["gate"][l, p], g]).gather(0, i)
-            self.top["doc"][l, p] = torch.cat([self.top["doc"][l, p], self.ctx["doc"][:, None].expand(-1, f)]).gather(0, i)
-            self.top["pos"][l, p] = torch.cat([self.top["pos"][l, p], pos.to(torch.int16)]).gather(0, i)
+            ext = ext.float()
+            cols = (ext.amax(0) > self.top["val"][l, p, -1]).nonzero().squeeze(1)  # only a neuron with a new entry needs its list redone
+            if not len(cols):
+                continue
+            v, i = torch.cat([self.top["val"][l, p][:, cols], ext[:, cols]]).topk(TOP, dim=0)
+            self.top["val"][l, p][:, cols] = v
+            at = pos[:, cols]
+            new = {"gate": gate[torch.arange(B, device=a.device)[:, None], at, cols[None, :]].half(),
+                   "doc": self.ctx["doc"][:, None].expand(-1, len(cols)), "pos": at.to(torch.int16)}
+            for k, x in new.items():
+                self.top[k][l, p][:, cols] = torch.cat([self.top[k][l, p][:, cols], x]).gather(0, i)
 
     def input_norm(self, l: int, x: torch.Tensor, eps: float) -> None:
         if self.mode == "main":
@@ -236,7 +246,7 @@ class Collector:
         nv = norm[hm]  # [P, H]
         self.seg["h_sum"][l] += nv.sum(0)
         self.seg["h_sumsq"][l] += nv.pow(2).sum(0)
-        self.count(self.seg["h_count"][l], nv, poles=False)
+        self.count(self.seg["h_count"][l], nv)
         v, t = norm.masked_fill(~hm[..., None], -1).max(1)  # [B, H]
         bi, hi = torch.arange(B, device=a.device)[:, None], torch.arange(H, device=a.device)[None, :]
         rows = a[bi, hi, t].float()  # [B, H, T]: the attention rows there
