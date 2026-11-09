@@ -35,8 +35,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `python -m neuron_lens.catalog`); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; for Qwen3-8B, `16` edges, after `06`; then `11`
-  figures → `12` release).
+  `14` media tables → `15` optimised media reads; for Qwen3-8B, `16` edges and `18` sources, after `06`;
+  `17` firings, after `06`; then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -71,6 +71,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   reads MLP inputs and attention outputs. Don't fit or ship a lens for a point it isn't built for,
   and don't ship borrowed lenses (the J-lens, the logit lens) in the catalog; comparisons belong in
   checks. A head's input is read with the S-lens on both circuits (findings §11).
+- **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
+  firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
+  card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded.
 - **One token mask.** Every token read covers `catalog.kept()`: tokens seen 5+ times in the
   activation corpora, without byte-fallback pieces.
 - **Description cards stay leak-free.** `10_labels.py check` and `checks/lens_blind.py` hold out a
@@ -138,7 +141,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a
   `−` pole, read and described separately. From weights, a pole's read direction is `â ± b̂`: the
   gate and up rows times the post-attention norm weight, normalized (a heuristic; activations give
-  the true poles). Catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles.
+  the true poles), negated for a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
+  past a half, `neurons.read_rows`, §17). Catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles.
 - **Scale.** A lens read is scale-free (RMSNorm), so its probabilities describe a direction, not an
   effect. Effect sizes need the activation scale (`act_top`); don't rank neurons by lens
   probability across layers.
@@ -151,6 +155,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   L13-L20; findings §11). These bands are a prior: weigh each unit's sides by its own q-values
   in `legible`. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
+- **Three relations between units** (§17): wired to (`edges`), driven by and fires with (`sources`). Keep them
+  apart; none is the others.
 - **Edges** (`edges`, findings §17) are wiring, not traffic: what a pole's firing would push into each
   later pole, directly at one position. What drives a pole when it fires is mostly units firing with it,
   which the edges rarely list; `checks/edges_in_context.py explain` gives a pole's sources in context.
@@ -188,6 +194,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   (default 10) and resume when rerun; `06_activations.py` rerun after a complete pass rebuilds the
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
+- The catalog's GPU stages: `scripts/catalog_box.sh` installs on a rented box (a GH200 works) and starts
+  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for Qwen3-8B, then `06`, `17` for Gemma 4.
+  Its header has the commands to copy the results back. The weight-only stages run on a Mac from those tables.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,
   runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
   torch's default of one thread per core makes CPU ops on small tensors spin for minutes. Run one

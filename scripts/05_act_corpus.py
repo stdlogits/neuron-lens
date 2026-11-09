@@ -11,7 +11,8 @@
 
 Each slice goes to ``data/corpus/act-<slice>.jsonl`` (``text`` and ``id``; the chat slice of a
 model other than Qwen3-8B to ``act-chat-<model>.jsonl``, ``corpus.act_file``) with a provenance record
-at the dataset revision used. Only the DCLM slice is a uniform sample. ``NEURON_LENS_MODEL`` picks
+at the dataset revision used; a provenance record already in place fixes that revision, so a rebuild
+gives the catalog's rows. Only the DCLM slice is a uniform sample. ``NEURON_LENS_MODEL`` picks
 the model whose chat template renders the chat slice.
 
     python scripts/05_act_corpus.py [--docs dclm=4000,zh=1000,code=1000,chat=1000]
@@ -56,7 +57,10 @@ def main() -> None:
         name, n = item.split("=")
         n = int(n)
         repo, config, split = SOURCES[name]
-        if name == "dclm":
+        recorded = act_file(name).with_name(act_file(name).name.replace(".jsonl", ".provenance.json"))
+        if recorded.exists():  # the rows the catalog was built from
+            revision = json.loads(recorded.read_text())["revision"]
+        elif name == "dclm":
             revision = json.loads((CORPUS_DIR / "dclm.provenance.json").read_text())["revision"]
         else:
             revision = HfApi().dataset_info(repo).sha

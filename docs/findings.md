@@ -1176,6 +1176,12 @@ over every upstream neuron, in the pole it is in, between its push and its contr
   the in-list entries at L0-L8 (10-23% later), and L0 n11466 − (甩, "fling") is in 45% of L1-L8 poles'
   lists. Shared lists show as recall's control at L1-L2 (0.06).
 
+- **Driven by differs from wired to and fires with** (160 random poles at L6-L30, K = 16, first 5 firings; a probe,
+  `data/summary/relations_probe_qwen3-8b.json`; `checks/relations.py` measures every pole once the `sources` table exists). A pole's
+  top 16 driven-by sources are a median of 25-44% in its top 16 in-edges or fires-with lists: 56-75% of its largest contributors are in
+  neither, because a source's contribution is its activation times its wiring and the top of the product is not the top of
+  either factor. The top 16 still carry only 1-5% of the summed absolute contribution, which is diffuse.
+
 **What this means.** The edges are the model's wiring: what a pole's firing would do to each later pole,
 the counterpart of a write read (§3), and like it an average that leaves the context out (§4). Which
 units drive a pole when it fires is the context's: a list of what feeds a pole needs activations, its
@@ -1185,6 +1191,46 @@ sources at its top firings, which `explain` gives one pole at a time.
 units, are not edges. Heads are sources in context but have no weight edges. `push` holds each source
 at its typical top firing. 32 random neurons a layer, 5 firings each. Qwen3-8B only: Gemma 4's norms
 rescale each write per position.
+
+## §18. What a write adds beyond what it reads
+
+**Setup** (`checks/write_parts.py`; Qwen3-8B, MPS, fp32). Weights, 512 random neurons a layer: the cosine of a neuron's write with its
+gate and up rows, and the top 12 of the R-lens read of the write, orthogonal to the read direction `â ± b̂` or to the whole gate-up plane
+(`neurons.orthogonal_write`). Census, §3's random picks, 16 neurons a layer at even layers L4-L34, both poles (511 live poles): the
+pole's write added at positions 16+ of 16 documents at 1× `act_top` (§3's protocol), split into the part along `â ± b̂` and the rest; and
+removing the same parts of real firings (8 top firings, 8 positions after each). Blind Sonnet ratings of two token lists per pole (same
+concept, related but distinct, different, or unclear for lack of a theme), with shuffled pairs mixed in; the second rater judged the
+orthogonal-to-read-direction list and the orthogonal-to-plane list for the same poles together. Pairs, keys and ratings are in
+`data/summary/write_parts/`.
+
+| layer | `cos(w, up)` | `|cos(w, gate)|` | the write's top 12 kept when orthogonalized to the plane |
+|---|---|---|---|
+| L6 | +0.35 | 0.06 | 0.57 |
+| L10 | +0.55 | 0.13 | 0.44 |
+| L14 | +0.45 | 0.14 | 0.46 |
+| L18 | +0.29 | 0.20 | 0.49 |
+| L22 | +0.26 | 0.14 | 0.53 |
+| L26 | +0.12 | 0.09 | 0.75 |
+| L30 | −0.02 | 0.06 | 0.85 |
+| L34 | −0.17 | 0.05 | 0.69 |
+
+- **The self-alignment is with `up`.** Through L14 a neuron's write leans on the direction its `up` row carries; the gate row's cosine is
+  small. At L18-L22 the two sizes close; by L30 the `up` alignment is gone, and it reverses at the last layers. Subtracting only the read
+  direction leaves half of this in, which is why the plane is the version in the catalog. `cos_up`, `cos_gate` keep it per pole.
+- **Effect sizes.** Steering, medians by band: the orthogonal part's effect is 84-100% of the whole write's, the along-read part's 8-34%; `r(whole, orth)` 0.94-1.00.
+  `r(along, orth)` is about 0 at every depth, but any two orthogonal vectors would tend to that, and no random-split control was run.
+- **Meaning, blind.** Orthogonal part against the pole's own read, per rater, among 240 real poles (same / related / different / unclear): rater 1,
+  L4-L20 18/5/5/116, L22-L34 10/24/5/57; rater 2, L4-L20 16/8/18/102, L22-L34 10/22/6/58; orthogonal to the plane (rater 2), 18/8/14/104 and 10/21/6/59;
+  shuffled pairs 0/3/6/51 and 0/0/16/44. The move to a related concept from L22 replicates; before it the part is as often unrelated as the same concept, and rarely
+  related. Removing either part of real firings is too noisy for this: 83% of those lists are unclear.
+- **Which kind of related.** Some late pairs are concept shifts (L22 n1988 +: faced, confronted → trying, navigating); others are collocates of a next word (L30 n165 +: dismantle → apart).
+
+**The `firings` table** (`17_firings.py`) reads what the residual holds where a pole fires, the layer's MLP output there and the model's prediction, as activation-side counterparts of these weight reads.
+Whether its `after` reads add anything over `before` and the write read is checked by `checks/firing_reads.py` once the pass has run.
+
+**Limits.** One model; a rater per comparison and many unclear lists, so the counts describe poles legible on both sides. The read direction is a heuristic, the
+lens read of a pole's input at early layers is uninformative for many (§6). §2, §3, §4, §7 and §17 measure top firings and edges at their earlier list sizes
+(24 and 16); catalog tables from this release hold 64, and those sections are re-measured after the GPU pass.
 
 ## Open questions
 
@@ -1198,5 +1244,4 @@ rescale each write per position.
   per slot, which would say where in an image a neuron looks.
 - Every pole's sources at its top firings, neurons and heads (§17's `explain` for the whole catalog),
   and weight edges for heads (OV writes into neurons, neurons into QK).
-- Whether a pole's read direction should follow its gate's sign at L1-L3, where half or more of top
-  firings ride SiLU's negative lobe (§17).
+- Whether the firing-averaged RelP direction (the gate's and `up`'s weights set by each firing's activation) improves on the sign flip at L1-L3 (§17).

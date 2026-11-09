@@ -112,7 +112,10 @@ to its write, the R-lens says what the write makes the model say, and the S-lens
 *footprints* it imitates (a token's footprint is the average change it makes to the stream at that
 layer). Raw reads share *hub tokens* that top many units' reads at once (` the`, ` and` early);
 the catalog also keeps *layer-contrastive* reads (`_z`), each token's score z-scored across the
-layer's units, which remove them.
+layer's units, which remove them. Each pole also has its write with what it reads removed (`write_orth_*`),
+the cosines of its write with the gate and up rows it reads (`cos_gate`, `cos_up`), and, from activations, the
+residual, MLP output and model prediction at its firings (the `firings` table) and, for Qwen3-8B, what drives it
+when it fires and what fires with it (`sources`, beside the weight `edges`).
 
 Some Qwen3-8B neuron entries (top tokens, abridged; ⟦ ⟧ marks the token where it fires):
 

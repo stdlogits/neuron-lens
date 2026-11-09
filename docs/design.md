@@ -154,12 +154,21 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
 | `read_R` | `softmax(W_U · norm(J_L^mid c))`: what the residual says when it drives the pole |
 | `read_S` | `c · K_L^mid (W_E[v] − ē)`: the input tokens that drive the pole |
 | `w_norm`, `cos_ab` | `‖W_down[:, n]‖`, `cos(a, b)` |
+| `cos_gate`, `cos_up` | the cosine of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
 | `vocab_skew`, `vocab_kurt` | of the pole's logit-lens logits: prediction and suppression neurons (Gurnee et al. 2024; §5) |
 | `null_share` | the write's share in the bottom 1% of singular directions of `W_U diag(γ)`: entropy neurons (Stolfo et al. 2024; §9) |
 
+- **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write with its components along
+  the neuron's gate and up rows removed (`neurons.orthogonal_write`), the part that adds something
+  beyond anything it reads (§18).
+- **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
+  `neg_lobe` past a half) reads the negative of `â ± b̂` (`neurons.read_rows`), and its `read_*`, `cos_gate`, `cos_up`
+  and in-edges follow it (§17).
 - **Layer-contrastive reads** (`_z`) z-score each token's score across the layer's poles (S-lens rows
   as unit vectors), which removes hub tokens. Raw `read_S` keeps literal tokens early; `read_S_z`
   gives concepts later but loses the literal peak token.
+- **One top-k.** Every ranked list the catalog stores has `catalog.TOP` = 64 entries (token reads, top firings,
+  edges, sources, media labels and documents).
 - **Depth:** each read keeps its top 64 tokens with scores (`_ids`, `_val`; `_str` the top 8 decoded);
   signal holds to rank 64 (§7). At L35, `write_R` is the logit lens.
 - **Which read to trust where** depends on depth (§7): the S-lens on the input side through L8, the
@@ -190,10 +199,19 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **Activations** (`06_activations.py`): one bf16 pass with eager attention over the activation
   corpora (below), hooking each `down_proj` input and each head's output. Per pole: exact counts of
   `|act|` on a quarter-octave grid from 2⁻¹⁰ to 2¹⁰, which give `rate` (past `act_top / 4`) and the
-  quantiles; the top firing in each document, keeping the 24 best; position 0 from every kept token run
+  quantiles; the top firing in each document, keeping the 64 best, each with its gate pre-activation
+  (`top_gate`; `neg_lobe`, the share below zero); position 0 from every kept token run
   alone. Per head, the same for the output norm `‖W_O^h z‖`, plus attention patterns (sink, previous,
   self) and the in-context read of its firings' outputs (`out_R_z`); induction and duplicate-token
   scores from 64 random sequences said twice.
+- **Firing reads** (`17_firings.py`, the `firings` table). Per pole, the mean over its top firings of the residual
+  entering the MLP (`before`, through `mid`), the layer's MLP output there (`mlp`, through `out`), the residual after
+  the layer (`after`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
+  logit), each with a `_z` variant across the layer's poles. Each firing is scaled by its own residual's RMS, so
+  `after = before · s + mlp`. They average over every top firing, so they stay off the label cards.
+- **Sources** (`18_sources.py`, the `sources` table, Qwen3-8B). The exact RelP split of each of a pole's first 5
+  top firings over the embedding, heads and upstream neurons (`driven_*`), and the upstream poles active there
+  by lift over their rate (`with_*`).
 - **Drivers** (`07_drivers.py`): every kept token at position 24 of 8 documents (4 web, 2 code, 2 chat),
   before the documents' own next 16 tokens. Per pole, the 64 tokens with the largest mean activation at
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and

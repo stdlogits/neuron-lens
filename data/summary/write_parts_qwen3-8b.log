@@ -1,0 +1,32 @@
+write parts, Qwen/Qwen3-8B: 511 poles
+L4-8     95 poles: cos +0.23, |along|/|whole| 0.14, |orth|/|whole| 0.96, r(whole, orth) +0.98, r(along, orth) -0.03
+L10-12   64 poles: cos +0.39, |along|/|whole| 0.26, |orth|/|whole| 0.87, r(whole, orth) +0.94, r(along, orth) -0.01
+L14-20  128 poles: cos +0.34, |along|/|whole| 0.25, |orth|/|whole| 0.93, r(whole, orth) +0.95, r(along, orth) +0.01
+L22-26   96 poles: cos +0.09, |along|/|whole| 0.16, |orth|/|whole| 1.00, r(whole, orth) +0.99, r(along, orth) -0.01
+L28-34  128 poles: cos -0.05, |along|/|whole| 0.08, |orth|/|whole| 1.00, r(whole, orth) +1.00, r(along, orth) -0.00
+
+read vs orthogonal to read direction (steering, rater 1)
+  L4-20  real     S  18 R   5 D   5 U 116
+  L4-20  shuffled S   0 R   3 D   3 U  30
+  L22-34 real     S  10 R  24 D   5 U  57
+  L22-34 shuffled S   0 R   0 D   3 U  21
+
+along vs orthogonal (steering)
+  L4-20  real     S  20 R   3 D   7 U 114
+  L4-20  shuffled S   2 R   0 D   1 U  33
+  L22-34 real     S  15 R  15 D   4 U  62
+  L22-34 shuffled S   0 R   1 D   5 U  18
+
+along vs orthogonal (firing)
+  L4-20  real     S  11 R   4 D   7 U 122
+  L4-20  shuffled S   0 R   0 D   2 U  34
+  L22-34 real     S   8 R   5 D   5 U  78
+  L22-34 shuffled S   0 R   0 D   0 U  24
+
+read vs orthogonal to read direction, and to the gate-up plane (one rater over both, rater 2)
+  read_orth L4-20  S  16 R   8 D  18 U 102
+  read_orth L22-34 S  10 R  22 D   6 U  58
+  plane     L4-20  S  18 R   8 D  14 U 104
+  plane     L22-34 S  10 R  21 D   6 U  59
+  shuffled  L4-20  S   0 R   0 D   9 U  27
+  shuffled  L22-34 S   0 R   0 D   7 U  17

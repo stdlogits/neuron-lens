@@ -13,8 +13,8 @@ its first ``N_CONTEXTS`` top firings (the firings the cards show, so these can s
 
 ``n_firings``: the firings used. Only ``RANK`` candidates per firing are kept for the merge over firings
 (a source outside them counts 0 at that firing). Qwen3-8B only: Gemma 4's norms rescale each write per position.
-A summary per band in ``data/summary/sources_<model>.{log,json}``: each kind's share, the decomposition's
-error, and how much the three relations overlap (driven by, wired to, ``16_edges.py``, fires with).
+Per layer in ``data/summary/sources_<model>.json``: each kind's share and the decomposition's largest
+error. ``checks/relations.py`` compares the three relations (driven by, wired to, fires with).
 
     python scripts/18_sources.py [--detach] [--docs N] [--layers a-b]
 """

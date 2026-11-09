@@ -43,7 +43,7 @@ import torch
 from huggingface_hub import HfApi
 
 from neuron_lens import arch
-from neuron_lens.catalog import MODEL, catalog_dir, kept
+from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept
 from neuron_lens.paths import CORPUS_DIR, DATA, FITS, ROOT, SUMMARY
 from neuron_lens.rules import HALF_RULE_BETA
 from neuron_lens.transport import SKIP_FIRST, Accumulator
@@ -66,6 +66,8 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                       "legible": "which reads hold at every pole's top firings",
                       "labels": "every pole's labels, by Claude Haiku 5.5",
                       "edges": "every pole's strongest direct weight edges from earlier poles and to later ones",
+                      "firings": "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+                      "sources": "what drives every pole when it fires, and the poles that fire with it",
                       "image": "every pole's image read and write, the images that drive it, and its cross-modal ranks",
                       "audio": "every pole's audio read and write, the sounds that drive it, and its cross-modal ranks"},
           "heads": {"acts": "every head's output statistics, top firings and attention patterns",
@@ -633,11 +635,15 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
 |---|---|---|
 | `write_R`, `write_R_z` | the R-lens, `softmax(W_U · norm(J^out_L w))`; `_val` are probabilities (the logit lens at the last layer) | the write `w` (Qwen3-8B: `±W_down[:, n]`) |
 | `write_S`, `write_S_z` | the S-lens to the layer's output: tokens whose footprint the write imitates | the write |
+| `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18) |
 | `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` |
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
 
 `â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight, normalized: `â ± b̂`
-is a heuristic direction for each pole. Also per row: `w_norm`, `cos_ab`, `null_share` (the share of the
+is a heuristic direction for each pole, its negative for a pole whose top firings ride SiLU's negative
+lobe (`acts`' `neg_lobe` past a half; §17). Also per row: `w_norm`, `cos_ab`, `cos_gate`, `cos_up` (the
+cosine of the pole's write with the gate and up sides of what it reads, positive where it writes toward
+them; §18), `null_share` (the share of the
 write in the bottom 1% of singular directions of `W_U diag(γ)`, where entropy neurons write; Stolfo et
 al. 2024) and `vocab_skew`, `vocab_kurt` of `W_U · norm(w)` (Gurnee et al. 2024's prediction and
 suppression neurons).
@@ -650,11 +656,13 @@ Over every document of four slices, up to 256 tokens each, in bf16: DCLM held ou
 corpus, FineWeb-2 Chinese, codeparrot Python, and UltraChat dialogues ({q['docs']:,} documents and
 {q['positions']:,} positions for Qwen3-8B, {g['docs']:,} and {g['positions']:,} for Gemma 4; `docs.parquet`).
 
-- `act_top`: the median of the 24 top firings, the pole's typical high activation; `act_max`.
+- `act_top`: the median of the {TOP} top firings, the pole's typical high activation; `act_max`.
 - `rate`: the share of positions past `act_top / 4`, from exact counts on a quarter-octave grid (linear
   between its points); `rate_<slice>` per slice; `pos_share`: where the pole's sign holds; `q50`-`q999`:
   quantiles of the activation times the pole's sign, from the same counts; `mean`, `std`.
-- `top_doc`, `top_pos`, `top_val`: the 24 top firings; `peak_tokens` and the first 5 `contexts`.
+- `top_doc`, `top_pos`, `top_val`, `top_gate` (the gate pre-activation there): the {TOP} top firings; `neg_lobe`, the
+  share of them on SiLU's negative lobe; `peak_tokens`, `next_tokens` (the tokens after the firings) and the
+  first 5 `contexts`.
 - `first_max`, `first_tokens`, `first_chat`: the first position (left out above, where the attention
   sink forms), where activations depend on the token alone: the largest over every kept token, the 3
   tokens that reach it, and the value on the chat transcript's opening token. Many of Qwen3-8B's L2-L3
@@ -706,10 +714,26 @@ labels late (80% picked at L28-L35, 41% at L0-L8). Gemma 4's neuron labels are n
 
 ![Random poles read blind](figures/14_lens_blind.png)
 
+### `<model>-neurons-firings`: reads at the firings
+
+The residual at a pole's {TOP} top firings, averaged (each firing scaled by its residual's RMS) and read through the lenses, §18:
+`before_R`, `before_S`, the residual entering the MLP, through `mid`: what the pole's input holds where it fires; `mlp_R`, `mlp_S`, the
+layer's whole MLP output there, through `out`: what the layer writes when the pole fires, the pole and the neurons firing with it;
+`after_R`, `after_S`, the residual after the layer, through `out`; and `pred`, the model's mean next-token logit there. Each has a `_z`
+variant across the layer's poles. `n_firings`: how many firings went in.
+
+### `qwen3-8b-neurons-sources`: what drives a pole, and what fires with it
+
+At a pole's first 5 top firings, the exact RelP split of its activation over the embedding, the heads and earlier neurons (§17). `driven_*`:
+the {TOP} upstream poles with the largest mean share, `driven_head_*` the same of the heads, and `emb_share`, `heads_share`,
+`neurons_share` each kind's mean share. `with_*`: the {TOP} earlier poles active at `act_top / 4` or more at the pole's firings, by lift
+(`with_lift`, the share of those firings where they are active over their overall `rate`), with that share (`with_co`). The three relations
+differ: of a pole's top 16 driven-by sources, a median of 25-44% are in its top 16 wired-to or fires-with lists (32 random neurons a layer, L6-L30).
+
 ### `qwen3-8b-neurons-edges`: direct weight edges
 
 What a neuron writes reaches every later layer's MLP input unchanged, so each pole has a direct edge to
-every pole of a later layer (§17). Per pole, its 16 strongest in-edges (`in_*`, from earlier poles) and
+every pole of a later layer (§17). Per pole, its {TOP} strongest in-edges (`in_*`, from earlier poles) and
 out-edges (`out_*`, to later ones), strongest first: `_layer`, `_neuron`, `_pole` name the other pole;
 `_cos` is the cosine of the earlier pole's write with the later pole's read direction, and `_push` is
 `cos · act_top · ‖w‖ / rms`, how far one of the earlier pole's top firings moves the later pole's
@@ -736,7 +760,7 @@ and one linear map. One row per pole, beside the text tables:
 | `write_R`, `write_R_z` | the write through the modality's R-lens: what it makes the model say in image or audio contexts |
 | `label`, `label_z`, `label_mean`, `labels_str` | its top labels by the z of its mean activation over each label's documents (labels on 8 or more documents: {media['image']['labels_scored']:,} for images, {media['audio']['labels_scored']:,} for sound) |
 | `sig`, `stable`, `auroc_heldout` | the top label past the shuffled-label null's 99th percentile for its layer; in the top 5 of both halves of the documents; chosen on even documents, its AUROC on odd ones |
-| `top_docs`, `top_vals` | the 16 documents with its largest mean activation (rows of `media/<modality>_docs.parquet`) |
+| `top_docs`, `top_vals` | the {TOP} documents with its largest mean activation (rows of `media/<modality>_docs.parquet`) |
 | `text_fire_rank`, `text_read_rank`, `text_write_rank` | for a reliable label, its rank among the modality's labels on the text side (1 first, 0.5 chance): firing on the label's words, the text S-lens read, the text R-lens write |
 
 A media read sums over a document's 64 slots, so it is one pattern wherever it sits, not a map of
