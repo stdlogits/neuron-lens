@@ -28,6 +28,7 @@ import argparse
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +60,7 @@ def main():
     ap.add_argument("--top-docs", type=int, default=TOP)
     ap.add_argument("--min-docs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--workers", type=int, default=16, help="threads preparing each batch's documents")
     ap.add_argument("--modalities", default="audio,image")
     ap.add_argument("--out", help="output folder (default data/catalog/<model>/media)")
     ap.add_argument("--wait-free-gb", type=float, default=0, help="before the forward passes, wait until the GPU has this much free")
@@ -83,6 +85,7 @@ def main():
                       x.masked_fill(m[..., None] == 0, float("inf")).amin(1))
         return model.layers[i].mlp.down_proj.register_forward_pre_hook(f_)
     hooks = [hook(i) for i in range(L)]
+    pool = ThreadPoolExecutor(args.workers)  # the processors are CPU work the GPU would wait for
     for modality in args.modalities.split(","):
         t1 = time.perf_counter()
         docs_all = (image_collection if modality == "image" else audio_collection)(args.scale)
@@ -103,7 +106,7 @@ def main():
         while args.wait_free_gb and torch.cuda.mem_get_info(dev)[0] / 2 ** 30 < args.wait_free_gb:  # a shared GPU
             time.sleep(15)
         for start in range(0, n, args.batch):
-            batch = [processed(proc, modality, x) for x in items[start:start + args.batch]]
+            batch = list(pool.map(lambda x: processed(proc, modality, x), items[start:start + args.batch]))
             inp = {key: torch.cat([d[key] for d in batch]).to(dev) for key in batch[0]}
             inp = {key: v.to(torch.bfloat16) if v.is_floating_point() else v for key, v in inp.items()}
             mask["m"] = (inp["input_ids"] == sid).float()

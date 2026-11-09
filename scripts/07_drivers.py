@@ -4,7 +4,9 @@ Every kept token (``catalog.kept``) goes into 8 real documents (4 DCLM, 2 code, 
 full-length ones of the activation slices) at position 24, in place of the token there, with the
 documents' own 16 tokens after it; results are averaged over the documents (findings §6). Eager
 attention, bf16; an fp32 rerun through L9 kept 98-99% of a pole's top 20 (§6,
-``checks/drivers_precision.py``, which imports this pass's documents, order and reductions).
+``checks/drivers_precision.py``, which imports this pass's documents, order and reductions). Attention is
+causal, so the first 24 positions don't depend on the token: they run once per document and every pass
+continues from their cache.
 
 - **Neurons** (``neurons/drivers/L<layer>.parquet``): per pole, the 64 tokens with the largest
   activation at their own position (``drivers``), and summed over it and the 16 after
@@ -19,6 +21,7 @@ output as it reaches the residual (the post-attention norm's weight and its scal
     python scripts/07_drivers.py
 """
 import argparse
+import copy
 import time
 
 import torch
@@ -95,7 +98,7 @@ def main() -> None:
 
     def neuron(l: int):
         def hook(m, x):
-            a = x[0][:, AT:].float().unflatten(0, (D, -1))  # [D, B, 1 + AFTER, f]
+            a = x[0].float().unflatten(0, (D, -1))  # [D, B, 1 + AFTER, f]
             for key, v in pole_drivers(a).items():
                 for p, sign in enumerate((1, -1)):
                     merge(key, (l, p), sign * v.T, cur["ids"])
@@ -103,29 +106,32 @@ def main() -> None:
 
     def attention(l: int):
         def hook(m, x, out):
-            z = stash.pop(l)[:, AT].float().view(-1, H, geo[l].head_dim)  # [D·B, H, hd]: the token as the query
+            z = stash.pop(l)[:, 0].float().view(-1, H, geo[l].head_dim)  # [D·B, H, hd]: the token as the query
             scale = arch.attn_scale(model.layers[l], out[0])  # Gemma 4: the post-attention norm's scale
             if scale is not None:
-                z = z * scale[:, AT, None, None]
+                z = z * scale[:, 0, None, None]
             norm = torch.einsum("nhi,hij,nhj->nh", z, gram[l], z).clamp_min(0).sqrt()
             merge("h_out", l, norm.unflatten(0, (D, -1)).mean(0).T, cur["ids"])
-            key = out[1][:, :, AT + 1:, AT].float().mean(-1)  # [D·B, H]: attention from the positions after it
+            key = out[1][:, :, 1:, AT].float().mean(-1)  # [D·B, H]: attention from the positions after it
             merge("h_key", l, key.unflatten(0, (D, -1)).mean(0).T, cur["ids"])
         return hook
-    for l, m in enumerate(model.layers):
-        m.mlp.down_proj.register_forward_pre_hook(neuron(l))
-        m.self_attn.o_proj.register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
-        m.self_attn.register_forward_hook(attention(l))
-
     order = token_order()
     t0 = time.time()
     with torch.inference_mode():
+        prefix = model(input_ids=docs[:, :AT], use_cache=True).past_key_values
+        for l, m in enumerate(model.layers):  # from here on every pass starts at the token
+            m.mlp.down_proj.register_forward_pre_hook(neuron(l))
+            m.self_attn.o_proj.register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
+            m.self_attn.register_forward_hook(attention(l))
         for i in range(0, len(order), args.batch):
             ids = order[i:i + args.batch].to(dev)
             cur["ids"] = ids
-            batch = docs[:, None].repeat(1, len(ids), 1)  # [D, B, T]
-            batch[:, :, AT] = ids
-            model(input_ids=batch.flatten(0, 1))
+            batch = docs[:, None, AT:].repeat(1, len(ids), 1)  # [D, B, 1 + AFTER]
+            batch[:, :, 0] = ids
+            cache = copy.deepcopy(prefix)
+            cache.batch_repeat_interleave(len(ids))  # document-major, as the batch is flattened
+            model(input_ids=batch.flatten(0, 1), past_key_values=cache, use_cache=True)
+            del cache
             if (i // args.batch) % 100 == 0:
                 print(f"{time.strftime('%H:%M:%S')} {i + len(ids)}/{len(order)} tokens, {time.time() - t0:.0f}s", flush=True)
 
