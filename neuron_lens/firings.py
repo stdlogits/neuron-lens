@@ -18,6 +18,17 @@ from neuron_lens import arch
 SITES = ("before", "mlp", "pred")
 
 
+def gather(tensors: list[torch.Tensor]) -> list[torch.Tensor]:
+    """``tensors`` on the CPU, in one transfer per dtype: a transfer each would stop the GPU for each. Each comes
+    back a view of a shared buffer, so what stays around needs a ``clone``."""
+    out = [None] * len(tensors)
+    for dt in {t.dtype for t in tensors}:
+        at = [i for i, t in enumerate(tensors) if t.dtype == dt]
+        for i, part in zip(at, torch.cat([tensors[i].flatten() for i in at]).cpu().split([tensors[i].numel() for i in at])):
+            out[i] = part.view(tensors[i].shape)
+    return out
+
+
 def firing_plan(doc: torch.Tensor, pos: torch.Tensor, val: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """A layer's firings from its ``[2f, K]`` ``top_doc``, ``top_pos``, ``top_val``: ``(doc, pos, pole row)``,
     flat, sorted by document, those with a positive value."""
@@ -28,8 +39,8 @@ def firing_plan(doc: torch.Tensor, pos: torch.Tensor, val: torch.Tensor) -> tupl
 
 
 class Accumulator:
-    """Running sums ``[2f, d]`` per site and layer, on the CPU; ``hooks`` adds to them during a forward pass.
-    Between ``begin`` and the end of each batch, documents ``a..b`` are rows ``0..`` of the batch."""
+    """Running sums ``[2f, d]`` per site and layer, on the CPU. ``begin`` a batch of documents ``a..b`` (rows ``0..``
+    of the batch), run the forward pass with ``hooks`` on, ``flush`` its firings into the sums."""
 
     def __init__(self, plan: dict[int, tuple], f: int, d: int, device):
         self.plan = {l: tuple(t.to(device) for t in p) for l, p in plan.items()}
@@ -39,6 +50,7 @@ class Accumulator:
         self.count = {l: torch.zeros(2 * f) for l in self.layers}
         self.scale, self.scalar = {}, {l: 1.0 for l in self.layers}
         self.a = self.b = 0
+        self.out = []  # (site, layer, pole rows, [n, d]), on the GPU until the batch ends
 
     def begin(self, a: int, b: int) -> None:
         self.a, self.b = a, b
@@ -52,20 +64,27 @@ class Accumulator:
         bi, p, r = self._firings(l)
         v = x[bi, p].float()
         self.scale[l] = torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))
-        r = r.long().cpu()
-        self.sum["before"][l].index_add_(0, r, (v * self.scale[l]).cpu())
-        self.count[l].index_add_(0, r, torch.ones(len(r)))
+        self.out.append(("before", l, r, v * self.scale[l]))
 
     def mlp(self, l: int, out: torch.Tensor, scalar) -> None:
         bi, p, r = self._firings(l)
         v = out[bi, p].float() * (1 if scalar is None else scalar.float().reshape(()))
-        self.sum["mlp"][l].index_add_(0, r.long().cpu(), (v * self.scale[l]).cpu())
+        self.out.append(("mlp", l, r, v * self.scale[l]))
 
     def pred(self, x: torch.Tensor) -> None:
         for l in self.layers:
             bi, p, r = self._firings(l)
             v = x[bi, p].float()
-            self.sum["pred"][l].index_add_(0, r.long().cpu(), (v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))).cpu())
+            self.out.append(("pred", l, r, v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))))
+
+    def flush(self) -> None:
+        got = gather([t for *_, r, v in self.out for t in (r, v)])
+        for (site, l, *_), r, v in zip(self.out, got[::2], got[1::2]):
+            r = r.long()
+            self.sum[site][l].index_add_(0, r, v)
+            if site == "before":
+                self.count[l].index_add_(0, r, torch.ones(len(r)))
+        self.out = []
 
     def hooks(self, stack) -> list:
         out = []

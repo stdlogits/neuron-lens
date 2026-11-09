@@ -19,7 +19,7 @@ import torch
 
 from neuron_lens import arch
 from neuron_lens.catalog import N_CONTEXTS, TOP, column, fixed, neuron_keys, neuron_table
-from neuron_lens.firings import firing_plan
+from neuron_lens.firings import firing_plan, gather
 from neuron_lens.rules import norm_eps
 
 RANK = 256  # candidates kept per firing for driven-by
@@ -166,32 +166,37 @@ class Sources:
 
     @torch.inference_mode()
     def split(self) -> None:
-        for M, (row, u) in self.pending.items():
-            if len(row):
-                self.layer(M, row, u)
+        done = {M: self.layer(M, row, u) for M, (row, u) in self.pending.items() if len(row)}
         self.cap.clear()
+        got = iter(gather([t for parts in done.values() for t in parts]))
+        for M, parts in done.items():
+            self.record(M, *(next(got) for _ in parts))
 
-    def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> None:
+    def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> list[torch.Tensor]:
+        """A layer's firings of this batch, ``split`` and ranked, on the GPU, in ``record``'s order."""
         cap, f = self.cap, self.f
         s = self.flow.sources(cap, M, row.long() % f, u)
-        d = self.dense[M]
-        r = row.long().cpu()
-        d["heads"].index_add_(0, r, s["heads"].cpu())
-        d["emb"].index_add_(0, r, s["emb"].cpu())
-        d["neurons"].index_add_(0, r, s["neurons"].sum(1).cpu())
-        d["n"].index_add_(0, r, torch.ones(len(r)))
-        d["err"].append((s["emb"] + s["heads"].sum(1) + s["neurons"].sum(1) - 1).abs().amax().item())
-        if M == 0:
-            return
         acts = torch.cat([cap["a", l][u] for l in range(M)], 1)  # [N, M·f]
         pid = (torch.arange(M, device=self.dev)[:, None] * 2 * f + torch.arange(f, device=self.dev)).flatten() + f * (acts < 0)  # [N, M·f]
         top = s["neurons"].abs().topk(min(RANK, s["neurons"].shape[1]), dim=1).indices
-        self.sparse[M]["driven"].append((r, pid.gather(1, top).int().cpu(), s["neurons"].gather(1, top).cpu()))
+        driven = pid.gather(1, top).int(), s["neurons"].gather(1, top)
         fires = (acts.abs() >= FIRE * self.act_top[pid]) & (self.act_top[pid] > 0)  # a silent pole doesn't fire at zero
         lift = fires / self.rate[pid].clamp_min(self.rate_floor)
         top = lift.topk(min(RANK_WITH, lift.shape[1]), dim=1).indices
         n, k = fires.gather(1, top).nonzero(as_tuple=True)
-        self.sparse[M]["with"].append((r[n.cpu()].int(), pid.gather(1, top)[n, k].int().cpu()))
+        err = (s["emb"] + s["heads"].sum(1) + s["neurons"].sum(1) - 1).abs().amax()
+        return [row, s["heads"], s["emb"], s["neurons"].sum(1), err[None], *driven, row[n], pid.gather(1, top)[n, k].int()]
+
+    def record(self, M: int, row, heads, emb, neurons, err, driven_id, driven_val, with_row, with_id) -> None:
+        d = self.dense[M]
+        r = row.long()
+        d["heads"].index_add_(0, r, heads)
+        d["emb"].index_add_(0, r, emb)
+        d["neurons"].index_add_(0, r, neurons)
+        d["n"].index_add_(0, r, torch.ones(len(r)))
+        d["err"].append(err.item())
+        self.sparse[M]["driven"].append((r.clone(), driven_id.clone(), driven_val.clone()))
+        self.sparse[M]["with"].append((with_row.clone(), with_id.clone()))
 
     def state(self) -> dict:
         return {"dense": self.dense, "sparse": self.sparse}
