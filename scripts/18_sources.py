@@ -20,7 +20,6 @@ error. ``checks/relations.py`` compares the three relations (driven by, wired to
     python scripts/18_sources.py [--detach] [--docs N] [--layers a-b]
 """
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -57,13 +56,11 @@ class Pass:
         self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, stack.config.num_attention_heads
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
         self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev).flatten()
-        self.plan, self.fp = {}, hashlib.sha256()
+        self.plan = {}
         for l in layers:
             t = pq.read_table(neuron_table("acts", l), columns=["top_doc", "top_pos", "top_val"])
             doc, pos, row = firing_plan(column(t, "top_doc", N_CONTEXTS).long(), column(t, "top_pos", N_CONTEXTS).long(), column(t, "top_val", N_CONTEXTS))
             self.plan[l] = (doc.to(dev), pos.to(dev), row.to(dev))
-            for x in (doc, pos, row):
-                self.fp.update(x.numpy().tobytes())
         self.cap = {}
         self.sparse = {l: {"driven": [], "with": []} for l in layers}  # (row, ids, vals) per batch, on the CPU
         self.dense = {l: {"heads": torch.zeros(2 * self.f, (l + 1) * self.H), "emb": torch.zeros(2 * self.f), "neurons": torch.zeros(2 * self.f),
@@ -223,9 +220,7 @@ def main() -> None:
         docs = docs[:args.docs]
     p = Pass(stack, layers, args.device, sum(len(d) for d in docs))
     hooks = p.hooks()
-    for d in docs:
-        p.fp.update(d.numpy().tobytes())
-    meta, next_doc = {"model": MODEL, "layers": layers, "contexts": N_CONTEXTS, "top": TOP, "sha256": p.fp.hexdigest()}, 0
+    meta, next_doc = {"model": MODEL, "layers": layers, "contexts": N_CONTEXTS, "top": TOP, "docs": len(docs)}, 0
     if STATE.exists() and args.docs is None:
         saved = torch.load(STATE, weights_only=False, map_location="cpu")
         if saved["meta"] != meta:

@@ -27,7 +27,6 @@ Runs from the ``acts`` tables and documents, in bf16 (as ``06_activations.py``),
 ``--docs N`` is a smoke test: only the first N documents, printing what it collected, writing no table.
 """
 import argparse
-import hashlib
 import os
 import subprocess
 import sys
@@ -56,23 +55,12 @@ def layer_plan(layer: int) -> tuple:
     return firing_plan(column(t, "top_doc").long(), column(t, "top_pos").long(), column(t, "top_val"))
 
 
-def fingerprint(docs: list[torch.Tensor], plans: dict) -> str:
-    """A hash of the documents and every layer's firing list: a checkpoint is only good for these."""
-    h = hashlib.sha256()
-    for d in docs:
-        h.update(d.numpy().tobytes())
-    for l in sorted(plans):
-        for t in plans[l]:
-            h.update(t.numpy().tobytes())
-    return h.hexdigest()
-
-
 def collect(args, layers: list[int], docs: list[torch.Tensor]) -> Accumulator:
     lm, stack = arch.load_model(MODEL, args.device, eager=False)
     cfg = stack.config
     plans = {l: layer_plan(l) for l in layers}
     acc = Accumulator(plans, cfg.intermediate_size, cfg.hidden_size, args.device)
-    meta = {"model": MODEL, "layers": layers, "top": TOP, "sha256": fingerprint(docs, plans)}
+    meta = {"model": MODEL, "layers": layers, "top": TOP, "docs": len(docs)}
     next_doc = 0
     if STATE.exists() and args.docs is None:
         saved = torch.load(STATE, weights_only=False, map_location="cpu")
