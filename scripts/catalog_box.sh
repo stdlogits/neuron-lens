@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The catalog passes that need a GPU, on a rented box (GH200, or any CUDA machine with about 96 GB of
-# GPU memory and 400 GB of RAM):
+# GPU memory, 400 GB of RAM and 500 GB of disk). MEDIA=1 in the environment adds Gemma 4's media stages:
 #
 #   git clone -b neuron-lens-2 https://github.com/stdlogits/neuron-lens && cd neuron-lens
 #   export HF_TOKEN=hf_...          # Gemma 4 is gated; the released lenses are read from the Hub
@@ -10,13 +10,14 @@
 # if it cannot, for example TORCH_ARGS="--index-url https://download.pytorch.org/whl/cu128"), downloads
 # the models, rebuilds the corpora at the revisions in data/corpus/*.provenance.json and the token
 # counts, and starts scripts/catalog_queue.sh detached. Progress is in logs/catalog_queue.log, each
-# stage's output in logs/<stage>.log. A rerun of the queue resumes 06, 17 and 18 from their checkpoints
-# (the media stages, with MEDIA=1, restart).
+# stage's output in logs/<stage>.log. A rerun of the queue skips finished stages and resumes 06, 17, 18 and
+# the causal checks from their checkpoints.
 #
 # When the queue is done, copy the results to the machine that keeps the catalog and destroy the box:
 #
 #   rsync -av --include='*/' --include='*.parquet' --include='*.pt' --exclude='*' box:neuron-lens/data/catalog/ data/catalog/
-#   rsync -av box:neuron-lens/data/acts/ data/acts/
+#   rsync -av --exclude='*-firings.pt' --exclude='*-sources.pt' box:neuron-lens/data/acts/ data/acts/   # those checkpoints are 40-70 GB each and done with
+#   rsync -av box:neuron-lens/data/causal/ data/causal/
 #   rsync -av box:neuron-lens/data/summary/ data/summary/
 #   rsync -av box:neuron-lens/logs/ logs/box/
 set -euo pipefail

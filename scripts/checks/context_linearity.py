@@ -2,7 +2,7 @@
 and how much of that push does its lens read capture?
 
 **Poles.** §3's random neurons (``causal_lens.random_neurons``: 32 a layer, seed 0), both poles. A pole
-is measured at its top firings, the strongest position in each of its 24 top documents (the ``acts``
+is measured at its top firings, the strongest position in each of its top documents (``catalog.TOP``; the ``acts``
 table's ``top_doc``, ``top_pos``, ``top_val``; positions from 1), those where it fired (``top_val > 0``),
 and is scored if it fired in at least 2 (Qwen3-8B: 2,290 of 2,304 poles).
 

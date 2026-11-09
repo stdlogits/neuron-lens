@@ -195,8 +195,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
 - The catalog's GPU stages: `scripts/catalog_box.sh` installs on a rented box (a GH200 works) and starts
-  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for Qwen3-8B, then `06`, `17` for Gemma 4.
-  Its header has the commands to copy the results back. The weight-only stages run on a Mac from those tables.
+  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `18` for Qwen3-8B, then `06`, `17` for Gemma 4, then
+  `08`, `09`, `16` and the `measure` halves of the causal checks (`MEDIA=1` adds `13`, `14`). Its header has the
+  commands to copy the results back. The checks' `score` halves run where the comparison lenses are.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,
   runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
   torch's default of one thread per core makes CPU ops on small tensors spin for minutes. Run one
