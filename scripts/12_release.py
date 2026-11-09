@@ -27,9 +27,13 @@ repo, and numbers from ``data/summary/``. What a card needs to know about a mode
 counts, documents, the lenses' fits) is kept in ``data/summary/release_<model>.json``, updated by
 each run that builds that model's files, so a run for one model rebuilds the cards for all.
 New repos are created private. Run where the fits and the catalog are, logged in to the Hub.
-``--parts`` picks what to build and upload; ``--parts ""`` updates just the cards and figures:
+``--parts`` picks what to build and upload; ``--parts ""`` updates just the cards and figures. ``--branch`` uploads to
+that branch of both repos, made from ``main`` if it is new. ``--tables`` sends only those tables, as the catalog holds them,
+to the dataset's ``--branch``, leaving the cards alone, so a run can publish each table as soon as its stage is done
+(``scripts/catalog_queue.sh``):
 
-    NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--dry-run]
+    NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
+    NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
 """
 import argparse
 import json
@@ -961,11 +965,28 @@ and [@treetowntree](https://x.com/treetowntree) with Claude (Anthropic), {date}.
 
 # ---------------------------------------------------------------- the release
 
+def upload_tables(model: str, tables: list[str], branch: str) -> None:
+    """``tables`` of the model's catalog, as they are, to the dataset's ``branch``. A table is its ``neurons/<t>/`` shards,
+    ``heads/<t>.parquet`` and ``neurons/<t>_optimised.parquet``, whichever exist; ``docs`` is ``docs.parquet``, ``media`` the media documents."""
+    stem, api = arch.stem(model), HfApi()
+    named = {"docs": ["docs.parquet"], "media": ["media/*_docs.parquet"]}
+    api.create_branch(DATASET, repo_type="dataset", branch=branch, exist_ok=True)
+    api.upload_folder(repo_id=DATASET, repo_type="dataset", revision=branch, folder_path=catalog_dir(model), path_in_repo=stem,
+                      allow_patterns=[p for t in tables for p in named.get(t, [f"neurons/{t}/L*.parquet", f"heads/{t}.parquet", f"neurons/{t}_optimised.parquet"])],
+                      commit_message=f"{stem}: {', '.join(tables)}")
+    print(f"{time.strftime('%H:%M:%S')} {stem}: {', '.join(tables)} on {DATASET}@{branch}", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--parts", default=",".join(PARTS), help=f"what to build and upload: {', '.join(PARTS)}; empty for the cards alone")
+    ap.add_argument("--branch", default=None, help="the branch of both repos to upload to (default main)")
+    ap.add_argument("--tables", default=None, help="only these catalog tables, to --branch, without the cards")
     ap.add_argument("--dry-run", action="store_true", help="build the files and cards, upload nothing")
     args = ap.parse_args()
+    if args.tables is not None:
+        upload_tables(MODEL, args.tables.split(","), args.branch)
+        return
     parts = set(filter(None, args.parts.split(",")))
     if parts - set(PARTS):
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
@@ -1003,18 +1024,22 @@ def main() -> None:
         print(f"dry run: cards in {lens_root} and {data_root}")
         return
     api.create_repo(REPO, private=True, exist_ok=True)
-    api.upload_folder(repo_id=REPO, folder_path=lens_root,
+    if args.branch:
+        api.create_branch(REPO, branch=args.branch, exist_ok=True)
+    api.upload_folder(repo_id=REPO, folder_path=lens_root, revision=args.branch,
                       allow_patterns=["README.md", "figures/*"] + ([f"{stem}/**"] if "lenses" in parts else []),
                       delete_patterns=["figures/*", "*/README.md", "*/figures/*"] + ([f"{stem}/**"] if "lenses" in parts else []),
                       commit_message=f"{stem}: lenses, cards and figures" if "lenses" in parts else "Cards and figures")
-    lens_rev = api.repo_info(REPO).sha[:10]
+    lens_rev = api.repo_info(REPO, revision=args.branch).sha[:10]
     print(f"{time.strftime('%H:%M:%S')} model repo at {lens_rev}: https://huggingface.co/{REPO}", flush=True)
     (data_root / "README.md").write_text(dataset_card(every, lens_rev, date))
     api.create_repo(DATASET, repo_type="dataset", private=True, exist_ok=True)
+    if args.branch:
+        api.create_branch(DATASET, repo_type="dataset", branch=args.branch, exist_ok=True)
     built = [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
     stale = ["figures/*", "*/README.md", "*/figures/*"] + (
         [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
-    api.upload_folder(repo_id=DATASET, repo_type="dataset", folder_path=data_root,
+    api.upload_folder(repo_id=DATASET, repo_type="dataset", folder_path=data_root, revision=args.branch,
                       allow_patterns=["README.md", "figures/*", *built], delete_patterns=stale,
                       commit_message=(f"{stem}: {', '.join(sorted(parts - {'lenses'}))}, cards" if parts - {"lenses"} else "Cards")
                                      + f" and figures (reads through {REPO}@{lens_rev})")
