@@ -1,0 +1,151 @@
+# Profiles of the catalog's GPU stages, Qwen3-8B on one H100 NVL, 2026-11-09.
+
+## 06_activations.py (recorded from the run's console, no log kept)
+forward alone, sdpa: 21.3k tokens/s; eager: 19.4-19.7k; flat in batch size up to 128 documents (peak 17-23 GiB)
+with hooks, 32 documents a batch: 8.8k tokens/s, 0.846 s/batch: neuron hook 0.298, of which grid counts 0.182; attention 0.127; qk_norm 0.051; input_norm 0.008
+grid counts from a table of every bf16 pattern and top lists redone only for columns with a new entry, 40 batches: 8,998 -> 9,647 tokens/s, identical except float-order rounding in the sums of offset (0.125) and recv (20.0)
+
+## 17_firings.py: fp32, TF32 and bf16 forwards and splits
+
+forward only highest: 2564 tok/s, 2.915 s/batch
+forward only high: 12156 tok/s, 0.615 s/batch
+
+forward only bf16: 21109 tok/s, 0.354 s/batch
+parts ('acc',) pass forward=high split=high: 10467 tok/s, 0.722 s/batch (forward with hooks 0.716, split 0.000), peak 50 GiB
+parts ('src',) pass forward=high split=high: 8099 tok/s, 0.933 s/batch (forward with hooks 0.607, split 0.322), peak 54 GiB
+pass forward=highest split=highest: 2006 tok/s, 3.767 s/batch (forward with hooks 3.214, split 0.549), peak 54 GiB
+pass forward=high split=highest: 5780 tok/s, 1.307 s/batch (forward with hooks 0.752, split 0.550), peak 55 GiB
+pass forward=high split=high: 7216 tok/s, 1.047 s/batch (forward with hooks 0.747, split 0.295), peak 56 GiB
+pass forward=high split=high: 9546 tok/s, 0.791 s/batch (forward with hooks 0.492, split 0.295), peak 57 GiB
+--- tf32+fp32split against fp32
+  L6 firings before: cos median 1.000000, min 0.999999
+  L6 firings mlp: cos median 1.000000, min 0.999999
+  L6 firings pred: cos median 1.000000, min 0.999989
+  L6 driven: top-16 overlap 0.9998, top-64 0.9996
+  L6 with: top-16 overlap 0.9995, top-64 0.9994
+  L6 sources: err 2.70e-04 (fp32 1.19e-06), driven share corr 0.998928
+  L14 firings before: cos median 1.000000, min 0.999999
+  L14 firings mlp: cos median 1.000000, min 0.999949
+  L14 firings pred: cos median 1.000000, min 0.999963
+  L14 driven: top-16 overlap 0.9997, top-64 0.9995
+  L14 with: top-16 overlap 0.9993, top-64 0.9991
+  L14 sources: err 5.18e-04 (fp32 2.80e-06), driven share corr 0.996056
+  L21 firings before: cos median 1.000000, min 0.999955
+  L21 firings mlp: cos median 1.000000, min 0.999696
+  L21 firings pred: cos median 1.000000, min 0.999813
+  L21 driven: top-16 overlap 0.9996, top-64 0.9994
+  L21 with: top-16 overlap 0.9990, top-64 0.9992
+  L21 sources: err 4.86e-04 (fp32 2.15e-06), driven share corr 0.994514
+  L30 firings before: cos median 1.000000, min 0.999965
+  L30 firings mlp: cos median 1.000000, min 0.999818
+  L30 firings pred: cos median 1.000000, min 0.999911
+  L30 driven: top-16 overlap 0.9997, top-64 0.9996
+  L30 with: top-16 overlap 0.9995, top-64 0.9993
+  L30 sources: err 3.61e-04 (fp32 1.19e-06), driven share corr 0.998559
+--- tf32 against fp32
+  L6 firings before: cos median 1.000000, min 0.999999
+  L6 firings mlp: cos median 1.000000, min 0.999999
+  L6 firings pred: cos median 1.000000, min 0.999989
+  L6 driven: top-16 overlap 0.9998, top-64 0.9996
+  L6 with: top-16 overlap 0.9995, top-64 0.9994
+  L6 sources: err 3.03e-04 (fp32 1.19e-06), driven share corr 0.998824
+  L14 firings before: cos median 1.000000, min 0.999999
+  L14 firings mlp: cos median 1.000000, min 0.999949
+  L14 firings pred: cos median 1.000000, min 0.999963
+  L14 driven: top-16 overlap 0.9997, top-64 0.9995
+  L14 with: top-16 overlap 0.9993, top-64 0.9991
+  L14 sources: err 3.87e-04 (fp32 2.80e-06), driven share corr 0.995884
+  L21 firings before: cos median 1.000000, min 0.999955
+  L21 firings mlp: cos median 1.000000, min 0.999696
+  L21 firings pred: cos median 1.000000, min 0.999813
+  L21 driven: top-16 overlap 0.9995, top-64 0.9994
+  L21 with: top-16 overlap 0.9990, top-64 0.9992
+  L21 sources: err 4.08e-04 (fp32 2.15e-06), driven share corr 0.994216
+  L30 firings before: cos median 1.000000, min 0.999965
+  L30 firings mlp: cos median 1.000000, min 0.999818
+  L30 firings pred: cos median 1.000000, min 0.999911
+  L30 driven: top-16 overlap 0.9996, top-64 0.9996
+  L30 with: top-16 overlap 0.9995, top-64 0.9993
+  L30 sources: err 3.30e-04 (fp32 1.19e-06), driven share corr 0.998419
+--- bf16+tf32split against fp32
+  L6 firings before: cos median 0.999982, min 0.999794
+  L6 firings mlp: cos median 0.999963, min 0.999400
+  L6 firings pred: cos median 0.999979, min 0.994837
+  L6 driven: top-16 overlap 0.9940, top-64 0.9929
+  L6 with: top-16 overlap 0.9864, top-64 0.9857
+  L6 sources: err 3.01e-03 (fp32 1.19e-06), driven share corr 0.981730
+  L14 firings before: cos median 0.999957, min 0.999138
+  L14 firings mlp: cos median 0.999877, min 0.993468
+  L14 firings pred: cos median 0.999980, min 0.766098
+  L14 driven: top-16 overlap 0.9899, top-64 0.9899
+  L14 with: top-16 overlap 0.9832, top-64 0.9828
+  L14 sources: err 6.92e-03 (fp32 2.80e-06), driven share corr 0.930917
+  L21 firings before: cos median 0.999950, min 0.980296
+  L21 firings mlp: cos median 0.999861, min 0.928378
+  L21 firings pred: cos median 0.999981, min 0.968460
+  L21 driven: top-16 overlap 0.9872, top-64 0.9872
+  L21 with: top-16 overlap 0.9774, top-64 0.9797
+  L21 sources: err 6.01e-03 (fp32 2.15e-06), driven share corr 0.909568
+  L30 firings before: cos median 0.999964, min 0.955994
+  L30 firings mlp: cos median 0.999945, min 0.829160
+  L30 firings pred: cos median 0.999973, min 0.919727
+  L30 driven: top-16 overlap 0.9929, top-64 0.9906
+  L30 with: top-16 overlap 0.9818, top-64 0.9817
+  L30 sources: err 6.58e-03 (fp32 1.19e-06), driven share corr 0.971071
+
+## 17_firings.py: one transfer per batch (new) against one per tensor (old)
+
+new: 4726 tok/s, 1.599 s/batch (forward with hooks 0.615, flush 0.685, split 0.293)
+old: 7360 tok/s, 1.027 s/batch (forward with hooks 0.726, flush 0.000, split 0.296)
+new again: 4743 tok/s, 1.593 s/batch (forward with hooks 0.617, flush 0.682, split 0.290)
+L6 before: max |new-old| 0.00e+00 of 276.5, counts equal True
+L6 mlp: max |new-old| 0.00e+00 of 28032.9, counts equal True
+L6 pred: max |new-old| 0.00e+00 of 280.6, counts equal True
+L6 sources columns that differ: ['driven_head_share', 'driven_share', 'with_lift', 'with_co']
+L14 before: max |new-old| 0.00e+00 of 221.2, counts equal True
+L14 mlp: max |new-old| 0.00e+00 of 81.8, counts equal True
+L14 pred: max |new-old| 0.00e+00 of 355.6, counts equal True
+L14 sources columns that differ: ['driven_head_share', 'driven_share', 'with_lift', 'with_co']
+L21 before: max |new-old| 0.00e+00 of 224.4, counts equal True
+L21 mlp: max |new-old| 0.00e+00 of 41.5, counts equal True
+L21 pred: max |new-old| 0.00e+00 of 315.7, counts equal True
+L21 sources columns that differ: ['driven_head_share', 'driven_share', 'with_lift', 'with_co']
+L30 before: max |new-old| 0.00e+00 of 204.3, counts equal True
+L30 mlp: max |new-old| 0.00e+00 of 51.1, counts equal True
+L30 pred: max |new-old| 0.00e+00 of 269.7, counts equal True
+L30 sources columns that differ: ['driven_head_share', 'driven_share', 'with_lift', 'with_co']
+
+## 17_firings.py: the split, step by step, seconds per batch
+
+firings per batch (over all layers) 2081
+  flush bytes      1.323 per batch
+  flush gather     0.657 per batch
+  flush .cpu()     0.573 per batch
+  split total      0.302 per batch
+  flow.sources     0.222 per batch
+  flush index_add  0.037 per batch
+  fires+lift       0.018 per batch
+  topk driven      0.015 per batch
+  cat+pid          0.013 per batch
+  topk with        0.011 per batch
+  record on CPU    0.006 per batch
+  rest             0.006 per batch
+  nonzero          0.003 per batch
+  gather driven    0.002 per batch
+  flush cat        0.001 per batch
+  flush ints       0.000 per batch
+
+## parallel ("gain along read") and orthogonal ("off read"), per layer, with each layer's median residual scale
+
+L 2 rms    0.24 | gain along read q10/50/90 -0.204 -0.000 +0.328 | off read 0.000 0.003 7.909 | share gain>0 0.49 | sign agrees with cos_up 0.77, cos_gate 0.73, corr(gain/total, cos_up) 0.67, disagree(up,gate) 0.49
+L 4 rms    0.35 | gain along read q10/50/90 -0.053 +0.459 +1.625 | off read 0.891 3.499 8.798 | share gain>0 0.84 | sign agrees with cos_up 0.87, cos_gate 0.62, corr(gain/total, cos_up) 0.70, disagree(up,gate) 0.50
+L 6 rms    0.63 | gain along read q10/50/90 +0.218 +0.699 +1.182 | off read 1.245 2.536 3.693 | share gain>0 0.97 | sign agrees with cos_up 0.98, cos_gate 0.52, corr(gain/total, cos_up) 0.72, disagree(up,gate) 0.50
+L 8 rms    0.81 | gain along read q10/50/90 +0.130 +0.583 +1.417 | off read 1.092 1.720 3.147 | share gain>0 0.95 | sign agrees with cos_up 0.96, cos_gate 0.54, corr(gain/total, cos_up) 0.72, disagree(up,gate) 0.50
+L10 rms    0.92 | gain along read q10/50/90 +0.134 +0.719 +1.675 | off read 0.943 1.729 3.187 | share gain>0 0.94 | sign agrees with cos_up 0.96, cos_gate 0.54, corr(gain/total, cos_up) 0.74, disagree(up,gate) 0.50
+L14 rms    1.18 | gain along read q10/50/90 -0.132 +0.411 +1.002 | off read 0.797 1.256 2.053 | share gain>0 0.85 | sign agrees with cos_up 0.90, cos_gate 0.60, corr(gain/total, cos_up) 0.79, disagree(up,gate) 0.50
+L18 rms    1.47 | gain along read q10/50/90 -0.242 +0.276 +0.776 | off read 0.738 1.098 1.739 | share gain>0 0.76 | sign agrees with cos_up 0.84, cos_gate 0.66, corr(gain/total, cos_up) 0.81, disagree(up,gate) 0.50
+L21 rms    2.04 | gain along read q10/50/90 -0.214 +0.231 +0.780 | off read 0.736 1.136 1.925 | share gain>0 0.75 | sign agrees with cos_up 0.85, cos_gate 0.64, corr(gain/total, cos_up) 0.84, disagree(up,gate) 0.50
+   L21 n1180−: live True, gain +1.170, off-read 2.044, cos(write, firing read) +0.494, cos_up +0.450, cos_gate +0.219
+L26 rms    5.00 | gain along read q10/50/90 -0.099 +0.095 +0.459 | off read 0.856 1.275 2.187 | share gain>0 0.75 | sign agrees with cos_up 0.85, cos_gate 0.65, corr(gain/total, cos_up) 0.77, disagree(up,gate) 0.50
+L30 rms    9.59 | gain along read q10/50/90 -0.117 -0.027 +0.200 | off read 0.869 1.233 2.181 | share gain>0 0.36 | sign agrees with cos_up 0.77, cos_gate 0.73, corr(gain/total, cos_up) 0.71, disagree(up,gate) 0.50
+L34 rms   19.07 | gain along read q10/50/90 -0.434 -0.127 +0.007 | off read 0.626 0.950 1.462 | share gain>0 0.11 | sign agrees with cos_up 0.90, cos_gate 0.60, corr(gain/total, cos_up) 0.47, disagree(up,gate) 0.50
