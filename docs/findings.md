@@ -1172,6 +1172,16 @@ over every upstream neuron, in the pole it is in, between its push and its contr
   0.86-0.91 from L4: at L1-L3, 49-78% of top firings ride SiLU's negative lobe (the gate below 0; 14%
   at L4, 2% or less from L5), where `â ± b̂` points the wrong way. Every weight-only read of those
   layers' read directions (§6) inherits this.
+- **On the negative lobe a pole reads the up row.** SiLU is nearly flat below zero (its floor is −0.28), so there the activation
+  follows `up`, opposite in sign to the pole, and which way of the gate raises it varies from pole to pole. Active poles with `neg_lobe`
+  past a half, S-lens reads (`checks/lobe_reads.py`), the rank of a pole's most frequent firing token among the kept tokens (50 is chance):
+  `â ± b̂` 16-48 at Qwen L0-L4 and 40-61 at Gemma L0-L10; its negative 52-84 and 39-60; the up row alone, `∓b̂`, 71-81 and 63-82 (`read_rows` now
+  uses it). Ordinary poles reach 69-95 and 75-95 with `â ± b̂`. In Qwen's `read_S_z` at L1-L4 a firing token is in the top 64 for 1-2% of poles
+  with the negative, 8-17% with `â ± b̂`, 9-19% with the up row, against 47-73% for ordinary poles. L0 is the exception (71% with the negative, 20% with
+  the up row). Limits: S-lens only, and the reads stay hard to interpret by eye under any rule: of 30 random such poles, 1-3 have a firing token in
+  their top 16. Many are faint shadows of the neuron's other pole, with the same up row and a shut gate: their `act_top` is a median 0.24 of the other pole's in
+  Qwen (0.70 in Gemma; 1.05 and 1.03 for ordinary poles), though about a quarter are the larger pole. L0 n3228 is one: its − pole is a clean 十 neuron (`act_top` 7.9;
+  pushed at that size it raises what follows a number, `-year`, `-month`, 月份), and its + pole (0.31) fires on byte fragments sharing 十's bytes, its up row reading 十.
 - **Early hubs.** A few L0-L1 neurons sit in most early in-lists: the 1% most-listed sources hold 59% of
   the in-list entries at L0-L8 (10-23% later), and L0 n11466 − (甩, "fling") is in 45% of L1-L8 poles'
   lists. Shared lists show as recall's control at L1-L2 (0.06).
