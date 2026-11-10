@@ -25,6 +25,11 @@ cd "$(dirname "$0")/.."
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 export HF_HUB_ENABLE_HF_TRANSFER=0
 
+if [ "${MEDIA:-0}" = 1 ]; then  # the synthetic images are drawn in these
+    $(command -v sudo) apt-get update -qq || true
+    $(command -v sudo) apt-get install -y -qq fonts-noto-core fonts-noto-cjk fonts-noto-extra
+fi
+
 command -v uv > /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 UV=uv

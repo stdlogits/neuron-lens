@@ -426,7 +426,9 @@ def _font(glob, size):
     import glob as g
     from PIL import ImageFont
     paths = sorted(g.glob(f"/usr/share/fonts/**/{glob}*", recursive=True))
-    return ImageFont.truetype(paths[0], size) if paths else ImageFont.load_default()
+    if not paths:  # PIL's default font has none of these scripts, and the images would still get drawn
+        raise FileNotFoundError(f"no {glob} font under /usr/share/fonts (fonts-noto-core, fonts-noto-cjk, fonts-noto-extra)")
+    return ImageFont.truetype(paths[0], size)
 
 
 def synth_images(scale: float = 1.0, seed: int = 0):
