@@ -72,13 +72,13 @@ At L0, 32% of the S-lens read's top 10 are exact drivers, and 4-11% at L1-L4; th
 
 ![Most mid-network poles are dark: they fire, but no token-level test reads them](12_census.png)
 
-Shares of each layer's poles: some weight-only read passes, only a token detector, dark (fires but nothing passes), or silent. Over all layers 22% of poles have a passing read and 57% are dark; dark averages 82% of L13-L20's poles.
+Shares of each layer's poles: some weight-only read passes, only a token detector, dark (fires but nothing passes), or silent. Over all layers 20% of poles have a passing read and 64% are dark; dark averages 87% of L13-L20's poles.
 
 ## 13. A read's signal holds down to rank 64, not just its top tokens
 
 ![A read's signal holds down to rank 64, not just its top tokens](13_rank_depth.png)
 
-Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read 29×, L12's read 6×), which is why the catalog keeps the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.
+Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read 22×, L12's read 6×), which is why the catalog keeps the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.
 
 ## 14. Labels written blind: lens reads predict what a pole promotes, contexts where it fires
 
@@ -102,13 +102,13 @@ Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (
 
 ![Late heads' OV reads predict the next token; mid-network heads are mostly dark](17_head_census.png)
 
-Shares of each layer's heads: an OV read passes, only a token mode or attention pattern, or dark. `ov_R` (the attended token's column predicts the next token) passes for 27% of L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) never separate a head from its layer. Dark is 56% of heads, 78% at L9-L12 and 74% at L13-L20.
+Shares of each layer's heads: an OV read passes, only a token mode or attention pattern, or dark. `ov_R` (the attended token's column predicts the next token) passes for 26% of L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) never separate a head from its layer. Dark is 63% of heads, 79% at L9-L12 and 81% at L13-L20.
 
 ## 18. Qwen3-8B and Gemma 4 12B read alike: inputs early, writes late, a dark middle
 
 ![Qwen3-8B and Gemma 4 12B read alike: inputs early, writes late, a dark middle](18_two_models.png)
 
-Both models against relative depth (layer / last layer). Left: median r between the R-lens read of a pole's write and its 1× steering effect. In Qwen3-8B it predicts steering from L4 (0.45-0.50 at L4-L8); in Gemma 4 12B it stays at 0.09 or less through L10 (relative depth 0.21), jumps to 0.40 at L11 and reaches 0.9 at L34 (Qwen3-8B: L22). The logit lens (dashed) trails the R-lens in both until late. Right: a weight-only read passes for 80% of Qwen3-8B's L0 poles and 84-88% of Gemma's L0-L1, for at most 7% of Qwen3-8B's L13-L20 and 4% of Gemma's L15-L30, and again late, mostly through the R-lens write (39% at Qwen3-8B's L29, 41% at Gemma's L33). Dark peaks mid-network: 86% at Qwen3-8B's L18 and 85% at Gemma's L22 (relative depth 0.51 and 0.47).
+Both models against relative depth (layer / last layer). Left: median r between the R-lens read of a pole's write and its 1× steering effect. In Qwen3-8B it predicts steering from L4 (0.45-0.50 at L4-L8); in Gemma 4 12B it stays at 0.09 or less through L10 (relative depth 0.21), jumps to 0.40 at L11 and reaches 0.9 at L34 (Qwen3-8B: L22). The logit lens (dashed) trails the R-lens in both until late. Right: a weight-only read passes for 85% of Qwen3-8B's L0 poles and 88-95% of Gemma's L0-L1, for at most 8% of Qwen3-8B's L13-L20 and 3% of Gemma's L15-L30, and again late, mostly through the R-lens write (38% at Qwen3-8B's L29, 40% at Gemma's L33). Dark peaks mid-network: 91% at Qwen3-8B's L18 and 91% at Gemma's L22 (relative depth 0.51 and 0.47).
 
 ## 19. Gemma 4 12B: a neuron's write, read through the R-lens, predicts steering from L11
 
@@ -120,7 +120,7 @@ Median r between each lens's write read and the measured effect, by layer, as fi
 
 ![Gemma 4 12B: inputs read early, writes late, and most of the middle is dark](20_gemma_census.png)
 
-The input side reads early: the S-lens read names the firing token for 84-88% of L0-L1's poles, falls to 0.5% at L9, and rises again at L10-L13 (23-57%), where the S-lens write also holds for 10-22% at L11-L13. The write side reads late: the R-lens write predicts the next token after a firing from L32, for 22-37% of poles at L33-L40, falling to 8-14% at L44-L47. In between, 54-85% of L16-L31's poles are dark. Over all layers 19% of poles pass some test and 52% are dark (Qwen3-8B: 22% and 57%).
+The input side reads early: the S-lens read names the firing token for 88-95% of L0-L1's poles, falls to 0.6% at L9, and rises again at L10-L13 (33-62%), where the S-lens write also holds for 10-21% at L11-L13. The write side reads late: the R-lens write predicts the next token after a firing from L32, for 22-36% of poles at L33-L40, falling to 7-13% at L44-L47. In between, 66-91% of L16-L31's poles are dark. Over all layers 20% of poles pass some test and 60% are dark (Qwen3-8B: 22% and 57%).
 
 ## 21. The S-lens's image read is a projection; an optimised read makes the neuron fire
 
@@ -138,7 +138,7 @@ Three poles from each six-layer band from L0 to L23, those with the strongest re
 
 ![Image labels hold on the text side from L12; sound labels only a little](23_crossmodal.png)
 
-Of 253,749 poles with an image label, the label's words fire the pole for 8% at L0-L11 and 42% at L12-L23 (5% by chance), the text R-lens writes it for up to 19% (L12-L23), the text S-lens reads it for 7-10%. Audio labels pass 6-13% by band and test. 18 of 45,138 poles with both labels pass all three text tests for both (independent lists would share 1.8): places and peoples with their language, such as mosques and Arabic, pagodas and Mandarin, tacos and Spanish.
+Of 253,785 poles with an image label, the label's words fire the pole for 8% at L0-L11 and 42% at L12-L23 (5% by chance), the text R-lens writes it for up to 19% (L12-L23), the text S-lens reads it for 7-10%. Audio labels pass 6-12% by band and test. 19 of 48,497 poles with both labels pass all three text tests for both (independent lists would share 2.0): places and peoples with their language, such as mosques and Arabic, pagodas and Mandarin, tacos and Spanish.
 
 ## 24. Single heads carry what an image shows into the text; for sound, none does
 
