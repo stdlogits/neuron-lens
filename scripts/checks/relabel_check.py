@@ -1,7 +1,7 @@
 """Did relabelling the negative-lobe poles help (findings §8)?
 
-The first labels of these poles (``acts``' ``neg_lobe`` past a half) were written from input reads pointing the wrong way;
-``10_labels.py cards --flipped`` labels those neurons again from the corrected reads. Blind, on ``PER_MODEL`` random such
+The first labels of these poles (``acts``' ``neg_lobe`` past a half) were written from their ``â ± b̂`` reads;
+``10_labels.py cards --flipped`` labels those neurons again from the up-row reads (findings §17). Blind, on ``PER_MODEL`` random such
 poles with at least ``HELD_OUT`` firings, as ``10_labels.py check`` tests the head labels: a scorer (Claude Sonnet) sees a
 pole's ``fires`` label and 8 contexts, 4 of its held-out firings (ranks 6-24, off every card) and 4 of another
 flipped pole of its layer, shuffled, ending at the marked token, and gives each the probability that it is the described

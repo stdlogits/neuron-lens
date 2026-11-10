@@ -20,9 +20,10 @@ pole (+: highest z, −: lowest), for each statistic:
 And each pole's top ``--top-docs`` documents (mean statistic). Written to
 ``data/catalog/<model>/media/<modality>_exemplars.pt`` (with every document's labels, source,
 caption and ``doc_ref``: its dataset, revision and row identifiers, to link it rather than host
-it), and the label means beside it.
+it), and the label means beside it. A source that fails or stalls stops the run before the forward passes, since a
+smaller pool changes every statistic here; ``--partial`` goes on without it.
 
-    python scripts/13_media_activations.py --device cuda [--scale 1.0] [--modalities audio,image]
+    python scripts/13_media_activations.py --device cuda [--scale 1.0] [--modalities audio,image] [--partial]
 """
 import argparse
 import os
@@ -37,7 +38,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor
 
 from neuron_lens.catalog import TOP
 from neuron_lens.media import processed, slot_token
-from neuron_lens.media_sets import audio_collection, image_collection
+from neuron_lens.media_sets import SHORT, audio_collection, image_collection
 from neuron_lens.paths import DATA
 from neuron_lens.transport import decoder_stack
 
@@ -65,6 +66,7 @@ def main():
     ap.add_argument("--out", help="output folder (default data/catalog/<model>/media)")
     ap.add_argument("--wait-free-gb", type=float, default=0, help="before the forward passes, wait until the GPU has this much free")
     ap.add_argument("--chunk", type=int, default=8192, help="neurons per GPU chunk in the statistics")
+    ap.add_argument("--partial", action="store_true", help="go on when a source failed or stalled")
     args = ap.parse_args()
     dev = args.device
     lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16).to(dev).eval().requires_grad_(False)
@@ -89,6 +91,8 @@ def main():
     for modality in args.modalities.split(","):
         t1 = time.perf_counter()
         docs_all = (image_collection if modality == "image" else audio_collection)(args.scale)
+        if SHORT and not args.partial:
+            sys.exit(f"{modality}: sources missing from the pool (--partial to go on without them):\n" + "\n".join(SHORT))
         items = [d[0] for d in docs_all]
         labels = [d[1] for d in docs_all]
         n = len(items)

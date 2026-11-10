@@ -129,7 +129,8 @@ def _image(data, letterbox=False):
 
 ID_KEY = re.compile(r"(^|_)(id|ids|file|filename|fname|path|name|key|url|ytid|start|end|start_time|end_time|index|idx)$|^__(key|url)__$",
                     re.IGNORECASE)
-MAX_SECONDS = 900  # a source still filling after this keeps what it has
+STALL = 3600  # a source with no new item for this many seconds stops there
+SHORT: list[str] = []  # the sources that failed or stalled, which stop 13_media_activations.py
 
 
 def _ref(name, cfg, split, revision, row, data) -> dict:
@@ -153,6 +154,7 @@ def _take(source, name, cfg, split, n, field, labeller, caption=None, kind="audi
           shard=None):
     """Up to ``n`` items of one source: ``[(item, labels, caption, source, ref)]``."""
     out, t0 = [], time.time()
+    last = t0
     try:
         try:
             from huggingface_hub import HfApi
@@ -170,10 +172,13 @@ def _take(source, name, cfg, split, n, field, labeller, caption=None, kind="audi
                         _ref(name, cfg, split, revision, row, row[field])))
             if len(out) == n:
                 break
-            if time.time() - t0 > MAX_SECONDS:
-                print(f"  {source} ({name}): stopped at {len(out)}/{n} after {MAX_SECONDS}s", flush=True)
+            if time.time() - last > STALL:
+                SHORT.append(f"{source} ({name}): stalled at {len(out)}/{n}")
+                print(f"  {SHORT[-1]}", flush=True)
                 break
-    except Exception as e:  # one failing source must not sink the collection
+            last = time.time()
+    except Exception as e:  # the other sources carry on; the run stops on it after the collection
+        SHORT.append(f"{source} ({name}): {e!r}"[:200])
         print(f"  {source}: FAILED {e!r}"[:200], flush=True)
     print(f"  {source} ({name}{f' {shard[1]}/{shard[0]}' if shard else ''}): {len(out)} in {time.time() - t0:.0f}s", flush=True)
     return out
@@ -570,7 +575,8 @@ def image_collection(scale: float = 1.0, log=print, workers: int | None = None):
     coco = next((p for j, p in zip(jobs, parts) if j[0] == "coco"), [])
     try:
         manga = manga_pages(max(2, int(800 * scale)))
-    except Exception as e:  # a gated or changed release must not sink the collection
+    except Exception as e:  # as a failing source in _take
+        SHORT.append(f"manga: {e!r}"[:200])
         print(f"  manga: FAILED {e!r}"[:200], flush=True)
         manga = []
     log(f"  manga: {len(manga)}")
