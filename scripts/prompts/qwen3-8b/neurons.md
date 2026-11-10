@@ -21,6 +21,7 @@ Every read is a ranked list of up to 64 tokens computed from the weights through
 - **Tokens come in rank tiers:** 1-8 ‖ 9-24 ‖ 25-64. Signal fades with rank but lasts to 64. A theme spread across many tokens and across tiers counts for more than one token at the top.
 - **"Shared by" lines are the strongest evidence.** Two different lenses naming the same token means the concept is real. Tokens shared by the input and output sides mean the neuron reads and writes the same thing.
 - **Look for the theme, not the exact tokens.** It can be a word family, a grammatical form (gerunds, adverbs, past tense), a topic, a script or language, or a format (code, numbers, punctuation). English and Chinese words for one concept are one concept.
+- **A "faint shadow" line** marks a pole much weaker than the neuron's other pole, sharing its up row. Its input reads may describe the other pole, so take where it fires from its contexts, and say in the note that it is a shadow.
 - **The two poles of a neuron write opposite directions,** and they often read different things. Compare them: what one pole has and the other lacks is usually its meaning.
 
 

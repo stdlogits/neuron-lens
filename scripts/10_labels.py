@@ -6,8 +6,8 @@ contexts: the catalog's ``labels`` tables (pipeline stage 10).
 only those that carry signal at the neuron's layer (§6, §7), primary first, each to 64 tokens, in
 rank tiers (1-8 ‖ 9-24 ‖ 25-64) with variants merged (``release×9``), the layer's hub tokens (in 3%+
 of its raw top 64s) dropped from raw reads, a strength percentile among the layer's poles, the
-tokens two lenses or the two sides share, and from L21 a note on peaked (high-kurtosis) writes
-(§5); then ``neurons/acts``'
+tokens two lenses or the two sides share, from L21 a note on peaked (high-kurtosis) writes
+(§5), and a line marking a pole that is a faint shadow of the other (§17); then ``neurons/acts``'
 activation line and first 5 top contexts. Labels: ``fires`` and ``writes``, each with a confidence.
 This arm was checked blind on 100 poles with ``checks/haiku_blind.py`` (§8). The full run
 (2026-10-29, on the first release's tables): 44,244 requests of 10 neurons, $105.41 at batch prices
@@ -97,6 +97,7 @@ FIELDS = {"neurons": ("fires", "writes"), "heads": ("fires", "attends", "writes"
 MAX_TOKENS = 12000
 MAX_REQUESTS, MAX_BYTES = 3000, 200_000_000  # per batch, under the API's 100,000 and 256 MB
 SILENT = 0.05  # act_top under this: near-silent (§7, §8)
+SHADOW = 1 / 4  # a pole on the negative lobe under this share of its partner's act_top is a faint shadow of it (§17)
 HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (§6)
 READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z": "in·R z",
         "write_S": "out·S", "write_S_z": "out·S z", "write_R": "out·R", "write_R_z": "out·R z"}
@@ -243,8 +244,12 @@ def cards_layer(layer: int, flipped: bool = False) -> int:
             if flipped and lobe[n] <= 0.5 and lobe[f + n] <= 0.5:
                 continue
             lines = [f"## layer {layer}, neuron {n}", f"input reads at this depth: {ni}.", f"output reads at this depth: {no}."]
-            for pole, r in ((1, rows[n]), (-1, rows[f + n])):
+            for pole, r, other, on_lobe in ((1, rows[n], rows[f + n], lobe[n]), (-1, rows[f + n], rows[n], lobe[f + n])):
                 lines.append(f"\n### L{layer} n{n} {'+' if pole > 0 else '−'}")
+                if on_lobe > 0.5 and other["act_top"] >= SILENT and r["act_top"] < SHADOW * other["act_top"]:
+                    lines.append(f"faint shadow of the {'−' if pole > 0 else '+'} pole: this pole fires on the activation's negative lobe, at "
+                                 f"{100 * r['act_top'] / other['act_top']:.0f}% of that pole's typical size. Its input reads show the up row the two poles share, "
+                                 "so they may name what the other pole fires on, not this one.")
                 toks, keys = {}, {}
                 for b in shown:
                     toks[b] = [dec(i) for i in r[b + "_ids"] if i not in hub[b]]

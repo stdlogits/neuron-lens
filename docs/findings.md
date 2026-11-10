@@ -1172,7 +1172,7 @@ over every upstream neuron, in the pole it is in, between its push and its contr
   0.86-0.91 from L4: at L1-L3, 49-78% of top firings ride SiLU's negative lobe (the gate below 0; 14%
   at L4, 2% or less from L5), where `â ± b̂` points the wrong way. Every weight-only read of those
   layers' read directions (§6) inherits this.
-- **On the negative lobe a pole reads the up row.** SiLU is nearly flat below zero (its floor is −0.28), so there the activation
+- **On the negative lobe a pole reads the up row.** SiLU is nearly flat below zero (its floor is −0.28; Gemma's GELU has the same shape), so there the activation
   follows `up`, opposite in sign to the pole, and which way of the gate raises it varies from pole to pole. Active poles with `neg_lobe`
   past a half, S-lens reads (`checks/lobe_reads.py`), the rank of a pole's most frequent firing token among the kept tokens (50 is chance):
   `â ± b̂` 16-48 at Qwen L0-L4 and 40-61 at Gemma L0-L10; its negative 52-84 and 39-60; the up row alone, `∓b̂`, 71-81 and 63-82 (`read_rows` now

@@ -162,7 +162,8 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
 - **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
   `neg_lobe` past a half) reads the up row alone, `∓b̂` (`neurons.read_rows`): SiLU is nearly flat there, so the activation
   follows `up`, and which way of the gate raises it varies from pole to pole. Its `read_*` and in-edges follow; `cos_write_gate` and
-  `cos_write_up` take each row on the side its firings sit (§17).
+  `cos_write_up` take each row on the side its firings sit (§17). A pole on the negative lobe under a quarter of its partner's `act_top` is
+  a faint shadow of it, and its label card says so (`10_labels.py`).
 - **Layer-contrastive reads** (`_z`) z-score each token's score across the layer's poles (S-lens rows
   as unit vectors), which removes hub tokens. Raw `read_S` keeps literal tokens early; `read_S_z`
   gives concepts later but loses the literal peak token.
