@@ -115,6 +115,8 @@ Fused projections and CUDA graphs gave nothing more.
 - **FP8 is not.** Row-scaled FP8 products are 1.5× faster but put the estimate 3.8% (R) and 4.5% (S)
   from fp32, mostly as a bias from the rounded weights that does not average over documents (the
   mean of four keeps 3.6% of the 3.8%). At equal time it ends worse than bf16.
+- **Multiplying out the gated MLP (`layers.contract`) saves 20-30%.** One `[d, d]` matrix per row, `W_d (diag(cg) W_g + diag(cu) W_u)`, built 16 rows at a time, makes each tangent one `d × d` product where the map costs three
+  through `d_ff`. On one H100, s per document with and without: Qwen3-8B R 13.65 / 17.06, S 13.81 / 17.28; Gemma 4 R 18.79 / 25.13, S 17.89 / 25.53. Dense `GatedMLP`s only, at Gemma 4's S-lens peak of 52 GiB (the same as without).
 - **Random-probe sketching doesn't pay** (an argument from Monte Carlo variance, not a measurement):
   each document's sketch noise scales with its whole Jacobian, not its deviation from the mean, so at
   equal compute it loses to exact probing.
@@ -232,7 +234,8 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **Drivers** (`07_drivers.py`): every kept token at position 24 of 8 documents (4 web, 2 code, 2 chat),
   before the documents' own next 16 tokens. Per pole, the 64 tokens with the largest mean activation at
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and
-  the most attention received from the 16 after (`keys`).
+  the most attention received from the 16 after (`keys`). Each document's prefix before the position is run once and its cache copied for every token, 12 minutes against 27 for
+  Qwen3-8B and 24 against 53 for Gemma 4 on an H100 (the top 8 of the 64 tokens match a run without it 98.6-98.8% of the time).
 - **Legibility tests** (`09_legible.py`): each unit's reads scored on its own top firings against
   mismatched pairs, at a 5% false discovery rate (§7, §12).
 
@@ -368,7 +371,7 @@ a 640-dimensional subspace.
   documents and drawings letterboxed. Per pole: its mean activation over each document's slots; each
   label's z over the documents; the top label is *reliable* if it passes the 99th percentile of a
   shuffled-label null for its layer and sits in the top 5 of both halves of the documents. A held-out
-  AUROC scores the label chosen on even documents on the odd ones. Each pole keeps its 16 top
+  AUROC scores the label chosen on even documents on the odd ones. Each pole keeps its 64 top
   documents. `data/corpus/media-{image,audio}.provenance.json` lists every source with its split,
   revision, sample size and license; `media/<modality>_docs.parquet` has each document's row and the
   SHA-1 of its bytes.

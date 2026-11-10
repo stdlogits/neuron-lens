@@ -256,9 +256,9 @@ doesn't explain why S-lens reads fade after L8 ([§6](docs/findings.md#6-the-inp
 ### 7. Most mid-network neurons are dark to weight-only reads, but not indescribable
 
 Every pole's reads are tested at its own top firings against mismatched pairs, at a 5% false discovery
-rate. 38% of poles are read by some test (a weight-only read, or a token that dominates their
-firings), 5% are silent, and 57% are *dark*: they fire, but no token-level test passes. Dark poles are
-82% of L13-L20. Yet explainers with full evidence cards describe dark poles almost as well as legible
+rate. 31% of poles are read by some test (a weight-only read, or a token that dominates their
+firings), 5% are silent, and 64% are *dark*: they fire, but no token-level test passes. Dark poles are
+87% of L13-L20. Yet explainers with full evidence cards describe dark poles almost as well as legible
 ones (detection AUROC 0.90 against 0.96): most are likely concept detectors whose firings vary in token
 ([§7](docs/findings.md#7-which-reads-hold-the-legibility-census)).
 
@@ -329,8 +329,8 @@ heads attend to the classes they copy or suppress
 
 ### 12. Heads, like neurons, are dark mid-network
 
-At their own top firings, 27% of L28-L35's heads write the next token as their OV read predicts, and
-few heads before; 74-78% of heads at L9-L20 pass no test and show no token mode or pattern. Claude Haiku
+At their own top firings, 26% of L28-L35's heads write the next token as their OV read predicts, and
+few heads before; 79-81% of heads at L9-L20 pass no test and show no token mode or pattern. Claude Haiku
 labels every head (where it fires, what it attends to, what it writes); checked blind, the firing labels
 tell a head's held-out firings from another head's at AUROC 0.71 (control 0.51), and the write labels
 are picked out of four 49% of the time (79% at L28-L35; chance 25%)
@@ -344,11 +344,11 @@ Gemma 4 12B comes from another lab, with another activation, norm layout and att
 catalog shows the same picture. The R-lens read of a write predicts steering from L11 on (median r
 0.53 at L12-L23, 0.82 at L24-L35, 0.97 at L36-L47), ahead of the logit lens; before L11, pushes at a
 neuron's natural size move the output too little for either lens to predict, though larger pushes
-still raise the tokens the R-lens names. 19% of poles pass some weight-only test (Qwen3-8B: 22%) and
-52% are dark (57%): the input side reads through L13, about the same relative depth as Qwen3-8B's L8,
+still raise the tokens the R-lens names. 20% of poles pass some weight-only test (Qwen3-8B: 20%) and
+60% are dark (64%): the input side reads through L13, about the same relative depth as Qwen3-8B's L8,
 the write side from L33, and the middle is dark from both. Claude Haiku labelled every pole and head;
 checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are at
-chance, and the neuron labels are not checked yet
+chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.72)
 ([§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
 
 ![Both models by relative depth](docs/figures/18_two_models.png)
@@ -413,8 +413,9 @@ What a neuron writes reaches every later neuron's input unchanged, so the weight
 every pair of poles: how far one pole's firing pushes a later one. Concept poles are wired from their
 concept (an L14 animals pole from L12's dogs-and-pets pole), and an edge ranks every upstream neuron's
 actual effect at Spearman 0.88. But when a pole fires, a few units drive it, and they are units firing
-with it: its 16 largest sources carry about half its activation, its 16 weight edges about a tenth.
-Heads carry a third (half at L13-L20) ([§17](docs/findings.md#17-direct-edges-between-neurons)).
+with it: its 64 largest sources carry nearly all its activation, its 64 weight edges about a tenth.
+Heads carry a third (half at L13-L20). Into a head, the value and keys come mostly from neurons, and the query a third to a half from
+earlier heads ([§17](docs/findings.md#17-direct-edges-between-neurons)).
 
 ### 18. What a neuron writes beyond what it reads
 
@@ -433,9 +434,8 @@ write through L20 is as often unrelated to the pole's read as the same concept, 
 - Activations are bf16 passes over documents of up to 256 tokens; the exact drivers match an fp32 rerun
   through L9 on Qwen3-8B, and later layers are unchecked.
 - The legibility tests are token-level; labels are written, scored and judged by Claude models, and
-  Gemma 4's neuron labels aren't checked yet. Media labels name what a whole image or sound is about.
-- Findings 2, 3, 4, 7 and 17 measure top firings and edges at their earlier list sizes (24 and 16). The catalog now holds 64 of each,
-  and those sections are re-measured after the GPU pass.
+  of Gemma 4's neuron labels only the relabelled poles are checked. Media labels name what a whole image or sound is about.
+- Findings 3 and 4 stand as first measured, with 24 top firings a pole; the catalog now holds 64.
 - Steering adds a write at every position of neutral text at many times its natural size: it shows what
   a direction does, not what one firing does in context.
 
@@ -551,13 +551,13 @@ take about 1.5× as long.
 | `04_export_rlens.py` | export an R-lens fit to a Drowse home | minutes |
 | `05_act_corpus.py` | the activation corpora: web (held out from the lens), Chinese, Python, chat | minutes |
 | `06_activations.py` | one pass for every neuron and head: statistics, top firings, attention patterns, position 0 | ~70 min on an RTX 4090 |
-| `07_drivers.py` | every kept token swept through 8 real documents: neuron and head drivers | ~70 min on an RTX 4090 |
-| `08_reads.py` | weight-only reads of every pole and head through both lenses | ~10 min per side on a Mac |
-| `09_legible.py` | which reads hold at each unit's top firings | ~30 min on a Mac |
+| `07_drivers.py` | every kept token swept through 8 real documents: neuron and head drivers | 12 min (Qwen3-8B), 24 min (Gemma 4) on an H100 |
+| `08_reads.py` | weight-only reads of every pole and head through both lenses | 5-7 min on an H100, ~10 min per side on a Mac |
+| `09_legible.py` | which reads hold at each unit's top firings | 2 min on an H100, ~30 min on a Mac |
 | `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$105 for the neurons, under $1 for the heads (Batch API) |
 | `16_edges.py` | every pole's strongest direct weight edges | minutes |
-| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`); what drives each head through its value, query and key (`heads/sources`) | 1-3 h on an H100 (estimate) |
-| `13_media_activations.py` | Gemma 4: every pole's activation over the labelled images and sounds; its exemplars | ~50 min per modality on an H100, and 220 GB of RAM for the images |
+| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`); what drives each head through its value, query and key (`heads/sources`) | ~2 h for Gemma 4 on an H100 |
+| `13_media_activations.py` | Gemma 4: every pole's activation over the labelled images and sounds; its exemplars | 25-40 min per modality on an H100, and 220 GB of RAM for the images |
 | `14_media_tables.py` | Gemma 4: the per-layer image and audio tables | ~15 min on an H100 |
 | `15_media_optimised.py` | Gemma 4: the optimised patches and sounds | ~25 min per modality on an H100 |
 | `11_figures.py` | every figure in `docs/figures/` | seconds |

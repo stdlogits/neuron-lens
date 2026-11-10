@@ -1,0 +1,8 @@
+relations, Qwen/Qwen3-8B: of each pole's top 16 driven-by sources, the share also in its top 16 wired-to / fires-with / either (control: the next pole's lists); medians over poles with a firing
+
+L1-8    w 0.125  f 0.250  either 0.375  w_c 0.000  f_c 0.000
+L9-12   w 0.188  f 0.250  either 0.438  w_c 0.000  f_c 0.000
+L13-20  w 0.125  f 0.188  either 0.312  w_c 0.000  f_c 0.000
+L21-27  w 0.125  f 0.188  either 0.312  w_c 0.000  f_c 0.000
+L28-35  w 0.125  f 0.188  either 0.312  w_c 0.000  f_c 0.000
+L1-35   w 0.125  f 0.188  either 0.375  w_c 0.000  f_c 0.000

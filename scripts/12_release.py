@@ -708,8 +708,9 @@ thinking; §8): `fires` (where it fires, 12 words or fewer), `writes` (what its 
 toward when amplified), each with a confidence 0-1, and `note`. Each model has its own prompt
 (`scripts/prompts/<model>/neurons.md` on GitHub), which says which reads hold at each depth, and its
 cards show only those. Qwen3-8B's labels were made from an earlier build of its tables, whose reads
-kept byte-fallback pieces; Gemma 4's from this release's, from text alone (its cards show no images or
-sounds).
+kept byte-fallback pieces; Gemma 4's from text alone (its cards show no images or sounds). Neurons with a
+negative-lobe pole (`neg_lobe` past a half) were labelled again from their up-row reads, and a pole that is a faint
+shadow of the neuron's other pole is marked on its card (§8, §17).
 
 Qwen3-8B, checked blind on 100 poles: firing labels separate held-out top firings from quiet positions at AUROC
 0.82 [0.78, 0.85] (another pole's label: 0.56); a judge picks a pole's write label out of four from
