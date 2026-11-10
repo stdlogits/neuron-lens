@@ -366,7 +366,7 @@ a 640-dimensional subspace.
   checked the layer maps against autograd on the real model (relative error 1e-6) and
   `checks/media_fit_check.py` a fitted media S-lens against reads taken without fitting it.
 - **Exemplars** (`13_media_activations.py`, collections in `neuron_lens/media_sets.py`). 49,694
-  images and 46,932 sounds streamed from 49 and 11 labelled Hub datasets with seed-0 shuffles, plus
+  images and 49,703 sounds streamed from 49 and 11 labelled Hub datasets with seed-0 shuffles, plus
   synthetic probes with exact labels, each labelled `source:label`. Images are centre-cropped,
   documents and drawings letterboxed. Per pole: its mean activation over each document's slots; each
   label's z over the documents; the top label is *reliable* if it passes the 99th percentile of a

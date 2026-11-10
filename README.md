@@ -105,7 +105,7 @@ Qwen3-8B, and 1,474,560 neuron entries and 768 heads for Gemma 4 12B. Each is re
   to measure which tokens directly make the unit fire.
 
 For Gemma 4, each neuron is also read through images and sound: which of 49,694 labelled images and
-46,932 labelled sounds make it fire, what its read direction looks like as a patch of pixels or 40 ms
+49,703 labelled sounds make it fire, what its read direction looks like as a patch of pixels or 40 ms
 of sound, and a pattern optimised to drive it.
 
 Either lens can read either side of a neuron. Applied to its read direction, the R-lens says what the
@@ -366,8 +366,8 @@ chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.
 Gemma 4 has no separate encoder for images or sound: each 48 × 48-pixel patch or 40 ms of audio
 enters the residual stream through a few norms and one linear map. So the lenses can be fitted on
 images and sounds, and a neuron's read direction can be carried back to pixels or samples. Over
-49,694 labelled images and 46,932 labelled sounds, a quarter to a half of each band's poles have a
-label that holds on held-out documents (AUROC 0.96-0.97 for images, 0.78-0.91 for sound): gratings,
+49,694 labelled images and 49,703 labelled sounds, a quarter to a half of each band's poles have a
+label that holds on held-out documents (AUROC 0.96-0.97 for images, 0.77-0.91 for sound): gratings,
 checkerboards and writing systems early, objects, scenes and languages later. The lens's patch read
 shows what a neuron's input direction looks like, but added to held-out images it raises the neuron
 only in the first six layers. Started from the read and optimised by gradient ascent through the
@@ -381,10 +381,10 @@ model, a single patch or 40 ms frame drives its neuron through L23
 ### 15. One concept in text, images and sound
 
 Many of Gemma 4's neurons mean the same thing whatever the input. At L12-L23, 42% of the poles with a
-reliable image label also fire on the label's name in text (5% by chance). 4,378 poles pass every
+reliable image label also fire on the label's name in text (5% by chance). 4,382 poles pass every
 text test for their image label (its name fires them, the text S-lens reads it, the text R-lens writes
-it), and 708 for their audio label. 18 pass all of them for both, where independent lists would share
-1.8: places and peoples, with their language
+it), and 730 for their audio label. 19 pass all of them for both, where independent lists would share
+2.0: places and peoples, with their language
 ([§15](docs/findings.md#15-one-concept-in-text-images-and-sound)).
 
 | pole | image label | audio label | exact text drivers | R-lens read of its write |

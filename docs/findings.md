@@ -994,7 +994,7 @@ rank being 2,041; 640 for audio), which is exact and cuts their cost to 0.1-0.3 
 Their maps match autograd to 1e-6. *Exemplars* (`13_media_activations.py`): every pole's mean
 activation over the slots of 49,694 labelled images (2,805 labels, from 49 datasets: ImageNet,
 Places365, food, cars, sketches, documents, charts, art, medical scans, …, plus manga pages and
-synthetic gratings, shapes and scripts) and 46,932 labelled sounds (1,167 labels, from 11 datasets:
+synthetic gratings, shapes and scripts) and 49,703 labelled sounds (1,167 labels, from 11 datasets:
 AudioSet, FSD50K, ESC-50, speech in many languages and accents, music, plus synthetic tones, chirps,
 beats and clicks; `data/corpus/media-*.provenance.json`). A pole's top label (by the z of its mean
 activation over that label's documents) is *reliable* if it passes the 99th percentile of a
@@ -1008,9 +1008,9 @@ AUROC scores it on the odd documents after choosing it on the even ones.
 | image | L24-L35 | 39% | 0.97 |
 | image | L36-L47 | 32% | 0.97 |
 | audio | L0-L11 | 51% | 0.91 |
-| audio | L12-L23 | 19% | 0.86 |
-| audio | L24-L35 | 28% | 0.83 |
-| audio | L36-L47 | 18% | 0.78 |
+| audio | L12-L23 | 21% | 0.85 |
+| audio | L24-L35 | 30% | 0.82 |
+| audio | L36-L47 | 19% | 0.77 |
 
 - **Labelled media name what a third of poles respond to.** Early reliable labels are often
   primitives (checkerboards, gratings, click trains at a given rate, scripts by writing system); later
@@ -1067,21 +1067,21 @@ label's tokens. A rank of 0.95 or more passes; a shuffled pairing passes 5%.
 
 | | image labels: share passing | audio labels: share passing |
 |---|---|---|
-| its words fire it | 31% (L12-L23: 42%) | 10% |
+| its words fire it | 31% (L12-L23: 42%) | 9% |
 | the text S-lens reads it | 8% | 9% |
 | the text R-lens writes it | 14% (L12-L23: 19%) | 8% |
-| all three | 4,378 poles | 708 poles |
-| poles scored | 253,749 | 232,251 |
+| all three | 4,382 poles | 730 poles |
+| poles scored | 253,785 | 248,033 |
 
 ![One concept in text, images and sound](figures/23_crossmodal.png)
 
 - **Image concepts are text concepts mid-network.** At L12-L23, 42% of the poles that respond to an
   image label also fire on its name in text, against 5% by chance; 8% at L0-L11, where image labels
   are mostly visual primitives.
-- **Sound is weaker:** 10% fire on their label's name, twice chance.
-- **18 poles hold one concept across all three modalities.** Of 45,138 poles with a reliable label in
-  both images and sound, 18 pass all three text tests for both, where independent lists would share
-  1.8. They are places and peoples, with their language:
+- **Sound is weaker:** 9% fire on their label's name, about twice chance.
+- **19 poles hold one concept across all three modalities.** Of 48,497 poles with a reliable label in
+  both images and sound, 19 pass all three text tests for both, where independent lists would share
+  2.0. They are places and peoples, with their language:
 
 | pole | image label | audio label | exact text drivers | R-lens read of its write |
 |---|---|---|---|---|
@@ -1092,9 +1092,9 @@ label's tokens. A rank of 0.95 or more passes; a shuffled pairing passes 5%.
 | `L36 n14109 +` | totem pole | Maori | Cherokee, Navajo, Apache, Mohawk | Native, Indian, Indigenous, Cherokee |
 | `L37 n7165 +` | giant panda | Mandarin Chinese | 熊猫 (panda), 四川 (Sichuan), 成都 (Chengdu) | panda, 熊猫, Chengdu |
 
-  The others pair mosques or Arabian camels with Arabic (8 poles), a coral reef with Māori, tacos with
-  Spanish, and Pembroke corgis with Welsh. Firing on both names alone is near chance (1,602 poles
-  against 1,267 expected): the lenses' reads are what make the triple match specific.
+  The others pair mosques, a pyramid or Arabian camels with Arabic (8 poles), a coral reef with Māori, a giant panda with
+  Mandarin, tacos with Spanish, and Pembroke corgis with Welsh. Firing on both names alone is near chance (1,692 poles
+  against 1,369 expected): the lenses' reads are what make the triple match specific.
 
 **Limits.** Label words are English and scored in one template; a rank among the modality's labels
 says the pole prefers this label to the others, not that the concept is all it does. Exemplar labels
