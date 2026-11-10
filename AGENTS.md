@@ -149,8 +149,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a
   `−` pole, read and described separately. From weights, a pole's read direction is `â ± b̂`: the
   gate and up rows times the post-attention norm weight, normalized (a heuristic; activations give
-  the true poles), negated for a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
-  past a half, `neurons.read_rows`, §17). Catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles.
+  the true poles); a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe` past a half) reads the up row
+  alone, `∓b̂` (`neurons.read_rows`, §17). Catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles.
 - **Scale.** A lens read is scale-free (RMSNorm), so its probabilities describe a direction, not an
   effect. Effect sizes need the activation scale (`act_top`); don't rank neurons by lens
   probability across layers.

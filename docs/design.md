@@ -160,8 +160,9 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
   the neuron's gate and up rows removed (`neurons.orthogonal_write`), the part that adds something
   beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
 - **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
-  `neg_lobe` past a half) reads the negative of `â ± b̂` (`neurons.read_rows`), and its `read_*`, `cos_write_gate`, `cos_write_up`
-  and in-edges follow it (§17).
+  `neg_lobe` past a half) reads the up row alone, `∓b̂` (`neurons.read_rows`): SiLU is nearly flat there, so the activation
+  follows `up`, and which way of the gate raises it varies from pole to pole. Its `read_*` and in-edges follow; `cos_write_gate` and
+  `cos_write_up` take each row on the side its firings sit (§17).
 - **Layer-contrastive reads** (`_z`) z-score each token's score across the layer's poles (S-lens rows
   as unit vectors), which removes hub tokens. Raw `read_S` keeps literal tokens early; `read_S_z`
   gives concepts later but loses the literal peak token.

@@ -101,7 +101,7 @@ def neuron_table(table: str, layer: int, model: str = MODEL):
 
 def lobe_signs(layer: int, model: str = MODEL) -> torch.Tensor:
     """``[2f]``: +1 for the poles whose top firings ride SiLU's positive side, −1 for those on its
-    negative lobe (``acts``' ``neg_lobe`` past a half), which read the opposite direction (findings §17)."""
+    negative lobe (``acts``' ``neg_lobe`` past a half), which read the up row alone (``neurons.read_rows``, findings §17)."""
     t = pq.read_table(neuron_table("acts", layer, model), columns=["neg_lobe"])
     return 1 - 2 * (torch.from_numpy(t.column(0).to_numpy().copy()) > 0.5).float()
 

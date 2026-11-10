@@ -15,8 +15,8 @@ top most raw reads (findings §6).
 - ``write_orth_R``, ``write_orth_S``: the same of the write with its components along the neuron's gate
   and up rows removed, what it adds beyond anything it reads (§18);
 - ``read_R``: the read direction ``â ± b̂`` (gate and up rows times the post-attention norm weight,
-  normalized; its negative for the poles on SiLU's negative lobe, ``acts``' ``neg_lobe`` past a half,
-  §17) through the R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it
+  normalized; the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe, ``acts``' ``neg_lobe`` past a
+  half, §17) through the R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it
   drives the pole;
 - ``read_S``: the read direction through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
   input tokens that drive the pole (legible at L0-L8);

@@ -8,8 +8,8 @@ later layers it pushes most (``out_*``), each as ``_layer``, ``_neuron``, ``_pol
 ``_cos``, strongest first (``−1`` and NaN where fewer clear the floor):
 
 - ``cos``: the cosine of A's write ``±w_A`` (``neurons.directions``) with B's read direction
-  (``neurons.read_rows``, as ``08_reads.py``: ``â ± b̂``, gate and up rows times the MLP input norm's weight,
-  normalized);
+  (``neurons.read_rows``, as ``08_reads.py``: ``â ± b̂``, the up row alone on the negative lobe, gate and up rows
+  times the MLP input norm's weight, normalized);
 - ``push``: ``cos · act_top_A · ‖w_A‖ · gain / rms_M``, how far one of A's top firings moves B's normalized
   MLP input along B's read direction; ``rms_M`` is the median RMS of the residual entering layer M's
   MLP (``RMS_DOCS`` catalog documents, positions from 1). Positive: A's firing drives B's pole;

@@ -45,14 +45,16 @@ def softcap(model_id: str) -> float | None:
 
 def read_rows(a: torch.Tensor, b: torch.Tensor, lobe: torch.Tensor) -> torch.Tensor:
     """``[2f, d]``, the poles' read directions, ``+`` poles then ``−``, from the unit gate and up rows
-    ``a``, ``b`` ``[f, d]``: ``â ± b̂``, and its negative for the poles on SiLU's negative lobe (``lobe``,
-    ``catalog.lobe_signs``). There the gate is below zero, and the pole's sign needs ``up`` opposite."""
-    return torch.cat([a + b, a - b]) * lobe.to(a)[:, None]
+    ``a``, ``b`` ``[f, d]``: ``â ± b̂``, and the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe
+    (``lobe``, ``catalog.lobe_signs``). There SiLU is nearly flat, so the activation follows ``up``, opposite
+    in sign to the pole, and which way of the gate raises it varies from pole to pole (findings §17)."""
+    return torch.where(lobe.to(a)[:, None] < 0, torch.cat([-b, b]), torch.cat([a + b, a - b]))
 
 
 def write_cosines(write: torch.Tensor, a: torch.Tensor, b: torch.Tensor, lobe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """``(cos_gate, cos_up)``, ``[2f]`` each: the cosine of each pole's write with the gate and up
-    sides of what it reads (``read_rows``), positive where the pole writes toward them."""
+    """``(cos_gate, cos_up)``, ``[2f]`` each: the cosine of each pole's write with the gate and up rows, each on the
+    side its firings sit (the gate below zero on the negative lobe, ``up`` opposite the pole there), positive where the
+    pole writes toward it."""
     w = (write / write.norm(dim=0, keepdim=True)).T
     x, y = (w * a).sum(1), (w * b).sum(1)
     return torch.cat([x, -x]) * lobe.to(x), torch.cat([y, y]) * lobe.to(x)

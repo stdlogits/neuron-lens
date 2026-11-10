@@ -644,9 +644,9 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
 
 `â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight, normalized: `â ± b̂`
-is a heuristic direction for each pole, its negative for a pole whose top firings ride SiLU's negative
-lobe (`acts`' `neg_lobe` past a half; §17). Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
-cosine of the pole's write with the gate and up sides of what it reads, positive where it writes toward
+is a heuristic direction for each pole; a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
+past a half; §17) reads the up row alone, `∓b̂`, because SiLU is nearly flat there. Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
+cosine of the pole's write with the gate and up rows, each on the side its firings sit, positive where it writes toward
 them; §18), `null_share` (the share of the
 write in the bottom 1% of singular directions of `W_U diag(γ)`, where entropy neurons write; Stolfo et
 al. 2024) and `vocab_skew`, `vocab_kurt` of `W_U · norm(w)` (Gurnee et al. 2024's prediction and

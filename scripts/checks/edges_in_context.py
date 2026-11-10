@@ -153,7 +153,8 @@ class Model:
         norm = arch.mid_norm(lay)
         a_hat, b_hat = (r / r.norm(dim=1, keepdim=True) for r in (lay.mlp.gate_proj.weight[neuron] * norm.weight,
                                                                   lay.mlp.up_proj.weight[neuron] * norm.weight))
-        c_b = (a_hat + pole[:, None] * b_hat) * lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]  # as read_rows
+        lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
+        c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as read_rows
         cos = torch.cat([c_b / c_b.norm(dim=1, keepdim=True) @ self.unit[l] for l in range(M)], 1) * sign
         gain = torch.stack([self.mlp_scale[l] * self.flow.scalars[l:M].prod() for l in range(M)])  # [M], as 16_edges.py
         push = cos * self.size.flatten()[pid] * gain[pid.div(2 * f, rounding_mode="floor")]
