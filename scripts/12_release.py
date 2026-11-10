@@ -716,7 +716,7 @@ Qwen3-8B, checked blind on 100 poles: firing labels separate held-out top firing
 0.82 [0.78, 0.85] (another pole's label: 0.56); a judge picks a pole's write label out of four from
 steered text 61% of the time [0.52, 0.69] (chance 25%). Firing labels at confidence 0.7 or more score
 0.94. They hold best early (83% of L0-L8's firing labels reach AUROC 0.8, 31% of L21-L27's), and write
-labels late (80% picked at L28-L35, 41% at L0-L8). Gemma 4's neuron labels are not checked blind yet.
+labels late (80% picked at L28-L35, 41% at L0-L8). Of Gemma 4's neuron labels, only the relabelled negative-lobe poles are checked blind (§8).
 
 ![Random poles read blind](figures/14_lens_blind.png)
 
@@ -736,7 +736,7 @@ At a pole's first 5 top firings, the exact RelP split of its activation over the
 the {TOP} upstream poles with the largest mean share, `driven_head_*` the same of the heads, and `emb_share`, `heads_share`,
 `neurons_share` each kind's mean share. `with_*`: the {TOP} earlier poles active at `act_top / 4` or more at the pole's firings, by lift
 (`with_lift`, the share of those firings where they are active over their overall `rate`), with that share (`with_co`). `n_contexts`: the firings used. The three relations
-differ, on Qwen3-8B: of a pole's top 16 driven-by sources, a median of 25-44% are in its top 16 wired-to or fires-with lists (32 random neurons a layer, L6-L30).
+differ: of a pole's top 16 driven-by sources, a median of 31-44% are in its top 16 wired-to or fires-with lists on Qwen3-8B, and 0-19% on Gemma 4 (every pole).
 
 ### `<model>-neurons-edges`: direct weight edges
 
