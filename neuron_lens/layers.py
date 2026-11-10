@@ -274,6 +274,20 @@ def _attention(at, x, cos, sin, mask, S: int, exact: bool):
     return out, m
 
 
+def attention_map(model, i: int, x: torch.Tensor) -> Attention:
+    """Layer ``i``'s attention over a whole document, ``x`` ``[T, d]`` its normalized input, every position a
+    query: for reading what a head did at one position (``sources.HeadSources``)."""
+    T, dev, at = x.shape[0], x.device, model.layers[i].self_attn
+    tp = -(-T // 8) * 8
+    mask = torch.full((T, tp), float("-inf"), device=dev).triu(1)
+    window = getattr(at, "sliding_window", None)
+    if window is not None:
+        mask = mask.masked_fill(torch.arange(tp, device=dev)[None] <= torch.arange(T, device=dev)[:, None] - window, float("-inf"))
+    typed = "layer_type" in inspect.signature(model.rotary_emb.forward).parameters  # Gemma 4: one table per layer type
+    c, s = model.rotary_emb(x[None], torch.arange(T, device=dev)[None], *((model.config.layer_types[i],) if typed else ()))
+    return _attention(at, x, c[0, :, None], s[0, :, None], mask, 0, False)[1]
+
+
 def _l2(x):
     r = torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + 1e-6)
     return x * r, r

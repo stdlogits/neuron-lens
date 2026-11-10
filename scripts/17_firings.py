@@ -45,9 +45,16 @@ firings (one, if the pole has only one), and its ``rate`` is at least one positi
 ``data/summary/sources_<model>.json``: each kind's share and the decomposition's largest error.
 ``checks/relations.py`` compares the three relations (driven by, wired to, fires with).
 
-Saves every ``--save-minutes`` and resumes there; the checkpoints go with the tables.
+``heads/sources.parquet``, a row per head, at each head's first ``N_CONTEXTS`` top firings (``--parts heads``, the documents
+holding one, each alone): what drives it through each input (``neuron_lens.sources``), per channel ``c`` of ``v`` (value, what it
+copies), ``q`` and ``k`` (query and key, why it looks there): ``<c>_emb_share``, ``<c>_heads_share``, ``<c>_neurons_share``,
+which sum to 1; the lists ``<c>_driven_head_layer``, ``<c>_driven_head``, ``<c>_driven_head_share`` and ``<c>_driven_layer``,
+``<c>_driven_neuron``, ``<c>_driven_pole``, ``<c>_driven_share``; ``with_*``, the poles firing at the query's position, as above.
+Per layer in ``data/summary/head_sources_<model>.json``.
 
-    python scripts/17_firings.py [--detach] [--layers a-b] [--docs N] [--batch-docs 32]
+The neurons' pass saves every ``--save-minutes`` and resumes there; the checkpoints go with the tables.
+
+    python scripts/17_firings.py [--detach] [--layers a-b] [--docs N] [--batch-docs 32] [--parts neurons,heads]
 
 ``--docs N`` is a smoke test: only the first N documents, printing what it collected, writing no table.
 """
@@ -65,12 +72,12 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from neuron_lens import arch
-from neuron_lens.catalog import MODEL, TOP, column, documents, kept, neuron_keys, neuron_table, put, write
+from neuron_lens.catalog import MODEL, TOP, column, documents, head_table, kept, neuron_keys, neuron_table, put, write
 from neuron_lens.firings import Accumulator, firing_plan
 from neuron_lens.neurons import softcap
 from neuron_lens.paths import DATA, LOGS, ROOT, SUMMARY
 from neuron_lens.readout import layer_reads, s_tops
-from neuron_lens.sources import Sources
+from neuron_lens.sources import HeadSources, Sources
 from neuron_lens.transport import decoder_stack
 from neuron_lens.weights import tensors
 
@@ -200,6 +207,27 @@ def source_tables(src: Sources, smoke: bool) -> None:
         (SUMMARY / f"sources_{STEM}.json").write_text(json.dumps(summary))
 
 
+def head_sources(args, docs: list[torch.Tensor]) -> None:
+    """``heads/sources.parquet``: what drives each head when it fires, by channel."""
+    if args.device == "cuda":
+        torch.set_float32_matmul_precision("high")
+    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(args.device).eval().requires_grad_(False)
+    src = HeadSources(decoder_stack(lm), args.device, sum(len(d) for d in docs))
+    t0 = time.perf_counter()
+    src.run(docs)
+    print(f"{time.strftime('%H:%M:%S')} heads: {int(src.count.sum())} firings in {time.perf_counter() - t0:.0f}s", flush=True)
+    summary = src.summary()
+    for M in sorted(summary)[::max(1, len(summary) // 8)]:
+        print(f"L{M}: {summary[M]}", flush=True)
+    worst = {c: max(s[c]["err"] for s in summary.values()) for c in ("v", "q", "k")}
+    print("largest error per channel:", worst, flush=True)
+    if args.docs is None:
+        write(src.table(), head_table("sources"))
+        (SUMMARY / f"head_sources_{STEM}.json").write_text(json.dumps(summary))
+    else:
+        src.table()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layers", default=None, help="a-b (default all)")
@@ -208,7 +236,9 @@ def main() -> None:
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
     ap.add_argument("--save-minutes", type=float, default=30)
     ap.add_argument("--detach", action="store_true")
+    ap.add_argument("--parts", default="neurons,heads", help="neurons (firings and sources), heads (heads/sources)")
     args = ap.parse_args()
+    parts = args.parts.split(",")
     if args.detach:
         LOGS.mkdir(exist_ok=True)
         log = LOGS / f"firings_{STEM}.log"
@@ -226,17 +256,21 @@ def main() -> None:
     docs = documents()
     if args.docs is not None:
         docs = docs[:args.docs]
-    acc, src = collect(args, layers, docs)
+    if "neurons" in parts:
+        acc, src = collect(args, layers, docs)
+        if args.docs is not None:
+            for l in layers:
+                print(f"L{l}: {int((acc.count[l] > 0).sum())} poles with a firing in {args.docs} documents, {int(acc.count[l].sum())} firings")
+            source_tables(src, smoke=True)
+        else:
+            tables(acc, layers, args.device)
+            source_tables(src, smoke=False)
+            for p in STATES.values():
+                p.unlink(missing_ok=True)
+    if "heads" in parts:
+        head_sources(args, docs)
     if args.docs is not None:
-        for l in layers:
-            print(f"L{l}: {int((acc.count[l] > 0).sum())} poles with a firing in {args.docs} documents, {int(acc.count[l].sum())} firings")
-        source_tables(src, smoke=True)
         print("smoke test done: no table written", flush=True)
-        return
-    tables(acc, layers, args.device)
-    source_tables(src, smoke=False)
-    for p in STATES.values():
-        p.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -221,6 +221,16 @@ A head's token maps are read between its own read and write points (§11): a tok
   by lift over their rate (`with_*`). The residual is a sum of writes for any model: `sources.Stream` takes each write as
   the residual sees it, times what rescales it at that position (a norm after the attention or the MLP) and the layer scalars
   it passes through.
+- **Head sources** (`17_firings.py --parts heads`, `heads/sources`). The same split with a head as the target, at each head's
+  first 5 top firings, through each of its inputs. At one firing each input is a read of the residual entering the layer,
+  so `sources.HeadSources` hands it to the same sum of writes. *Value* (`v_*`, what it copies): with the pattern and the norms'
+  scales held the output `o` is linear in the residual at every attended position; a source's share is its part of `o`
+  along `o`, summing to 1. *Query* and *key* (`q_*`, `k_*`, why it looks there): the score `q·k` is bilinear, and what is
+  split is the most attended key's margin (past the sink) over the mean key (past the sink), `q` over the sources at the
+  query's position with the keys held and `k` over those at the keys' positions with the query held; each sums to 1
+  for the score, and tells the pattern to first order. A source's activation sign at each position gives its pole. These
+  are Elhage et al.'s Q-, K- and V-composition (2021) measured at firings. No checkpoints: the pass runs only the documents
+  holding such a firing, in minutes.
 - **Drivers** (`07_drivers.py`): every kept token at position 24 of 8 documents (4 web, 2 code, 2 chat),
   before the documents' own next 16 tokens. Per pole, the 64 tokens with the largest mean activation at
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and

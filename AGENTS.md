@@ -10,9 +10,9 @@ A catalog of what every MLP neuron (two poles each) and attention head of two mo
 Qwen3-8B (36 layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads). Each unit is
 read from three sides: the weights through two lenses (a neuron's write and read direction; a head's
 OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
-heads get the same tables: `acts`, `drivers`, `reads`, `legible`, and `labels`; neurons also get `firings`
-(what the residual holds where they fire), `edges` (direct weight edges between poles) and `sources` (what drives
-them when they fire).
+heads get the same tables: `acts`, `drivers`, `reads`, `legible`, `labels` and `sources` (what drives them when
+they fire; for a head, through its value, query and key); neurons also get `firings` (what the residual holds where
+they fire) and `edges` (direct weight edges between poles).
 Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, per-neuron
 `image` and `audio` tables per neuron and per head. `NEURON_LENS_MODEL` selects the model for
 every stage (Qwen3-8B by default). The lenses and the catalog are released on the Hugging Face Hub
@@ -164,7 +164,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   in `legible`. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
 - **Three relations between units** (§17): wired to (`edges`), driven by and fires with (`sources`). Keep them
-  apart; none is the others.
+  apart; none is the others. Into a head only driven by and fires with exist (`heads/sources`): two heads meet through a
+  matrix, not a dot product, so there is no signed weight edge to list.
 - **Edges** (`edges`, findings §17) are wiring, not traffic: what a pole's firing would push into each
   later pole, directly at one position. What drives a pole when it fires is mostly units firing with it,
   which the edges rarely list; `checks/edges_in_context.py explain` gives a pole's sources in context.

@@ -79,6 +79,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                     "reads": "every head's OV and QK circuits read per token",
                     "legible": "which reads hold at every head's top firings",
                     "labels": "every head's labels, by Claude Haiku 5.5",
+                    "sources": "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
                     "image": "every head in image contexts",
                     "audio": "every head in audio contexts"}}
 OPTIMISED = {"image": "the patch that most raises each of the best-labelled poles",

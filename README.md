@@ -556,7 +556,7 @@ take about 1.5× as long.
 | `09_legible.py` | which reads hold at each unit's top firings | ~30 min on a Mac |
 | `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$105 for the neurons, under $1 for the heads (Batch API) |
 | `16_edges.py` | every pole's strongest direct weight edges | minutes |
-| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`) | 1-3 h on an H100 (estimate) |
+| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`); what drives each head through its value, query and key (`heads/sources`) | 1-3 h on an H100 (estimate) |
 | `13_media_activations.py` | Gemma 4: every pole's activation over the labelled images and sounds; its exemplars | ~50 min per modality on an H100, and 220 GB of RAM for the images |
 | `14_media_tables.py` | Gemma 4: the per-layer image and audio tables | ~15 min on an H100 |
 | `15_media_optimised.py` | Gemma 4: the optimised patches and sounds | ~25 min per modality on an H100 |
