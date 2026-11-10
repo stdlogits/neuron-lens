@@ -173,9 +173,10 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
   edges, sources, media labels and documents).
 - **Depth:** each read keeps its top 64 tokens with scores (`_ids`, `_val`; `_str` the top 8 decoded);
   signal holds to rank 64 (§7). At L35, `write_R` is the logit lens.
-- **Which read to trust where** depends on depth (§7): the S-lens on the input side through L8, the
-  R-lens from L9; `write_S` through L8, `write_R` from about L4; only exact drivers at L13-L20 on the
-  input side. These are priors; `legible` says what each read names for each pole.
+- **Which read to use where** depends on depth (§7): the S-lens on the input side through L8, the
+  R-lens from L9, with `read_S_z` as a concept view and, at L13-L20, contexts and exact drivers beside
+  them; `write_S` through L8, `write_R` from about L4. These are priors; `legible` says what each read
+  names for each pole.
 
 ## Reading heads
 
