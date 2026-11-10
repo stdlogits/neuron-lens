@@ -11,7 +11,7 @@ pipeline stage (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outpu
 
 **Terms.** A *pole* is one sign of a neuron's activation (SwiGLU activations take both), written
 `L8 n344 +`. Its *write* is `±W_down[:, n]`, its *read direction* `â ± b̂` (the gate and up rows).
-Its *top firings* are its strongest position in each of its 24 top documents. The *bands* are L0-L8,
+Its *top firings* are its strongest position in each of its 64 top documents (its 24 top documents in §3 and §4). The *bands* are L0-L8,
 L9-L12, L13-L20, L21-L27 and L28-L35 for Qwen3-8B, and Gemma 4 12B's quarters L0-L11, L12-L23,
 L24-L35 and L36-L47. A *mismatched control* scores another unit of the same layer on this unit's
 tokens. *Kept tokens* are the tokens seen 5+ times in the activation corpora, without byte-fallback
@@ -25,7 +25,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§4](#4-steering-is-not-what-a-firing-does) | before L21 a firing's effect depends on its context; the lens and steering read its average |
 | [§5](#5-prediction-and-suppression) | late poles fire before the word they promote; suppression from L32; two signs of one neuron |
 | [§6](#6-the-input-side) | the S-lens names early neurons' tokens through L8, the R-lens read from L9; exact drivers in between |
-| [§7](#7-which-reads-hold-the-legibility-census) | 38% of poles are read by some test, 57% are dark (82% at L13-L20) |
+| [§7](#7-which-reads-hold-the-legibility-census) | 31% of poles are read by some test, 64% are dark (87% at L13-L20) |
 | [§8](#8-describing-neurons) | labels from the lenses alone: firing AUROC 0.80, writes picked 65%; Haiku labels every pole |
 | [§9](#9-attention-sinks-the-outputs-temperature-and-entropy-neurons) | two null-space dimensions carry the attention sinks and set the output's temperature |
 | [§10](#10-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
@@ -33,7 +33,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§12](#12-attention-heads-census-and-labels) | late heads write the next token, the middle is dark; a label for every head |
 | [§13](#13-gemma-4-12b-the-text-catalog-in-a-second-model) | Gemma 4 12B reads like Qwen3-8B: inputs early, writes late (steering r 0.97 at L36-L47), a dark middle |
 | [§14](#14-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
-| [§15](#15-one-concept-in-text-images-and-sound) | 4,378 poles keep their image label on every text test; 18 hold one concept across all three modalities |
+| [§15](#15-one-concept-in-text-images-and-sound) | 4,382 poles keep their image label on every text test; 19 hold one concept across all three modalities |
 | [§16](#16-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
 | [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
 
