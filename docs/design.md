@@ -205,10 +205,8 @@ A head's token maps are read between its own read and write points (§11): a tok
   self) and the in-context read of its firings' outputs (`out_R_z`); induction and duplicate-token
   scores from 64 random sequences said twice.
 - **Firing reads** (`17_firings.py`, the `firings` table). Per pole, the mean over its top firings of the residual
-  entering the MLP (`before`, through `mid`), the layer's MLP output there (`mlp`, through `out`), the residual after
-  the layer (`after`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
-  logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS, so
-  `after = before · s + mlp`. They average over every top firing, so they stay off the label cards.
+  entering the MLP (`before`, through `mid`), the layer's MLP output there (`mlp`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
+  logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS. They average over every top firing, so they stay off the label cards.
 - **What a pole does to what it reads** (`parallel`, `orthogonal`, in the `firings` table). Under RelP's rules a firing's
   activation is exactly linear in the residual, `a = c · x` with `c = ½ (φ(g) / g) k (u r_gate + g r_up)` (`k` the norm's scale,
   `g`, `u` the gate and up values there), so the neuron's contribution is the rank-one map `x → w (c · x)`. `parallel = c · w` is

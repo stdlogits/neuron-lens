@@ -12,7 +12,6 @@ the residual at those positions, read through the lenses:
   input holds where it fires;
 - ``mlp_R``, ``mlp_S``: the layer's whole MLP output there, through ``out``: what the layer writes when the
   pole fires, the pole and the neurons that fire with it;
-- ``after_R``, ``after_S``: the residual after the layer, through ``out``;
 - ``pred``: the model's own mean logit there, its prediction of what comes next.
 
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
@@ -175,8 +174,7 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
         gains = acc.gains(l)
         cols["parallel"], cols["orthogonal"] = pa.array(gains[:, 0].numpy()), pa.array(gains[:, 1].numpy())
         add = lambda name, ids, val: put(cols, name, widen(keep[ids], fired, -1), widen(val, fired, float("nan")))
-        for site, J, K in (("before", J_mid[l], K_mid[l]), ("mlp", J_out[l] if l < len(J_out) else None, K_out[l]),
-                           ("after", J_out[l] if l < len(J_out) else None, K_out[l])):
+        for site, J, K in (("before", J_mid[l], K_mid[l]), ("mlp", J_out[l] if l < len(J_out) else None, K_out[l])):
             r = layer_reads(m[site].T, unembed, gamma, J, signs=(1,), k=TOP, kz=TOP, softcap=CAP)
             add(f"{site}_R", r["ids"][1], r["probs"][1])
             add(f"{site}_R_z", r["zids"][1], r["z"][1])

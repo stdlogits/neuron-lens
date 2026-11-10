@@ -22,7 +22,7 @@ from neuron_lens.catalog import MODEL, column, firing_tokens, flat_tokens, kept,
 from neuron_lens.paths import DATA, SUMMARY
 
 STEM = arch.stem(MODEL)
-SITES = ("before_R", "mlp_R", "after_R", "pred", "before_R_z", "mlp_R_z", "after_R_z", "pred_z")
+SITES = ("before_R", "mlp_R", "pred", "before_R_z", "mlp_R_z", "pred_z")
 REFS = ("write_R", "write_orth_R", "read_R")
 
 

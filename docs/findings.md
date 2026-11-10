@@ -1238,7 +1238,7 @@ orthogonal-to-read-direction list and the orthogonal-to-plane list for the same 
 - **Which kind of related.** Some late pairs are concept shifts (L22 n1988 +: faced, confronted → trying, navigating); others are collocates of a next word (L30 n165 +: dismantle → apart).
 
 **The `firings` table** (`17_firings.py`) reads what the residual holds where a pole fires, the layer's MLP output there and the model's prediction, as activation-side counterparts of these weight reads.
-Whether its `after` reads add anything over `before` and the write read is checked by `checks/firing_reads.py` once the pass has run.
+A read of the residual after the layer was tested and dropped: it is the sum of `before` and `mlp` and lands between them. Of the top 16 tokens a pole's steering promotes, the share in each read's top 16 (`checks/firing_reads.py`; controls 0.03 or less): Qwen3-8B L21-35, `write_R` 0.60-0.82, `mlp_R` 0.18-0.21, after 0.09-0.11, `before_R` 0.05; Gemma 4 12B L24-47, 0.41-0.68, 0.11-0.14, 0.08, 0.05.
 
 **Limits.** One model; a rater per comparison and many unclear lists, so the counts describe poles legible on both sides. The read direction is a heuristic, the
 lens read of a pole's input at early layers is uninformative for many (§6). §2, §3, §4, §7 and §17 measure top firings and edges at their earlier list sizes

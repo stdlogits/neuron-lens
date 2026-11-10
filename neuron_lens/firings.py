@@ -56,7 +56,7 @@ class Accumulator:
         self.sum = {site: {l: torch.zeros(2 * f, d) for l in self.layers} for site in SITES}
         self.count = {l: torch.zeros(2 * f) for l in self.layers}
         self.gain = {l: torch.zeros(2 * f, 2) for l in self.layers}  # parallel, orthogonal, summed
-        self.scale, self.scalar, self.weights, self.map = {}, {l: 1.0 for l in self.layers}, {}, {}
+        self.scale, self.weights, self.map = {}, {}, {}
         self.a = self.b = 0
 
     def begin(self, a: int, b: int) -> None:
@@ -105,7 +105,6 @@ class Accumulator:
         for l in self.layers:
             lay = stack.layers[l]
             module, scalar = arch.mlp_output(lay)
-            self.scalar[l] = 1.0 if scalar is None else float(scalar)
             self.weights[l] = weights(lay)
             out.append(arch.mid_norm(lay).register_forward_pre_hook(lambda m, a, l=l: self.before(l, a[0])))
             out.append(module.register_forward_hook(lambda m, a, o, l=l, s=scalar, lay=lay: self.mlp(l, o, s, arch.mlp_scale(lay, a[0]))))
@@ -113,11 +112,9 @@ class Accumulator:
         return out
 
     def means(self, l: int) -> dict[str, torch.Tensor]:
-        """The layer's means ``[2f, d]`` (zero rows for poles without a firing), with ``after``."""
+        """The layer's means ``[2f, d]`` (zero rows for poles without a firing)."""
         n = self.count[l].clamp_min(1)[:, None]
-        m = {site: self.sum[site][l] / n for site in SITES}
-        m["after"] = m["before"] * self.scalar[l] + m["mlp"]
-        return m
+        return {site: self.sum[site][l] / n for site in SITES}
 
     def gains(self, l: int) -> torch.Tensor:
         """``[2f, 2]``: the layer's ``parallel`` and ``orthogonal``, each pole's mean over its firings (NaN without any)."""
