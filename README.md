@@ -253,13 +253,15 @@ doesn't explain why S-lens reads fade after L8 ([§6](docs/findings.md#6-the-inp
 
 ![Which reads name the exact drivers](docs/figures/11_drivers.png)
 
-### 7. Most mid-network neurons are dark to weight-only reads, but not indescribable
+### 7. Most of the network's input side reads, and the middle is dark
 
-Every pole's reads are tested at its own top firings against mismatched pairs, at a 5% false discovery
-rate. 31% of poles are read by some test (a weight-only read, or a token that dominates their
-firings), 5% are silent, and 64% are *dark*: they fire, but no token-level test passes. Dark poles are
-87% of L13-L20. Yet explainers with full evidence cards describe dark poles almost as well as legible
-ones (detection AUROC 0.90 against 0.96): most are likely concept detectors whose firings vary in token
+Each pole's input side is held to something outside the lens that read it: the S-lens read to the tokens it fires on, and the
+R-lens read and what the residual holds where it fires to its exact drivers. An input read holds for 53% of poles, a further
+7% have only a token that dominates their firings, 5% are silent, and 35% are *dark*: they fire, but nothing names what
+drives them. Dark poles are 62% of L13-L20. That is a statement about the input side only: of §3's random poles, 97% of dark
+poles' write reads predict what steering them does (others: 96%). And in the description pilot, explainers with full evidence
+cards described poles without a legible weight read almost as well as the rest (detection AUROC 0.90 against 0.96), which
+suggests concept detectors whose firings vary in token
 ([§7](docs/findings.md#7-which-reads-hold-the-legibility-census)).
 
 ![Legibility census](docs/figures/12_census.png)
@@ -344,9 +346,10 @@ Gemma 4 12B comes from another lab, with another activation, norm layout and att
 catalog shows the same picture. The R-lens read of a write predicts steering from L11 on (median r
 0.53 at L12-L23, 0.82 at L24-L35, 0.97 at L36-L47), ahead of the logit lens; before L11, pushes at a
 neuron's natural size move the output too little for either lens to predict, though larger pushes
-still raise the tokens the R-lens names. 20% of poles pass some weight-only test (Qwen3-8B: 20%) and
-60% are dark (64%): the input side reads through L13, about the same relative depth as Qwen3-8B's L8,
-the write side from L33, and the middle is dark from both. Claude Haiku labelled every pole and head;
+still raise the tokens the R-lens names. An input read holds for 49% of poles (Qwen3-8B: 53%) and 35%
+are dark (35%): the weight-only S-lens read reaches L13, about the same relative depth as Qwen3-8B's L8, the
+write side in context starts at L33, and the middle stays dark. The R-lens read of a neuron's input direction
+fails on this model, a matter of how the read rows meet the input norm. Claude Haiku labelled every pole and head;
 checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are at
 chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.72)
 ([§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).

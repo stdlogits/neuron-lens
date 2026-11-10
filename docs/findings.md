@@ -25,7 +25,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§4](#4-steering-is-not-what-a-firing-does) | before L21 a firing's effect depends on its context; the lens and steering read its average |
 | [§5](#5-prediction-and-suppression) | late poles fire before the word they promote; suppression from L32; two signs of one neuron |
 | [§6](#6-the-input-side) | the S-lens names early neurons' tokens through L8, the R-lens read from L9; exact drivers in between |
-| [§7](#7-which-reads-hold-the-legibility-census) | 31% of poles are read by some test, 64% are dark (87% at L13-L20) |
+| [§7](#7-which-reads-hold-the-legibility-census) | 53% of poles have an input read that holds, 35% are dark (62% at L13-L20); a dark pole's write read predicts steering like any other's |
 | [§8](#8-describing-neurons) | labels from the lenses alone: firing AUROC 0.80, writes picked 65%; Haiku labels every pole |
 | [§9](#9-attention-sinks-the-outputs-temperature-and-entropy-neurons) | two null-space dimensions carry the attention sinks and set the output's temperature |
 | [§10](#10-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
@@ -418,60 +418,87 @@ top 20 tokens of 6,000 were 70% right at L0, 25% at L1 and about 0% from L5.
 
 ## §7. Which reads hold: the legibility census
 
-Do the catalog's reads say something true about each pole? `09_legible.py` tests every pole's
-weight-only reads at its own top firings.
+Do the catalog's reads say something true about each pole? `09_legible.py` holds each pole's reads to something outside
+the lens that made them, and reports the two sides of a neuron apart.
 
-**Setup.** For each of the 884,736 poles and its 64 top firings:
-- `write_R`: the mean layer-contrastive z, under the write read, of the tokens after the firings;
-  `write_S`: of the peak tokens, under the write's S-lens read; `read_R`, `read_S`: of the peak tokens,
-  under the read direction's reads; `write_orth_R`, `write_orth_S`: as the write's, for the write orthogonal to the neuron's
-  gate and up rows (§18), alongside the others and not part of *dark*;
-- p-values against mismatched pairs (another pole of the layer and sign, on this pole's tokens);
-  Benjamini-Hochberg over the layer's poles at a 5% false discovery rate; *net of chance* is the share
-  past the mismatched pairs' 99th percentile minus their own share;
+**Setup.** For each of the 884,736 poles, with its 64 top firings and 64 exact drivers (§6):
+- **the input side,** what drives it. `read_S`: the mean layer-contrastive z of the peak tokens, under the read direction's
+  S-lens read. `read_R`: of the exact drivers, under its R-lens read (an R-lens read reads forward, so the token under
+  the firing is the wrong target: L30 n7004 + fires on ` play` and reads *role*). `before_S`, `before_R`: what the residual
+  holds at the firings (`firings`' `_z` reads) against the exact drivers, as the overlap of the two top-64 lists, a z of
+  the mismatched pairs' overlaps;
+- **the write side,** reported alongside. `write_R`: the z of the tokens after the firings, under the write read;
+  `write_S`: of the peak tokens, under the write's S-lens read; `write_orth_R`, `write_orth_S`: as the write's, for the write
+  orthogonal to the neuron's gate and up rows (§18);
+- p-values against mismatched pairs (another pole of the layer and sign, on this pole's tokens); Benjamini-Hochberg over
+  the layer's poles at a 5% false discovery rate; *net of chance* is the share past the mismatched pairs' 99th percentile
+  minus their own share;
 - token and next-token detectors: a third of the firings share one peak token, or one next token;
-- silent: no firing, or `act_top` under 0.05; dark: fires, but no test passes and no detector.
+- silent: no firing, or `act_top` under 0.05; **dark: fires, but no input-side test passes and no detector.**
 
-| band | silent | token detector | `write_R` | `write_S` | `read_R` | `read_S` | `write_orth_R` | `write_orth_S` | any weight read | dark |
-|---|---|---|---|---|---|---|---|---|---|---|
-| L0-L8 | 0.19 | 0.26 | 0.00 [0.02] | 0.12 [0.12] | 0.03 [0.05] | 0.30 [0.26] | 0.00 [0.02] | 0.09 [0.09] | 0.31 | 0.39 |
-| L9-L12 | 0.00 | 0.11 | 0.01 [0.03] | 0.01 [0.03] | 0.09 [0.11] | 0.02 [0.07] | 0.01 [0.02] | 0.01 [0.02] | 0.11 | 0.80 |
-| L13-L20 | 0.00 | 0.08 | 0.00 [0.01] | 0.00 [0.01] | 0.04 [0.07] | 0.01 [0.01] | 0.00 [0.01] | 0.00 [0.01] | 0.05 | 0.87 |
-| L21-L27 | 0.00 | 0.20 | 0.10 [0.12] | 0.02 [0.03] | 0.07 [0.09] | 0.05 [0.06] | 0.08 [0.10] | 0.00 [0.01] | 0.18 | 0.67 |
-| L28-L35 | 0.00 | 0.16 | 0.27 [0.24] | 0.00 [0.01] | 0.03 [0.06] | 0.01 [0.02] | 0.25 [0.22] | 0.00 [0.01] | 0.28 | 0.60 |
-| all | 0.05 | 0.17 | 0.08 [0.09] | 0.04 [0.04] | 0.05 [0.07] | 0.09 [0.09] | 0.07 [0.08] | 0.02 [0.03] | 0.20 | 0.64 |
+| band | silent | token detector | `read_S` | `read_R` | `before_S` | `before_R` | any input read | dark | `write_R` | `write_S` | `write_orth_R` | `write_orth_S` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| L0-L8 | 0.19 | 0.26 | 0.30 [0.26] | 0.06 [0.08] | 0.50 [0.45] | 0.24 [0.24] | 0.56 | 0.19 | 0.00 [0.02] | 0.12 [0.12] | 0.00 [0.02] | 0.09 [0.09] |
+| L9-L12 | 0.00 | 0.11 | 0.02 [0.07] | 0.22 [0.21] | 0.44 [0.44] | 0.43 [0.43] | 0.54 | 0.40 | 0.01 [0.03] | 0.01 [0.03] | 0.01 [0.02] | 0.01 [0.02] |
+| L13-L20 | 0.00 | 0.08 | 0.01 [0.01] | 0.15 [0.15] | 0.20 [0.19] | 0.23 [0.23] | 0.32 | 0.62 | 0.00 [0.01] | 0.00 [0.01] | 0.00 [0.01] | 0.00 [0.01] |
+| L21-L27 | 0.00 | 0.20 | 0.05 [0.06] | 0.34 [0.30] | 0.46 [0.42] | 0.41 [0.35] | 0.61 | 0.31 | 0.10 [0.12] | 0.02 [0.03] | 0.08 [0.10] | 0.00 [0.01] |
+| L28-L35 | 0.00 | 0.16 | 0.01 [0.02] | 0.30 [0.25] | 0.50 [0.42] | 0.46 [0.36] | 0.65 | 0.27 | 0.27 [0.24] | 0.00 [0.01] | 0.25 [0.22] | 0.00 [0.01] |
+| all | 0.05 | 0.17 | 0.09 [0.09] | 0.21 [0.19] | 0.42 [0.38] | 0.34 [0.31] | 0.53 | 0.35 | 0.08 [0.09] | 0.04 [0.04] | 0.07 [0.08] | 0.02 [0.03] |
 
 Shares of poles passing at 5% FDR, band means over layers; net of chance in brackets.
 
 ![Which reads hold for each pole](figures/12_census.png)
 
-- **31% of poles are read by some test** (a weight-only read or a detector), 5% are silent (the
-  census skips position 0, where many L1-L3 poles work, §2), and **64% are dark**.
-- **The input side reads early:** `read_S` passes for 85% of poles at L0 and 23-35% at L1, L3 and L4
-  (L2: 9%, since 61% of its poles are silent), and almost none at L10-L20. `read_R` passes most at L8
-  and L12 (12-14%).
-- **The write side reads late:** `write_R` from L23, most at L28-L29 (30-31% net). `write_S` passes
+- **53% of poles have an input read that holds,** a further 7% only a token detector, 5% are silent (the census skips
+  position 0, where many L1-L3 poles work, §2), and **35% are dark**.
+- **The input side reads early and late.** `read_S` passes for 85% of poles at L0 and 23-35% at L1, L3 and L4 (L2: 9%, since 61%
+  of its poles are silent), and almost none at L10-L20. What the residual holds at the firings names the exact drivers
+  for 73% of poles at L0 (`before_S`), 15-30% at L13-L20 and 65-73% at L28-L31; `before_R` for 21-31% and 57-64%. The weight-only
+  `read_R` names them for 12-18% at L13-L20 and 44-51% at L27-L31.
+- **Dark poles peak mid-network:** 62% at L13-L20 (66-67% at L15-L18), against 19% at L0-L8, 40% at L9-L12 and 27-31% from
+  L21. It rises again at the very end, 37-55% at L33-L35, where the input reads fall.
+- **The write side reads late, in context:** `write_R` from L23, most at L28-L29 (30-31% net). `write_S` passes
   for 12% of L0-L8's poles, nearly always together with `read_S`: early neurons write back what they
-  detect (§6).
-- **The part of a write off what the neuron reads holds nearly as well late:** `write_orth_R` passes for 25% of L28-L35's poles, against 27% for
-  the whole write (§18).
-- **Dark poles peak mid-network:** 87% at L13-L20 (91% at L18), against 39% at L0-L8 and 52-78%
-  from L21.
-- **Dark is not indescribable.** In the description pilot (§8), explainers with full evidence cards
-  described dark poles almost as well as legible ones (detection AUROC 0.90 over 111 dark poles,
-  against 0.96 over 55 with a legible weight read): they are concept detectors whose firings vary in
-  token, which token-level tests miss.
+  detect (§6). The part of a write off what the neuron reads holds nearly as well late: `write_orth_R` passes for 25% of
+  L28-L35's poles, against 27% for the whole write (§18).
+- **`dark` says nothing about the write.** Of §3's random poles (`checks/dark_sides.py sides`; 810 dark, 1,397 not, mismatched
+  pairs 0.03 or less), the share whose R-lens write read predicts each effect, by §3's test:
+
+| band | steering: dark | steering: not dark | removal at its firings: dark | removal: not dark |
+|---|---|---|---|---|
+| L0-L8 | 0.80 | 0.88 | 0.14 | 0.10 |
+| L9-L12 | 0.98 | 0.99 | 0.14 | 0.15 |
+| L13-L20 | 0.99 | 0.99 | 0.38 | 0.41 |
+| L21-L27 | 1.00 | 1.00 | 0.89 | 0.96 |
+| L28-L35 | 1.00 | 1.00 | 1.00 | 1.00 |
+
+  So a dark pole's write read predicts steering as well as any other's, 97% against 96% over all layers. The
+  firings do test the write from L21: it predicts what removing the pole there does (r 0.37-0.91 for dark poles). What
+  fails in the census is the single next token. Before L21 a firing's effect depends on its context (§4).
+- **The token under a firing is rarely what drives it.** In the exact split of an activation over its sources (`sources`, the
+  first 5 firings), the embedding's direct share is at most 0.2% from L9. Heads supply 53% of it at dark L13-L20 poles
+  (42% at the others) and 50% at L21-L27 (39%), and earlier neurons the rest.
+- **Agreement with the residual isn't a test.** `read_R` scored on what the residual holds at the firings passes for 53%, 86% and
+  95% of L16, L24 and L30's poles, but random directions, selected on the same way, pass for 13%, 75% and 89%
+  (`checks/dark_sides.py null`; 3,000 documents): the firings are chosen along the direction, so the residual there agrees
+  with it. Exact drivers come from token swaps in other contexts, which nothing selects, so `dark` rests on those. The top-64
+  overlap of the two reads keeps a real gap (8-23% of the top 64 against 0.6-1.3% for random directions), and it is
+  where a read that the lens can't transport shows (§13).
+- **Dark is not indescribable.** In the description pilot (§8), on the census's first definition (any test, write side and
+  peak-token `read_R` included), explainers with full evidence cards described dark poles almost as well as legible ones
+  (detection AUROC 0.90 over 111 dark poles, against 0.96 over 55 with a legible weight read). That suggests
+  concept detectors whose firings vary in token. The pilot's scores were not kept, so its split can't be redrawn.
 
 **Which reads to trust where,** from §3-§7. The bands are priors; each pole's q-values in
 `legible` say which of its reads hold.
 
 | layers | what drives a pole | what a pole writes |
 |---|---|---|
-| L0-L7 | `read_S`: literal tokens (raw at L0-L4) | `write_S`: what it detects, written back; `write_R` legible from about L4 |
+| L0-L7 | `read_S`: literal tokens (raw at L0-L4); `before_S` | `write_S`: what it detects, written back; `write_R` legible from about L4 |
 | L8 | both lenses, agreeing most | both |
-| L9-L12 | `read_R`, with `read_S_z` as a concept view | `write_R`: predicts steering, rarely the next token |
-| L13-L20 | only exact drivers and activations | `write_R`, for steering |
-| L21-L35 | `read_R`, `read_S_z` | `write_R`: the next token from about L23; suppression from L32 |
+| L9-L12 | `read_R`, with `read_S_z` as a concept view; `before_S`, `before_R` | `write_R`: predicts steering, rarely the next token |
+| L13-L20 | exact drivers and activations; `before_R`, `before_S` for about a quarter of poles | `write_R`, for steering |
+| L21-L35 | `read_R`, `read_S_z`, `before_S`, `before_R` | `write_R`: the next token from about L23; suppression from L32 |
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
@@ -484,10 +511,12 @@ before L21 (1.0-1.7× at ranks 49-64), hub tokens at every rank; its `_z` read k
 
 ![Read signal by rank](figures/13_rank_depth.png)
 
-**Limits.** The tests are token-level, over at most 64 firings (the first release used 24; a third of 64 firings sharing a token is a
-harder test than a third of 24, which took detectors down and dark up from 57%), and each pole must clear the FDR on
-its own evidence; net shares count weak cases in aggregate. `write_R` tests only the next token: a
-write that acts later or through other units counts as dark. A third of firings is a chosen threshold.
+**Limits.** The tests are token-level, so a concept that shows in no single token stays dark. Exact drivers come from
+one position of 8 documents. The overlap tests are lenient: a pole passes on two or so shared tokens of 64 (a median of
+4-6), and `before_*` average over 64 firings. Each pole must clear the FDR on its own evidence; net shares count weak cases in
+aggregate. `write_R` tests only the next token. A third of firings is a chosen threshold. The census has changed twice: 24
+firings per pole in the first release gave 57% dark, 64 firings gave 64% (a third of 64 firings sharing a token is a harder
+test), and the amended test here, with the write tests out of `dark` and `read_R` held to exact drivers, gives 35%.
 
 ## §8. Describing neurons
 
@@ -838,7 +867,8 @@ induction) is not read.
 (largest output norm, one per document) against the layer's other heads on the same firings; BH over
 all 1,152 heads at 5%. `ov_R`: the attended token's column promotes the next token; `ov_copy`: the head
 promotes what it attends to; `ov_S`, `qk_S`: the attended token scores high in the head's own read.
-Dark: no test, no token mode (a third of firings sharing a query or attended token), no pattern.
+Dark: no test, no token mode (a third of firings sharing a query or attended token), no pattern. Unlike §7's, this
+counts the write-side OV tests: heads have neither a causal test of their writes nor a `firings` table to set against them.
 
 | band | `ov_R` | `ov_copy` | `ov_S` | `qk_S` | token mode: query / attended | pattern | dark |
 |---|---|---|---|---|---|---|---|
@@ -925,19 +955,29 @@ DCLM documents; Pearson r with the lens's read, medians over the random poles; c
 
 **Which reads hold** (`09_legible.py`, as §7, BH over all poles at 5%):
 
-| band | silent | `write_R` | `write_S` | `read_R` | `read_S` | any test | token detector | dark |
-|---|---|---|---|---|---|---|---|---|
-| L0-L11 | 0.00 | 0.00 | 0.01 | 0.00 | 0.40 | 0.40 | 0.57 | 0.27 |
-| L12-L23 | 0.00 | 0.00 | 0.04 | 0.00 | 0.06 | 0.07 | 0.26 | 0.71 |
-| L24-L35 | 0.00 | 0.07 | 0.00 | 0.01 | 0.04 | 0.11 | 0.18 | 0.73 |
-| L36-L47 | 0.00 | 0.19 | 0.00 | 0.00 | 0.03 | 0.20 | 0.15 | 0.68 |
-| all | 0.00 | 0.07 | 0.01 | 0.00 | 0.13 | 0.20 | 0.29 | 0.60 |
+| band | silent | `read_S` | `read_R` | `before_S` | `before_R` | any input read | token detector | dark | `write_R` | `write_S` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| L0-L11 | 0.00 | 0.40 | 0.00 | 0.32 | 0.17 | 0.57 | 0.57 | 0.17 | 0.00 | 0.01 |
+| L12-L23 | 0.00 | 0.06 | 0.01 | 0.27 | 0.50 | 0.54 | 0.26 | 0.34 | 0.00 | 0.04 |
+| L24-L35 | 0.00 | 0.04 | 0.04 | 0.03 | 0.30 | 0.32 | 0.18 | 0.54 | 0.07 | 0.00 |
+| L36-L47 | 0.00 | 0.03 | 0.01 | 0.07 | 0.53 | 0.53 | 0.15 | 0.36 | 0.19 | 0.00 |
+| all | 0.00 | 0.13 | 0.02 | 0.17 | 0.37 | 0.49 | 0.29 | 0.35 | 0.07 | 0.01 |
 
 ![Gemma 4: which reads hold, by layer](figures/20_gemma_census.png)
 
-- **The same shape as Qwen3-8B's:** 20% of poles pass some weight-only test (Qwen3-8B: 20%) and 60%
-  are dark (64%). The input side reads early (the S-lens names the firing token for 88-95% of L0-L1's
-  poles), the write side late (`write_R` 22-36% at L33-L40), and 66-91% of L16-L31 is dark.
+- **The same shape as Qwen3-8B's:** 49% of poles have an input read that holds (Qwen3-8B: 53%), a further 15% only a token
+  detector, and 35% are dark (35%). The input side reads early (the S-lens names the firing token for 88-95% of L0-L1's
+  poles) and again late (`before_R` 21-75% at L36-L47), the write side late (`write_R` 22-36% at L33-L40), and 49-77% of
+  L19-L32 is dark. As in Qwen3-8B, `dark` says nothing about the write: of §3's random poles, 95-100% of dark poles' writes
+  predict steering from L12, against 98-100% of the others'.
+- **The weight-only R-lens read of the input fails on this model.** `read_R` names the exact drivers for at most 9% of a
+  layer's poles, and its top 64 shares 0.1-0.6% with what the residual holds at the firings, by band (another pole: 0.1%;
+  Qwen3-8B: up to 23%), though the residual's own read holds (`before_R` above). The catalog's read rows are the rows times the input
+  norm's weight γ, the covector the activation applies to the residual. That suits the S-lens, a pullback; the R-lens
+  transports a vector. γ is nearly uniform on Qwen3-8B (std/mean 0.1-0.3) and not on Gemma 4 (1.1-4.8; the 99th percentile
+  is 365× the median at L42). Read with row / γ instead, the overlap rises from 0.4% to 9.2% at L30 and 0.1% to 3.8% at L42,
+  less at L18 (1.3%) and not at L6, and it is a little worse on Qwen3-8B (22.6% to 19.6% at L30), so neither form is
+  final (`checks/dark_sides.py norm`). The released `read_R`, `read_R_z` use row × γ; `dark` leans on `before_R` instead.
 - **The input-side stage reaches L13, at about Qwen3-8B's relative depth.** `read_S` falls to 3% at L8
   and 1% at L9, then rises again to 62% at L11 and 33-34% at L12-L13, where `write_S` also holds for 10-21% of poles:
   early neurons that write back the tokens they detect (§6), ending at 27% of the depth (Qwen3-8B: L8,
@@ -965,7 +1005,8 @@ neurons each, $171.66).
   follows the census: firing labels are least sure at L14-L32 (median 0.20; 0.30 in every other
   band), where most poles pass no test of a read, and write labels most sure there (0.30; 0.10 at
   L0-L4, 0.20 at L5-L13, 0.15 at L33-L47), where `out·R` predicts steering. Of Gemma 4's neuron labels, only
-  the relabelled negative-lobe poles are checked blind (§8).
+  the relabelled negative-lobe poles are checked blind (§8). From L14 their cards show the R-lens read of the input, which fails
+  on this model (above), with priors telling the labeller to expect little.
 
 - **Head labels: the firing labels hold, the write labels don't.** Checked blind as §12's, on 80 random
   heads (20 a band) by Claude Sonnet 5.5: the `fires` and `attends` labels tell 4 of a head's held-out

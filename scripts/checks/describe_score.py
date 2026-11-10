@@ -31,8 +31,8 @@ Stages, under ``data/checks/describe/<model>/`` (``describe_cards.py`` writes th
   ``tasks/scored_XX.jsonl``;
 - ``grade``: the scorers' answers against the key, to ``data/summary/describe_score_<model>.{log,json}``:
   matched and control AUROC, all poles, by thirds of depth, by the explainer's confidence, and by the
-  pole's class in the ``legible`` table (findings §7: ``weights``, a weight-only read passes;
-  ``detector``, a third of its top firings share a peak or next token; ``dark``, neither); means
+  pole's class in the ``legible`` table (findings §7: ``dark``, the table's; ``read``, an input-side test passes;
+  ``detector``, a third of its top firings share a peak or next token); means
   with 95% bootstrap intervals over neurons (both poles together, 2,000 resamples), and per pole in
   the JSON.
 
@@ -49,7 +49,7 @@ from statistics import mean, median
 import lens_blind as lb
 import pyarrow.parquet as pq
 import torch
-from describe_cards import FDR, NAME, OUT, TESTS
+from describe_cards import FDR, NAME, OUT
 
 from neuron_lens import arch
 from neuron_lens.catalog import (
@@ -62,6 +62,8 @@ from neuron_lens.catalog import (
     tokenizer,
 )
 from neuron_lens.paths import SUMMARY
+
+READS = ("read_R", "read_S", "before_R", "before_S")  # legible's input-side tests (findings §7)
 
 N_POS, N_NEG = 5, 5
 TASKS_PER_FILE = 20
@@ -151,20 +153,20 @@ def prompt(args) -> None:
 
 
 def census(ids) -> dict[str, str]:
-    """Each pole's class in the ``legible`` table (findings §7), in this precedence: ``silent``,
-    ``weights`` (a weight-only read passes at the FDR), ``dark`` (the table's: no test, no detector),
-    else ``detector`` (a third of its top firings share a peak or next token)."""
+    """Each pole's class in the ``legible`` table (findings §7), in this precedence: ``silent``, ``dark`` (the table's: no
+    input-side test, no detector), ``read`` (an input-side test passes at the FDR), else ``detector`` (a third of its top
+    firings share a peak or next token)."""
     by_layer = defaultdict(list)
     for pid in ids:
         by_layer[parse(pid)[0]].append(pid)
     out = {}
     for l, ps in by_layer.items():
-        t = pq.read_table(neuron_table("legible", l), columns=["silent", "dark", *[f"{x}_q" for x in TESTS]])
+        t = pq.read_table(neuron_table("legible", l), columns=["silent", "dark", *[f"{x}_q" for x in READS]])
         for pid in ps:
             _, n, s = parse(pid)
             r = t.slice(n if s > 0 else t.num_rows // 2 + n, 1).to_pylist()[0]
-            out[pid] = ("silent" if r["silent"] else "weights" if any(r[f"{x}_q"] <= FDR for x in TESTS)
-                        else "dark" if r["dark"] else "detector")
+            out[pid] = ("silent" if r["silent"] else "dark" if r["dark"]
+                        else "read" if any(r[f"{x}_q"] <= FDR for x in READS) else "detector")
     return out
 
 
@@ -213,7 +215,7 @@ def grade(args) -> None:
     for lo, hi in ((0, 0.4), (0.4, 0.7), (0.7, 1.01)):
         row(f"explainer confidence {lo}-{min(hi, 1):.1f}", [p for p in both if lo <= both[p]["confidence"] < hi])
     lines.append("\nby the pole's class in the legible table (findings §7; matched 0.9 or more in the JSON)")
-    for c in ("weights", "detector", "dark", "silent"):
+    for c in ("read", "detector", "dark", "silent"):
         row(c, [p for p in both if both[p]["class"] == c])
     lines.append("\nlowest matched AUROC")
     for p in sorted(both, key=lambda p: both[p]["matched"])[:10]:

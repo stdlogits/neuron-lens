@@ -37,8 +37,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`;
-  then `11` figures → `12` release).
+  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`, with `09` reading
+  `07` and `17`; then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -163,6 +163,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
   L13-L20; findings §11). These bands are a prior: weigh each unit's sides by its own q-values
   in `legible`. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
+- **Dark** (`legible`, findings §7) is a statement about a neuron pole's input side: fires, no input-side test passes, no
+  detector. Each test is held to something outside the lens (token text or token swaps). Don't add the write tests to it (a dark
+  pole's write predicts steering like any other's), or `read_R` against the residual at the firings (selecting the firings
+  guarantees that agreement at depth). Heads keep their own `dark`, which counts OV tests (§12).
 - **Three relations between units** (§17): wired to (`edges`), driven by and fires with (`sources`). Keep them
   apart; none is the others. Into a head only driven by and fires with exist (`heads/sources`): two heads meet through a
   matrix, not a dot product, so there is no signed weight edge to list.
@@ -204,7 +208,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
 - The catalog's GPU stages: `scripts/catalog_box.sh` installs on a GPU machine and starts
-  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17` for each model, then
+  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `07` for each model, then
   `08`, `09`, `16` and the `measure` half of `checks/edges_in_context.py` (`MEDIA=1` adds `13`, `14`). Each table goes to the
   `UPLOAD` branch of the Hub dataset as soon as its stage has run (`12_release.py --tables`). The release is a full `12_release.py` to that branch, then the same without `--branch` for `main`; it deletes what this machine's catalog lacks, so bring the catalog up to date and run it with `--dry-run` first, which lists the deletions. `catalog_box.sh`'s header has the
   commands to copy the results back. The `score` half runs where the comparison lenses are.

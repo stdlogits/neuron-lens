@@ -518,8 +518,8 @@ def dataset_card(f: dict, lens_rev: str, date: str) -> str:
                      for i, (c, glob, _, _) in enumerate(configs))
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("legible_qwen3-8b.json"), summary("legible_gemma-4-12b.json")
-    neuron_cols = {"silent": "silent", "write_R": "`write_R`", "write_S": "`write_S`", "read_R": "`read_R`",
-                   "read_S": "`read_S`", "any_test": "any test", "dark": "dark"}
+    neuron_cols = {"silent": "silent", "read_R": "`read_R`", "read_S": "`read_S`", "before_R": "`before_R`", "before_S": "`before_S`",
+                   "any_read": "any input read", "dark": "dark", "write_R": "`write_R`", "write_S": "`write_S`"}
     head_labels = {m: (SUMMARY / f"labels_heads_{m}.md").read_text().strip() for m in ("qwen3-8b", "gemma-4-12b")}
     media = summary("media_tables_gemma-4-12b.json")
     xm = summary("gemma4_media/crossmodal.json")["text_image_audio"]["all_three"]
@@ -607,7 +607,7 @@ reads hold for each unit):
 | L0-L7 | `read_S` (literal tokens, raw at L0-L4) | `write_S` (early neurons write back what they detect); `write_R` from about L4 | `ov_S` |
 | L8 | both | both | `ov_S`, `ov_R` |
 | L9-L12, L21-L35 | `read_R`, with `read_S_z` as a concept-level view | `write_R` | `ov_R` |
-| L13-L20 | only `drivers` and `acts` | `write_R`, for steering | `ov_R` (weak) |
+| L13-L20 | `drivers`, `acts`; `before_R`, `before_S` for about a quarter of poles | `write_R`, for steering | `ov_R` (weak) |
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
@@ -633,10 +633,10 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
 - **Firings.** A unit's firing in a document is its strongest position there; its top firings are the
   {TOP} documents where that is largest. `contexts` show the first 5, the firing token in `⟦ ⟧` and, for
   heads, the token it attends to most (past position 0) in `⟪ ⟫`.
-- **Tests** (`legible`) score a read on the tokens of the unit's own top firings, as a mean z, against
-  mismatched pairs: another unit of the layer scored on the same tokens. `_q` is the Benjamini-Hochberg
-  q-value; a test passes at `q ≤ 0.05`. **Dark:** fires, but no test passes and no single token
-  dominates its firings.
+- **Tests** (`legible`) score a read on a list of tokens as a z, against mismatched pairs: another unit of the
+  layer scored on the same tokens. `_q` is the Benjamini-Hochberg q-value; a test passes at `q ≤ 0.05`.
+  **Dark:** a neuron pole fires, but no input-side test passes and no single token dominates its firings. The
+  write tests are reported alongside: they don't enter a pole's `dark` (§7). Heads keep their own definition (§12).
 - **Scale.** A lens read describes a direction, not an effect size; `act_top × w_norm` is a pole's
   typical write within this corpus. A write read is the pole's average push, which steering shows;
   before about L21 of Qwen3-8B, what one firing does depends on its context (§4).
@@ -703,10 +703,12 @@ shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §6).
 
 ### `<model>-neurons-legible`: which reads hold
 
-`write_R` (the write's read promotes the tokens that follow the top firings), `write_S` (it names the
-peak tokens), `read_R`, `read_S` (the read direction's reads name the peak tokens), each with `_z` and
-`_q`; `silent` (no firing, or `act_top` under 0.05), `cur_mode`, `next_mode` (the share of top firings on
-one token, or followed by one), `dark`. Share of each band's poles, Qwen3-8B:
+The input side: `read_S` (the read direction's S-lens read names the peak tokens), `read_R` (its R-lens
+read names the exact drivers), `before_R`, `before_S` (what the residual holds at the top firings names the exact
+drivers). The write side, alongside: `write_R` (the write's read promotes the tokens that follow the top
+firings), `write_S` (it names the peak tokens), `write_orth_R`, `write_orth_S`. Each with `_z` and `_q`; `silent` (no
+firing, or `act_top` under 0.05), `cur_mode`, `next_mode` (the share of top firings on one token, or followed by
+one), `dark` (fires, no input-side test, neither mode past a third). Share of each band's poles, Qwen3-8B:
 
 {band_table(ql["neurons"]["bands"], neuron_cols, "L0-35")}
 
@@ -958,8 +960,8 @@ image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4],
   photos and ESC-50 sounds.
 - Activation statistics come from bf16 passes over documents of up to 256 tokens; top firings are one
   per document.
-- The tests are token-level, over at most 24 firings per unit. A dark unit may still be describable from
-  its contexts (§7).
+- The tests are token-level, over at most 64 firings per unit and 64 exact drivers per pole. A dark unit may still be
+  describable from its contexts, and its write read is tested apart from it (§7).
 - Heads are read through their circuits one token at a time: a head whose role depends on the query's
   context, or on position alone, is read only through `acts`.
 - Media labels name what a whole image or sound is about, not each patch or frame; media reads lose

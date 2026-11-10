@@ -1,0 +1,48 @@
+the write side, Qwen/Qwen3-8B: §3's random poles by the census's dark; share whose write read predicts the target (r past the mismatched pairs' 99th percentile, pooled over layers: {'steer 1x': 0.24174192547798157, 'steer 4x': 0.301853746175766, 'ablate win': 0.19017520546913147}) [mismatched pairs]; median r
+
+steer 1x
+L0-L8    dark n=108  0.80 [0.02] r 0.45 | not dark n=371  0.88 [0.01] r 0.44 | silent n=80   0.10 [0.08] r -0.03
+L9-L12   dark n=108  0.98 [0.01] r 0.58 | not dark n=148  0.99 [0.02] r 0.60
+L13-L20  dark n=312  0.99 [0.01] r 0.75 | not dark n=200  0.99 [0.01] r 0.78
+L21-L27  dark n=143  1.00 [0.01] r 0.93 | not dark n=305  1.00 [0.00] r 0.95
+L28-L35  dark n=139  1.00 [0.00] r 0.99 | not dark n=373  1.00 [0.00] r 0.98
+L0-L35   dark n=810  0.97 [0.01] r 0.78 | not dark n=1397 0.96 [0.01] r 0.86 | silent n=80   0.10 [0.08] r -0.03
+
+steer 4x
+L0-L8    dark n=108  0.68 [0.00] r 0.37 | not dark n=371  0.56 [0.05] r 0.33 | silent n=80   0.03 [0.01] r -0.00
+L9-L12   dark n=108  0.94 [0.00] r 0.53 | not dark n=148  0.86 [0.00] r 0.51
+L13-L20  dark n=312  0.96 [0.00] r 0.70 | not dark n=200  0.98 [0.01] r 0.70
+L21-L27  dark n=143  1.00 [0.01] r 0.91 | not dark n=305  1.00 [0.00] r 0.90
+L28-L35  dark n=139  0.99 [0.00] r 0.99 | not dark n=373  1.00 [0.00] r 0.97
+L0-L35   dark n=810  0.93 [0.00] r 0.71 | not dark n=1397 0.87 [0.02] r 0.74 | silent n=80   0.03 [0.01] r -0.00
+
+ablate win
+L0-L8    dark n=108  0.14 [0.01] r 0.07 | not dark n=371  0.10 [0.03] r 0.07 | silent n=85   0.05 [0.02] r 0.02
+L9-L12   dark n=108  0.14 [0.00] r 0.09 | not dark n=148  0.15 [0.01] r 0.09
+L13-L20  dark n=312  0.38 [0.01] r 0.15 | not dark n=200  0.41 [0.01] r 0.17
+L21-L27  dark n=143  0.89 [0.01] r 0.37 | not dark n=305  0.96 [0.00] r 0.45
+L28-L35  dark n=139  1.00 [0.00] r 0.91 | not dark n=373  1.00 [0.00] r 0.77
+L0-L35   dark n=810  0.51 [0.01] r 0.20 | not dark n=1397 0.58 [0.01] r 0.26 | silent n=85   0.05 [0.02] r 0.02
+
+what drives a firing (embedding / heads / earlier neurons, mean share over the first firings) and read_R_z's top 64 in before_R_z's [another pole]; dark | not dark
+L0-L8    0.006 / 0.457 / 0.537  agree 0.014 [0.001] | 0.013 / 0.368 / 0.618  agree 0.038 [0.001]
+L9-L12   0.001 / 0.333 / 0.666  agree 0.049 [0.001] | 0.002 / 0.226 / 0.773  agree 0.132 [0.001]
+L13-L20  0.000 / 0.526 / 0.474  agree 0.054 [0.001] | 0.001 / 0.422 / 0.577  agree 0.129 [0.001]
+L21-L27  0.000 / 0.495 / 0.505  agree 0.088 [0.001] | 0.001 / 0.385 / 0.615  agree 0.162 [0.001]
+L28-L35  0.000 / 0.188 / 0.812  agree 0.137 [0.001] | 0.000 / 0.206 / 0.793  agree 0.229 [0.001]
+L0-L35   0.001 / 0.429 / 0.570  agree 0.068 [0.001] | 0.003 / 0.318 / 0.679  agree 0.140 [0.001]
+
+selection null, Qwen/Qwen3-8B: 2048 random directions, top 64 of 3000 documents of up to 128 tokens; share passing read>before at 5% FDR (mean z, against mismatched pairs), and the top-64 overlap [mismatched]; real poles beside
+L16: random directions pass 0.13, shared 0.006 [0.001]; the layer's poles pass 0.53, shared 0.083 [0.001]
+L24: random directions pass 0.75, shared 0.009 [0.001]; the layer's poles pass 0.86, shared 0.142 [0.001]
+L30: random directions pass 0.89, shared 0.013 [0.001]; the layer's poles pass 0.95, shared 0.226 [0.001]
+
+read_R by how the rows meet the input norm's weight γ, Qwen/Qwen3-8B: read_R_z's top 64 in before_R_z's [another pole]; share of the plain read's top 10 in the top 20 exact drivers
+L16: γ std/mean 0.34, 99th percentile / median 2
+  row x norm  agree 0.083 [0.001]  drivers 0.030
+  row         agree 0.100 [0.001]  drivers 0.032
+  row / norm  agree 0.070 [0.001]  drivers 0.016
+L30: γ std/mean 0.11, 99th percentile / median 1
+  row x norm  agree 0.226 [0.001]  drivers 0.063
+  row         agree 0.225 [0.001]  drivers 0.063
+  row / norm  agree 0.196 [0.001]  drivers 0.056

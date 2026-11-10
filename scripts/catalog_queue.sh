@@ -30,8 +30,10 @@ Q=Qwen/Qwen3-8B
 G=google/gemma-4-12B
 must acts_qwen3-8b "$Q" python scripts/06_activations.py && up acts_qwen3-8b "$Q" acts,docs
 must firings_qwen3-8b "$Q" python scripts/17_firings.py && up firings_qwen3-8b "$Q" firings,sources
+must drivers_qwen3-8b "$Q" python scripts/07_drivers.py && up drivers_qwen3-8b "$Q" drivers
 must acts_gemma "$G" python scripts/06_activations.py && up acts_gemma "$G" acts,docs
 run firings_gemma "$G" python scripts/17_firings.py && up firings_gemma "$G" firings,sources
+run drivers_gemma "$G" python scripts/07_drivers.py && up drivers_gemma "$G" drivers
 
 run reads_qwen3-8b "$Q" python scripts/08_reads.py && up reads_qwen3-8b "$Q" reads
 run legible_qwen3-8b "$Q" python scripts/09_legible.py && up legible_qwen3-8b "$Q" legible

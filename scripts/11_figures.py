@@ -415,20 +415,23 @@ def fig_depth_map() -> None:
     steer = summary(f"causal_lens_{STEM}.json")["targets"]["steer 1x"]["R:dclm"]["pass"]
     col = lambda k: [r[k] for r in rows]
     groups = [
-        ("What makes a pole fire (its read direction)", [
+        ("What makes a pole fire", [
             ("read_S", "its S-lens read names the firing token", col("read_S"), S_COLOR),
-            ("read_R", "its R-lens read names the firing token", col("read_R"), R_COLOR),
+            ("read_R", "its R-lens read names its exact drivers", col("read_R"), R_COLOR),
+            ("before_S", "the residual at its firings, S-lens, names them", col("before_S"), S_COLOR),
+            ("before_R", "the residual at its firings, R-lens, names them", col("before_R"), R_COLOR),
             ("detector", "a third of its top firings are on one token", col("token_detector"), SLOT[3])]),
-        ("What a pole does (its write)", [
+        ("What a pole does (its write; not part of dark)", [
             ("write_S", "its S-lens read names the firing token", col("write_S"), S_COLOR),
             ("write_R", "its R-lens read predicts the next token, in context", col("write_R"), R_COLOR),
             ("steering", "its R-lens read predicts its effect, amplified", steer, R_COLOR)]),
         ("Neither", [
-            ("dark", "fires, but no test or detector passes", col("dark"), INK2),
+            ("dark", "fires, but nothing names what drives it", col("dark"), INK2),
             ("silent", "barely fires (act_top under 0.05)", col("silent"), MUTED)]),
     ]
     n_rows = sum(len(g) for _, g in groups)
-    fig = plt.figure(figsize=(10.0, 6.6), dpi=100)
+    span = lambda k, lo, hi: f"{100 * min(r[k] for r in rows[lo:hi + 1]):.0f}-{100 * max(r[k] for r in rows[lo:hi + 1]):.0f}%"
+    fig = plt.figure(figsize=(10.0, 7.7), dpi=100)
     ax = fig.add_axes((0.265, 0.1, 0.725, 0.69))
     ax.grid(False)
     for s in ax.spines.values():
@@ -466,16 +469,20 @@ def fig_depth_map() -> None:
         if lo:
             ax.plot([lo - 0.5] * 2, [-0.6, y + 0.05], color=INK2, lw=0.9, zorder=5)
     assert n_rows == len(ticks)
-    finish(fig, "03_depth_map", "Each side of a neuron reads at its own depth: inputs early, outputs late, a dark middle",
-           "Share of each layer's poles (%) whose weight-only read passes its test at the pole's top firings (5% false "
-           "discovery rate), except steering: of 64 random poles a layer (those that fire), the share whose write "
-           "predicts the effect of adding it at every position (amplified, not one firing in context). Blank: under 0.5%.",
+    finish(fig, "03_depth_map", "Each side of a neuron reads at its own depth, with a dark middle on the input side",
+           "Share of each layer's poles (%) whose read passes its test (5% false discovery rate). Input: weight-only reads and "
+           "the residual at the top firings, against the firing token or the exact drivers. Write: weight-only reads at "
+           "the top firings, and steering, of 64 random poles a layer (those that fire). Blank: under 0.5%.",
            "findings §3, §4, §6, §7; data/summary/legible_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
-           "The input side reads early: the S-lens names the firing token for 78% of L0's poles and 14-58% at L1-L8, "
-           "and almost none at L10-L20. The write side reads late: the R-lens write predicts the next token after a "
-           "firing for at most 2% of poles before L23, rising to 35-37% at L28-L30. In between, 77-86% of L13-L20's "
-           "poles are dark. Amplified, the write side reads nearly everywhere: from L5, 94-100% of random poles' "
-           "writes predict the effect of steering them.")
+           f"The S-lens names the firing token for {100 * rows[0]['read_S']:.0f}% of L0's poles and {span('read_S', 1, 8)} at L1-L8. "
+           f"What the residual holds at the firings names the exact drivers at most depths: the S-lens read for "
+           f"{span('before_S', 13, 20)} of L13-L20's poles and {span('before_S', 21, 35)} from L21, the R-lens read for "
+           f"{span('before_R', 13, 20)} and {span('before_R', 21, 35)}. The weight-only R-lens read names the drivers for "
+           f"{span('read_R', 13, 20)} and {span('read_R', 21, 35)}. {span('dark', 13, 20)} of L13-L20's poles are dark. The write "
+           f"side reads late in context: the R-lens write predicts the next token after a firing for at most "
+           f"{100 * max(r['write_R'] for r in rows[:23]):.0f}% of poles before L23 and {span('write_R', 28, 30)} at L28-L30. "
+           "Amplified it reads nearly everywhere: from L5, 94-100% of random poles' writes predict the effect of steering "
+           "them, dark or not (§7).")
 
 
 def fig_lens_reliability() -> None:
@@ -707,14 +714,14 @@ def fig_census() -> None:
     rows = summary(f"legible_{STEM}.json")["neurons"]["layers"]
     fig, (ax,) = figure()
     x = [r["layer"] for r in rows]
-    weights = [r["any_test"] for r in rows]
+    weights = [r["any_read"] for r in rows]
     silent = [r["silent"] for r in rows]
     dark = [r["dark"] for r in rows]
     detector = [max(0.0, 1 - w - s - d) for w, s, d in zip(weights, silent, dark)]
     bottom = [0.0] * len(x)
-    for vals, label, color in ((weights, "a weight-only read passes", R_COLOR),
+    for vals, label, color in ((weights, "an input read holds", R_COLOR),
                                (detector, "only a token detector:\na third of firings on one token", SLOT[3]),
-                               (dark, "dark: fires, nothing passes", BASE), (silent, "silent", GRID)):
+                               (dark, "dark: fires, nothing names\nwhat drives it", BASE), (silent, "silent", GRID)):
         ax.bar(x, vals, bottom=bottom, width=0.86, color=color, label=label, edgecolor=SURFACE, linewidth=0.8)
         bottom = [b + v for b, v in zip(bottom, vals)]
     layer_axis(ax)
@@ -724,14 +731,13 @@ def fig_census() -> None:
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     ax.grid(False)
     band = summary(f"legible_{STEM}.json")["neurons"]["bands"]
-    finish(fig, "12_census", "Most mid-network poles are dark: they fire, but no token-level test reads them",
-           "Every pole's weight-only reads (write: next token or firing token; read: firing token; R-lens and S-lens) "
-           "tested at its top firings against other poles of the layer, at a 5% false discovery rate.",
+    finish(fig, "12_census", "Most of the middle of the network is dark: its poles fire, but nothing names what drives them",
+           "Every pole's input side, at a 5% false discovery rate against other poles of the layer: the S-lens read against "
+           "the firing token; the R-lens read and the residual at the top firings against the exact drivers. Write reads don't enter it.",
            "findings §7; data/summary/legible_qwen3-8b.json; neurons/legible",
-           f"Shares of each layer's poles: some weight-only read passes, only a token detector, dark (fires but "
-           f"nothing passes), or silent. Over all layers {100 * band['L0-35']['any_test']:.0f}% of poles have a "
-           f"passing read and {100 * band['L0-35']['dark']:.0f}% are dark; dark averages "
-           f"{100 * band['L13-20']['dark']:.0f}% of L13-L20's poles.")
+           f"Shares of each layer's poles: an input read holds, only a token detector, dark (fires but nothing names what "
+           f"drives it), or silent. Over all layers an input read holds for {100 * band['L0-35']['any_read']:.0f}% of poles and "
+           f"{100 * band['L0-35']['dark']:.0f}% are dark; dark averages {100 * band['L13-20']['dark']:.0f}% of L13-L20's poles.")
 
 
 def fig_rank_depth() -> None:
@@ -951,7 +957,7 @@ def fig_two_models() -> None:
         a.plot(depth(steer["logit"]["layer"]), steer["logit"]["r_med"], color=SLOT[slot], lw=0.9, ls=(0, (3, 2)),
                zorder=2, label=f"{name}: logit lens")
         x = depth([r["layer"] for r in rows])
-        series(b, x, [r["any_test"] for r in rows], slot, f"{name}: a weight-only read passes")
+        series(b, x, [r["any_read"] for r in rows], slot, f"{name}: an input read holds")
         series(b, x, [r["dark"] for r in rows], slot, f"{name}: dark", ls=(0, (4, 2)))
         at[name] = (steer[record]["r_med"], rows)
     for ax in (a, b):
@@ -964,14 +970,16 @@ def fig_two_models() -> None:
     a.set_ylabel("median r, lens read vs steering effect")
     b.set_ylim(0, 1)
     pct(b)
-    b.set_title("Which reads hold at the top firings")
+    b.set_title("Which poles' input side reads")
     b.set_ylabel("share of the layer's poles")
     (qr, qrows), (gr, grows) = at["Qwen3-8B"], at["Gemma 4 12B"]
     first = lambda r: next(i for i, v in enumerate(r) if v >= 0.9)
     peak = lambda rows, k: max(rows, key=lambda r: r[k])
     qd, gd = peak(qrows, "dark"), peak(grows, "dark")
-    qw, gw = peak(qrows[len(qrows) // 2:], "any_test"), peak(grows[len(grows) // 2:], "any_test")
-    finish(fig, "18_two_models", "Qwen3-8B and Gemma 4 12B read alike: inputs early, writes late, a dark middle",
+    qw, gw = peak(qrows[len(qrows) // 2:], "any_read"), peak(grows[len(grows) // 2:], "any_read")
+    low = lambda rows: min(rows, key=lambda r: r["any_read"])
+    ql, gl = low(qrows[9:27]), low(grows[12:36])
+    finish(fig, "18_two_models", "Qwen3-8B and Gemma 4 12B read alike: steering from the weights, and a dark middle on the input side",
            "Both models on one depth axis, layer / (layers − 1): 36 layers for Qwen3-8B, 48 for Gemma 4 12B. Left: "
            "median r between a pole's R-lens write read and its 1× steering effect (dashed: the logit lens). Right: "
            "shares of each layer's poles at a 5% false discovery rate.",
@@ -981,13 +989,11 @@ def fig_two_models() -> None:
            f"pole's write and its 1× steering effect. In Qwen3-8B it predicts steering from L4 ({min(qr[4:9]):.2f}-"
            f"{max(qr[4:9]):.2f} at L4-L8); in Gemma 4 12B it stays at {max(gr[:11]):.2f} or less through L10 (relative "
            f"depth 0.21), jumps to {gr[11]:.2f} at L11 and reaches 0.9 at L{first(gr)} (Qwen3-8B: L{first(qr)}). The "
-           f"logit lens (dashed) trails the R-lens in both until late. Right: a weight-only read passes for "
-           f"{100 * qrows[0]['any_test']:.0f}% of Qwen3-8B's L0 poles and {100 * min(r['any_test'] for r in grows[:2]):.0f}-"
-           f"{100 * max(r['any_test'] for r in grows[:2]):.0f}% of Gemma's L0-L1, for at most "
-           f"{100 * max(r['any_test'] for r in qrows[13:21]):.0f}% of Qwen3-8B's L13-L20 and "
-           f"{100 * max(r['any_test'] for r in grows[15:31]):.0f}% of Gemma's L15-L30, and again late, mostly through "
-           f"the R-lens write ({100 * qw['any_test']:.0f}% at Qwen3-8B's L{qw['layer']}, {100 * gw['any_test']:.0f}% at "
-           f"Gemma's L{gw['layer']}). Dark peaks "
+           f"logit lens (dashed) trails the R-lens in both until late. Right: an input read holds for "
+           f"{100 * qrows[0]['any_read']:.0f}% of Qwen3-8B's L0 poles and {100 * min(r['any_read'] for r in grows[:2]):.0f}-"
+           f"{100 * max(r['any_read'] for r in grows[:2]):.0f}% of Gemma's L0-L1, falls to {100 * ql['any_read']:.0f}% at "
+           f"Qwen3-8B's L{ql['layer']} and {100 * gl['any_read']:.0f}% at Gemma's L{gl['layer']}, and rises again late "
+           f"({100 * qw['any_read']:.0f}% at Qwen3-8B's L{qw['layer']}, {100 * gw['any_read']:.0f}% at Gemma's L{gw['layer']}). Dark peaks "
            f"mid-network: {100 * qd['dark']:.0f}% at Qwen3-8B's L{qd['layer']} and {100 * gd['dark']:.0f}% at Gemma's "
            f"L{gd['layer']} (relative depth {qd['layer'] / 35:.2f} and {gd['layer'] / 47:.2f}).")
 
@@ -1020,8 +1026,9 @@ def fig_gemma_census() -> None:
     for k, label, slot, ls in (("read_S", "read_S: its S-lens read\nnames the firing token", 2, "-"),
                                ("write_S", "write_S: its S-lens write\nnames the firing token", 2, dash),
                                ("write_R", "write_R: its R-lens write\npredicts the next token", 0, "-"),
-                               ("read_R", "read_R: its R-lens read\nnames the firing token", 0, dash),
-                               ("dark", "dark: fires, but no test\nor detector passes", None, "-")):
+                               ("read_R", "read_R: its R-lens read\nnames its exact drivers", 0, dash),
+                               ("before_R", "before_R: the residual at its\nfirings names its exact drivers", 4, "-"),
+                               ("dark", "dark: fires, but nothing names\nwhat drives it", None, "-")):
         series(ax, x, [r[k] for r in rows], slot, label, ls=ls)
     layer_axis(ax, n=GEMMA_LAYERS)
     ax.set_ylim(-0.02, 1.0)
@@ -1030,19 +1037,22 @@ def fig_gemma_census() -> None:
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     band = summary(f"legible_{GEMMA_STEM}.json")["neurons"]["bands"]
     span = lambda k, lo, hi: (100 * min(r[k] for r in rows[lo:hi + 1]), 100 * max(r[k] for r in rows[lo:hi + 1]))
-    finish(fig, "20_gemma_census", "Gemma 4 12B: inputs read early, writes late, and most of the middle is dark",
-           "Share of each layer's 30,720 poles whose weight-only read passes its test at the pole's top firings, "
-           "against other poles of the layer, at a 5% false discovery rate (as figures 3 and 12 for Qwen3-8B).",
+    other = summary(f"legible_{STEM}.json")["neurons"]["bands"]["L0-35"]
+    finish(fig, "20_gemma_census", "Gemma 4 12B: inputs read early and late, writes late, and the middle is darkest",
+           "Share of each layer's 30,720 poles whose read passes its test against other poles of the layer, at a 5% false "
+           "discovery rate (as figures 3 and 12 for Qwen3-8B).",
            "findings §13; data/summary/legible_gemma-4-12b.json; neurons/legible",
            "The input side reads early: the S-lens read names the firing token for {:.0f}-{:.0f}% of L0-L1's poles, "
            "falls to {:.1f}% at L9, and rises again at L10-L13 ({:.0f}-{:.0f}%), where the S-lens write also holds for "
-           "{:.0f}-{:.0f}% at L11-L13. The write side reads late: the R-lens write predicts the next token after a "
-           "firing from L32, for {:.0f}-{:.0f}% of poles at L33-L40, falling to {:.0f}-{:.0f}% at L44-L47. In between, "
-           "{:.0f}-{:.0f}% of L16-L31's poles are dark. Over all layers {:.0f}% of poles pass some test and {:.0f}% are "
-           "dark (Qwen3-8B: 22% and 57%).".format(
+           "{:.0f}-{:.0f}% at L11-L13. From L12 what the residual holds at the firings names the exact drivers (`before_R`: "
+           "{:.0f}-{:.0f}% of L36-L47's poles); the weight-only R-lens read names them for at most {:.0f}% of any layer's poles (§13). "
+           "The write side reads late: the R-lens write predicts the next token after a firing from L32, for {:.0f}-{:.0f}% of "
+           "poles at L33-L40, falling to {:.0f}-{:.0f}% at L44-L47. {:.0f}-{:.0f}% of L19-L32's poles are dark. Over all "
+           "layers an input read holds for {:.0f}% of poles and {:.0f}% are dark (Qwen3-8B: {:.0f}% and {:.0f}%).".format(
                *span("read_S", 0, 1), 100 * rows[9]["read_S"], *span("read_S", 10, 13), *span("write_S", 11, 13),
-               *span("write_R", 33, 40), *span("write_R", 44, 47), *span("dark", 16, 31),
-               100 * band["L0-47"]["any_test"], 100 * band["L0-47"]["dark"]))
+               *span("before_R", 36, 47), 100 * max(r["read_R"] for r in rows),
+               *span("write_R", 33, 40), *span("write_R", 44, 47), *span("dark", 19, 32),
+               100 * band["L0-47"]["any_read"], 100 * band["L0-47"]["dark"], 100 * other["any_read"], 100 * other["dark"]))
 
 
 def fig_media_reads() -> None:
