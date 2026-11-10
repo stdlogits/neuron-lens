@@ -30,7 +30,8 @@ New repos are created private. Run where the fits and the catalog are, logged in
 ``--parts`` picks what to build and upload; ``--parts ""`` updates just the cards and figures. ``--branch`` uploads to
 that branch of both repos, made from ``main`` if it is new. ``--tables`` sends only those tables, as the catalog holds them,
 to the dataset's ``--branch``, leaving the cards alone, so a run can publish each table as soon as its stage is done
-(``scripts/catalog_queue.sh``):
+(``scripts/catalog_queue.sh``). A release deletes what this machine's catalog lacks from the folders it covers (the
+whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-run`` lists that against the revision it would upload to, with what it would add and change in size:
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
@@ -45,6 +46,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import torch
 from huggingface_hub import HfApi
+from huggingface_hub.utils import filter_repo_objects
 
 from neuron_lens import arch
 from neuron_lens.catalog import MODEL, TOP, TYPICAL, catalog_dir, kept
@@ -187,6 +189,21 @@ def catalog_files(model: str) -> dict:
                        (DATA / "causal" / f"{stem}-causal.pt", "causal/causal.pt")]
                       + [(p, f"media/{p.name}") for p in sorted((base / "media").glob("*_docs.parquet"))]}
     return files
+
+
+def remote_changes(built: list[str], stale: list[str], root: Path, stem: str, branch: str | None) -> None:
+    """Print what uploading ``built`` (paths in the staged ``root``) would do to the dataset's ``stem`` folder at ``branch``: the files
+    it would add and change in size, and those it would delete, every file matching ``stale`` that the staging lacks."""
+    api = HfApi()
+    rev = branch if branch in {b.name for b in api.list_repo_refs(DATASET, repo_type="dataset").branches} else "main"
+    remote = {f.path: f.size for f in api.list_repo_tree(DATASET, repo_type="dataset", revision=rev, recursive=True)
+              if hasattr(f, "size") and f.path.startswith(f"{stem}/")}
+    gone = sorted(set(filter_repo_objects(list(remote), allow_patterns=stale)) - set(built))
+    new = [p for p in built if p not in remote]
+    changed = [p for p in built if p in remote and remote[p] != (root / p).stat().st_size]
+    print(f"{DATASET}@{rev}, {stem}: {len(built)} files, {len(new)} new, {len(changed)} of another size, {len(gone)} to delete")
+    for p in gone:
+        print(f"  delete {p}")
 
 
 def catalog_facts(model: str, root: Path) -> dict:
@@ -984,7 +1001,7 @@ def main() -> None:
     ap.add_argument("--parts", default=",".join(PARTS), help=f"what to build and upload: {', '.join(PARTS)}; empty for the cards alone")
     ap.add_argument("--branch", default=None, help="the branch of both repos to upload to (default main)")
     ap.add_argument("--tables", default=None, help="only these catalog tables, to --branch, without the cards")
-    ap.add_argument("--dry-run", action="store_true", help="build the files and cards, upload nothing")
+    ap.add_argument("--dry-run", action="store_true", help="build the files and cards, list what the upload would delete or change, upload nothing")
     args = ap.parse_args()
     if args.tables is not None:
         upload_tables(MODEL, args.tables.split(","), args.branch)
@@ -1021,9 +1038,14 @@ def main() -> None:
         for name in names:
             link(FIGURES / name, root / "figures" / name)
     (lens_root / "README.md").write_text(model_card(every, date))
+    built = [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
+    stale = ["figures/*", "*/README.md", "*/figures/*"] + (
+        [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
     if args.dry_run:
         (data_root / "README.md").write_text(dataset_card(every, "(dry run)", date))
         print(f"dry run: cards in {lens_root} and {data_root}")
+        if built:
+            remote_changes(built, stale, data_root, stem, args.branch)
         return
     api.create_repo(REPO, private=True, exist_ok=True)
     if args.branch:
@@ -1038,9 +1060,6 @@ def main() -> None:
     api.create_repo(DATASET, repo_type="dataset", private=True, exist_ok=True)
     if args.branch:
         api.create_branch(DATASET, repo_type="dataset", branch=args.branch, exist_ok=True)
-    built = [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
-    stale = ["figures/*", "*/README.md", "*/figures/*"] + (
-        [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
     api.upload_folder(repo_id=DATASET, repo_type="dataset", folder_path=data_root, revision=args.branch,
                       allow_patterns=["README.md", "figures/*", *built], delete_patterns=stale,
                       commit_message=(f"{stem}: {', '.join(sorted(parts - {'lenses'}))}, cards" if parts - {"lenses"} else "Cards")
