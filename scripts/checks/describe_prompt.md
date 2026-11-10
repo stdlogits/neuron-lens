@@ -14,7 +14,7 @@ part of the token, ⏎ is a newline.
   mostly noise past layer 8. All weight reads are averages and can be loose.
 - **exact drivers:** measured, not read from the weights: the tokens that make the pole fire most
   when put into real text, at their own position and summed over the positions after. The input
-  side to trust at layers 13-20, where the weight reads of the input are dark.
+  side to trust at layers 13-20, where the weight reads of the input are uninformative.
 - **the layer's shares:** how many of this layer's poles have each read hold at their own top
   firings (`write_R`, `write_S`, `read_R`, `read_S`). Near 0, that read is rarely informative at
   this depth; it says nothing about this pole in particular.

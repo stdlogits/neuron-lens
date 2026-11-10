@@ -127,7 +127,7 @@ PLANS = {
                                   "QK reads track real attention best at layer 0")),
             (8, ["ov_S", "ov_R"], "OV·S is the record through layer 8, OV·R carries signal from about layer 4"),
             (12, ["ov_R"], "OV·R is the output read from here"),
-            (20, ["ov_R"], "the weakest band for every head read: QK reads are dark here, expect little, say unclear freely"),
+            (20, ["ov_R"], "the weakest band for every head read: QK reads are uninformative here, expect little, say unclear freely"),
             (35, ["ov_R"], "OV·R and the QK reads are most reliable here; late heads often attend to what they copy"),
         ],
         "late": 21,

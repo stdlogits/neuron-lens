@@ -30,9 +30,7 @@ Stages, under ``data/checks/describe/<model>/`` (``describe_cards.py`` writes th
 - scorers (Claude Code subagents, Sonnet, briefed with ``describe_score_prompt.md``) write
   ``tasks/scored_XX.jsonl``;
 - ``grade``: the scorers' answers against the key, to ``data/summary/describe_score_<model>.{log,json}``:
-  matched and control AUROC, all poles, by thirds of depth, by the explainer's confidence, and by the
-  pole's class in the ``legible`` table (findings §7: ``dark``, the table's; ``read``, an input-side test passes;
-  ``detector``, a third of its top firings share a peak or next token); means
+  matched and control AUROC, all poles, by thirds of depth and by the explainer's confidence; means
   with 95% bootstrap intervals over neurons (both poles together, 2,000 resamples), and per pole in
   the JSON.
 
@@ -49,7 +47,7 @@ from statistics import mean, median
 import lens_blind as lb
 import pyarrow.parquet as pq
 import torch
-from describe_cards import FDR, NAME, OUT
+from describe_cards import NAME, OUT
 
 from neuron_lens import arch
 from neuron_lens.catalog import (
@@ -62,8 +60,6 @@ from neuron_lens.catalog import (
     tokenizer,
 )
 from neuron_lens.paths import SUMMARY
-
-READS = ("read_R", "read_S", "before_R", "before_S")  # legible's input-side tests (findings §7)
 
 N_POS, N_NEG = 5, 5
 TASKS_PER_FILE = 20
@@ -152,24 +148,6 @@ def prompt(args) -> None:
           f"files; labels for {len(labels)}, sets for {len(sets)} -> {OUT / 'tasks'}")
 
 
-def census(ids) -> dict[str, str]:
-    """Each pole's class in the ``legible`` table (findings §7), in this precedence: ``silent``, ``dark`` (the table's: no
-    input-side test, no detector), ``read`` (an input-side test passes at the FDR), else ``detector`` (a third of its top
-    firings share a peak or next token)."""
-    by_layer = defaultdict(list)
-    for pid in ids:
-        by_layer[parse(pid)[0]].append(pid)
-    out = {}
-    for l, ps in by_layer.items():
-        t = pq.read_table(neuron_table("legible", l), columns=["silent", "dark", *[f"{x}_q" for x in READS]])
-        for pid in ps:
-            _, n, s = parse(pid)
-            r = t.slice(n if s > 0 else t.num_rows // 2 + n, 1).to_pylist()[0]
-            out[pid] = ("silent" if r["silent"] else "dark" if r["dark"]
-                        else "read" if any(r[f"{x}_q"] <= FDR for x in READS) else "detector")
-    return out
-
-
 def grade(args) -> None:
     key = json.loads((OUT / "tasks" / "key.json").read_text())
     got = lb.read_jsonl((OUT / "tasks").glob("scored_*.jsonl"))
@@ -178,9 +156,8 @@ def grade(args) -> None:
         if tid in got and len(got[tid]["p"]) == len(k["truth"]):
             res.setdefault(k["pole"], {"confidence": k["confidence"]})[k["kind"]] = lb.auroc(got[tid]["p"], k["truth"])
     both = {p: r for p, r in res.items() if "matched" in r and "control" in r}
-    cls = census(both)
     for p in both:
-        both[p] |= {"layer": parse(p)[0], "class": cls[p]}
+        both[p] |= {"layer": parse(p)[0]}
     lines = [(f"detection scoring of the description pilot, {MODEL}: {len(both)} poles scored under both labels "
               f"({len(got)} of {len(key)} tasks answered)"),
              ("AUROC of the scorer's probabilities, matched / control label (one derangement); means with 95% bootstrap "
@@ -214,12 +191,9 @@ def grade(args) -> None:
         row(f"layers {lo}-{hi}", [p for p in both if lo <= both[p]["layer"] <= hi])
     for lo, hi in ((0, 0.4), (0.4, 0.7), (0.7, 1.01)):
         row(f"explainer confidence {lo}-{min(hi, 1):.1f}", [p for p in both if lo <= both[p]["confidence"] < hi])
-    lines.append("\nby the pole's class in the legible table (findings §7; matched 0.9 or more in the JSON)")
-    for c in ("read", "detector", "dark", "silent"):
-        row(c, [p for p in both if both[p]["class"] == c])
     lines.append("\nlowest matched AUROC")
     for p in sorted(both, key=lambda p: both[p]["matched"])[:10]:
-        lines.append(f"  {p:14s} {both[p]['matched']:.2f} (control {both[p]['control']:.2f}, {both[p]['class']})")
+        lines.append(f"  {p:14s} {both[p]['matched']:.2f} (control {both[p]['control']:.2f})")
     text = "\n".join(lines)
     print(text)
     (SUMMARY / f"describe_score_{NAME}.log").write_text(text + "\n")

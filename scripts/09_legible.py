@@ -1,33 +1,24 @@
-"""Which reads say something measurable about each neuron pole and attention head (pipeline stage 9; findings §7, §12).
+"""What each weight-only read names, for every neuron pole and attention head (pipeline stage 9; findings §7, §12).
 
-Most tests score a read on the tokens of the unit's own top firings (``06_activations.py``: the strongest position in each
-of its top documents) as a mean z, against mismatched pairs: another unit of the layer scored on this unit's tokens. A
-unit's p-value on a test is the share of its layer's mismatched pairs that score as high, and a test passes at a false
-discovery rate of 5% (Benjamini-Hochberg over the layer's units for neurons, over all heads for heads). Units with fewer
-than 3 usable firings are not scored. Columns give the z and q-value of each test.
+Each test scores a read on a list of tokens as a mean z, against mismatched pairs: another unit of the layer scored on this
+unit's tokens. A unit's p-value on a test is the share of its layer's mismatched pairs that score as high, and a test passes
+at a false discovery rate of 5% (Benjamini-Hochberg over the layer's units for neurons, over all heads for heads). A test
+says whether a read names that target. The targets are narrow (the token under a firing, the token after it), so a failed
+test doesn't make the read wrong (§7). Units with fewer than 3 usable tokens are not scored. Columns give the z and q-value of
+each test.
 
-**Neurons** (``neurons/legible/L<layer>.parquet``). Run after ``07_drivers.py``, ``08_reads.py`` and ``17_firings.py``.
+**Neurons** (``neurons/legible/L<layer>.parquet``), run after ``07_drivers.py`` and ``08_reads.py``, z of each token across the
+layer's poles:
 
-The input side, what drives the pole; each read is held to something outside the lens that made it:
-
-- ``read_S``: the read direction's S-lens read names the peak tokens;
-- ``read_R``: its R-lens read (from the MLP input) names the pole's exact drivers (``07_drivers.py``, token swaps), z of each
-  token across the layer's poles. An R-lens read reads forward, so it isn't held to the peak token;
-- ``before_R``, ``before_S``: what the residual holds at the top firings (``firings``' ``_z`` reads) names the exact drivers:
-  the overlap of the two top-64 lists, as a z of the mismatched pairs' overlap.
-
-The R-lens read isn't held to ``before_R`` itself: selecting the firings on a direction already makes the residual there
-agree with that direction's read (``checks/dark_sides.py``'s null, findings §7).
-
-The write side, reported alongside and left out of ``dark``. The token tests here are narrow, and the write reads' causal
-test is steering, on a sample (§3; ``checks/dark_sides.py`` splits it by ``dark``):
-
+- ``read_S``: the read direction's S-lens read names the peak tokens of the top firings (``06_activations.py``: the strongest
+  position in each of the pole's top documents);
+- ``read_R``: its R-lens read (from the MLP input) names the pole's exact drivers (``07_drivers.py``, token swaps). An R-lens read
+  reads forward, so it isn't scored on the token under a firing;
 - ``write_R``: the write's R-lens read promotes the tokens that follow the firings;
 - ``write_S``: the write's S-lens read names the peak tokens (early neurons write back what they detect);
-- ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up rows (§18).
-
-``silent``: no firing, or ``act_top`` under 0.05; ``cur_mode``, ``next_mode``: the share of top firings on one peak token, or
-followed by one token; ``dark``: fires, but no input-side test passes and neither mode reaches a third.
+- ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up rows (§18);
+- ``silent``: no firing, or ``act_top`` under 0.05; ``cur_mode``, ``next_mode``: the share of top firings on one peak token, or
+  followed by one token.
 
 **Heads** (``heads/legible.parquet``), each read's per-token z from ``08_reads.py``, at the token the
 firing attends to most (past the sink):
@@ -38,8 +29,7 @@ firing attends to most (past the sink):
 - ``ov_S``: the same through the S-lens: the write carries the attended token's footprint;
 - ``qk_S``: the attended token's ``qk_S`` z: the QK read predicts what the head attends to;
 - ``cur_mode``, ``src_mode``: the share of firings on one query token, or attending to one token;
-  ``pattern``: ``prev`` or ``self`` past 0.5, ``induction`` or ``duplicate`` past 0.3; ``dark``: no
-  test passes, neither mode reaches a third, and no pattern.
+  ``pattern``: ``prev`` or ``self`` past 0.5, ``induction`` or ``duplicate`` past 0.3.
 - ``<test>_p``: the uncorrected p-value against the layer's mismatched pairs. A layer's H(H − 1)
   pairs bound p below by 1/(H(H − 1) + 1): with 16 heads a layer (Gemma 4), BH over all heads passes
   only if dozens sit at that floor, so ``_q`` can be 1 where a head clearly stands out of its layer.
@@ -93,8 +83,7 @@ FDR = 0.05
 NULL_Q = 0.99
 CHUNK = 2048
 BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers))  # Qwen3-8B's five, else quarters
-READ_TESTS = ("read_R", "read_S", "before_R", "before_S")  # the input side: what ``dark`` asks
-WRITE_TESTS = ("write_R", "write_S", "write_orth_R", "write_orth_S")  # alongside: not part of ``dark``
+TESTS = ("read_R", "read_S", "write_R", "write_S", "write_orth_R", "write_orth_S")
 HEAD_TESTS = ("ov_R", "ov_copy", "ov_S", "qk_S")
 PATTERN = {"prev": 0.5, "self": 0.5, "induction": 0.3, "duplicate": 0.3}
 
@@ -123,25 +112,6 @@ def mean_z(vecs: torch.Tensor, table: torch.Tensor, tok: torch.Tensor, ok: torch
         stat = (z * ok).sum(1) / ok.sum(1).clamp_min(1)
         out.append(torch.where(ok.sum(1) >= MIN_FIRINGS, stat, torch.nan))
     return out[0], out[1]
-
-
-def shared_z(ids: torch.Tensor, target: torch.Tensor, perm: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """How many of each row's ``ids`` are in its ``target`` list, and of the rows in ``perm`` order (the mismatched pairs), as
-    z-scores of the mismatched pairs' counts; NaN for an empty list (a pole without firings)."""
-    def shared(x: torch.Tensor) -> torch.Tensor:
-        out = torch.zeros(len(x))
-        for s in range(0, len(x), CHUNK):
-            a = x[s:s + CHUNK]
-            out[s:s + CHUNK] = ((a[:, :, None] == target[s:s + CHUNK][:, None, :]).any(-1) & (a >= 0)).sum(1).float()
-        return out
-
-    empty = ids[:, 0] < 0
-    m, n = shared(ids), shared(ids[perm])
-    n[empty[perm]] = torch.nan
-    kept_n = n[~n.isnan()]
-    mu, sd = kept_n.mean(), kept_n.std().clamp_min(1e-6)
-    m[empty] = torch.nan
-    return (m - mu) / sd, (n - mu) / sd
 
 
 def firing_tokens(saved: dict, doc: torch.Tensor, pos: torch.Tensor, offset: int = 0) -> torch.Tensor:
@@ -186,7 +156,6 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         cur, nxt = firing_tokens(saved, doc, pos), firing_tokens(saved, doc, pos, 1)
         silent = (fired.sum(1) == 0) | (val.median(1).values.clamp_min(0) < SILENT)
         drivers = column(pq.read_table(neuron_table("drivers", layer), columns=["drivers_ids"]), "drivers_ids").long()
-        before = pq.read_table(neuron_table("firings", layer), columns=["before_R_z_ids", "before_S_z_ids"])
         k_cur, k_nxt, k_drv = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (cur, nxt, drivers))
         ok_cur, ok_nxt = fired & (k_cur >= 0), fired & (k_nxt >= 0)
         perm = torch.cat([torch.randperm(f, generator=g), f + torch.randperm(f, generator=g)])
@@ -210,40 +179,29 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
                  "read_R": mean_z(rr.half(), unembed, k_drv, k_drv >= 0, perm),
                  "read_S": mean_z((cs / cs.norm(dim=1, keepdim=True)).half(), emb, k_cur, ok_cur, perm),
                  "write_orth_R": mean_z(torch.cat([ro, -ro]).half(), unembed, k_nxt, ok_nxt, perm),
-                 "write_orth_S": mean_z(torch.cat([so, -so]).half(), emb, k_cur, ok_cur, perm),
-                 "before_R": shared_z(column(before, "before_R_z_ids").long(), drivers, perm),
-                 "before_S": shared_z(column(before, "before_S_z_ids").long(), drivers, perm)}
+                 "write_orth_S": mean_z(torch.cat([so, -so]).half(), emb, k_cur, ok_cur, perm)}
         cur_mode, next_mode = modal_share(cur, fired), modal_share(nxt, fired & (nxt >= 0))
         cols = neuron_keys(layer, f)
         cols |= {"silent": pa.array(silent.numpy()), "cur_mode": pa.array(cur_mode.numpy()), "next_mode": pa.array(next_mode.numpy())}
         row = {"layer": layer, "silent": silent.float().mean().item(),
                "token_detector": ((cur_mode >= PAST) & ~silent).float().mean().item(),
                "next_detector": ((next_mode >= PAST) & ~silent).float().mean().item()}
-        passed = {}
         for test, (m, n) in stats.items():
             ok = ~m.isnan() & ~silent
             q = torch.ones(2 * f)
             q[ok] = bh(null_p(m[ok], n))
             cols[f"{test}_z"], cols[f"{test}_q"] = pa.array(m.numpy()), pa.array(q.numpy())
-            passed[test] = q <= FDR
             thr = n[~n.isnan()].quantile(NULL_Q).item()
             row[test] = (q <= FDR).float().mean().item()
             row[f"{test}_net"] = (((m > thr) & ~silent).float().mean() - ((n > thr) & ~silent).float().mean()).item()
-        any_read = torch.stack([passed[t] for t in READ_TESTS]).any(0)
-        dark = ~silent & ~any_read & (cur_mode < PAST) & (next_mode < PAST)
-        cols["dark"] = pa.array(dark.numpy())
-        row["any_read"] = any_read.float().mean().item()
-        row["any_write"] = torch.stack([passed[t] for t in WRITE_TESTS[:2]]).any(0).float().mean().item()
-        row["dark"] = dark.float().mean().item()
         write(cols, neuron_table("legible", layer))
         per.append(row)
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: " + " ".join(f"{k} {row[k]:.2f}" for k in
-              ("silent", *READ_TESTS, "dark")) + f" in {time.perf_counter() - t0:.0f}s", flush=True)
-    keys = ("silent", "token_detector", "next_detector", *READ_TESTS, "any_read", "dark", *WRITE_TESTS, "any_write")
+              ("silent", *TESTS)) + f" in {time.perf_counter() - t0:.0f}s", flush=True)
+    keys = ("silent", "token_detector", "next_detector", *TESTS)
     lines = [(f"neurons, {MODEL}: {2 * f * L:,} poles; share of each band's poles (mean over layers) passing each test at "
               f"a {FDR:.0%} false discovery rate; in brackets, the share past the {NULL_Q:.0%} point of mismatched pairs net "
-              "of theirs. Detectors: a third of top firings share a token. Dark: fires, but no input-side test and no detector; "
-              "the write tests are alongside."), "",
+              "of theirs. Detectors: a third of top firings share a token."), "",
              "band     " + "  ".join(f"{k:>14s}" for k in keys)]
     bands = band_rows(per, L)
     for name, r in bands.items():
@@ -312,18 +270,16 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     q = {t: bh(pval[t].flatten()).view(L, H) for t in HEAD_TESTS}
     # Uncorrected p too: a layer's H(H − 1) mismatched pairs bound p below by 1/(H(H − 1) + 1), so with
     # Gemma 4's 16 heads a layer (240 pairs) BH over 768 heads passes only if dozens sit at that floor.
-    passed = torch.stack([q[t] <= FDR for t in HEAD_TESTS]).any(0)
     cur_mode, src_mode = modal_share(cur, torch.ones_like(cur, dtype=torch.bool)), modal_share(att, att >= 0)
-    dark = ~passed & (cur_mode < PAST) & (src_mode < PAST) & ~pattern
     cols = head_keys(L, H, arch.groups(MODEL))
     for t in HEAD_TESTS:
         cols[f"{t}_z"], cols[f"{t}_q"] = pa.array(stat[t].flatten().numpy()), pa.array(q[t].flatten().numpy())
     cols |= {f"{t}_p": pa.array(pval[t].flatten().numpy()) for t in HEAD_TESTS}
     cols |= {"cur_mode": pa.array(cur_mode.flatten().numpy()), "src_mode": pa.array(src_mode.flatten().numpy()),
-             "pattern": pa.array(pattern.flatten().numpy()), "dark": pa.array(dark.flatten().numpy())}
+             "pattern": pa.array(pattern.flatten().numpy())}
     write(cols, head_table("legible"))
     flags = {t: q[t] <= FDR for t in HEAD_TESTS} | {"cur_det": cur_mode >= PAST, "src_det": src_mode >= PAST,
-                                                    "pattern": pattern, "any_test": passed, "dark": dark}
+                                                    "pattern": pattern}
     flags |= {f"{t}_p05": pval[t] <= 0.05 for t in HEAD_TESTS}  # uncorrected; 5% by chance
     lines = [(f"heads, {MODEL}: {L} × {H} heads; share of each band's heads passing each test at a {FDR:.0%} false discovery "
               "rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: "

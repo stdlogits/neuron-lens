@@ -1,0 +1,24 @@
+read_R_z's top 64 in before_R_z's [another pole], google/gemma-4-12B, mean over layers
+L0-11    0.002 [0.001]
+L12-23   0.003 [0.001]
+L24-35   0.004 [0.001]
+L36-47   0.002 [0.001]
+L0-47    0.003 [0.001]
+
+read_R by how the rows meet γ, google/gemma-4-12B: read_R_z's top 64 in before_R_z's [another pole]; the plain read's top 10 in the top 20 exact drivers
+L6: γ std/mean 3.09, 99th percentile / median 69
+  row x norm  0.001 [0.001]  drivers 0.001
+  row         0.002 [0.001]  drivers 0.001
+  row / norm  0.002 [0.001]  drivers 0.001
+L18: γ std/mean 1.12, 99th percentile / median 8
+  row x norm  0.004 [0.001]  drivers 0.002
+  row         0.009 [0.001]  drivers 0.004
+  row / norm  0.013 [0.001]  drivers 0.003
+L30: γ std/mean 2.46, 99th percentile / median 58
+  row x norm  0.004 [0.001]  drivers 0.002
+  row         0.012 [0.001]  drivers 0.005
+  row / norm  0.092 [0.002]  drivers 0.042
+L42: γ std/mean 4.80, 99th percentile / median 365
+  row x norm  0.001 [0.000]  drivers 0.000
+  row         0.004 [0.000]  drivers 0.001
+  row / norm  0.038 [0.002]  drivers 0.013

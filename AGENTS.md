@@ -38,7 +38,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
   `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`, with `09` reading
-  `07` and `17`; then `11` figures → `12` release).
+  `07`; then `11` figures → `12` release).
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -156,17 +156,17 @@ by `scripts/12_release.py`, one card per repo covering both models.
   probability across layers.
 - **Which side, which depth** (findings §6, §7, for Qwen3-8B; Gemma 4 has the same shape at its own
   depths, §13). Input side: the S-lens read at L0-L7 (raw at L0-L4, naming literal tokens), both
-  lenses at L8, the R-lens `mid` read from L9 (`read_S_z` as a concept-level second view), and only
-  exact drivers and activations at L13-L20. Write side: the
+  lenses at L8, the R-lens `mid` read from L9 (`read_S_z` as a concept-level second view), and at
+  L13-L20 the R-lens read with exact drivers and activations beside it. Write side: the
   S-lens (`write_S`) through L8, where early neurons write back the tokens they detect; the R-lens,
-  legible from about L4. Heads: `ov_S` through L8, `ov_R` from L9, `qk_S` throughout (dark at
+  legible from about L4. Heads: `ov_S` through L8, `ov_R` from L9, `qk_S` throughout (uninformative at
   L13-L20; findings §11). These bands are a prior: weigh each unit's sides by its own q-values
   in `legible`. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
-- **Dark** (`legible`, findings §7) is a statement about a neuron pole's input side: fires, no input-side test passes, no
-  detector. Each test is held to something outside the lens (token text or token swaps). Don't add the write tests to it (a dark
-  pole's write predicts steering like any other's), or `read_R` against the residual at the firings (selecting the firings
-  guarantees that agreement at depth). Heads keep their own `dark`, which counts OV tests (§12).
+- **Firings are a sample, not a ground truth.** A top firing is one context, summarized by a token. Where a read and a
+  firing's token differ, that alone doesn't make the read wrong: the causal test of a write is steering (§3), a pole's firings
+  need not predict each other (§4), and an R-lens read reads forward. `legible` says what each read names; don't turn it into a
+  verdict on a unit, or write a mismatch with firings up as a limit of the lens.
 - **Three relations between units** (§17): wired to (`edges`), driven by and fires with (`sources`). Keep them
   apart; none is the others. Into a head only driven by and fires with exist (`heads/sources`): two heads meet through a
   matrix, not a dot product, so there is no signed weight edge to list.

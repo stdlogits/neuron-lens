@@ -64,12 +64,12 @@ FIGURES = ROOT / "docs" / "figures"
 MODEL_FIGURES = ("02_lenses.png", "04_lens_reliability.png", "05_chat_lens.png", "07_steering.png", "11_drivers.png",
                  "16_head_lens_sides.png", "19_gemma_steering.png", "21_media_reads.png")
 DATASET_FIGURES = ("01_anatomy.png", "03_depth_map.png", "18_two_models.png", "13_rank_depth.png", "06_activations.png",
-                   "11_drivers.png", "12_census.png", "20_gemma_census.png", "14_lens_blind.png", "22_media_gallery.png",
+                   "11_drivers.png", "20_gemma_census.png", "14_lens_blind.png", "22_media_gallery.png",
                    "23_crossmodal.png", "17_head_census.png", "24_heads_media.png")
 TABLES = {"neurons": {"acts": "every pole's activation statistics and top firings",
                       "drivers": "every pole's 64 token drivers in real contexts",
                       "reads": "every pole's weight-only reads through both lenses",
-                      "legible": "which reads hold at every pole's top firings",
+                      "legible": "what each read names at every pole's firings and drivers",
                       "labels": "every pole's labels, by Claude Haiku 5.5",
                       "edges": "every pole's strongest direct weight edges from earlier poles and to later ones",
                       "firings": "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
@@ -79,7 +79,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
           "heads": {"acts": "every head's output statistics, top firings and attention patterns",
                     "drivers": "every head's 64 token drivers, as query and as key",
                     "reads": "every head's OV and QK circuits read per token",
-                    "legible": "which reads hold at every head's top firings",
+                    "legible": "what each read names at every head's firings",
                     "labels": "every head's labels, by Claude Haiku 5.5",
                     "sources": "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
                     "image": "every head in image contexts",
@@ -518,8 +518,7 @@ def dataset_card(f: dict, lens_rev: str, date: str) -> str:
                      for i, (c, glob, _, _) in enumerate(configs))
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("legible_qwen3-8b.json"), summary("legible_gemma-4-12b.json")
-    neuron_cols = {"silent": "silent", "read_R": "`read_R`", "read_S": "`read_S`", "before_R": "`before_R`", "before_S": "`before_S`",
-                   "any_read": "any input read", "dark": "dark", "write_R": "`write_R`", "write_S": "`write_S`"}
+    neuron_cols = {"silent": "silent", "read_R": "`read_R`", "read_S": "`read_S`", "write_R": "`write_R`", "write_S": "`write_S`"}
     head_labels = {m: (SUMMARY / f"labels_heads_{m}.md").read_text().strip() for m in ("qwen3-8b", "gemma-4-12b")}
     media = summary("media_tables_gemma-4-12b.json")
     xm = summary("gemma4_media/crossmodal.json")["text_image_audio"]["all_three"]
@@ -564,7 +563,7 @@ Neurons and heads get the same tables, one row per pole or per head:
 | `reads` | lens reads of the write and the read direction | lens reads of the OV and QK circuits, per token |
 | `acts` | activation statistics and top firings | output-norm statistics, top firings, attention patterns |
 | `drivers` | the tokens that drive each pole hardest | the tokens that drive each head, as query and as key |
-| `legible` | which reads hold at the pole's top firings | which reads hold at the head's top firings |
+| `legible` | what each read names at the pole's firings and drivers | what each read names at the head's firings |
 | `labels` | Claude Haiku's labels: where it fires, what it writes | where it fires, what it attends to, what it writes |
 | `firings` | what the residual holds, what the MLP layer writes and what the model predicts at the pole's top firings | |
 | `edges` | the earlier poles whose writes push it most, and the later poles it pushes most | |
@@ -597,22 +596,22 @@ Gemma 4's image and audio lenses are fitted the same way on images and sounds.
 | what a head reads | layer `L − 1`'s output | | the token's footprint (input of `ov_*`, `qk_*`) | |
 | what a head writes | layer `L`'s MLP input | `ov_R` | `ov_S` | |
 
-## Which reads to trust where
+## Which read to use where
 
-No read works at every depth (§7, §11). For Qwen3-8B (these bands are priors; `legible` says which
-reads hold for each unit):
+No read works at every depth (§7, §11). For Qwen3-8B (these bands are priors; `legible` says what each read names
+for each unit):
 
 | layers | what drives a neuron | what a neuron writes | what a head writes |
 |---|---|---|---|
 | L0-L7 | `read_S` (literal tokens, raw at L0-L4) | `write_S` (early neurons write back what they detect); `write_R` from about L4 | `ov_S` |
 | L8 | both | both | `ov_S`, `ov_R` |
 | L9-L12, L21-L35 | `read_R`, with `read_S_z` as a concept-level view | `write_R` | `ov_R` |
-| L13-L20 | `drivers`, `acts`; `before_R`, `before_S` for about a quarter of poles | `write_R`, for steering | `ov_R` (weak) |
+| L13-L20 | `read_R`, `read_S_z`, with `drivers` and `acts` beside them | `write_R`, for steering | `ov_R` (weak) |
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
 Gemma 4's map has the same shape at its own depths: `read_S` through L13 (falling to under 1% at L9 and rising again at L10-L13),
-`write_R` from about L33 (for steering from L11), and a dark middle (§13).
+`write_R` from about L33 (for steering from L11) (§13).
 
 ![Both models by relative depth](figures/18_two_models.png)
 
@@ -634,9 +633,9 @@ Gemma 4's map has the same shape at its own depths: `read_S` through L13 (fallin
   {TOP} documents where that is largest. `contexts` show the first 5, the firing token in `⟦ ⟧` and, for
   heads, the token it attends to most (past position 0) in `⟪ ⟫`.
 - **Tests** (`legible`) score a read on a list of tokens as a z, against mismatched pairs: another unit of the
-  layer scored on the same tokens. `_q` is the Benjamini-Hochberg q-value; a test passes at `q ≤ 0.05`.
-  **Dark:** a neuron pole fires, but no input-side test passes and no single token dominates its firings. The
-  write tests are reported alongside: they don't enter a pole's `dark` (§7). Heads keep their own definition (§12).
+  layer scored on the same tokens. `_q` is the Benjamini-Hochberg q-value; a test passes at `q ≤ 0.05`. A test says whether
+  a read names that target. The targets are narrow (the token under a firing, the token after it), so a failed test
+  doesn't make the read wrong (§7).
 - **Scale.** A lens read describes a direction, not an effect size; `act_top × w_norm` is a pole's
   typical write within this corpus. A write read is the pole's average push, which steering shows;
   before about L21 of Qwen3-8B, what one firing does depends on its context (§4).
@@ -701,24 +700,20 @@ shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §6).
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
-### `<model>-neurons-legible`: which reads hold
+### `<model>-neurons-legible`: what each read names
 
-The input side: `read_S` (the read direction's S-lens read names the peak tokens), `read_R` (its R-lens
-read names the exact drivers), `before_R`, `before_S` (what the residual holds at the top firings names the exact
-drivers). The write side, alongside: `write_R` (the write's read promotes the tokens that follow the top
-firings), `write_S` (it names the peak tokens), `write_orth_R`, `write_orth_S`. Each with `_z` and `_q`; `silent` (no
-firing, or `act_top` under 0.05), `cur_mode`, `next_mode` (the share of top firings on one token, or followed by
-one), `dark` (fires, no input-side test, neither mode past a third). Share of each band's poles, Qwen3-8B:
+`read_S` (the read direction's S-lens read names the peak tokens), `read_R` (its R-lens read names the exact drivers),
+`write_R` (the write's read promotes the tokens that follow the top firings), `write_S` (it names the peak tokens),
+`write_orth_R`, `write_orth_S`. Each with `_z` and `_q`; `silent` (no firing, or `act_top` under 0.05), `cur_mode`,
+`next_mode` (the share of top firings on one token, or followed by one). Share of each band's poles, Qwen3-8B:
 
 {band_table(ql["neurons"]["bands"], neuron_cols, "L0-35")}
-
-![Which reads hold for each pole](figures/12_census.png)
 
 Gemma 4 12B:
 
 {band_table(gl["neurons"]["bands"], neuron_cols, "L0-47")}
 
-![Gemma 4: which reads hold for each pole](figures/20_gemma_census.png)
+![Gemma 4: what each read names](figures/20_gemma_census.png)
 
 ### `<model>-neurons-labels`: a label for every pole
 
@@ -864,29 +859,29 @@ In the same pass as the neurons': `drivers`, the 64 tokens with the largest outp
 position (the token as the query), and `keys`, the 64 that receive the most attention from the 16
 positions after them (the token as the key).
 
-### `<model>-heads-legible`: which reads hold
+### `<model>-heads-legible`: what each read names
 
 At each top firing, with the attended token: `ov_R` (its OV column promotes the token after the query),
 `ov_copy` (its own `ov_R` z: the head promotes what it reads), `ov_S` (its own `ov_S` z), `qk_S` (its
 `qk_S` z: the QK read predicts what the head attends to), each with `_z` and `_q` (Benjamini-Hochberg over
 all heads); `cur_mode`, `src_mode`; `pattern` (`prev` or `self` past 0.5, `induction` or `duplicate` past
-0.3); `dark`: no test, no mode past a third, no pattern. Share of each band's heads, Qwen3-8B:
+0.3). Share of each band's heads, Qwen3-8B:
 
 {band_table(ql["heads"]["bands"], {"ov_R": "`ov_R`", "ov_copy": "`ov_copy`", "ov_S": "`ov_S`", "qk_S": "`qk_S`",
-                                     "pattern": "pattern", "any_test": "any test", "dark": "dark"}, "L0-35")}
+                                     "pattern": "pattern"}, "L0-35")}
 
 The S-side tests pass for almost no head. S→S copying and the mean query's favourite keys are shared by a
 layer's heads, so at a head's own firings they don't tell it from its neighbours; they remain reads of
 what each head does (§12).
 
-![Which reads hold for each head](figures/17_head_census.png)
+![What each head's reads name](figures/17_head_census.png)
 
 Gemma 4 has 16 heads a layer, so a head's mismatched control has 240 pairs, no p-value falls below
 1/241, and BH over its 768 heads passes none. Its table adds `<test>_p`, the uncorrected p-value. Share
 of each band's heads at p ≤ 0.05 (5% by chance):
 
 {band_table(gl["heads"]["bands"], {"ov_R_p05": "`ov_R`", "ov_copy_p05": "`ov_copy`", "ov_S_p05": "`ov_S`",
-                                     "qk_S_p05": "`qk_S`", "pattern": "pattern", "dark": "dark"}, "L0-47")}
+                                     "qk_S_p05": "`qk_S`", "pattern": "pattern"}, "L0-47")}
 
 ### `<model>-heads-labels`: a label for every head
 
@@ -960,8 +955,8 @@ image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4],
   photos and ESC-50 sounds.
 - Activation statistics come from bf16 passes over documents of up to 256 tokens; top firings are one
   per document.
-- The tests are token-level, over at most 64 firings per unit and 64 exact drivers per pole. A dark unit may still be
-  describable from its contexts, and its write read is tested apart from it (§7).
+- The tests are token-level, over at most 64 firings per unit and 64 exact drivers per pole. A read can be right about a
+  concept that shows in no single token (§7).
 - Heads are read through their circuits one token at a time: a head whose role depends on the query's
   context, or on position alone, is read only through `acts`.
 - Media labels name what a whole image or sound is about, not each patch or frame; media reads lose

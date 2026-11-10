@@ -175,7 +175,7 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
   signal holds to rank 64 (§7). At L35, `write_R` is the logit lens.
 - **Which read to trust where** depends on depth (§7): the S-lens on the input side through L8, the
   R-lens from L9; `write_S` through L8, `write_R` from about L4; only exact drivers at L13-L20 on the
-  input side. These are priors; `legible` says which reads hold for each pole.
+  input side. These are priors; `legible` says what each read names for each pole.
 
 ## Reading heads
 
@@ -236,10 +236,9 @@ A head's token maps are read between its own read and write points (§11): a tok
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and
   the most attention received from the 16 after (`keys`). Each document's prefix before the position is run once and its cache copied for every token, 12 minutes against 27 for
   Qwen3-8B and 24 against 53 for Gemma 4 on an H100 (the top 8 of the 64 tokens match a run without it 98.6-98.8% of the time).
-- **Legibility tests** (`09_legible.py`, after `07`, `08` and `17`): a neuron's input side is held to something outside the lens
-  (`read_S` to its peak tokens, `read_R` and the residual at its firings to its exact drivers), its write side is reported alongside
-  and left out of `dark`; a head's reads are scored on its own top firings; against mismatched pairs at a 5% false
-  discovery rate (§7, §12).
+- **Read tests** (`09_legible.py`, after `07` and `08`): what each read names, as a z on a list of tokens against mismatched pairs at a
+  5% false discovery rate: a neuron's `read_S` on its peak tokens, `read_R` on its exact drivers, `write_R` on the tokens after its firings,
+  `write_S` on its peak tokens; a head's reads on its own top firings (§7, §12).
 
 ## Edges
 
