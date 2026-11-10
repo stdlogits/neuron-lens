@@ -805,7 +805,7 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
 
 # --------------------------------------------------------------------------------- the MLPs
 
-def contract(m: Layer, chunk: int = 64) -> Layer:
+def contract(m: Layer, chunk: int = 16) -> Layer:
     """The layer with its gated MLP's map multiplied out, one ``[d, d]`` matrix per row:
     ``W_d (diag(cg) W_g + diag(cu) W_u)``. Building them is one matrix product over the rows and
     each tangent then costs one ``d × d`` product where the map costs three through ``d_ff``, so the
