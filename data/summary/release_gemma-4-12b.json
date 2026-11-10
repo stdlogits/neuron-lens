@@ -37,6 +37,24 @@
    1474560
   ],
   [
+   "gemma-4-12b-neurons-edges",
+   "gemma-4-12b/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-firings",
+   "gemma-4-12b/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   1474560
+  ],
+  [
+   "gemma-4-12b-neurons-sources",
+   "gemma-4-12b/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   1443840
+  ],
+  [
    "gemma-4-12b-neurons-image",
    "gemma-4-12b/neurons/image/*.parquet",
    "every pole's image read and write, the images that drive it, and its cross-modal ranks",
@@ -91,9 +109,21 @@
    768
   ],
   [
-   "gemma-4-12b-heads-media",
-   "gemma-4-12b/heads/media.parquet",
-   "every head in image and audio contexts",
+   "gemma-4-12b-heads-sources",
+   "gemma-4-12b/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-image",
+   "gemma-4-12b/heads/image.parquet",
+   "every head in image contexts",
+   768
+  ],
+  [
+   "gemma-4-12b-heads-audio",
+   "gemma-4-12b/heads/audio.parquet",
+   "every head in audio contexts",
    768
   ]
  ],

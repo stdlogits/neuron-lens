@@ -51,6 +51,24 @@
    884736
   ],
   [
+   "qwen3-8b-neurons-edges",
+   "qwen3-8b/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-firings",
+   "qwen3-8b/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   884736
+  ],
+  [
+   "qwen3-8b-neurons-sources",
+   "qwen3-8b/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   860160
+  ],
+  [
    "qwen3-8b-heads-acts",
    "qwen3-8b/heads/acts.parquet",
    "every head's output statistics, top firings and attention patterns",
@@ -78,6 +96,12 @@
    "qwen3-8b-heads-labels",
    "qwen3-8b/heads/labels.parquet",
    "every head's labels, by Claude Haiku 5.5",
+   1152
+  ],
+  [
+   "qwen3-8b-heads-sources",
+   "qwen3-8b/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
    1152
   ]
  ],
