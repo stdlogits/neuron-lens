@@ -775,7 +775,8 @@ the token after the attended position for an R-lens input:
   copy test at L28-L35 with an S-lens output, which the catalog doesn't use there); on the QK side
   too, the S-lens key read agrees with the attention keys receive (+0.18, control +0.08) better than
   the R-lens's (+0.09, control +0.05; `checks/head_qk.py`, over every 16th document). A head reads
-  what a position holds, not what it is about to say.
+  what a position holds, not what it is about to say. On the QK side this was tested on keys; a late
+  head's query can read what its own position is about to say (cross-lens self-match, below).
 - **The output side is the S-lens early and the R-lens late,** as for neuron writes: S→S leads at
   L1-L8 and edges S→R at L13-L20 (where it also predicts whole columns better), S→R leads at L9-L12
   and by far from L21. Induction heads favour S→R, duplicate-token heads S→S.
@@ -820,8 +821,29 @@ with the q/k norms' derivative and RoPE averaged over the head's own offsets.
   their own copy read (control 7%; `checks/head_census.py`), and class suppressors to the class they suppress (L31h23 attends to
   ` Combination | Equality` and suppresses ` alternative | balance | combination`). Mid-network, where a
   head looks says little about what it writes.
-- **Query reads past L1 are noise:** L20h17 favours nearly the same keys whether its query is ` she` or
-  ` he`.
+- **Cross-lens self-match finds the late heads that look up what is about to be said**
+  (`checks/head_seek.py`). With an R-lens query (the position says `v`) against S-lens keys (the
+  position holds `v`), QK's diagonal asks whether a head seeks earlier copies of the token its query
+  position predicts: the QK half of copy suppression (McDougall et al. 2023). A token's R and S
+  directions are nearly orthogonal (median cosine 0.02-0.08), so this is not `qk_self` again. In
+  context (2,000 documents), a head's *seeking* is its attention per key to earlier copies (two or
+  more back, induction matches left out) of the R-lens top-1 at its input, relative to uniform, minus
+  that to copies of a random earlier token. At L28-L35 the weight read's per-head median tracks it at
+  Spearman +0.62 across heads (another head's read +0.11, `qk_self` −0.17), and +0.58 with the model's
+  final top-1 as the target; less earlier (+0.39 at L13-L20, where R-lens on both sides does better,
+  +0.21 at L21-L27).
+  - Of the 20% of L21-L35 heads that seek most, 17 lower the target's logit (direct effect, against a
+    random earlier token's): copy suppression in context, among them L33h21, L32h9, L27h7, L29h16 and
+    L31h30 (the list is in `data/summary/head_seek_qwen3-8b.log`). The weight read finds them at
+    AUROC 0.91 (`qk_self` 0.41); a negative OV copy score does as well (0.91). Within about half of
+    them the tokens sought most are the ones suppressed most (per-token Spearman with `ov_R` −0.18 at
+    the median, −0.68 for L27h7).
+    QK says what a head looks up and OV what it does with it: the read also finds the 79 that seek and
+    boost (0.75).
+  - Early the test is empty: at L3's input the R-lens top-1 is ` the` at 78% of positions (8 distinct
+    tokens), so early heads' large "seeking" is attention to function words.
+- **Query reads past L1 are noise with an S-lens query:** L20h17 favours nearly the same keys whether its
+  query is ` she` or ` he`.
 
 **Limits.** The OV read assumes the head reads one token's footprint; in context a head mixes several
 positions. Reads are scale-free. The S-lens footprint is a context-averaged stand-in (§6). The QK read

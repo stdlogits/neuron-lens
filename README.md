@@ -321,7 +321,9 @@ circuits gives two token-by-token maps. The OV map says what it copies and suppr
 quantities: ` weight | 体重 | strength`; L32h9 suppresses the surnames L34h1 copies), and predicts where
 the attended token ranks in the head's actual output at each firing (Spearman +0.51; 0.00 under
 another head). The QK map finds the duplicate-token heads from the weights (AUROC 0.96), and late
-heads attend to the classes they copy or suppress
+heads attend to the classes they copy or suppress. With an R-lens query against S-lens keys it finds
+the late heads that attend to earlier copies of the token their position is about to say; with a
+negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91)
 ([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token)).
 
 ![Which lens on each side of a head](docs/figures/16_head_lens_sides.png)
