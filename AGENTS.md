@@ -10,7 +10,7 @@ A catalog of what every MLP neuron (two poles each) and attention head of two mo
 Qwen3-8B (36 layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads). Each unit is
 read from three sides: the weights through two lenses (a neuron's write and read direction; a head's
 OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
-heads get the same tables: `acts`, `drivers`, `reads`, `legible`, `labels` and `sources` (what drives them when
+heads get the same tables: `acts`, `drivers`, `reads`, `labels` and `sources` (what drives them when
 they fire; for a head, through its value, query and key); neurons also get `firings` (what the residual holds where
 they fire) and `edges` (direct weight edges between poles).
 Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, per-neuron
@@ -36,9 +36,10 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `python -m neuron_lens.catalog`); `firings.py` and `sources.py` the activation-side passes (the residual at a pole's firings; the exact split of
   an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
-  reads → `09` legible → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`, with `09` reading
-  `07`; then `11` figures → `12` release).
+  reads → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
+  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`; then `11` figures
+  → `12` release). `09` is retired: `checks/reads_at_firings.py`, after `07` and `08`, gives the per-band shares the
+  figures and the depth guidance rest on.
   `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
   design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
   Every script the findings name is here. Checks read the catalog's tables and get documents from
@@ -71,7 +72,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **The lens rule.** A lens's `out` target reads MLP outputs and attention inputs; its `mid` target
   reads MLP inputs and attention outputs. Don't fit or ship a lens for a point it isn't built for,
   and don't ship borrowed lenses (the J-lens, the logit lens) in the catalog; comparisons belong in
-  checks. A head's input is read with the S-lens on both circuits (findings §11).
+  checks. A head's keys and values are read with the S-lens (what a position holds); its query with the S-lens, or for
+  `qk_self_R` with the R-lens at `L − 1`'s output (what the position is about to say; findings §11).
 - **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
   firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
   card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded (`HELD_OUT`
@@ -144,8 +146,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   post-feedforward norm's scale held constant, `layer_scalar` `s`); its read rows are scaled by the
   pre-feedforward norm. Logits pass a softcap (`30 · tanh(x / 30)`), which R-lens probabilities
   include. Every document starts with `<bos>` (the sink): statistics start at position 1. Its bands
-  are quarters (L0-L11, …, L36-L47). With 16 heads a layer, head tests can't pass BH; `heads/legible`
-  adds uncorrected `_p` columns (findings §13). Design.md's Gemma section has the rest.
+  are quarters (L0-L11, …, L36-L47). With 16 heads a layer, head tests can't pass BH, so
+  `checks/reads_at_firings.py` reports uncorrected p too (findings §13). Design.md's Gemma section has the rest.
 - **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a
   `−` pole, read and described separately. From weights, a pole's read direction is `â ± b̂`: the
   gate and up rows times the post-attention norm weight, normalized (a heuristic; activations give
@@ -159,14 +161,16 @@ by `scripts/12_release.py`, one card per repo covering both models.
   lenses at L8, the R-lens `mid` read from L9 (`read_S_z` as a concept-level second view), and at
   L13-L20 the R-lens read with exact drivers and activations beside it. Write side: the
   S-lens (`write_S`) through L8, where early neurons write back the tokens they detect; the R-lens,
-  legible from about L4. Heads: `ov_S` through L8, `ov_R` from L9, `qk_S` throughout (uninformative at
-  L13-L20; findings §11). These bands are a prior: weigh each unit's sides by its own q-values
-  in `legible`. Don't force a word reading where a side is uninformative, and say which side a
+  legible from about L4. Heads: OV `ov_S` through L8, `ov_R` from L9; QK `qk_S` throughout (uninformative
+  at L13-L20), and its diagonal as `qk_self_S` through L20 (duplicate-token heads) and `qk_self_R` late (L28-L35, mixed
+  at L21-L27; Gemma 4 from L24, weaker; findings §11, §13). These bands are a prior: weigh a unit's sides by its reads,
+  contexts and drivers together. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
 - **Firings are a sample, not a ground truth.** A top firing is one context, summarized by a token. Where a read and a
   firing's token differ, that alone doesn't make the read wrong: the causal test of a write is steering (§3), a pole's firings
-  need not predict each other (§4), and an R-lens read reads forward. `legible` says what each read names; don't turn it into a
-  verdict on a unit, or write a mismatch with firings up as a limit of the lens.
+  need not predict each other (§4), and an R-lens read reads forward. `checks/reads_at_firings.py` counts how often each read
+  names what is counted at the firings, a population result about the reads; the catalog keeps no per-unit test. Don't turn a
+  mismatch into a verdict on a unit, or write it up as a limit of the lens.
 - **Three relations between units** (§17): wired to (`edges`), driven by and fires with (`sources`). Keep them
   apart; none is the others. Into a head only driven by and fires with exist (`heads/sources`): two heads meet through a
   matrix, not a dot product, so there is no signed weight edge to list.

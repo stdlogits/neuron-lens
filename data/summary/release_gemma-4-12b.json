@@ -25,12 +25,6 @@
    1474560
   ],
   [
-   "gemma-4-12b-neurons-legible",
-   "gemma-4-12b/neurons/legible/*.parquet",
-   "which reads hold at every pole's top firings",
-   1474560
-  ],
-  [
    "gemma-4-12b-neurons-labels",
    "gemma-4-12b/neurons/labels/*.parquet",
    "every pole's labels, by Claude Haiku 5.5",
@@ -94,12 +88,6 @@
    "gemma-4-12b-heads-reads",
    "gemma-4-12b/heads/reads.parquet",
    "every head's OV and QK circuits read per token",
-   768
-  ],
-  [
-   "gemma-4-12b-heads-legible",
-   "gemma-4-12b/heads/legible.parquet",
-   "which reads hold at every head's top firings",
    768
   ],
   [

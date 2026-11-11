@@ -15,7 +15,8 @@ with thinking on (effort low), 1,071 poles' labels recovered from malformed JSON
 
 **Heads** (``--side heads``): the card per head shows its attention pattern scores, its output
 scale, its OV reads (what it copies and suppresses; through the S-lens too through L8, §11), its
-QK reads (what it attends to and avoids, the tokens that seek themselves), its exact drivers as the
+QK reads (what it attends to and avoids, the tokens that seek themselves, and from L1 those a query about to say
+them seeks), its exact drivers as the
 query and as the key, and its first 5 top contexts with the query in ``⟦ ⟧`` and the attended token
 in ``⟪ ⟫``. Labels: ``fires``, ``attends`` and ``writes``. Like the neuron cards, nothing on a card
 summarizes the held-out top firings (ranks 6-24): no token counts or tests over them, and no
@@ -128,7 +129,10 @@ PLANS = {
             (8, ["ov_S", "ov_R"], "OV·S is the record through layer 8, OV·R carries signal from about layer 4"),
             (12, ["ov_R"], "OV·R is the output read from here"),
             (20, ["ov_R"], "the weakest band for every head read: QK reads are uninformative here, expect little, say unclear freely"),
-            (35, ["ov_R"], "OV·R and the QK reads are most reliable here; late heads often attend to what they copy"),
+            (27, ["ov_R"], ("OV·R is the output read here; the QK reads carry little, though some heads already seek what "
+                            "they are about to say")),
+            (35, ["ov_R"], ("OV·R and the QK reads are most reliable here; late heads often attend to what they copy, and "
+                            "'seeks what it is about to say' tracks where they look: with a negative copying score, copy suppression")),
         ],
         "late": 21,
         "check_bands": ((0, 8), (9, 12), (13, 20), (21, 27), (28, 35)),
@@ -157,7 +161,9 @@ PLANS = {
             (13, ["ov_S", "ov_R"], ("neither OV read passes its test this early (with 16 heads a layer the tests are weak); "
                                    "early heads often attend by token identity or position: lean on the pattern and the contexts")),
             (32, ["ov_R"], "the weakest band for every head read: 70% of heads here pass no test, expect little, say unclear freely"),
-            (47, ["ov_R"], "OV·R is most reliable here: it holds for about a fifth of the heads at layers 36-47"),
+            (47, ["ov_R"], ("OV·R is most reliable here: it holds for about a fifth of the heads at layers 36-47; 'seeks what "
+                            "it is about to say' tracks where late heads look a little better than self-seeking, though weakly "
+                            "on this model, and with a negative copying score marks copy suppression")),
         ],
         "late": 33,
         "check_bands": ((0, 4), (5, 13), (14, 32), (33, 47)),
@@ -307,7 +313,7 @@ def head_cards() -> None:
     rows = t.to_pylist()
     L = max(r["layer"] for r in rows) + 1
     pct = {}
-    for k in ("ov_R_copy", "ov_S_copy", "qk_self", "out_top"):
+    for k in ("ov_R_copy", "ov_S_copy", "qk_self_S", "qk_self_R", "out_top"):
         for layer in range(L):
             pct[k, layer] = sorted(r[k] for r in rows if r["layer"] == layer)
 
@@ -347,7 +353,10 @@ def head_cards() -> None:
         lines.append(f"  - against the layer's heads, also: {body_z or '(nothing new)'}")
         lines.append(f"  - avoids: {tokens(r, 'qk_S_neg')[0]}")
         lines.append(f"- self-seeking (a token as the query favours the same token as the key): median z "
-                     f"{r['qk_self']:+.2f} ({rank(r, 'qk_self')}); most: {tokens(r, 'qk_self_S')[0]}")
+                     f"{r['qk_self_S']:+.2f} ({rank(r, 'qk_self_S')}); most: {tokens(r, 'qk_self_S')[0]}")
+        if layer:  # no R-lens input at L0
+            lines.append(f"- seeks what it is about to say (a query about to say a token favours earlier copies of it as the "
+                         f"key): median z {r['qk_self_R']:+.2f} ({rank(r, 'qk_self_R')}); most: {tokens(r, 'qk_self_R')[0]}")
         lines.append(f"- attends to what it copies (Spearman of QK·S with OV·R over tokens): {r['qk_ov_rho']:+.2f}")
         lines.append(f"- drivers in real text: as the query, the tokens that make its output largest: {tokens(r, 'drivers')[0]}")
         lines.append(f"  - as the key, the tokens it attends to most from the 16 after them: {tokens(r, 'keys')[0]}")

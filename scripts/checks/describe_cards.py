@@ -7,8 +7,8 @@ A card gathers what the catalog knows about a pole, from every side:
   and layer-contrastive (``write_R``, ``write_R_z``, ``write_S``, ``write_S_z``, ``read_R``, ...);
 - **exact drivers** (``drivers``): the tokens that drive the pole most in real text, at their own
   position and summed over the 16 after;
-- **the layer's legibility** (``legible``): the share of the layer's poles whose each read passes its
-  test at their top firings (findings §7), a prior on which sides hold at this depth;
+- **the layer's shares** (``reads_at_firings.py``'s summary): the share of the layer's poles whose each read
+  names its target at their top firings (findings §7), a prior on which sides hold at this depth;
 - **activations** (``acts``): the typical high activation (``act_top``, the median of the top
   documents' extremes), the maximum, the firing rate (past a quarter of ``act_top``) overall and per
   slice, the position it peaks at when a third of the shown documents share one, the first
@@ -23,8 +23,8 @@ A card gathers what the catalog knows about a pole, from every side:
 
 Nothing on a card summarizes the pole's top documents past the first ``N_CONTEXTS``, which
 ``describe_score.py`` holds out (AGENTS.md, "Description cards stay leak-free"): no peak-token counts
-(``acts.peak_tokens`` counts all of them), none of the pole's own ``legible`` columns (its tests and
-modes run on all its top firings: only the layer's shares are shown), and no ablation (``causal_lens``
+(``acts.peak_tokens`` counts all of them), nor its ``cur_mode`` or ``next_mode``, none of its own scores from
+``reads_at_firings.py`` (its tests run on all its top firings: only the layer's shares are shown), and no ablation (``causal_lens``
 ablated in the pole's own top documents).
 
 The sample: ``--per-layer`` neurons of each layer, drawn (``random.Random(1)``, layers in order) from
@@ -54,12 +54,11 @@ from lens_blind import pole_id
 from neuron_lens import arch
 from neuron_lens.catalog import MODEL, N_CONTEXTS, kept, load_layer, vocab
 from neuron_lens.known import EXTERNAL, KNOWN
-from neuron_lens.paths import DATA, LIBRARY
+from neuron_lens.paths import DATA, LIBRARY, SUMMARY
 
 NAME = arch.stem(MODEL)
 OUT = DATA / "checks" / "describe" / NAME
-TESTS = ("write_R", "write_S", "read_R", "read_S")  # legible's tests (findings §7)
-FDR = 0.05
+TESTS = ("write_R", "write_S", "read_R", "read_S")  # reads_at_firings.py's tests (findings §7)
 N_STEER = 8  # tokens per steering line
 READS = (
     ("write_R", "writes (R-lens of record: what the write promotes downstream)"),
@@ -120,10 +119,11 @@ def cards(poles: list[tuple[int, int, int]], causal: dict) -> list[str]:
     labels = outside_labels()
     n_layers = arch.text_config(MODEL).num_hidden_layers
     tables, shares, out = {}, {}, []
+    layer_shares = json.loads((SUMMARY / f"reads_at_firings_{arch.stem(MODEL)}.json").read_text())["neurons"]["layers"]
     for l, n, s in poles:
         if l not in tables:
             tables[l] = load_layer(l)
-            shares[l] = {t: (tables[l].column(f"{t}_q").to_numpy() <= FDR).mean() for t in TESTS}
+            shares[l] = {t: layer_shares[l][t] for t in TESTS}
         t = tables[l]
         e = t.slice(n if s > 0 else t.num_rows // 2 + n, 1).to_pylist()[0]
         lines = [f"### {pole_id(l, n, s)}",

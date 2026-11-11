@@ -420,9 +420,10 @@ top 20 tokens of 6,000 were 70% right at L0, 25% at L1 and about 0% from L5.
 
 ## §7. What each read names
 
-`09_legible.py` scores every pole's weight-only reads against what can be counted around it: the token under each top firing,
-the token after it, and its exact drivers (§6). These targets are narrow. A pass says a read names that target, and a miss
-doesn't make the read wrong.
+`checks/reads_at_firings.py` counts how often each weight-only read names what can be counted around a pole: the token
+under each top firing, the token after it, and its exact drivers (§6). These targets are narrow, and a firing is one context
+summarized by a token: a pass says a read names that target, a miss doesn't make the read wrong, and the shares describe the
+reads at each depth, not single poles. The catalog keeps no per-pole test.
 
 **Setup.** For each of the 884,736 poles, with its 64 top firings and 64 exact drivers:
 - `read_S`: the mean layer-contrastive z of the peak tokens, under the read direction's S-lens read;
@@ -432,9 +433,10 @@ doesn't make the read wrong.
 - p-values against mismatched pairs (another pole of the layer and sign, on this pole's tokens); Benjamini-Hochberg over
   the layer's poles at a 5% false discovery rate; *net of chance* is the share past the mismatched pairs' 99th percentile
   minus their own share;
-- token modes: a third of the firings share one peak token, or one next token; silent: no firing, or `act_top` under 0.05.
+- token modes: a third of the firings share one peak token, or one next token (`acts`' `cur_mode`, `next_mode`); near-silent:
+  `act_top` under 0.05, not scored.
 
-| band | `read_S` | `read_R` | `write_R` | `write_S` | `write_orth_R` | `write_orth_S` | token mode | next-token mode | silent |
+| band | `read_S` | `read_R` | `write_R` | `write_S` | `write_orth_R` | `write_orth_S` | token mode | next-token mode | near-silent |
 |---|---|---|---|---|---|---|---|---|---|
 | L0-L8 | 0.30 [0.26] | 0.06 [0.08] | 0.00 [0.02] | 0.12 [0.12] | 0.00 [0.02] | 0.09 [0.09] | 0.26 | 0.05 | 0.19 |
 | L9-L12 | 0.02 [0.07] | 0.22 [0.21] | 0.01 [0.03] | 0.01 [0.03] | 0.01 [0.02] | 0.01 [0.02] | 0.11 | 0.04 | 0.00 |
@@ -448,7 +450,7 @@ Shares of poles passing at 5% FDR, band means over layers; net of chance in brac
 ![Which reads work at which depth](figures/03_depth_map.png)
 
 - **Each read names its target at its own depth.** `read_S` passes for 85% of poles at L0 and 23-35% at L1, L3 and L4 (L2: 9%,
-  since 61% of its poles are silent), and almost none at L10-L20. `read_R` names exact drivers for 12-18% of poles at L13-L20 and
+  since 61% of its poles are near-silent), and almost none at L10-L20. `read_R` names exact drivers for 12-18% of poles at L13-L20 and
   44-51% at L27-L31. `write_S` passes for 12% of L0-L8's poles, nearly always together with `read_S`: early neurons write back what
   they detect (§6). `write_R` passes from L23, most at L28-L29 (30-31% net), and the part of a write off what the neuron reads holds
   nearly as well there: `write_orth_R` passes for 25% of L28-L35's poles, against 27% for the whole write (§18).
@@ -462,8 +464,8 @@ Shares of poles passing at 5% FDR, band means over layers; net of chance in brac
 - **Exact drivers are a token-level target too.** They swap one token at one position of 8 documents, and at L13-L20 the
   strongest swap reaches a median 9% of a typical firing (§6). A concept carried by the surrounding text has no single token to find.
 
-**Which read to use where,** from §3-§7. The bands are priors; each pole's q-values in `legible` say which of its reads name
-their targets.
+**Which read to use where,** from §3-§7. The bands are priors: weigh a pole's sides by its reads, contexts and drivers
+together, and say which side a description rests on.
 
 | layers | what drives a pole | what a pole writes |
 |---|---|---|
@@ -701,7 +703,7 @@ input side (`read_R` and `read_S`) or both together:
   its top 100 for 19% of pairs (mismatched names 3%; J-lens 10%, logit lens 7%;
   `checks/combo_crosscheck.py`). The best parent's read alone does about as well (24%, control 5%):
   the new concept is mostly latent in one parent's write.
-- **Steering one prompt finds personas, not everything.** Of the 78,420 poles whose write predicts
+- **Steering one prompt finds personas, not everything.** Of the 71,661 poles whose write predicts
   what follows their firings (§7), 4.0% have a library row, mostly because 98% sit at L21-L35, where
   the library is thin; against each layer's base rate the library is enriched for them (1.5×;
   `checks/library_crosscheck.py`). What it misses has no self-description: idiom completers (L30
@@ -783,8 +785,11 @@ the token after the attended position for an R-lens input:
 - An earlier, coarser test agrees: of the four brackets' copying scores, only S→R tracked single-head
   ablation better than the raw score (Spearman +0.22, +0.08 over raw, 95% interval +0.03 to +0.12;
   `checks/head_circuits.py`).
-- The catalog reads QK with the S-lens on both sides, and OV as `ov_R` (S→R, trusted from L9) and
-  `ov_S` (S→S, trusted through L8 and a second view through L20).
+- The catalog reads keys and values with the S-lens; OV as `ov_R` (S→R, trusted from L9) and `ov_S` (S→S, trusted
+  through L8 and a second view through L20); QK as `qk_S` (the mean query), and its diagonal twice: with the S-lens
+  query, `qk_self_S` (a position holding `v` seeks `v`: duplicate-token heads, through L20), and with the R-lens query,
+  `qk_self_R` (a position about to say `v` seeks `v`: late heads, L28-L35 clearly, L21-L27 mixed; below). Both are kept at
+  every layer; the bands are a prior.
 
 **What each head copies** (`ov_R`, `ov_S` in `heads/reads`): each token's z in its own column of the
 OV map, that is, where `v` ranks in what the head writes when it reads `v`. At each firing this
@@ -808,7 +813,7 @@ output, an S-lens input scores +0.49 and the raw embedding +0.40. Examples:
 
 **What each head attends to** (`qk_S`, `qk_self_S`): each key token's z under the head's mean query,
 with the q/k norms' derivative and RoPE averaged over the head's own offsets.
-- **Self-match finds duplicate-token heads from the weights** (`qk_self`, AUROC 0.96): as queries they
+- **Self-match finds duplicate-token heads from the weights** (`qk_self_S`, AUROC 0.96): as queries they
   favour a token's own surface form (L1h28 reading ` Paris` favours ` Paris | Paris | Parse`).
 - **Attends-to agrees with the attention tokens receive in context early and late** (`qk_ctx_rho`,
   over tokens seen 10+ times as keys): Spearman over tokens +0.18 at L0-L8 (control +0.07), +0.01 at
@@ -822,20 +827,20 @@ with the q/k norms' derivative and RoPE averaged over the head's own offsets.
   ` Combination | Equality` and suppresses ` alternative | balance | combination`). Mid-network, where a
   head looks says little about what it writes.
 - **Cross-lens self-match finds the late heads that look up what is about to be said**
-  (`checks/head_seek.py`). With an R-lens query (the position says `v`) against S-lens keys (the
+  (`qk_self_R`; `checks/head_seek.py`). With an R-lens query (the position says `v`) against S-lens keys (the
   position holds `v`), QK's diagonal asks whether a head seeks earlier copies of the token its query
   position predicts: the QK half of copy suppression (McDougall et al. 2023). A token's R and S
-  directions are nearly orthogonal (median cosine 0.02-0.08), so this is not `qk_self` again. In
+  directions are nearly orthogonal (median cosine 0.02-0.08), so this is not `qk_self_S` again. In
   context (2,000 documents), a head's *seeking* is its attention per key to earlier copies (two or
   more back, induction matches left out) of the R-lens top-1 at its input, relative to uniform, minus
   that to copies of a random earlier token. At L28-L35 the weight read's per-head median tracks it at
-  Spearman +0.62 across heads (another head's read +0.11, `qk_self` −0.17), and +0.58 with the model's
+  Spearman +0.62 across heads (another head's read +0.11, `qk_self_S` −0.17), and +0.58 with the model's
   final top-1 as the target; less earlier (+0.39 at L13-L20, where R-lens on both sides does better,
   +0.21 at L21-L27).
   - Of the 20% of L21-L35 heads that seek most, 17 lower the target's logit (direct effect, against a
     random earlier token's): copy suppression in context, among them L33h21, L32h9, L27h7, L29h16 and
     L31h30 (the list is in `data/summary/head_seek_qwen3-8b.log`). The weight read finds them at
-    AUROC 0.91 (`qk_self` 0.41); a negative OV copy score does as well (0.91). Within about half of
+    AUROC 0.91 (`qk_self_S` 0.41); a negative OV copy score does as well (0.91). Within about half of
     them the tokens sought most are the ones suppressed most (per-token Spearman with `ov_R` −0.18 at
     the median, −0.68 for L27h7).
     QK says what a head looks up and OV what it does with it: the read also finds the 79 that seek and
@@ -852,9 +857,9 @@ induction) is not read.
 
 ## §12. Attention heads: tests and labels
 
-**What each read names** (`09_legible.py`). Each head's weight-only reads are tested at its 64 top firings
+**What each read names** (`checks/reads_at_firings.py`). Each head's weight-only reads are scored at its 64 top firings
 (largest output norm, one per document) against the layer's other heads on the same firings; BH over
-all 1,152 heads at 5%. `ov_R`: the attended token's column promotes the next token; `ov_copy`: the head
+all 1,152 heads at 5%, as shares of each band's heads (no per-head test is kept). `ov_R`: the attended token's column promotes the next token; `ov_copy`: the head
 promotes what it attends to; `ov_S`, `qk_S`: the attended token scores high in the head's own read. Token mode: a third of
 firings sharing a query or attended token.
 
@@ -879,17 +884,20 @@ firings sharing a query or attended token.
   head's.
 
 **A label for every head** (`10_labels.py --side heads`). Claude Haiku 5.5 labelled all 1,152 heads
-from leak-free cards (patterns, output scale, OV and QK reads, drivers, the first 5 contexts): where it
-fires, what it attends to, what it writes ($0.28 on the Batch API). Checked blind on 100 random heads,
-20 a band, by Claude Sonnet:
+from leak-free cards (patterns, output scale, OV and QK reads with both self-match diagonals, drivers, the
+first 5 contexts): where it fires, what it attends to, what it writes ($0.30 on the Batch API). Checked
+blind on 100 random heads, 20 a band, by Claude Sonnet:
 - **Firing:** the labels separate 4 held-out top firings from 4 of another head of the band at AUROC
-  0.71 [0.65, 0.77]; a third head's labels score 0.51. Half the heads (53%) score 0.8 or more. The
+  0.70 [0.64, 0.77]; a third head's labels score 0.50. Half the heads (55%) score 0.8 or more. The
   contrast is another head's strongest firings, harder than §8's quiet text.
 - **Writes:** a judge shown the firings' in-context output read picks the head's own label out of four
-  49% of the time [39, 60] (chance 25%): 79% at L28-L35, 55-56% at L9-L12 and L21-L27, 33% at L0-L8,
-  chance at L13-L20.
+  54% of the time [45, 65] (chance 25%): 79% at L28-L35, 67% at L9-L12, 55% at L21-L27, 42% at
+  L13-L20, 28% at L0-L8.
 - Most labels are unconfident (median 0.25-0.30), and confidence tracks the score only weakly
-  (Spearman +0.20).
+  (Spearman +0.15).
+- The labels before `qk_self_R` was on the cards scored the same within noise (0.71 and 49%), and the
+  copy suppressors' labels barely changed: their `qk_self_R` lists are scattered tokens, and the
+  labeller leans on the contexts and the OV reads.
 
 **Limits.** The tests compare a head with its own layer, so a property shared by a layer's heads never
 passes: the right null for "this head", the wrong one for "these heads". Firings are the top 64 by
@@ -939,9 +947,9 @@ DCLM documents; Pearson r with the lens's read, medians over the random poles; c
 - **Ablation agrees only late,** as in Qwen3-8B (§4): 0.05 at L12-L23, 0.17 at L24-L35, 0.71 at
   L36-L47.
 
-**What each read names** (`09_legible.py`, as §7, BH over all poles at 5%):
+**What each read names** (`checks/reads_at_firings.py`, as §7, BH over all poles at 5%):
 
-| band | `read_S` | `read_R` | `write_R` | `write_S` | token mode | silent |
+| band | `read_S` | `read_R` | `write_R` | `write_S` | token mode | near-silent |
 |---|---|---|---|---|---|---|
 | L0-L11 | 0.40 | 0.00 | 0.00 | 0.01 | 0.57 | 0.00 |
 | L12-L23 | 0.06 | 0.01 | 0.00 | 0.04 | 0.26 | 0.00 |
@@ -966,20 +974,29 @@ DCLM documents; Pearson r with the lens's read, medians over the random poles; c
   23%).
 - **Late writes fall off at the end:** `write_R` drops from 27% at L40 to 7-13% at L44-L47, where
   Qwen3-8B's keeps rising to its last layer.
-- **No poles are silent.** Gemma's activations take both signs at every layer, and none of its early
+- **No poles are near-silent.** Gemma's activations take both signs at every layer, and none of its early
   layers is near-silent as Qwen3-8B's L1 is (§2).
 
 ![Both models: steering by relative depth](figures/18_two_models.png)
 
-**Heads** (`09_legible.py`, as §12). With 16 heads a layer, a head's mismatched control has 240 pairs,
-so no p-value falls below 1/241, and BH over 768 heads passes none. The `legible` table adds the
-uncorrected `<test>_p`. At p ≤ 0.05 (5% by chance), `ov_R` holds for 23% of L36-L47's heads and
-`ov_copy` for 18%. `qk_self` finds the 26
+**Heads** (`checks/reads_at_firings.py`, as §12). With 16 heads a layer, a head's mismatched control has 240 pairs,
+so no p-value falls below 1/241, and BH over 768 heads passes none. At an uncorrected p ≤ 0.05 (5% by chance), `ov_R` holds for 23% of L36-L47's heads and
+`ov_copy` for 18%. `qk_self_S` finds the 26
 duplicate-token heads at AUROC 0.95 (Qwen3-8B: 0.96).
+
+- **The cross-lens self-match points the same way, more weakly** (`qk_self_R`, `checks/head_seek.py` as §11, 2,000
+  documents). A head's median `qk_self_R` tracks its seeking of the R-lens top-1 in context at Spearman +0.26 at L24-L35
+  and +0.18 at L36-L47 (another head's read +0.02 and −0.05; `qk_self_S` +0.07 and +0.11), and +0.40 at L24-L35 with the
+  model's final top-1 as the target (Qwen3-8B, L28-L35: +0.62). Late heads seek less here: per matching key, 1.7× uniform
+  at L36-L47 against 1.3× for a random earlier token (Qwen3-8B, L28-L35: 2.7× against 0.8×). Of the top fifth of L24-L47's
+  heads by seeking, the 25 that lower the target's logit are found at AUROC 0.66 (`qk_self_S` 0.50), and a negative OV
+  copy score does better (0.78); many sit on the global layers (L29, L35, L41). At L12-L23, as at Qwen3-8B's L13-L20, the
+  R-lens on both sides tracks seeking best (+0.46; `qk_self_R` +0.25, `qk_self_S` +0.26). L1-L11 heads seek most of all
+  and no read tracks it (+0.13 at best).
 
 **Labels** (`10_labels.py`, as §8 and §12, with Gemma 4's own reading plan and prompts: four bands
 from the tests above, L0-L4, L5-L13, L14-L32 and L33-L47, and six worked examples of its own poles).
-Claude Haiku 5.5 labelled every head ($0.19) and all 1,474,560 neuron poles (73,728 requests of 10
+Claude Haiku 5.5 labelled every head ($0.20) and all 1,474,560 neuron poles (73,728 requests of 10
 neurons each, $171.66).
 
 - **Haiku is less sure of Gemma 4's neurons.** Median confidence is 0.30 for firing labels and 0.20 for
@@ -989,11 +1006,12 @@ neurons each, $171.66).
   the relabelled negative-lobe poles are checked blind (§8). From L14 their cards show the R-lens read of the input, which fails
   on this model (above), with priors telling the labeller to expect little.
 
-- **Head labels: the firing labels hold, the write labels don't.** Checked blind as §12's, on 80 random
+- **Head labels: the firing labels hold, the write labels barely do.** Checked blind as §12's, on 80 random
   heads (20 a band) by Claude Sonnet 5.5: the `fires` and `attends` labels tell 4 of a head's held-out
-  firings (ranks 6-24) from 4 of another head's at AUROC 0.71 [0.64, 0.79] (a third head's labels on the
-  same contexts: 0.47), as Qwen3-8B's do (0.71). A judge picks a head's `writes` label out of four from
-  what its firings promote in context 22% of the time [13, 30], chance (25%; Qwen3-8B: 49%). Its cards'
+  firings (ranks 6-24) from 4 of another head's at AUROC 0.71 [0.64, 0.78] (a third head's labels on the
+  same contexts: 0.49), as Qwen3-8B's do (0.70). A judge picks a head's `writes` label out of four from
+  what its firings promote in context 32% of the time [22, 42], near chance (25%; Qwen3-8B: 54%; before
+  `qk_self_R` was on the cards, 22%). Its cards'
   OV reads rarely pass a test (above), and what a head's OV map promotes is not what it writes in
   context; the labels follow the cards (`data/summary/labels_heads_gemma-4-12b.md`).
 

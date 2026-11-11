@@ -15,6 +15,7 @@ You are describing attention heads of Gemma 4 12B, a base model (48 layers, 16 q
   - "Against the layer's heads, also" lists what is specific to this head, beyond the tokens already shown.
 - **QK reads** (weight-only): which key tokens the head favours under its average query. They read the content a head looks for, not position: a previous-token or induction head shows little here.
   - **Self-seeking:** tokens that, as the query, favour the same token as the key. A high median means a duplicate-token head.
+  - **Seeks what it is about to say:** tokens that a query about to say them (what the residual there predicts) favours as the key. A high median, mostly in late layers, means a head that looks up earlier copies of the coming token: with a negative copying score it pushes that token down (copy suppression); with a positive one it passes it on.
   - **Attends to what it copies:** high when the tokens it attends to are the ones it copies.
 - **Drivers in real text:** tokens swept through real documents. As the query: the tokens at which its output is largest. As the key: the tokens it attends to most from the 16 positions after them.
 - **Contexts:** its 5 strongest firings, the query token in ⟦ ⟧ and the token it attended to most in ⟪ ⟫ (when it attended to the query itself, only ⟦ ⟧ shows). "…" marks a gap when the attended token is far back.

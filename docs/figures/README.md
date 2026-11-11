@@ -1,6 +1,6 @@
 # Figures
 
-Drawn by `scripts/11_figures.py`. Figures 1-17 are Qwen/Qwen3-8B's: 1 and 2 are schematics, the others draw `data/summary/`, the released lenses' provenance and the catalog's `heads/legible` table. Figure 18 sets it beside google/gemma-4-12B, and 19-24 are Gemma's, from `data/summary/` and its catalog's media and head tables; no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer names its findings section and source.
+Drawn by `scripts/11_figures.py`. Figures 1-17 are Qwen/Qwen3-8B's: 1 and 2 are schematics, the others draw `data/summary/` and the released lenses' provenance. Figure 18 sets it beside google/gemma-4-12B, and 19-24 are Gemma's, from `data/summary/` and its catalog's media and head tables; no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer names its findings section and source.
 
 ## 1. What attention heads and MLP neurons do
 

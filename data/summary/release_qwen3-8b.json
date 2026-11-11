@@ -39,12 +39,6 @@
    884736
   ],
   [
-   "qwen3-8b-neurons-legible",
-   "qwen3-8b/neurons/legible/*.parquet",
-   "which reads hold at every pole's top firings",
-   884736
-  ],
-  [
    "qwen3-8b-neurons-labels",
    "qwen3-8b/neurons/labels/*.parquet",
    "every pole's labels, by Claude Haiku 5.5",
@@ -84,12 +78,6 @@
    "qwen3-8b-heads-reads",
    "qwen3-8b/heads/reads.parquet",
    "every head's OV and QK circuits read per token",
-   1152
-  ],
-  [
-   "qwen3-8b-heads-legible",
-   "qwen3-8b/heads/legible.parquet",
-   "which reads hold at every head's top firings",
    1152
   ],
   [

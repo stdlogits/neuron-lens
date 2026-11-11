@@ -410,8 +410,8 @@ def _lenses() -> None:
 
 
 def fig_depth_map() -> None:
-    """Every legibility share by layer, one row per side, as an annotated heatmap."""
-    rows = summary(f"legible_{STEM}.json")["neurons"]["layers"]
+    """Every read's share of poles naming its target at their firings, by layer, one row per side, as an annotated heatmap."""
+    rows = summary(f"reads_at_firings_{STEM}.json")["neurons"]["layers"]
     steer = summary(f"causal_lens_{STEM}.json")["targets"]["steer 1x"]["R:dclm"]["pass"]
     col = lambda k: [r[k] for r in rows]
     groups = [
@@ -468,7 +468,7 @@ def fig_depth_map() -> None:
            "Share of each layer's poles (%) whose read names its target (5% false discovery rate). Input: the firing token, or "
            "the exact drivers. Write: the firing token, the token after a firing, and steering, of 64 random poles a layer "
            "(those that fire). Blank: under 0.5%.",
-           "findings §3, §4, §6, §7; data/summary/legible_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
+           "findings §3, §4, §6, §7; data/summary/reads_at_firings_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
            f"The S-lens names the firing token for {100 * rows[0]['read_S']:.0f}% of L0's poles and {span('read_S', 1, 8)} at L1-L8. "
            f"The R-lens read of the input direction names exact drivers for {span('read_R', 13, 20)} of L13-L20's poles and "
            f"{span('read_R', 21, 35)} from L21. The R-lens write predicts steering for 94-100% of random poles from L5. The token "
@@ -587,7 +587,7 @@ def fig_steering() -> None:
 
 def fig_amplified() -> None:
     steer = summary(f"causal_lens_{STEM}.json")["targets"]["steer 1x"]["R:dclm"]
-    rows = summary(f"legible_{STEM}.json")["neurons"]["layers"]
+    rows = summary(f"reads_at_firings_{STEM}.json")["neurons"]["layers"]
     fig, (ax,) = figure()
     x = [r["layer"] for r in rows]
     items = [series(ax, x, steer["pass"], 0, "write predicts its steering effect (amplified)") + ("amplified",),
@@ -604,7 +604,7 @@ def fig_amplified() -> None:
            "Blue: of 64 random poles a layer (those that fire), the share whose R-lens write read predicts their own 1× "
            "steering effect. "
            "Orange: of all poles, the share whose write promotes the token after their top firings, net of chance.",
-           "findings §4; data/summary/causal_lens_qwen3-8b.json (steering), legible_qwen3-8b.json (in context)",
+           "findings §4; data/summary/causal_lens_qwen3-8b.json (steering), reads_at_firings_qwen3-8b.json (in context)",
            "From L5, 94-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles "
            "promote what follows their own firings, rising to 31-32% at L28-L29. The same reads pass one test and not the "
            "other: a write's average push is what steering shows, and one firing's context decides the rest (figure 9).")
@@ -852,28 +852,25 @@ def fig_head_lens_sides() -> None:
 
 
 def fig_head_census() -> None:
-    t = pq.read_table(head_table("legible", MODEL)).to_pandas()
-    for k in ("ov_R", "ov_copy"):
-        t[k] = t[f"{k}_q"] <= 0.05
-    t["mode"] = (t.cur_mode >= 1 / 3) | (t.src_mode >= 1 / 3)
-    by = t.groupby("layer")
-    x = list(by.groups)
+    heads = summary(f"reads_at_firings_{STEM}.json")["heads"]
+    rows = heads["layers"]
+    x = [r["layer"] for r in rows]
     fig, (ax,) = figure()
     for k, label, slot in (("ov_R", "ov_R: its OV read promotes\nthe next token", 0),
                            ("ov_copy", "ov_copy: it promotes\nwhat it attends to", 2),
                            ("mode", "a third of firings on one query\nor attended token", 3),
                            ("pattern", "induction, duplicate-token,\nprevious-token or self attention", 1)):
-        series(ax, x, by[k].mean().tolist(), slot, label)
+        series(ax, x, [r[k] for r in rows], slot, label)
     layer_axis(ax)
     ax.set_ylim(-0.02, 1)
     pct(ax)
     ax.set_ylabel("share of the layer's 32 heads")
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
-    band = summary(f"legible_{STEM}.json")["heads"]["bands"]
+    band = heads["bands"]
     finish(fig, "17_head_census", "Late heads' OV reads predict the next token",
            "Each head's weight-only OV reads tested at its 64 strongest firings against the layer's other heads (5% false "
            "discovery rate), with the tokens it fires on and attends to, and its attention pattern.",
-           "findings §12; data/summary/legible_qwen3-8b.json; heads/legible",
+           "findings §12; data/summary/reads_at_firings_qwen3-8b.json",
            f"`ov_R` (the attended token's column predicts the next token) passes for {100 * band['L28-35']['ov_R']:.0f}% of "
            f"L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a head from its layer.")
 
@@ -901,7 +898,7 @@ def fig_two_models() -> None:
     at = {}
     for name, stem, record, slot in (("Qwen3-8B", STEM, "R:dclm", 6), ("Gemma 4 12B", GEMMA_STEM, "hub", 1)):
         steer = summary(f"causal_lens_{stem}.json")["targets"]["steer 1x"]
-        last = len(summary(f"legible_{stem}.json")["neurons"]["layers"]) - 1
+        last = len(summary(f"reads_at_firings_{stem}.json")["neurons"]["layers"]) - 1
         depth = lambda layers, last=last: [layer / last for layer in layers]
         series(a, depth(steer[record]["layer"]), steer[record]["r_med"], slot, f"{name}: R-lens")
         a.plot(depth(steer["logit"]["layer"]), steer["logit"]["r_med"], color=SLOT[slot], lw=0.9, ls=(0, (3, 2)),
@@ -946,7 +943,7 @@ def fig_gemma_steering() -> None:
 
 
 def fig_gemma_census() -> None:
-    rows = summary(f"legible_{GEMMA_STEM}.json")["neurons"]["layers"]
+    rows = summary(f"reads_at_firings_{GEMMA_STEM}.json")["neurons"]["layers"]
     x = [r["layer"] for r in rows]
     fig, (ax,) = figure()
     dash = (0, (4, 2))
@@ -965,7 +962,7 @@ def fig_gemma_census() -> None:
     finish(fig, "20_gemma_census", "Gemma 4 12B: what each read names, by depth",
            "Share of each layer's 30,720 poles whose read names its target, against other poles of the layer, at a 5% false "
            "discovery rate (as figure 3 for Qwen3-8B).",
-           "findings §13; data/summary/legible_gemma-4-12b.json; neurons/legible",
+           "findings §13; data/summary/reads_at_firings_gemma-4-12b.json",
            "The S-lens read names the firing token for {:.0f}-{:.0f}% of L0-L1's poles, falls to {:.1f}% at L9, and rises again "
            "at L10-L13 ({:.0f}-{:.0f}%), where the S-lens write also names it for {:.0f}-{:.0f}% at L11-L13. The weight-only R-lens read "
            "of the input names exact drivers for at most {:.0f}% of any layer's poles (§13). The R-lens write promotes the token "
@@ -1172,7 +1169,7 @@ def main() -> None:
         if stale.name not in names:
             stale.unlink()
     intro = (f"Drawn by `scripts/11_figures.py`. Figures 1-17 are {MODEL}'s: 1 and 2 are schematics, the others draw "
-             "`data/summary/`, the released lenses' provenance and the catalog's `heads/legible` table. Figure 18 sets "
+             "`data/summary/` and the released lenses' provenance. Figure 18 sets "
              f"it beside {GEMMA}, and 19-24 are Gemma's, from `data/summary/` and its catalog's media and head tables; "
              "no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer "
              "names its findings section and source.")

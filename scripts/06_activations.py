@@ -39,7 +39,9 @@ The state is saved to ``data/acts/<model>.pt`` every ``--save-minutes`` and resu
 Once the pass is complete, the script writes the acts tables, ``neurons/acts/L<layer>.parquet``
 and ``heads/acts.parquet``, and ``docs.parquet`` (each document's slice and line in the slice's
 corpus file); a rerun rebuilds them. The heads' ``out_R_z`` reads their firings' outputs through
-the R-lens from the MLP input.
+the R-lens from the MLP input. ``cur_mode`` and ``next_mode``: the share of a pole's top firings on its
+most common peak token, or before its most common next token; for a head, ``cur_mode`` and ``src_mode``,
+on its most common query token, or attending most to its most common token (findings §7, §12).
 
     python scripts/06_activations.py [--detach] [--docs N]
 """
@@ -64,6 +66,7 @@ from neuron_lens.catalog import (
     acts_path,
     catalog_dir,
     context,
+    firing_tokens,
     fixed,
     head_keys,
     head_table,
@@ -78,6 +81,7 @@ from neuron_lens.corpus import ACT_SLICES, act_docs
 from neuron_lens import arch
 from neuron_lens.paths import LOGS, ROOT
 from neuron_lens.readout import rms_norm_columns
+from neuron_lens.stats import modal_share
 from neuron_lens.transport import SKIP_FIRST, decoder_stack
 from neuron_lens.weights import tensors
 
@@ -439,6 +443,29 @@ def past(counts: torch.Tensor) -> torch.Tensor:
 _SAVED = {}  # the collected state, shared with forked table workers
 
 
+def neuron_modes(saved: dict, layer: int) -> dict:
+    """``[2f]`` (+ poles, then −): the share of a pole's top firings (positive activation) on its most common
+    peak token (``cur_mode``), and followed by its most common next token (``next_mode``)."""
+    top = saved["state"]["top"]
+    val = torch.cat([top["val"][layer, p].T for p in (0, 1)]).float()  # [2f, K]
+    doc, pos = (torch.cat([top[k][layer, p].T for p in (0, 1)]).long() for k in ("doc", "pos"))
+    fired = val > 0
+    flat, start = saved["tokens"], saved["doc_start"]
+    cur, nxt = firing_tokens(flat, start, doc, pos), firing_tokens(flat, start, doc, pos, 1)
+    return {"cur_mode": modal_share(cur, fired), "next_mode": modal_share(nxt, fired & (nxt >= 0))}
+
+
+def head_modes(saved: dict) -> dict:
+    """``[L·H]``: the share of a head's top firings on its most common query token (``cur_mode``), and
+    attending most to its most common token (``src_mode``)."""
+    top = saved["state"]["top"]
+    L, H, K = top["h_val"].shape
+    doc, pos, src = top["h_doc"].long(), top["h_pos"].long(), top["h_src"].long()
+    cur, att = (firing_tokens(saved["tokens"], saved["doc_start"], doc, p) for p in (pos, src))
+    return {"cur_mode": modal_share(cur, torch.ones_like(cur, dtype=torch.bool)).flatten(),
+            "src_mode": modal_share(att, att >= 0).flatten()}
+
+
 def neuron_tables(saved: dict, workers: int = 1) -> None:
     """One ``neurons/acts`` table per layer; with ``workers`` > 1, layers in forked processes (the
     per-pole contexts are Python string work, ~45 s a layer for Gemma 4's 30,720 poles)."""
@@ -510,6 +537,7 @@ def _neuron_layer(layer: int) -> None:
     cols["first_tokens"] = pa.array([" | ".join(f"{dec(int(ft[p, j, nn]))!r} {fv[p, j, nn]:.3g}" for j in range(FIRST_K))
                                      for p in range(2) for nn in range(f)])
     cols["first_chat"] = pa.array(torch.cat([extra["first_chat"][layer], -extra["first_chat"][layer]]).numpy())
+    cols |= {k: pa.array(v.float().numpy()) for k, v in neuron_modes(saved, layer).items()}
     write(cols, neuron_table("acts", layer))
     print(f"{time.strftime('%H:%M:%S')} neurons/acts L{layer} in {time.perf_counter() - t0:.0f}s", flush=True)
 
@@ -569,6 +597,7 @@ def head_tables(saved: dict, device) -> None:
         ids.append(keep[i.cpu()])
         vals.append(v.cpu())
     put(cols, "out_R_z", torch.cat(ids), torch.cat(vals))
+    cols |= {k: pa.array(v.float().numpy()) for k, v in head_modes(saved).items()}
     write(cols, head_table("acts"))
     print(f"{time.strftime('%H:%M:%S')} heads/acts written", flush=True)
 

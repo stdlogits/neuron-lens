@@ -6,12 +6,12 @@ The prompt is `scripts/prompts/gemma-4-12b/heads.md` on GitHub.
 
 **Checked blind** on 80 random heads, 20 a band, by Claude Sonnet 5.5:
 
-- **Firing:** given a head's `fires` and `attends` labels and 8 contexts, 4 of its held-out top firings (ranks 6-24) and 4 of another head of its band, the scorer separates them at AUROC 0.71 [0.64, 0.79]; a third head's labels on the same contexts score 0.47.
-- **Writes:** given what the head's firings actually promote in context (`out_R_z`, not on the card), a judge picks its `writes` label out of four from its band 22% of the time [13, 30] (chance 25%).
+- **Firing:** given a head's `fires` and `attends` labels and 8 contexts, 4 of its held-out top firings (ranks 6-24) and 4 of another head of its band, the scorer separates them at AUROC 0.71 [0.64, 0.78]; a third head's labels on the same contexts score 0.49.
+- **Writes:** given what the head's firings actually promote in context (`out_R_z`, not on the card), a judge picks its `writes` label out of four from its band 32% of the time [22, 42] (chance 25%).
 
 | band | firing AUROC | control | writes picked |
 |---|---|---|---|
-| L0-L4 | 0.62 | 0.44 | 25% |
-| L5-L13 | 0.80 | 0.49 | 15% |
-| L14-L32 | 0.75 | 0.52 | 32% |
-| L33-L47 | 0.69 | 0.41 | 15% |
+| L0-L4 | 0.74 | 0.48 | 25% |
+| L5-L13 | 0.74 | 0.54 | 35% |
+| L14-L32 | 0.70 | 0.47 | 39% |
+| L33-L47 | 0.67 | 0.47 | 30% |

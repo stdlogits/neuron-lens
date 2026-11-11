@@ -140,9 +140,9 @@ And some heads, read from the weights:
 | `L1h28` | a duplicate-token head: as a query it seeks the same token again (Paris → Paris), and copies almost nothing |
 | `L0h27` | attends to the starts of code and documents (`/*`, `import`) |
 
-Neurons and heads get the same five tables, one row per pole or per head: `reads` (weight-only lens
-reads), `acts` (activation statistics and top firings), `drivers` (exact token drivers), `legible`
-(what each read names at the unit's firings and drivers) and `labels` (Claude Haiku's labels in words).
+Neurons and heads get the same four tables, one row per pole or per head: `reads` (weight-only lens
+reads), `acts` (activation statistics and top firings), `drivers` (exact token drivers) and `labels`
+(Claude Haiku's labels in words).
 Neurons add `firings` (what the residual holds, what the MLP layer writes and what the model predicts where a pole
 fires, and how much the pole amplifies what it reads and adds off it), `edges` (each pole's strongest direct weight edges from earlier poles and to later ones) and `sources` (what drives
 a pole when it fires, and what fires with it). Gemma 4 adds `image` and `audio` tables, per neuron and per head. The [dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents
@@ -314,17 +314,18 @@ concepts ([§10](docs/findings.md#10-outside-labels)).
 Qwen3-8B has 33 induction heads (which continue repeated text: after `A B … A`, they attend to `B` and
 predict it), 33 duplicate-token heads (which attend to earlier copies of the current token), 4
 previous-token heads and 16 sink heads, and removing any one head costs in-context copying at most
-0.07 nats: the work is spread over many heads. A head's input reads best through the S-lens (a head
-reads what a position holds, not what it is about to say); its output with the S-lens up to L8 and the
+0.07 nats: the work is spread over many heads. A head's keys and values read best through the S-lens (a
+head reads what a position holds, not what it is about to say); its output with the S-lens up to L8 and the
 R-lens from L9, as for neurons. Feeding each vocabulary token's S-lens footprint through a head's
 circuits gives two token-by-token maps. The OV map says what it copies and suppresses (L26h31 copies
 quantities: ` weight | 体重 | strength`; L32h9 suppresses the surnames L34h1 copies), and predicts where
 the attended token ranks in the head's actual output at each firing (Spearman +0.51; 0.00 under
 another head). The QK map finds the duplicate-token heads from the weights (AUROC 0.96), and late
-heads attend to the classes they copy or suppress. With an R-lens query against S-lens keys it finds
-the late heads that attend to earlier copies of the token their position is about to say; with a
-negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91)
-([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token)).
+heads attend to the classes they copy or suppress. With an R-lens query against S-lens keys (`qk_self_R`)
+it finds the late heads that attend to earlier copies of the token their position is about to say; with a
+negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91; on Gemma 4 the
+same, more weakly) ([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token),
+[§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
 
 ![Which lens on each side of a head](docs/figures/16_head_lens_sides.png)
 
@@ -333,8 +334,8 @@ negative OV map, these are copy suppression in context (17 heads at L21-L35, AUR
 At their own top firings, 26% of L28-L35's heads write the next token as their OV read predicts, and
 few heads before. Claude Haiku
 labels every head (where it fires, what it attends to, what it writes); checked blind, the firing labels
-tell a head's held-out firings from another head's at AUROC 0.71 (control 0.51), and the write labels
-are picked out of four 49% of the time (79% at L28-L35; chance 25%)
+tell a head's held-out firings from another head's at AUROC 0.70 (control 0.50), and the write labels
+are picked out of four 54% of the time (79% at L28-L35; chance 25%)
 ([§12](docs/findings.md#12-attention-heads-tests-and-labels)).
 
 ![What heads' reads name](docs/figures/17_head_census.png)
@@ -348,7 +349,7 @@ neuron's natural size move the output too little for either lens to predict, tho
 still raise the tokens the R-lens names. The S-lens read of a neuron's input names its firing token through L13, about the same
 relative depth as Qwen3-8B's L8, and the write promotes the next token from L33. The R-lens read of a neuron's input direction
 fails on this model, a matter of how the read rows meet the input norm. Claude Haiku labelled every pole and head;
-checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are at
+checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are near
 chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.72)
 ([§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
 
@@ -554,7 +555,6 @@ take about 1.5× as long.
 | `06_activations.py` | one pass for every neuron and head: statistics, top firings, attention patterns, position 0 | ~70 min on an RTX 4090 |
 | `07_drivers.py` | every kept token swept through 8 real documents: neuron and head drivers | 12 min (Qwen3-8B), 24 min (Gemma 4) on an H100 |
 | `08_reads.py` | weight-only reads of every pole and head through both lenses | 5-7 min on an H100, ~10 min per side on a Mac |
-| `09_legible.py` | what each read names at each unit's firings and drivers | 2 min on an H100, ~30 min on a Mac |
 | `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$105 for the neurons, under $1 for the heads (Batch API) |
 | `16_edges.py` | every pole's strongest direct weight edges | minutes |
 | `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`); what drives each head through its value, query and key (`heads/sources`) | ~2 h for Gemma 4 on an H100 |
@@ -589,7 +589,7 @@ python scripts/03_token_counts.py
 python scripts/06_activations.py --batch-docs 64
 python scripts/07_drivers.py --batch 128
 python scripts/08_reads.py
-python scripts/09_legible.py
+python scripts/checks/reads_at_firings.py
 python scripts/16_edges.py
 python scripts/17_firings.py
 python scripts/13_media_activations.py --modalities audio --batch 32   # then image: one at a time

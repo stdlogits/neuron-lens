@@ -1,5 +1,5 @@
 """Each MLP neuron's read and write directions as the residual sees them, across models, for the
-catalog stages (``08_reads.py``, ``09_legible.py``, ``14_media_tables.py``) and the checks.
+catalog stages (``08_reads.py``, ``14_media_tables.py``) and the checks (``checks/reads_at_firings.py``).
 
 A neuron ``n`` of layer ``L`` reads the MLP input through its gate and up rows times the norm that
 feeds the MLP (Qwen3: ``post_attention_layernorm``; Gemma 4: ``pre_feedforward_layernorm``), and

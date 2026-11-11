@@ -175,8 +175,9 @@ final RMSNorm with its weight (`neuron_lens/readout.py`):
   signal holds to rank 64 (§7). At L35, `write_R` is the logit lens.
 - **Which read to use where** depends on depth (§7): the S-lens on the input side through L8, the
   R-lens from L9, with `read_S_z` as a concept view and, at L13-L20, contexts and exact drivers beside
-  them; `write_S` through L8, `write_R` from about L4. These are priors; `legible` says what each read
-  names for each pole.
+  them; `write_S` through L8, `write_R` from about L4. These are priors, from how often each read names what is
+  counted at the firings (`checks/reads_at_firings.py`, §7); weigh a unit's sides by its reads, contexts and drivers
+  together.
 
 ## Reading heads
 
@@ -189,13 +190,19 @@ A head's token maps are read between its own read and write points (§11): a tok
   it reads `v`. Top 64 copied, and `_neg` the 64 most suppressed. Columns' means and variances come
   from the mean and covariance of the head's 128-dimensional projections, so the 103,830² map is never
   built. `ov_R_copy` and `ov_S_copy` are Elhage et al.'s copying score `Σλ/Σ|λ|` of each map.
-- **QK** (`qk_S`, `qk_self_S`): the attention logit between a query footprint and a key footprint,
+- **QK** (`qk_S`, `qk_self_S`, `qk_self_R`): the attention logit between a query and a key footprint,
   through `q_norm` and `k_norm` (their true derivative, averaged over real positions) and RoPE's
-  relative rotation averaged over the head's own attention offsets. Footprints are taken at unit
+  relative rotation averaged over the head's own attention offsets. Directions are taken at unit
   length, since attends-to ranks keys across tokens. `qk_S`: each key token's z over the vocabulary
   under the head's mean query (what it attends to, whatever the query); `qk_self_S`: each token's z in
-  its own row (it seeks itself); `qk_self` their median; `qk_ctx_rho` and `qk_ov_rho`: Spearman of
-  `qk_S` with the attention tokens receive in context, and with `ov_R`.
+  its own row with its footprint as the query too (a position holding `v` seeks `v`: duplicate-token
+  heads); `qk_self_R`: the same diagonal with the query the R-lens direction at `L − 1`'s output that
+  promotes `v`, `W_U diag(γ_f) J^out_{L−1}` (a position about to say `v` seeks earlier copies of `v`, the
+  QK half of copy suppression), from L1. The query reads what a position says, so it takes the R-lens; the
+  key and the value read what a position holds, so they take the S-lens (the lens rule holds: R `out` at
+  `L − 1`). The diagonal's z come from the mean and covariance of the keys' projections, as OV's. The
+  scalar columns `qk_self_S` and `qk_self_R` are each diagonal's median over tokens; `qk_ctx_rho` and
+  `qk_ov_rho`: Spearman of `qk_S` with the attention tokens receive in context, and with `ov_R`.
 
 ## Activations, drivers and tests
 
@@ -206,7 +213,9 @@ A head's token maps are read between its own read and write points (§11): a tok
   (`top_gate`; `neg_lobe`, the share below zero); position 0 from every kept token run
   alone. Per head, the same for the output norm `‖W_O^h z‖`, plus attention patterns (sink, previous,
   self) and the in-context read of its firings' outputs (`out_R_z`); induction and duplicate-token
-  scores from 64 random sequences said twice.
+  scores from 64 random sequences said twice. `cur_mode`, `next_mode` (neurons) and `cur_mode`, `src_mode`
+  (heads): the share of top firings on the most common peak (or query) token, before the most common next
+  token, or attending most to the most common token.
 - **Firing reads** (`17_firings.py`, the `firings` table). Per pole, the mean over its top firings of the residual
   entering the MLP (`before`, through `mid`), the layer's MLP output there (`mlp`, through `out`), and the final residual through the unembedding (`pred`, the model's mean next-token
   logit), each with a `_z` variant across the layer's poles that fired (a pole with no firing has −1, NaN and an empty preview). Each firing is scaled by its own residual's RMS. They average over every top firing, so they stay off the label cards.
@@ -237,9 +246,11 @@ A head's token maps are read between its own read and write points (§11): a tok
   the token and summed over the 16 after; per head, the largest output norm at the token (`drivers`) and
   the most attention received from the 16 after (`keys`). Each document's prefix before the position is run once and its cache copied for every token, 12 minutes against 27 for
   Qwen3-8B and 24 against 53 for Gemma 4 on an H100 (the top 8 of the 64 tokens match a run without it 98.6-98.8% of the time).
-- **Read tests** (`09_legible.py`, after `07` and `08`): what each read names, as a z on a list of tokens against mismatched pairs at a
-  5% false discovery rate: a neuron's `read_S` on its peak tokens, `read_R` on its exact drivers, `write_R` on the tokens after its firings,
-  `write_S` on its peak tokens; a head's reads on its own top firings (§7, §12).
+- **Reads at firings** (`checks/reads_at_firings.py`, after `07` and `08`; a check, not a table): how often each read names
+  what is counted around a unit, as a z on a list of tokens against mismatched pairs, the share of each layer's units at a 5%
+  false discovery rate: a neuron's `read_S` on its peak tokens, `read_R` on its exact drivers, `write_R` on the tokens after its
+  firings, `write_S` on its peak tokens; a head's reads on its own top firings (§7, §12). A firing is a sample, so these are
+  population results about the reads; the catalog keeps no per-unit test.
 
 ## Edges
 
@@ -329,7 +340,7 @@ tables, tests and conventions are Qwen3-8B's, with these differences:
   derivative.
 - **Tokens and output.** Embeddings enter the residual times √3840 and are tied to the unembedding;
   S-lens reads use them so scaled. Final logits pass a softcap, `30 · tanh(x / 30)`, which the
-  catalog's R-lens probabilities and the causal checks include; `09_legible.py`'s z-scores use the
+  catalog's R-lens probabilities and the causal checks include; `checks/reads_at_firings.py`'s z-scores use the
   logits before it (the cap keeps each token's order). Every document starts with `<bos>`, the
   attention sink, so activation statistics leave out position 0 and the `first_*` columns are at
   position 1. The kept tokens are 123,774 of 262,144 (the same corpora, 92.6M Gemma tokens).

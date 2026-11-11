@@ -15,7 +15,7 @@ for the next row's of the same layer. Hit rates at ranks 10, 100 and 1,000 by la
 
 **Coverage** (findings §10): which poles the library's steering caught (any published row, every
 category), among all poles and among those whose write predicts what follows their firings
-(``legible``'s ``write_R`` at a 5% false discovery rate, §7), against what each layer's base rate
+(``reads_at_firings.py``'s ``write_R`` test at a 5% false discovery rate, §7), against what each layer's base rate
 predicts for the latter (pooled over a band's write-legible poles), since the two sit at different
 depths.
 
@@ -32,7 +32,7 @@ from transformers import AutoTokenizer
 
 from neuron_lens.catalog import neuron_table
 from neuron_lens.lenses import load_lens
-from neuron_lens.paths import LIBRARY, SUMMARY
+from neuron_lens.paths import DATA, LIBRARY, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
 from neuron_lens.weights import down_proj, readout_names, tensors
 
@@ -40,7 +40,8 @@ MODEL = "Qwen/Qwen3-8B"
 STOP = {"the", "of", "and", "old", "year", "years", "with", "from", "for", "who", "one", "your", "you"}
 GROUPS = [(0, 5), (6, 11), (12, 17), (18, 23), (24, 29), (30, 35)]
 BANDS = [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
-FDR = 0.05  # 09_legible.py's
+FDR = 0.05  # reads_at_firings.py's
+UNITS = DATA / "checks" / "reads_at_firings-qwen3-8b.pt"  # its per-pole q-values
 
 
 def name_tokens(tok, name: str) -> list[int]:
@@ -69,10 +70,11 @@ def coverage(lib: dict) -> tuple[list[str], dict]:
     share from each layer's base rate."""
     caught = {(r[0], r[1], r[2]) for r in lib["rows"]}  # (layer, neuron, sign) of every published row
     per = []  # (poles, poles caught, write-legible, write-legible caught) per layer
+    q = torch.load(UNITS, weights_only=False)["neurons"]["q"]["write_R"]  # [L, 2f], the catalog's row order
     for layer in range(36):
-        t = pq.read_table(neuron_table("legible", layer), columns=["neuron", "pole", "write_R_q"]).to_pydict()
+        t = pq.read_table(neuron_table("reads", layer), columns=["neuron", "pole"]).to_pydict()
         hit = torch.tensor([(layer, n, s) in caught for n, s in zip(t["neuron"], t["pole"])])
-        w = torch.tensor(t["write_R_q"]) <= FDR
+        w = q[layer] <= FDR
         per.append((len(hit), int(hit.sum()), int(w.sum()), int((hit & w).sum())))
     lines = ["\ncoverage: the library's steering (any published row), share of all poles | of write-legible poles "
              "(write_R at a 5% FDR) | what each layer's base rate predicts for them"]

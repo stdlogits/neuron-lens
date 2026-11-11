@@ -1,14 +1,16 @@
-"""What each weight-only read names, for every neuron pole and attention head (pipeline stage 9; findings §7, §12).
+"""How often each weight-only read names what is counted at a unit's firings and drivers, by layer and band (findings §7,
+§12, §13, §18).
 
 Each test scores a read on a list of tokens as a mean z, against mismatched pairs: another unit of the layer scored on this
-unit's tokens. A unit's p-value on a test is the share of its layer's mismatched pairs that score as high, and a test passes
-at a false discovery rate of 5% (Benjamini-Hochberg over the layer's units for neurons, over all heads for heads). A test
-says whether a read names that target. The targets are narrow (the token under a firing, the token after it), so a failed
-test doesn't make the read wrong (§7). Units with fewer than 3 usable tokens are not scored. Columns give the z and q-value of
-each test.
+unit's tokens. A unit's p-value on a test is the share of its layer's mismatched pairs that score as high; the summary gives
+the share of each layer's units that pass at a false discovery rate of 5% (Benjamini-Hochberg over the layer's units for
+neurons, over all heads for heads) and the share past the 99% point of mismatched pairs net of theirs. These are population
+results about the reads, not verdicts on units: a firing is one context summarized by a token, and the targets are narrow
+(the token under a firing, the token after it), so a read that misses them isn't wrong (§7), and the catalog keeps no
+per-unit score. Units with fewer than 3 usable tokens, and near-silent poles (``acts``' ``act_top`` under 0.05), are not
+scored.
 
-**Neurons** (``neurons/legible/L<layer>.parquet``), run after ``07_drivers.py`` and ``08_reads.py``, z of each token across the
-layer's poles:
+**Neurons**, after ``07_drivers.py`` and ``08_reads.py``, z of each token across the layer's poles:
 
 - ``read_S``: the read direction's S-lens read names the peak tokens of the top firings (``06_activations.py``: the strongest
   position in each of the pole's top documents);
@@ -17,10 +19,10 @@ layer's poles:
 - ``write_R``: the write's R-lens read promotes the tokens that follow the firings;
 - ``write_S``: the write's S-lens read names the peak tokens (early neurons write back what they detect);
 - ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up rows (§18);
-- ``silent``: no firing, or ``act_top`` under 0.05; ``cur_mode``, ``next_mode``: the share of top firings on one peak token, or
-  followed by one token.
+- the shares of near-silent poles, and of poles with a third of their top firings on one peak token or before one token
+  (``acts``' ``cur_mode``, ``next_mode``).
 
-**Heads** (``heads/legible.parquet``), each read's per-token z from ``08_reads.py``, at the token the
+**Heads**, each read's per-token z from ``08_reads.py`` (``data/heads/<model>-token-z.pt``), at the token the
 firing attends to most (past the sink):
 
 - ``ov_R``: the OV column of the attended token through the R-lens (what the head writes when it
@@ -28,54 +30,45 @@ firing attends to most (past the sink):
 - ``ov_copy``: the attended token's z in its own ``ov_R`` column: the head promotes what it reads;
 - ``ov_S``: the same through the S-lens: the write carries the attended token's footprint;
 - ``qk_S``: the attended token's ``qk_S`` z: the QK read predicts what the head attends to;
-- ``cur_mode``, ``src_mode``: the share of firings on one query token, or attending to one token;
-  ``pattern``: ``prev`` or ``self`` past 0.5, ``induction`` or ``duplicate`` past 0.3.
-- ``<test>_p``: the uncorrected p-value against the layer's mismatched pairs. A layer's H(H − 1)
-  pairs bound p below by 1/(H(H − 1) + 1): with 16 heads a layer (Gemma 4), BH over all heads passes
-  only if dozens sit at that floor, so ``_q`` can be 1 where a head clearly stands out of its layer.
+- the shares with a third of firings on one query or attended token (``acts``' ``cur_mode``, ``src_mode``), and with an
+  attention pattern score past a threshold (``prev`` or ``self`` past 0.5, ``induction`` or ``duplicate`` past 0.3);
+- ``<test>_p05``: the share with an uncorrected p of 0.05 or less (5% by chance). A layer's H(H − 1) pairs bound p
+  below by 1/(H(H − 1) + 1): with 16 heads a layer (Gemma 4), BH over all heads passes only if dozens sit at that
+  floor, though a head can clearly stand out of its layer.
 
-Per band into ``data/summary/legible_<model>.{log,json}``.
+Per layer and band into ``data/summary/reads_at_firings_<model>.{log,json}``. Each unit's q-values (and the heads'
+uncorrected p) go to ``data/checks/reads_at_firings-<model>.pt``, unreleased, for the checks that count a subgroup of units
+(``library_crosscheck.py``'s coverage).
 
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``): the released lenses; each neuron's write as
 the residual sees it and its read rows times the pre-feedforward norm (``neuron_lens/neurons.py``);
 embeddings × √d; each head's ``W_O`` times the post-attention norm weight, keys as values on the full
 layers, and the values through ``v_norm``'s averaged true derivative, as ``08_reads.py`` reads them.
 
-    python scripts/09_legible.py [--parts neurons,heads]
+    python scripts/checks/reads_at_firings.py [--parts neurons,heads]
 """
 import argparse
 import json
 import time
 
-import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens.catalog import (
-    MODEL,
-    acts_path,
-    column,
-    head_keys,
-    head_table,
-    kept,
-    kept_index,
-    lobe_signs,
-    neuron_keys,
-    neuron_table,
-    write,
-)
+from neuron_lens.catalog import (MODEL, acts_path, column, firing_tokens, head_table, kept, kept_index, lobe_signs,
+                                 neuron_table)
 from neuron_lens import arch
 from neuron_lens.heads import norm_derivative
 from neuron_lens.neurons import directions, orthogonal_write, read_rows
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
-from neuron_lens.stats import bh, modal_share, null_p
+from neuron_lens.stats import bh, null_p
 from neuron_lens.weights import tensors
 
 R_FIT, S_FIT = arch.fits(MODEL)
 STEM = MODEL.split("/")[-1].lower()
 ACTS = acts_path()
 TOKEN_Z = DATA / "heads" / f"{STEM}-token-z.pt"
+UNITS = DATA / "checks" / f"reads_at_firings-{STEM}.pt"
 PAST = 1 / 3
 SILENT = 0.05
 MIN_FIRINGS = 3
@@ -114,14 +107,6 @@ def mean_z(vecs: torch.Tensor, table: torch.Tensor, tok: torch.Tensor, ok: torch
     return out[0], out[1]
 
 
-def firing_tokens(saved: dict, doc: torch.Tensor, pos: torch.Tensor, offset: int = 0) -> torch.Tensor:
-    """The token at ``pos + offset`` of each firing's document, −1 past its end."""
-    flat, start = saved["tokens"], saved["doc_start"]
-    p = pos + offset
-    inside = p < start[doc + 1] - start[doc]
-    return torch.where(inside, flat[(start[doc] + p).clamp_max(len(flat) - 1)].long(), -1)
-
-
 def band_rows(per: list[dict], L: int) -> dict:
     out = {}
     for lo, hi in BANDS + ((0, L - 1),):
@@ -146,15 +131,18 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)
     top = saved["state"]["top"]
     g = torch.Generator().manual_seed(0)
-    per = []
+    per, unit_q = [], {}
     for layer in range(L):
         t0 = time.perf_counter()
         val = torch.cat([top["val"][layer, p].T for p in (0, 1)]).float()  # [2f, K]: + poles, then −
         doc = torch.cat([top["doc"][layer, p].T for p in (0, 1)]).long()
         pos = torch.cat([top["pos"][layer, p].T for p in (0, 1)]).long()
         fired = val > 0
-        cur, nxt = firing_tokens(saved, doc, pos), firing_tokens(saved, doc, pos, 1)
-        silent = (fired.sum(1) == 0) | (val.median(1).values.clamp_min(0) < SILENT)
+        flat, start = saved["tokens"], saved["doc_start"]
+        cur, nxt = firing_tokens(flat, start, doc, pos).long(), firing_tokens(flat, start, doc, pos, 1).long()
+        acts = pq.read_table(neuron_table("acts", layer), columns=["act_top", "cur_mode", "next_mode"]).to_pydict()
+        silent = torch.tensor(acts["act_top"]) < SILENT
+        cur_mode, next_mode = torch.tensor(acts["cur_mode"]), torch.tensor(acts["next_mode"])
         drivers = column(pq.read_table(neuron_table("drivers", layer), columns=["drivers_ids"]), "drivers_ids").long()
         k_cur, k_nxt, k_drv = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (cur, nxt, drivers))
         ok_cur, ok_nxt = fired & (k_cur >= 0), fired & (k_nxt >= 0)
@@ -180,9 +168,6 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
                  "read_S": mean_z((cs / cs.norm(dim=1, keepdim=True)).half(), emb, k_cur, ok_cur, perm),
                  "write_orth_R": mean_z(torch.cat([ro, -ro]).half(), unembed, k_nxt, ok_nxt, perm),
                  "write_orth_S": mean_z(torch.cat([so, -so]).half(), emb, k_cur, ok_cur, perm)}
-        cur_mode, next_mode = modal_share(cur, fired), modal_share(nxt, fired & (nxt >= 0))
-        cols = neuron_keys(layer, f)
-        cols |= {"silent": pa.array(silent.numpy()), "cur_mode": pa.array(cur_mode.numpy()), "next_mode": pa.array(next_mode.numpy())}
         row = {"layer": layer, "silent": silent.float().mean().item(),
                "token_detector": ((cur_mode >= PAST) & ~silent).float().mean().item(),
                "next_detector": ((next_mode >= PAST) & ~silent).float().mean().item()}
@@ -190,11 +175,10 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
             ok = ~m.isnan() & ~silent
             q = torch.ones(2 * f)
             q[ok] = bh(null_p(m[ok], n))
-            cols[f"{test}_z"], cols[f"{test}_q"] = pa.array(m.numpy()), pa.array(q.numpy())
+            unit_q.setdefault(test, []).append(q)
             thr = n[~n.isnan()].quantile(NULL_Q).item()
             row[test] = (q <= FDR).float().mean().item()
             row[f"{test}_net"] = (((m > thr) & ~silent).float().mean() - ((n > thr) & ~silent).float().mean()).item()
-        write(cols, neuron_table("legible", layer))
         per.append(row)
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: " + " ".join(f"{k} {row[k]:.2f}" for k in
               ("silent", *TESTS)) + f" in {time.perf_counter() - t0:.0f}s", flush=True)
@@ -207,7 +191,7 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     for name, r in bands.items():
         lines.append(f"{name:8s} " + "  ".join((f"{r[k]:.2f} [{r[k + '_net']:.2f}]" if k + "_net" in r else f"{r[k]:.2f}").rjust(14)
                                              for k in keys))
-    return lines, {"layers": per, "bands": bands}
+    return lines, {"layers": per, "bands": bands}, {"q": {t: torch.stack(v) for t, v in unit_q.items()}}
 
 
 def heads(saved: dict, dev) -> tuple[list[str], dict]:
@@ -220,10 +204,12 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     kidx = kept_index()
     top = saved["state"]["top"]
     doc, pos, src = top["h_doc"].long(), top["h_pos"].long(), top["h_src"].long()  # [L, H, K]
-    cur, att, nxt = firing_tokens(saved, doc, pos), firing_tokens(saved, doc, src), firing_tokens(saved, doc, pos, 1)
+    flat, start = saved["tokens"], saved["doc_start"]
+    att, nxt = firing_tokens(flat, start, doc, src).long(), firing_tokens(flat, start, doc, pos, 1).long()
     k_att, k_nxt = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (att, nxt))
-    acts = pq.read_table(head_table("acts"), columns=list(PATTERN)).to_pydict()
+    acts = pq.read_table(head_table("acts"), columns=[*PATTERN, "cur_mode", "src_mode"]).to_pydict()
     pattern = torch.stack([torch.tensor(acts[k]).view(L, H) > v for k, v in PATTERN.items()]).any(0)
+    cur_mode, src_mode = (torch.tensor(acts[k]).view(L, H) for k in ("cur_mode", "src_mode"))
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
@@ -268,18 +254,8 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
             pval[test][l] = null_p(m, st[~eye])
         print(f"{time.strftime('%H:%M:%S')} heads L{l}", flush=True)
     q = {t: bh(pval[t].flatten()).view(L, H) for t in HEAD_TESTS}
-    # Uncorrected p too: a layer's H(H − 1) mismatched pairs bound p below by 1/(H(H − 1) + 1), so with
-    # Gemma 4's 16 heads a layer (240 pairs) BH over 768 heads passes only if dozens sit at that floor.
-    cur_mode, src_mode = modal_share(cur, torch.ones_like(cur, dtype=torch.bool)), modal_share(att, att >= 0)
-    cols = head_keys(L, H, arch.groups(MODEL))
-    for t in HEAD_TESTS:
-        cols[f"{t}_z"], cols[f"{t}_q"] = pa.array(stat[t].flatten().numpy()), pa.array(q[t].flatten().numpy())
-    cols |= {f"{t}_p": pa.array(pval[t].flatten().numpy()) for t in HEAD_TESTS}
-    cols |= {"cur_mode": pa.array(cur_mode.flatten().numpy()), "src_mode": pa.array(src_mode.flatten().numpy()),
-             "pattern": pa.array(pattern.flatten().numpy())}
-    write(cols, head_table("legible"))
     flags = {t: q[t] <= FDR for t in HEAD_TESTS} | {"cur_det": cur_mode >= PAST, "src_det": src_mode >= PAST,
-                                                    "pattern": pattern}
+                                                    "mode": (cur_mode >= PAST) | (src_mode >= PAST), "pattern": pattern}
     flags |= {f"{t}_p05": pval[t] <= 0.05 for t in HEAD_TESTS}  # uncorrected; 5% by chance
     lines = [(f"heads, {MODEL}: {L} × {H} heads; share of each band's heads passing each test at a {FDR:.0%} false discovery "
               "rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: "
@@ -288,7 +264,8 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     for lo, hi in BANDS + ((0, L - 1),):
         bands[f"L{lo}-{hi}"] = {k: v[lo:hi + 1].float().mean().item() for k, v in flags.items()}
         lines.append(f"L{lo}-{hi}".ljust(8) + " " + "  ".join(f"{x:9.2f}" for x in bands[f"L{lo}-{hi}"].values()))
-    return lines, {"bands": bands}
+    layers = [{"layer": l, **{k: v[l].float().mean().item() for k, v in flags.items()}} for l in range(L)]
+    return lines, {"layers": layers, "bands": bands}, {"q": q, "p": pval}
 
 
 def main() -> None:
@@ -298,16 +275,20 @@ def main() -> None:
     args = ap.parse_args()
     parts = set(args.parts.split(","))
     saved = torch.load(ACTS, weights_only=False, map_location="cpu", mmap=True)
-    path = SUMMARY / f"legible_{STEM}.json"
+    path = SUMMARY / f"reads_at_firings_{STEM}.json"
+    units_path = UNITS
+    units = torch.load(units_path, weights_only=False) if units_path.exists() else {}
     table = json.loads(path.read_text()) if path.exists() else {}
     for part, fn in (("neurons", neurons), ("heads", heads)):
         if part in parts:
-            lines, table[part] = fn(saved, args.device)
+            lines, table[part], units[part] = fn(saved, args.device)
             table[f"{part}_log"] = lines
     text = "\n\n".join("\n".join(table[f"{p}_log"]) for p in ("neurons", "heads") if f"{p}_log" in table)
     print(text)
-    (SUMMARY / f"legible_{STEM}.log").write_text(text + "\n")
+    (SUMMARY / f"reads_at_firings_{STEM}.log").write_text(text + "\n")
     path.write_text(json.dumps(table))
+    units_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(units, units_path)
 
 
 if __name__ == "__main__":

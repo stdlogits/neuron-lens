@@ -9,9 +9,9 @@ L0-47              0.00            0.29            0.08     0.02 [0.04]     0.13
 
 heads, google/gemma-4-12B: 48 × 16 heads; share of each band's heads passing each test at a 5% false discovery rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: prev > 0.5, self > 0.5, induction > 0.3, duplicate > 0.3
 
-band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det    pattern   ov_R_p05  ov_copy_p05   ov_S_p05   qk_S_p05
-L0-11         0.00       0.00       0.00       0.00       0.62       0.48       0.15       0.05       0.05       0.05       0.08
-L12-23        0.00       0.00       0.00       0.00       0.12       0.15       0.09       0.02       0.09       0.03       0.07
-L24-35        0.00       0.00       0.00       0.00       0.12       0.08       0.06       0.11       0.09       0.05       0.09
-L36-47        0.00       0.00       0.00       0.00       0.40       0.24       0.08       0.23       0.18       0.05       0.14
-L0-47         0.00       0.00       0.00       0.00       0.32       0.24       0.10       0.10       0.10       0.04       0.10
+band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det       mode    pattern   ov_R_p05  ov_copy_p05   ov_S_p05   qk_S_p05
+L0-11         0.00       0.00       0.00       0.00       0.62       0.48       0.71       0.15       0.05       0.05       0.05       0.08
+L12-23        0.00       0.00       0.00       0.00       0.12       0.15       0.20       0.09       0.02       0.09       0.03       0.07
+L24-35        0.00       0.00       0.00       0.00       0.12       0.08       0.18       0.06       0.11       0.09       0.05       0.09
+L36-47        0.00       0.00       0.00       0.00       0.40       0.24       0.44       0.08       0.23       0.18       0.05       0.14
+L0-47         0.00       0.00       0.00       0.00       0.32       0.24       0.38       0.10       0.10       0.10       0.04       0.10

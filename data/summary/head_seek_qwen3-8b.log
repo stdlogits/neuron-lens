@@ -1,4 +1,4 @@
-QK's cross-lens diagonal, Qwen/Qwen3-8B: 35 layers × 32 heads from L1; RS (R-lens query, S-lens key), SS (08_reads.py's qk_self_S, recomputed: max |Δz| 0.008), RR; in context over every 32th activation document (2,000), queries with an earlier copy of the target per layer (mean): lens 153,674, final 194,492, ctrl 432,204
+QK's cross-lens diagonal, Qwen/Qwen3-8B: 35 layers × 32 heads from L1; RS (R-lens query, S-lens key), SS (08_reads.py's qk_self_S, recomputed: max |Δz| 0.000), RR; in context over every 32th activation document (2,000), queries with an earlier copy of the target per layer (mean): lens 153,674, final 194,492, ctrl 432,204
 
 by band: median over heads of each head's median z, RS / SS / RR; median rho(RS, ov_R) over tokens; attention per matching key relative to uniform, mean over heads, lens / final / ctrl
   L1-8: +0.08 / +0.33 / +0.48   rho_ov +0.02   lift 5.13 / 1.78 / 0.81

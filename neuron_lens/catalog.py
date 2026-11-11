@@ -5,9 +5,8 @@
 - ``heads/<table>.parquet``: a row per query head, with ``layer``, ``head`` and ``kv_head`` in front.
 
 Tables, each from one pipeline stage: ``acts`` (``06_activations.py``), ``drivers``
-(``07_drivers.py``), ``reads`` (``08_reads.py``), ``legible`` (``09_legible.py``), ``labels``
-(``10_labels.py``), and for neurons ``firings`` (``17_firings.py``), ``edges`` (``16_edges.py``) and
-``sources`` (the same stage). Token reads cover the kept tokens (``kept``) and
+(``07_drivers.py``), ``reads`` (``08_reads.py``), ``labels`` (``10_labels.py``), and for neurons
+``firings`` (``17_firings.py``), ``edges`` (``16_edges.py``) and ``sources`` (the same stage). Token reads cover the kept tokens (``kept``) and
 list ``TOP`` of them: ``*_ids`` (the model's token ids), ``*_val`` (their scores) and ``*_str`` (the top
 8 decoded, `` | ``-joined). A list with fewer entries than ``TOP`` is padded with ``−1`` and NaN.
 
@@ -31,7 +30,7 @@ import torch
 from neuron_lens.paths import DATA
 
 MODEL = os.environ.get("NEURON_LENS_MODEL", "Qwen/Qwen3-8B")
-TABLES = ("acts", "drivers", "reads", "legible", "labels", "edges", "firings", "sources")
+TABLES = ("acts", "drivers", "reads", "labels", "edges", "firings", "sources")
 TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top firings, edges, sources, media labels and documents (findings §7)
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3

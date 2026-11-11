@@ -20,11 +20,13 @@ back count (early, the R-lens top-1 is often a recent token, which previous-toke
 previous token is the query's (induction matches) and targets equal to the query's own token (duplicate matches) are
 left out. A head's
 ``seek`` is its lift on a target minus its lift on ``ctrl``; its ``effect`` the direct effect of its output on the
-target's logit (``W_U diag(γ_f)`` row through ``W_O^h``, before the final norm's positive scale) minus that on
-``ctrl``'s, at the same queries. The pass is cached in ``data/heads/<model>-seek-context.pt``. Qwen3-8B only.
-Summary in ``data/summary/head_seek_<model>.{log,json}``.
+target's logit (``W_U diag(γ_f)`` row through the head's write as the residual sees it: ``W_O^h``, for Gemma 4 times
+``γ_post`` and the post-attention norm's scale at that position; before the final norm's positive scale) minus that
+on ``ctrl``'s, at the same queries. The late groups are the last two bands (Qwen3-8B L21-L35, Gemma 4 L24-L47). The
+pass is cached in ``data/heads/<model>-seek-context.pt``. Summary in ``data/summary/head_seek_<model>.{log,json}``.
 
     python scripts/checks/head_seek.py
+    NEURON_LENS_MODEL=google/gemma-4-12B python scripts/checks/head_seek.py
 """
 import json
 import time
@@ -47,7 +49,7 @@ EVERY = 32
 BATCH = 16
 TARGETS = ("lens", "final", "ctrl")
 READS = ("RS", "SS", "RR")
-EXAMPLES = ((32, 9), (33, 21), (27, 7), (31, 30), (28, 23), (29, 11), (23, 4), (22, 23), (1, 28))
+EXAMPLES = {arch.QWEN: ((32, 9), (33, 21), (27, 7), (31, 30), (28, 23), (29, 11), (23, 4), (22, 23), (1, 28))}
 
 
 def unembed(dev, rows=None) -> torch.Tensor:
@@ -108,7 +110,7 @@ def context(dev) -> dict:
     seqs = doc_tokens(saved)
     docs = list(range(0, len(seqs), EVERY))
     lm, stack = arch.load_model(MODEL, dev)
-    L, H = lm.config.num_hidden_layers, lm.config.num_attention_heads
+    L, H = len(arch.layout(MODEL)), arch.layout(MODEL)[0].q_heads
     keep = kept().to(dev)
     Wu_full = unembed(dev).to(dev, torch.bfloat16)
     Wu_keep = Wu_full[keep]
@@ -153,23 +155,27 @@ def context(dev) -> dict:
                 n[t][l] += float(hit.sum())
         return f
 
-    def o_proj(l, W_O):
-        def f(m, args):
+    def o_proj(l, layer, W_O):
+        def f(m, args, out):
             if not ctx["on"] or ctx[l] is None:
                 return
             z = args[0]  # [B, T, H·hd]
             hd = z.shape[-1] // H
+            scale = arch.attn_scale(layer, out)  # [B, T]: the post-attention norm's scale (Gemma 4), else None
             for t in TARGETS:
                 _, _, hit, y = ctx[l][t]
-                e = ((Wu_full[y[hit]] @ W_O).view(-1, H, hd) * z[hit].view(-1, H, hd)).sum(-1)  # [queries, H]
-                dla[t][l] += e.float().sum(0).cpu().double()
+                e = ((Wu_full[y[hit]] @ W_O).view(-1, H, hd) * z[hit].view(-1, H, hd)).sum(-1).float()  # [queries, H]
+                if scale is not None:
+                    e = e * scale[hit][:, None]
+                dla[t][l] += e.sum(0).cpu().double()
         return f
 
     hooks = []
     for l, layer in enumerate(stack.layers):
         hooks.append(layer.register_forward_pre_hook(pre_layer(l), with_kwargs=True))
         hooks.append(layer.self_attn.register_forward_hook(attn(l)))
-        hooks.append(layer.self_attn.o_proj.register_forward_pre_hook(o_proj(l, layer.self_attn.o_proj.weight)))
+        W_O = arch.head_write(layer).to(dev, torch.bfloat16)  # × γ_post for Gemma 4
+        hooks.append(layer.self_attn.o_proj.register_forward_hook(o_proj(l, layer, W_O)))
     t0 = time.perf_counter()
     for s in range(0, len(docs), BATCH):
         part = [seqs[i] for i in docs[s:s + BATCH]]
@@ -206,14 +212,12 @@ def context(dev) -> dict:
 
 
 def main() -> None:
-    if MODEL != arch.QWEN:
-        raise SystemExit(f"head_seek.py reads Qwen3-8B's heads only, not {MODEL}")
     dev = "mps" if torch.backends.mps.is_available() else "cuda"
     saved = torch.load(acts_path(), weights_only=False, map_location="cpu", mmap=True)
     tot, extra = saved["state"]["total"], saved["state"]["extra"]
     z = diagonals(dev, tot, extra)
     tz = torch.load(TOKEN_Z, weights_only=False, mmap=True)
-    diff = (z["SS"][1:].float() - tz["qk_self"][1:].float()).abs().max().item()
+    diff = (z["SS"][1:].float() - tz["qk_self_S"][1:].float()).abs().max().item()
     L, H, _ = z["RS"].shape
     med = {k: z[k].float().median(-1).values for k in READS}
     rho_ov = torch.full((L, H), float("nan"))
@@ -260,10 +264,11 @@ def main() -> None:
         r = row["rho_seek"]
         lines.append(f"  {b}: {r['RS']:+.2f} / {row['rho_seek_control']:+.2f} / {r['SS']:+.2f} / {r['RR']:+.2f}   final "
                      f"{row['rho_seek_final']:+.2f}   seek–effect {row['rho_seek_effect']:+.2f}   RS–effect {row['rho_RS_effect']:+.2f}")
-    late = slice(21, L)
+    lo_late = bands[-2][0]
+    late = slice(lo_late, L)
     top = seek["lens"][late] > seek["lens"][late].quantile(0.8)
     groups = {"seek and suppress": top & (effect["lens"][late] < 0), "seek and boost": top & (effect["lens"][late] > 0)}
-    lines += ["", f"L21-{L - 1}, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score"]
+    lines += ["", f"L{lo_late}-{L - 1}, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score"]
     table["late"] = {}
     for name, m in groups.items():
         sc = {"RS": auroc(med["RS"][late].flatten(), m.flatten()), "SS": auroc(med["SS"][late].flatten(), m.flatten()),
@@ -273,7 +278,7 @@ def main() -> None:
         lines.append(f"  {name} ({int(m.sum())} heads): RS {sc['RS']:.2f}, SS {sc['SS']:.2f}, RR {sc['RR']:.2f}, "
                      f"{'' if 'boost' in name else '−'}ov_R_copy {sc['ov_R_copy']:.2f}")
         if "suppress" in name:
-            heads = [(21 + i // H, i % H) for i in m.flatten().nonzero().flatten().tolist()]
+            heads = [(lo_late + i // H, i % H) for i in m.flatten().nonzero().flatten().tolist()]
             table["late"][name]["list"] = [f"L{l}h{h}" for l, h in heads]
             lines.append("    " + ", ".join(f"L{l}h{h}" for l, h in heads))
     for name, m in (("copiers (ov_R_copy > 0.5)", copy[late] > 0.5), ("suppressors (ov_R_copy < −0.5)", copy[late] < -0.5)):
@@ -282,11 +287,12 @@ def main() -> None:
     f = lambda l, h: (f"L{l}h{h}: RS {med['RS'][l, h]:+.2f} SS {med['SS'][l, h]:+.2f} RR {med['RR'][l, h]:+.2f} rho_ov "
                       f"{rho_ov[l, h]:+.2f} ov_R_copy {copy[l, h]:+.2f}; seek lens {seek['lens'][l, h]:+.2f} final "
                       f"{seek['final'][l, h]:+.2f}, effect {effect['lens'][l, h]:+.3f}")
-    lines += ["", "the top 12 heads by RS from L21:"]
-    lines += [f"  {f(21 + i // H, i % H)}" for i in med["RS"][late].flatten().topk(12).indices.tolist()]
+    lines += ["", f"the top 12 heads by RS from L{lo_late}:"]
+    lines += [f"  {f(lo_late + i // H, i % H)}" for i in med["RS"][late].flatten().topk(12).indices.tolist()]
     lines += ["", "the top 12 heads by seek (lens):"]
     lines += [f"  {f(1 + i // H, i % H)}" for i in seek["lens"][1:].flatten().topk(12).indices.tolist()]
-    lines += ["", "named:"] + [f"  {f(l, h)}" for l, h in EXAMPLES]
+    if MODEL in EXAMPLES:
+        lines += ["", "named:"] + [f"  {f(l, h)}" for l, h in EXAMPLES[MODEL]]
     for l in range(1, L):
         for h in range(H):
             table["heads"][f"L{l}h{h}"] = {**{k: med[k][l, h].item() for k in READS}, "rho_ov": rho_ov[l, h].item(),

@@ -27,8 +27,8 @@ token (after the query) and the attended token, among the kept tokens (``catalog
   head the mean over firings, and the share of heads past 0.9 (attend to what they copy) or under
   0.1 (to what they suppress).
 
-The other classes (sink and pattern heads, token modes) are ``09_legible.py``'s
-(``heads/legible``), with its weight-only tests at the same firings. Needs the activations file
+The other shares (sink and pattern heads, token modes) are ``reads_at_firings.py``'s, from ``heads/acts``, with its
+weight-only tests at the same firings. Needs the activations file
 (``data/acts/<model>.pt``; the output vectors are not released) and ``08_reads.py``'s per-token z
 (``data/heads/<model>-token-z.pt``, which itself needs the activations file). Qwen3-8B only. The
 summary goes to ``data/summary/head_census_<model>.{log,json}``.

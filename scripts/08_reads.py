@@ -40,14 +40,18 @@ MLP input (``neuron_lens.heads``).
   and RoPE averaged over the head's own attention offsets (``06_activations.py``'s statistics),
   footprints at unit length: each key token's z over the vocabulary under the head's mean query,
   what it attends to (``qk_S_neg``: avoids); ``qk_self_S``: each token's z in its own row, where it
-  ranks among the keys it favours as a query; ``qk_self``: the median of that z over tokens, which
-  finds duplicate-token heads (§11);
+  ranks among the keys it favours as a query whose position holds it (its S-lens footprint as the query too),
+  and the scalar ``qk_self_S`` the median of that z over tokens, which finds duplicate-token heads (§11);
+  ``qk_self_R``: the same with the query the R-lens direction at ``L − 1``'s output that promotes the token
+  (``W_U diag(γ_f) J^out_{L−1}``, the position is about to say it), which finds the late heads that look up
+  earlier copies of what is about to be said, with a negative ``ov_R_copy`` the copy suppressors (§11; from L1,
+  empty at L0);
 - ``qk_ctx_rho``: Spearman over tokens between ``qk_S`` and the attention each key token receives
   in context (tokens seen as keys 10+ times); ``qk_ov_rho``: between ``qk_S`` and ``ov_R``'s z,
   whether a head attends to what it copies.
 
-The per-token z of the four head reads go to ``data/heads/<model>-token-z.pt`` for
-``09_legible.py``; a summary to ``data/summary/reads_<model>.{log,json}``.
+The per-token z of the five head reads go to ``data/heads/<model>-token-z.pt`` for
+the checks (``reads_at_firings.py``, ``head_seek.py``, ``head_census.py``); a summary to ``data/summary/reads_<model>.{log,json}``.
 
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``) reads its released lenses. A neuron's write is
 what reaches the residual, ``s · γ_post ⊙ W_down[:, n]``, and its read rows are times the
@@ -159,14 +163,17 @@ def neurons(layers: list[int], dev) -> None:
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: {2 * f} poles in {time.perf_counter() - t0:.0f}s", flush=True)
 
 
-def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool = True) -> None:
+def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool = True, start: int = 0) -> None:
     """A head read's token lists from its per-token z ``[L, H, V]``: the top tokens by z, by z
-    z-scored across the layer's heads (``_z``), and with ``neg`` the bottom ones (``_neg``)."""
+    z-scored across the layer's heads (``_z``), and with ``neg`` the bottom ones (``_neg``); layers
+    below ``start`` (no read there) get empty lists."""
     zc = (z - z.mean(1, keepdim=True)) / z.std(1, keepdim=True).clamp_min(1e-6)
     for suffix, x in (("", z), ("_z", zc)):
         for sign, tag in ((1, ""), (-1, "_neg")) if neg else ((1, ""),):
-            v, i = (sign * x).flatten(0, 1).topk(TOP, dim=-1)
-            put(cols, f"{name}{tag}{suffix}", keep[i], sign * v)
+            v, i = (sign * x).flatten(0, 1).nan_to_num(0.0).topk(TOP, dim=-1)
+            ids, v = keep[i], sign * v
+            ids[:start * z.shape[1]], v[:start * z.shape[1]] = -1, float("nan")
+            put(cols, f"{name}{tag}{suffix}", ids, v)
 
 
 def heads(dev) -> None:
@@ -181,10 +188,11 @@ def heads(dev) -> None:
     Wu = (head[nm["unembed"]][keep].float() * head[nm["norm"]].float()).to(dev)
     del head
     K_out, K_mid = arch.lens(MODEL, "S_out", S_FIT), arch.lens(MODEL, "S_mid", S_FIT)
-    J_mid = arch.lens(MODEL, "R_mid", R_FIT)
+    J_mid, J_out = arch.lens(MODEL, "R_mid", R_FIT), arch.lens(MODEL, "R_out", R_FIT)
     saved = torch.load(ACTS, weights_only=False, map_location="cpu", mmap=True)
     st, extra = saved["state"]["total"], saved["state"]["extra"]
-    z = {k: torch.zeros(L, H, V, dtype=torch.float16) for k in ("ov_R", "ov_S", "qk_S", "qk_self")}
+    z = {k: torch.zeros(L, H, V, dtype=torch.float16) for k in ("ov_R", "ov_S", "qk_S", "qk_self_S", "qk_self_R")}
+    z["qk_self_R"][0] = float("nan")  # no R-lens below L0
     score = {k: torch.zeros(L, H) for k in ("ov_R_copy", "ov_S_copy")}
     for layer in range(L):
         kvh, hd = geo[layer].kv_heads, geo[layer].head_dim
@@ -223,8 +231,15 @@ def heads(dev) -> None:
         Qv = torch.einsum("hij,vhj->vhi", Aq, (Xu @ Wq.T).view(V, H, hd))
         a = torch.einsum("vhi,hi->vh", Kr, (st["q"][layer, :, :hd] / st["n_q"]).float().to(dev))
         z["qk_S"][layer] = ((a - a.mean(0)) / a.std(0)).T.half().cpu()
-        z["qk_self"][layer] = own_token_z(Kr, Qv).T.half().cpu()
-        del Kr, Qv, X, Xu
+        z["qk_self_S"][layer] = own_token_z(Kr, Qv).T.half().cpu()
+        del Qv
+        if layer:  # the query the position's R-lens direction (what it says), the key its footprint
+            Ru = Wu @ J_out[layer - 1].to(dev)
+            Ru = Ru / Ru.norm(dim=1, keepdim=True)
+            Qr = torch.einsum("hij,vhj->vhi", Aq, (Ru @ Wq.T).view(V, H, hd))
+            z["qk_self_R"][layer] = own_token_z(Kr, Qr).T.half().cpu()
+            del Ru, Qr
+        del Kr, X, Xu
         print(f"{time.strftime('%H:%M:%S')} heads L{layer}", flush=True)
     TOKEN_Z.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"keep": keep, **z}, TOKEN_Z)
@@ -244,27 +259,33 @@ def heads(dev) -> None:
         hh = torch.arange(H, device=dev)
         ctx[l], ctx_ctl[l] = c1.diagonal().cpu(), c1[other[l].to(dev), hh].cpu()
         align[l], align_ctl[l] = c2.diagonal().cpu(), c2[hh, other[l].to(dev)].cpu()
-    med = z["qk_self"].float().median(-1).values
+    med = {k: z[k].float().median(-1).values for k in ("qk_self_S", "qk_self_R")}
 
     cols = head_keys(L, H, arch.groups(MODEL))
     cols |= {k: pa.array(v.flatten().numpy()) for k, v in score.items()}
-    cols["qk_self"] = pa.array(med.flatten().numpy())
+    for k, v in med.items():
+        cols[k] = pa.array(v.flatten().numpy())
     cols["qk_ctx_rho"] = pa.array(ctx.flatten().numpy())
     cols["qk_ov_rho"] = pa.array(align.flatten().numpy())
     for name in ("ov_R", "ov_S", "qk_S"):
         lists(cols, name, z[name].float(), keep)
-    lists(cols, "qk_self_S", z["qk_self"].float(), keep, neg=False)
+    lists(cols, "qk_self_S", z["qk_self_S"].float(), keep, neg=False)
+    lists(cols, "qk_self_R", z["qk_self_R"].float(), keep, neg=False, start=1)  # L0 has no R-lens input
     write(cols, head_table("reads"))
 
     dup = extra["duplicate"].flatten()
     is_dup = dup > 0.3
     lines = [(f"head reads, {MODEL}: {L} × {H} heads, {V} tokens; QK statistics over {saved['meta']['docs']} documents, "
               f"{int(seen.sum())} tokens seen {MIN_OCC}+ times as keys"), "",
-             (f"qk_self against duplicate-token heads (duplicate > 0.3, {int(is_dup.sum())} heads): AUROC "
-              f"{auroc(med.flatten(), is_dup):.2f}, Spearman with the duplicate score {spearman(med.flatten(), dup):+.2f}"),
+             (f"qk_self_S against duplicate-token heads (duplicate > 0.3, {int(is_dup.sum())} heads): AUROC "
+              f"{auroc(med['qk_self_S'].flatten(), is_dup):.2f}, Spearman with the duplicate score "
+              f"{spearman(med['qk_self_S'].flatten(), dup):+.2f}; qk_self_R {auroc(med['qk_self_R'][1:].flatten(), is_dup[H:]):.2f} "
+              f"(from L1)"),
              "", ("by band: qk_ctx_rho mean (own / control head), share past +0.2 (own / control); qk_ov_rho mean "
-                  "(own / control), share past +0.2 and under −0.2 (own / control); ov_R_copy and ov_S_copy medians")]
-    table = {"qk_self_auroc": auroc(med.flatten(), is_dup), "bands": {}}
+                  "(own / control), share past +0.2 and under −0.2 (own / control); ov_R_copy and ov_S_copy medians; "
+                  "qk_self_S and qk_self_R medians")]
+    table = {"qk_self_S_auroc": auroc(med["qk_self_S"].flatten(), is_dup),
+             "qk_self_R_auroc": auroc(med["qk_self_R"][1:].flatten(), is_dup[H:]), "bands": {}}
     for lo, hi in BANDS + ((0, L - 1),):
         s = slice(lo, hi + 1)
         row = {"ctx": [ctx[s].mean().item(), ctx_ctl[s].mean().item(), (ctx[s] > 0.2).float().mean().item(),
@@ -272,11 +293,13 @@ def heads(dev) -> None:
                "align": [align[s].mean().item(), align_ctl[s].mean().item(), (align[s] > 0.2).float().mean().item(),
                          (align_ctl[s] > 0.2).float().mean().item(), (align[s] < -0.2).float().mean().item(),
                          (align_ctl[s] < -0.2).float().mean().item()],
-               "ov_R_copy": score["ov_R_copy"][s].median().item(), "ov_S_copy": score["ov_S_copy"][s].median().item()}
+               "ov_R_copy": score["ov_R_copy"][s].median().item(), "ov_S_copy": score["ov_S_copy"][s].median().item(),
+               **{k: v[s].nanmedian().item() for k, v in med.items()}}
         table["bands"][f"L{lo}-{hi}"] = row
         c, a_ = row["ctx"], row["align"]
         lines.append(f"  L{lo}-{hi}: ctx {c[0]:+.2f}/{c[1]:+.2f} ({c[2]:.2f}/{c[3]:.2f})  align {a_[0]:+.3f}/{a_[1]:+.3f} "
-                     f"(+ {a_[2]:.2f}/{a_[3]:.2f}, − {a_[4]:.2f}/{a_[5]:.2f})  copy R {row['ov_R_copy']:+.2f} S {row['ov_S_copy']:+.2f}")
+                     f"(+ {a_[2]:.2f}/{a_[3]:.2f}, − {a_[4]:.2f}/{a_[5]:.2f})  copy R {row['ov_R_copy']:+.2f} S {row['ov_S_copy']:+.2f}  "
+                     f"self S {row['qk_self_S']:+.2f} R {row['qk_self_R']:+.2f}")
     text = "\n".join(lines)
     print(text)
     (SUMMARY / f"reads_{STEM}.log").write_text(text + "\n")
