@@ -32,7 +32,7 @@ from neuron_lens.paths import FITS
 from neuron_lens.weights import tensors
 
 TINY = 1e-12
-FLOOR = 0.01  # polar: K Kᵀ's eigenvalues floored at this share of their mean (Gemma 4's S-lenses have a near-null bulk)
+FLOOR = 0.1  # polar: K Kᵀ's eigenvalues floored at this share of their mean, which keeps the lens's null space out (§13)
 
 
 def fit_name(model_id: str) -> str:

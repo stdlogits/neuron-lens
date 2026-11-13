@@ -181,7 +181,7 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
   there: an inverse problem. The transpose, `ē · Kᵀ w` (Euclidean), answers it only where `K` doesn't stretch; the
   inverse, `ē · K⁻¹ w`, is unstable where `K` is nearly null (most of Gemma 4's spectrum). `metric.polar` takes their
   midpoint, `ē · Kᵀ (K Kᵀ)^-½ w = (U ē) · w` with `K = (K Kᵀ)^½ U`: the footprints with the lens's stretch removed by
-  its nearest rotation `U`, `K Kᵀ`'s eigenvalues floored at 1% of their mean. Of the powers `(K Kᵀ)^-p`, `p = ½` reads
+  its nearest rotation `U`. The S-lenses are numerically singular (Gemma 4's at L11-L13 carry gain in about 5% of the residual's directions), and a polar factor is unique only on the range, so `K Kᵀ`'s eigenvalues are floored at 10% of their mean, which keeps the null space out (any floor from 1% to 50% reads alike; without one the read collapses). Of the powers `(K Kᵀ)^-p`, `p = ½` reads
   the peak tokens best on both models; the data's statistics (whitening, the within-token discriminant) and the
   model's downstream reads (the next layer's rows, the logit pullback) read them worse than the transpose (§13).
 - **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write minus its parts along the
