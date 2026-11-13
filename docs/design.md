@@ -154,7 +154,7 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
 | columns | read |
 |---|---|
 | `write_R` | `softmax(W_U · norm(J_L^out w))`, the R-lens read of the write |
-| `write_S` | `w · K_L^out (W_E[v] − ē)`: the tokens whose footprint the write imitates |
+| `write_S` | `w · U_L^out (W_E[v] − ē)`, `K_L^out = (K Kᵀ)^½ U`: the input tokens whose footprint the write imitates |
 | `read_R` | `softmax(W_U · norm(J_L^mid v))`: what the residual says when it drives the pole |
 | `read_S` | `c · K_L^mid (W_E[v] − ē)`: the input tokens that drive the pole |
 | `w_norm`, `cos_gate_up` | `‖W_down[:, n]‖`, `cos(a, b)` in the metric |
@@ -175,8 +175,15 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
   (`σ² γ ⊙ w`; Haufe et al. 2014). The same metric gives the cosines their lengths, the orthogonal writes their
   projection, `16_edges.py` its cosines and pushes, and `qk_self_R` its query. A length the model takes itself stays
   Euclidean: every RMSNorm divides by the raw basis's rms, so a QK footprint's size as a head sees it, and a write's
-  energy as the final norm sees it (`null_share`), are Euclidean. So does `write_S`, a write against footprints (two
-  vectors): every metric in the family names the peak tokens worse there, on both models (§13).
+  energy as the final norm sees it (`null_share`), are Euclidean.
+- **Vectors against footprints** (`write_S`, `write_orth_S`, `ov_S`, and the firings' `before_S`, `mlp_S`; §13). Two
+  vectors, a write and a token's S-lens footprint `K ē_v`, and the question is which input token would put the write
+  there: an inverse problem. The transpose, `ē · Kᵀ w` (Euclidean), answers it only where `K` doesn't stretch; the
+  inverse, `ē · K⁻¹ w`, is unstable where `K` is nearly null (most of Gemma 4's spectrum). `metric.polar` takes their
+  midpoint, `ē · Kᵀ (K Kᵀ)^-½ w = (U ē) · w` with `K = (K Kᵀ)^½ U`: the footprints with the lens's stretch removed by
+  its nearest rotation `U`, `K Kᵀ`'s eigenvalues floored at 1% of their mean. Of the powers `(K Kᵀ)^-p`, `p = ½` reads
+  the peak tokens best on both models; the data's statistics (whitening, the within-token discriminant) and the
+  model's downstream reads (the next layer's rows, the logit pullback) read them worse than the transpose (§13).
 - **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write minus its parts along the
   neuron's gate and up patterns (`s² ⊙ â`, `s² ⊙ b̂`), so that neither row reads it (`neurons.orthogonal_write`), the
   part that adds something beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
@@ -204,7 +211,8 @@ A head's token maps are read between its own read and write points (§11): a tok
 `X_v`, its S-lens footprint at `L − 1`'s output (`K^out_{L−1}(W_E[v] − ē)`; the embedding at L0).
 
 - **OV** (`ov_R`, `ov_S`): the head's write for `X_v`, `W_O^h W_V^h (γ₁ ⊙ X_v)` with `γ₁` the input
-  norm's weight, read through the R-lens `mid` (`ov_R`) or the S-lens footprint at `mid` (`ov_S`). Per
+  norm's weight, read through the R-lens `mid` (`ov_R`) or against the S-lens footprints at `mid` through the lens's
+  polar factor, as `write_S` (`ov_S`). Per
   token, the map's diagonal z-scored within its column: where `v` ranks in what the head writes when
   it reads `v`. Top 64 copied, and `_neg` the 64 most suppressed. Columns' means and variances come
   from the mean and covariance of the head's 128-dimensional projections, so the 103,830² map is never

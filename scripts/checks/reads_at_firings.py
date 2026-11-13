@@ -54,9 +54,18 @@ import time
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens.catalog import (MODEL, acts_path, column, firing_tokens, head_table, kept, kept_index, lobe_signs,
-                                 neuron_table)
-from neuron_lens import arch
+from neuron_lens import arch, metric
+from neuron_lens.catalog import (
+    MODEL,
+    acts_path,
+    column,
+    firing_tokens,
+    head_table,
+    kept,
+    kept_index,
+    lobe_signs,
+    neuron_table,
+)
 from neuron_lens.heads import norm_derivative
 from neuron_lens.neurons import orthogonal_write, poles
 from neuron_lens.paths import DATA, SUMMARY
@@ -150,16 +159,18 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         p = poles(MODEL, layer, lobe_signs(layer), dev)  # as 08_reads.py, in the residual's metric
         wd = p["write"]
         r = rms_norm_columns(transport(wd, J_out[layer] if layer < len(J_out) else None), gamma).T  # [f, d]
-        sw = wd.T @ K_out[layer].to(dev)
+        K = K_out[layer].to(dev)
+        PK = metric.polar(K) @ K  # as 08_reads.py: writes against the footprints' rotation
+        sw = wd.T @ PK
         sw = sw / sw.norm(dim=1, keepdim=True)
         orth = orthogonal_write(wd, p["a"], p["b"], p["s2"])
         ro = rms_norm_columns(transport(orth, J_out[layer] if layer < len(J_out) else None), gamma).T
-        so = orth.T @ K_out[layer].to(dev)
+        so = orth.T @ PK
         so = so / so.norm(dim=1, keepdim=True)
         c = p["cov"]
         rr = rms_norm_columns(transport(p["vec"].T, J_mid[layer]), gamma).T
         cs = c @ K_mid[layer].to(dev)
-        del p
+        del p, K, PK
         stats = {"write_R": mean_z(torch.cat([r, -r]).half(), unembed, k_nxt, ok_nxt, perm),
                  "write_S": mean_z(torch.cat([sw, -sw]).half(), emb, k_cur, ok_cur, perm),
                  "read_R": mean_z(rr.half(), unembed, k_drv, k_drv >= 0, perm),

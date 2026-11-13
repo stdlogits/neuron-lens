@@ -21,7 +21,8 @@ Scores per layer over its live poles (``act_top`` 0.05+): ``net``, the exact dri
 theirs); ``firing``, the share of the read's layer-contrastive top 64 in ``before_R_z``'s (``17_firings.py``: what the R-lens
 reads from the residual at the top firings); ``hub``, the share of top-10 tokens among the layer's 100 most listed. And per
 band, the catalog's ``read_R_z`` against ``before_R_z`` (another pole of the layer and sign in brackets). And ``write_S``
-by its vector-to-covector map (``write_arms``). σ is the scale
+(``write_arms``): the write against the S-lens's footprints, Euclidean (the release before the metric) or through the
+lens's polar factor (``metric.polar``, the catalog's), scored on the peak tokens. σ is the scale
 fit's (``02_fit.py --lens scale``). Writes ``data/summary/read_metric_<model>.{log,json}``.
 
     python scripts/checks/read_metric.py --layers 9,12,16,20,24,28,31
@@ -158,14 +159,13 @@ def arms(layers: list[int]) -> tuple[list[str], dict]:
     return lines, table
 
 
-WRITE_ARMS = ("euclidean", "γ²⊙w", "w|γ|/σ", "w/σ²")
+WRITE_ARMS = ("euclidean", "polar")
 
 
 def write_arms(layers: list[int]) -> tuple[list[str], dict]:
-    """``write_S`` by vector-to-covector map, scored as ``reads_at_firings.py`` scores it: the peak tokens' mean z under the
-    write's S-lens read, against another pole's. The covector of a write ``w`` landing at layer ``L``'s output, read by
-    ``L + 1``'s input norm (``γ``, ``σ`` there): ``euclidean`` ``w``; ``γ²⊙w`` (``f = I``, Euclidean in the norm's frame);
-    ``w|γ|/σ`` (``f = Σ_y^½``, ``metric.covector``); ``w/σ²`` (``f = Σ_y``, the diagonal Mahalanobis)."""
+    """``write_S``, scored as ``reads_at_firings.py`` scores it: the peak tokens' mean z under the write's read against
+    the S-lens's footprints at layer ``L``'s output, against another pole's: ``euclidean``, ``w · K ē``; ``polar``,
+    ``w · (K Kᵀ)^-½ K ē``, the footprints' rotation (the catalog's)."""
     keep, kidx = kept(), kept_index()
     nm = arch.names(MODEL)
     emb = tensors(MODEL, [nm["embed"]])[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
@@ -173,23 +173,21 @@ def write_arms(layers: list[int]) -> tuple[list[str], dict]:
     K_out = arch.lens(MODEL, "S_out", arch.fits(MODEL)[1])
     flat, start = flat_tokens()
     g = torch.Generator().manual_seed(1)
-    lines = [f"\nwrite_S by vector-to-covector map, {MODEL}: net (peak tokens)"]
+    lines = [f"\nwrite_S, Euclidean against the footprints or through the S-lens's polar factor, {MODEL}: net (peak tokens)"]
     table = {}
     for layer in layers:
         wd = directions(MODEL, layer, DEV)["write"]
-        gam = metric.norm_weight(MODEL, "in", layer + 1).abs().to(DEV)
-        sigma = metric.scales(MODEL)["in"][layer + 1].to(DEV)
+        K = K_out[layer].to(DEV).float()
         t = pq.read_table(neuron_table("acts", layer), columns=["act_top", "top_doc", "top_pos", "top_val"])
         doc, pos = column(t, "top_doc").long().clamp_min(0), column(t, "top_pos").long().clamp_min(0)
         cur = firing_tokens(flat, start, doc, pos).long()
         k_cur = torch.where((cur >= 0) & (column(t, "top_val") > 0), kidx[cur.clamp_min(0)], -1)
         live = torch.from_numpy(t["act_top"].to_numpy().copy()) >= SILENT
         perm = pair(g)
-        cov = {"euclidean": wd.T, "γ²⊙w": wd.T * gam.pow(2), "w|γ|/σ": wd.T * gam / sigma.clamp_min(metric.TINY),
-               "w/σ²": wd.T / sigma.clamp_min(metric.TINY).pow(2)}
+        cov = {"euclidean": wd.T, "polar": wd.T @ metric.polar(K)}
         table[layer] = {}
         for name in WRITE_ARMS:
-            sw = cov[name] @ K_out[layer].to(DEV).float()
+            sw = cov[name] @ K
             sw = sw / sw.norm(dim=1, keepdim=True)
             m, n = mean_z(torch.cat([sw, -sw]).half(), emb, k_cur, perm)
             table[layer][name] = {"net": net(m, n, live)}

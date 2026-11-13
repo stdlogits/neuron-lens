@@ -14,6 +14,9 @@ the residual at those positions, read through the lenses:
   pole fires, the pole and the neurons that fire with it;
 - ``pred``: the model's own mean logit there, its prediction of what comes next.
 
+The ``_S`` reads set a vector against the S-lens's footprints, through the lens's polar factor, as ``08_reads.py``'s
+``write_S`` does (``neuron_lens.metric.polar``, findings §13).
+
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
 score z-scored across the layer's poles that fired (for ``pred``, the logit). ``n_firings`` counts a pole's firings;
 a pole without any has ``−1``, NaN and empty previews.
@@ -70,8 +73,19 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoModelForCausalLM
 
-from neuron_lens import arch
-from neuron_lens.catalog import MODEL, TOP, column, documents, head_table, kept, neuron_keys, neuron_table, put, write
+from neuron_lens import arch, metric
+from neuron_lens.catalog import (
+    MODEL,
+    TOP,
+    column,
+    documents,
+    head_table,
+    kept,
+    neuron_keys,
+    neuron_table,
+    put,
+    write,
+)
 from neuron_lens.firings import Accumulator, firing_plan
 from neuron_lens.neurons import softcap
 from neuron_lens.paths import DATA, LOGS, ROOT, SUMMARY
@@ -178,7 +192,8 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
             r = layer_reads(m[site].T, unembed, gamma, J, signs=(1,), k=TOP, kz=TOP, softcap=CAP)
             add(f"{site}_R", r["ids"][1], r["probs"][1])
             add(f"{site}_R_z", r["zids"][1], r["z"][1])
-            cov = m[site] @ K.to(dev)
+            K = K.to(dev)
+            cov = m[site] @ (metric.polar(K) @ K)  # a vector against the footprints' rotation (§13)
             s = s_tops(cov / cov.norm(dim=1, keepdim=True).clamp_min(1e-9), emb, (1,), TOP)
             for kind, name in (("raw", f"{site}_S"), ("z", f"{site}_S_z")):
                 add(name, s[kind, 1][0], s[kind, 1][1])

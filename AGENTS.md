@@ -79,9 +79,12 @@ by `scripts/12_release.py`, one card per repo covering both models.
   read that feeds a covector to the R-lens, or takes a cosine or a projection between a covector and a vector, goes
   through the residual's metric (`neuron_lens.metric`: `v = s² ⊙ c`, `s² = σ / |γ|`, σ the
   scale fit's): the raw basis carries a unit per coordinate (Gemma 4's span 80-1,600×), and a Euclidean read there
-  weighs coordinates by their units (findings §13). Pairing a covector with a vector needs no metric, and a length the
-  model takes itself (an RMSNorm's rms: a QK footprint's size, a write's energy at the final norm) stays Euclidean, as
-  does `write_S` (a write against footprints), where every metric tested names the peak tokens worse (§13).
+  weighs coordinates by their units (findings §13). A read that sets a vector against the S-lens's footprints (a write
+  in `write_S`, `write_orth_S`; a head's output in `ov_S`; the residual at the firings in `before_S`, `mlp_S`) goes
+  through the lens's polar factor (`metric.polar`: `w · U ē`, `K = (K Kᵀ)^½ U`), the footprints with the lens's
+  stretch removed: it asks which input token would put the vector there, which the transpose answers only where `K`
+  doesn't stretch (§13). Pairing a covector with a vector needs no metric, and a length the model takes itself (an
+  RMSNorm's rms: a QK footprint's size, a write's energy at the final norm) stays Euclidean.
 - **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
   firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
   card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded (`HELD_OUT`

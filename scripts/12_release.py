@@ -337,7 +337,10 @@ what a unit applies to the residual). A covector read through the R-lens (a neur
 token row used as a query) goes through `scale.pt` first, `v = (σ / |γ|) ⊙ c` with `γ` the weight of the norm that
 reads that point: for a neuron, its raw rows times the residual's scale. The raw basis carries a unit per coordinate
 (Gemma 4's coordinate scales span 80-1,600×, Qwen3-8B's 3-6×), and fed in as it is, a read row lands on the few
-coordinates where the residual barely moves (§13).
+coordinates where the residual barely moves (§13). A vector set against the S-lens's token footprints (a write in
+`write_S`, a head's output in `ov_S`, the residual at a pole's firings in `before_S`, `mlp_S`) meets them through the
+lens's nearest rotation: with `K = (K Kᵀ)^½ U`, the read is `w · U ē`, the footprints with the lens's stretch removed,
+which asks which input token would put the vector there (§13).
 
 ## Definition
 
@@ -710,7 +713,7 @@ Gemma 4 12B:
 | columns | read | of |
 |---|---|---|
 | `write_R`, `write_R_z` | the R-lens, `softmax(W_U · norm(J^out_L w))`; `_val` are probabilities (the logit lens at the last layer) | the write `w` (Qwen3-8B: `±W_down[:, n]`) |
-| `write_S`, `write_S_z` | the S-lens to the layer's output: tokens whose footprint the write imitates | the write |
+| `write_S`, `write_S_z` | against the S-lens's footprints at the layer's output, through the lens's rotation (`w · U ē`, `K = (K Kᵀ)^½ U`): input tokens whose footprint the write imitates | the write |
 | `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18; the idea is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s) |
 | `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` as a vector, `s² ⊙ (â ± b̂)` |
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
@@ -780,7 +783,7 @@ labels late (80% picked at L28-L35, 41% at L0-L8). Of Gemma 4's neuron labels, o
 The residual at a pole's {TOP} top firings, averaged (each firing scaled by its residual's RMS) and read through the lenses, §18:
 `before_R`, `before_S`, the residual entering the MLP, through `mid`: what the pole's input holds where it fires; `mlp_R`, `mlp_S`, the
 layer's whole MLP output there, through `out`: what the layer writes when the pole fires, the pole and the neurons firing with it;
-and `pred`, the model's mean next-token logit there. Each has a `_z`
+and `pred`, the model's mean next-token logit there. The `_S` reads meet the footprints through the lens's rotation, as `write_S`. Each has a `_z`
 variant across the layer's poles that fired. `n_firings`: how many firings went in; a pole with none has `−1`, NaN and empty previews.
 `parallel`, `orthogonal`, means over the firings: how much the pole's write amplifies (positive) or suppresses (negative) the part of the
 residual it reads, as a multiple of that part, and how much it adds off that direction, on the same scale.
@@ -866,7 +869,7 @@ decides where it reads, both over the whole vocabulary (§11).
 | columns | read |
 |---|---|
 | `ov_R`, `ov_R_neg` | each token's z in its own column of the OV map read through the R-lens: where `v` ranks in what the head makes the model say when it reads `v`. The tokens it copies most, and suppresses most |
-| `ov_S`, `ov_S_neg` | the same through the S-lens: whether the write makes the residual look as if `v` were there (the record through L8) |
+| `ov_S`, `ov_S_neg` | the same against the S-lens's footprints, through the lens's rotation as `write_S`: whether the write makes the residual look as if `v` were there (the record through L8) |
 | `qk_S`, `qk_S_neg` | each key token's z over the vocabulary under the head's mean query: what it attends to and avoids, whatever the query |
 | `qk_self_S` | each token's z in its own row of the QK map, its footprint as the query too: where a position holding the token ranks earlier copies of it among the keys |
 | `qk_self_R` | the same with the query the R-lens direction at `L − 1`'s output that promotes the token: where a position about to say it ranks earlier copies of it (from L1; empty at L0) |

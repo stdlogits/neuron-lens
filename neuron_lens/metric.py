@@ -13,6 +13,12 @@ scale (``σ ⊙ w`` for a neuron's row ``w``), between the row itself (``w / γ`
 the diagonal Haufe pattern (``σ² γ ⊙ w``). Findings §13 compares them. A length the model takes itself stays
 Euclidean: every RMSNorm divides by the raw basis's rms (a QK footprint's size, a write's energy at the final norm).
 
+A read that sets a vector against vectors, a write (or the residual, or a head's output) against the S-lens's token
+footprints ``K ē``, asks which input token would put it there: an inverse problem, which the transpose (``ē · Kᵀ w``,
+Euclidean) answers only where ``K`` doesn't stretch. ``polar(K)`` takes the midpoint between the transpose and the
+inverse, ``ē · Kᵀ (K Kᵀ)^-½ w = (U ē) · w`` with ``K = (K Kᵀ)^½ U``: the footprints with the lens's stretch removed,
+by its nearest rotation ``U``. Of the powers ``(K Kᵀ)^-p``, ``p = ½`` reads best on both models (findings §13).
+
 Points, each the input of a norm that reads the residual: ``in`` ``[L + 1, d]``, layer ``L``'s input (its input norm;
 ``in[L]`` for the last index is the final norm's input, the last layer's output), so layer ``L``'s output is
 ``in[L + 1]``; ``mid`` ``[L, d]``, layer ``L``'s MLP input (the norm that feeds the MLP).
@@ -26,6 +32,7 @@ from neuron_lens.paths import FITS
 from neuron_lens.weights import tensors
 
 TINY = 1e-12
+FLOOR = 0.01  # polar: K Kᵀ's eigenvalues floored at this share of their mean (Gemma 4's S-lenses have a near-null bulk)
 
 
 def fit_name(model_id: str) -> str:
@@ -147,3 +154,13 @@ def cov_norm(c: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
 def vec_norm(v: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
     """``[n, 1]``: each vector row's length in the metric, ``√(v · v / s²)``."""
     return (v.pow(2) / s2).sum(-1, keepdim=True).sqrt()
+
+
+def polar(K: torch.Tensor) -> torch.Tensor:
+    """``[d, d]`` (on ``K``'s device): ``(K Kᵀ)^-½`` for an S-lens ``K`` ``[d, d_in]``, its eigenvalues floored at
+    ``FLOOR`` of their mean, at unit mean diagonal. Vectors ``w`` ``[n, d]`` read against the footprints as
+    ``w @ polar(K) @ K`` (covectors on the embeddings) rather than ``w @ K``."""
+    kap, U = torch.linalg.eigh((K.float() @ K.float().T).cpu().double())
+    kap = kap.clamp_min(0)
+    M = (U * (kap + FLOOR * kap.mean()).rsqrt()) @ U.T
+    return (M / M.diagonal().mean()).float().to(K.device)

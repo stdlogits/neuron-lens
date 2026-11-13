@@ -7,17 +7,18 @@ top most raw reads (findings §6).
 
 A lens takes vectors or covectors as it was built: the R-lens transports a vector, the S-lens pulls back a
 covector. A read row (what a unit applies to the residual) is a covector, a write a vector, so a read that feeds
-one to a lens built for the other goes through the residual's metric (``neuron_lens.metric``: ``v = s² ⊙ c``,
-``s² = σ / |γ|``), which keeps the read free of the units each residual coordinate carries (findings §13).
+a read row to the R-lens goes through the residual's metric (``neuron_lens.metric``: ``v = s² ⊙ c``,
+``s² = σ / |γ|``), which keeps the read free of the units each residual coordinate carries; one that sets a vector
+against the S-lens's footprints goes through the lens's polar factor (``metric.polar``: ``w · U ē``, the footprints
+with the lens's stretch removed), which asks which input token would put it there (findings §13).
 
 **Neurons** (``neurons/reads/L<layer>.parquet``), no forward pass:
 
 - ``write_R``: the write ``±W_down[:, n]`` through the R-lens, ``softmax(W_U · norm(J_L w))``
   (``_val``: probabilities; the logit lens at the last layer);
-- ``write_S``: the write through the S-lens to the layer's output, tokens ``v`` by
-  ``±w · K^out_L (e_v − ē)``: those whose footprint the write imitates (a write against footprints in the raw basis,
-  which names the peak tokens far better than any metric does, §13) (legible to about L8, where
-  early neurons write back the tokens they detect; §6, §7);
+- ``write_S``: the write against the S-lens's footprints at the layer's output, tokens ``v`` by
+  ``±w · U (e_v − ē)``, ``K^out_L = (K Kᵀ)^½ U`` (``metric.polar``): the input tokens whose footprint the write
+  imitates (legible to about L8 in Qwen3-8B, where early neurons write back the tokens they detect; §6, §7, §13);
 - ``write_orth_R``, ``write_orth_S``: the same of the write minus its parts along the neuron's gate and up
   patterns, so that neither row reads it (``neurons.orthogonal_write``), what it adds beyond anything it reads (§18);
 - ``read_R``: the read covector ``c = â ± b̂`` (gate and up rows times the MLP input norm's weight, each at
@@ -39,8 +40,9 @@ MLP input (``neuron_lens.heads``).
 
 - ``ov_R``: the OV map read through the R-lens: each token's z in its own column, where ``v`` ranks
   in what the head makes the model say when it reads ``v``; the tokens it copies most, and
-  ``ov_R_neg`` those it suppresses most. ``ov_S``: the same through the S-lens, whether the write
-  makes the residual look as if ``v`` were there (the record through L8; §11).
+  ``ov_R_neg`` those it suppresses most. ``ov_S``: the same against the S-lens's footprints at the MLP input
+  through its polar factor, as ``write_S``: whether the write makes the residual look as if ``v`` were there (the
+  record through L8; §11, §13).
   ``ov_R_copy``, ``ov_S_copy``: Elhage et al.'s copying score Σλ/Σ|λ| of each map (§11);
 - ``qk_S``: the QK map, ``q̃ᵀ R̄ k̃`` with the q/k norms' true derivative averaged over positions
   and RoPE averaged over the head's own attention offsets (``06_activations.py``'s statistics),
@@ -76,6 +78,7 @@ import time
 import pyarrow as pa
 import torch
 
+from neuron_lens import arch, metric
 from neuron_lens.catalog import (
     MODEL,
     TOP,
@@ -89,9 +92,7 @@ from neuron_lens.catalog import (
     put,
     write,
 )
-from neuron_lens import arch
 from neuron_lens.heads import copy_score, norm_derivative, own_token_z, rope_mean
-from neuron_lens import metric
 from neuron_lens.neurons import orthogonal_write, poles, softcap, write_cosines
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads, s_tops
@@ -142,7 +143,9 @@ def neurons(layers: list[int], dev) -> None:
         r = layer_reads(wd, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
         put(cols, "write_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
         put(cols, "write_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
-        sw = wd.T @ K_out[layer].to(dev)  # [f, d_in]: each write as a covector on the embeddings (Euclidean, §13)
+        K = K_out[layer].to(dev)
+        PK = metric.polar(K) @ K  # [d, d_in]: the footprints' rotation, U (§13)
+        sw = wd.T @ PK  # [f, d_in]: each write as a covector on the embeddings
         s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
         for kind, name in (("raw", "write_S"), ("z", "write_S_z")):
             put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
@@ -150,11 +153,11 @@ def neurons(layers: list[int], dev) -> None:
         r = layer_reads(orth, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
         put(cols, "write_orth_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
         put(cols, "write_orth_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
-        so = orth.T @ K_out[layer].to(dev)
+        so = orth.T @ PK
         s = s_tops(so / so.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
         for kind, name in (("raw", "write_orth_S"), ("z", "write_orth_S_z")):
             put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
-        del orth, so
+        del orth, so, K, PK
         c, v = p["cov"], p["vec"]  # [2f, d]: the read covectors and their vectors, + poles then −
         del p
         reads = [layer_reads(v[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP)
@@ -216,12 +219,13 @@ def heads(dev) -> None:
             Bv = torch.einsum("gij,vgj->vgi", Av, Bv)
         B = Bv.repeat_interleave(g, dim=1)
         del Bv
-        for name, A in (("ov_R", Wu @ (J_mid[layer].to(dev) @ Wo)), ("ov_S", E @ (K_mid[layer].to(dev).T @ Wo))):
+        Km = K_mid[layer].to(dev)
+        for name, A in (("ov_R", Wu @ (J_mid[layer].to(dev) @ Wo)), ("ov_S", E @ (Km.T @ (metric.polar(Km) @ Wo)))):
             A = A.view(V, H, hd)
             z[name][layer] = own_token_z(A, B).T.half().cpu()
             score[f"{name}_copy"][layer] = copy_score(A, B)
             del A
-        del B
+        del B, Km
         # QK: logit q̃ᵀ R̄ k̃, footprints at unit length (a footprint's size would rank keys across tokens), Euclidean
         # as the input norm's rms takes it.
         Xu = X / X.norm(dim=1, keepdim=True)
