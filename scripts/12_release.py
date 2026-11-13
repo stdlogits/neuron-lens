@@ -7,7 +7,9 @@ rebuilt on every run.
 dictionary of ``camilablank/workspace-lenses`` (``J``, ``n_prompts``, ``source_layers``,
 ``d_model``, ``provenance``, with the target layer's row the identity). ``<model>/r-lens/mid.pt``
 is the R-lens from each layer's MLP input in that layout, and ``<model>/s-lens/{mid,out}.pt`` hold
-the S-lens to each layer's MLP input and output (``K``, ``layers``). Drowse fetches the text lenses
+the S-lens to each layer's MLP input and output (``K``, ``layers``). ``<model>/scale.pt`` is the residual's per-coordinate
+scale (``neuron_lens.metric``, ``02_fit.py --lens scale``), which turns a covector into a vector for the R-lens; the
+``lenses`` part writes it with the lenses, and the ``scale`` part alone (for a model whose lens fits are not here). Drowse fetches the text lenses
 as ``drowse lens fetch <model> rs-r`` (both R files) and ``rs-s`` (both S files). Gemma 4 12B adds the same under
 ``image/`` and ``audio/``, fitted on image and audio documents; their S-lenses are seeded in the
 subspace the embedder reaches, so ``K[L]`` is ``[d, k]`` with ``basis`` ``[k, d]`` (``K_full = K @
@@ -57,7 +59,7 @@ from neuron_lens.transport import SKIP_FIRST, Accumulator
 REPO = "stdlogits/rs-lenses"
 DATASET = "stdlogits/neuron-lens"
 MODELS = ("Qwen/Qwen3-8B", "google/gemma-4-12B")  # the released models, in the cards' order
-PARTS = ("lenses", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
+PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
 FIGURES = ROOT / "docs" / "figures"
@@ -175,6 +177,19 @@ def write_lenses(model: str, out: Path) -> dict:
     return facts
 
 
+def write_scale(model: str, out: Path) -> dict:
+    """Write ``out / "scale.pt"`` from the model's scale fit; return what the card says about it."""
+    from neuron_lens import metric
+    saved = torch.load(FITS / f"{metric.fit_name(model)}.pt", weights_only=False, map_location="cpu")
+    acc = metric.Sums.from_state(saved["state"])
+    sigma = acc.sigma()
+    out.mkdir(parents=True, exist_ok=True)
+    torch.save({"in": sigma["in"], "mid": sigma["mid"], "n_prompts": sum(acc.n_docs), "positions": int(acc.sums["n"].sum()),
+                "split_half": {p: acc.split_half(p) for p in ("in", "mid")}}, out / "scale.pt")
+    print(f"{time.strftime('%H:%M:%S')} {arch.stem(model)} scale written", flush=True)
+    return {"docs": sum(acc.n_docs), "split": spread(acc.split_half("in") + acc.split_half("mid"))}
+
+
 def catalog_files(model: str) -> dict:
     """The model's release files by part: ``(local source, path in the model's folder)``."""
     base, stem = catalog_dir(model), arch.stem(model)
@@ -237,7 +252,8 @@ def lens_files_table(f: dict) -> str:
         rows += [f"| `{x['dir']}/r-lens/lens.pt` | R, `J[L]` | layer `L`'s output → the last layer's output, `[{d}, {d}]`, `J[{last}]` the identity |",
                  f"| `{x['dir']}/r-lens/mid.pt` | R, `J[L]` | layer `L`'s MLP input → the last layer's output |",
                  f"| `{x['dir']}/s-lens/mid.pt` | S, `K[L]` | token embeddings → layer `L`'s MLP input |",
-                 f"| `{x['dir']}/s-lens/out.pt` | S, `K[L]` | token embeddings → layer `L`'s output |"]
+                 f"| `{x['dir']}/s-lens/out.pt` | S, `K[L]` | token embeddings → layer `L`'s output |",
+                 f"| `{x['dir']}/scale.pt` | the residual's scale, `in`, `mid` | σ per coordinate at every norm's input: `in[L]` layer `L`'s input (`in[{last + 1}]` the final norm's), `mid[L]` its MLP input, `[{d}]` each |"]
         for media, (what, unit) in MEDIA_WHAT.items():
             if media in x["lenses"]:
                 rows.append(f"| `{x['dir']}/{media}/r-lens/`, `{x['dir']}/{media}/s-lens/` | the same, fitted on {what} | "
@@ -315,6 +331,13 @@ inputs and attention outputs.
 | what an attention head reads: keys and values | layer `L − 1`'s output | | `s-lens/out.pt` |
 | what an attention head reads: a late query (what the position is about to say) | layer `L − 1`'s output | `r-lens/lens.pt` | |
 | what an attention head writes | layer `L`'s MLP input | `r-lens/mid.pt` | `s-lens/mid.pt` |
+
+**Vectors and covectors.** The R-lens transports a vector (a write), the S-lens pulls back a covector (a read row,
+what a unit applies to the residual). A covector read through the R-lens (a neuron's gate and up rows, or an R-lens
+token row used as a query) goes through `scale.pt` first, `v = (σ / |γ|) ⊙ c` with `γ` the weight of the norm that
+reads that point: for a neuron, its raw rows times the residual's scale. The raw basis carries a unit per coordinate
+(Gemma 4's coordinate scales span 80-1,600×, Qwen3-8B's 3-6×), and fed in as it is, a read row lands on the few
+coordinates where the residual barely moves (§13).
 
 ## Definition
 
@@ -428,6 +451,8 @@ r = torch.load(hf_hub_download("{REPO}", "qwen3-8b/r-lens/lens.pt"), weights_onl
 J = r["J"][20]           # [4096, 4096]: layer 20's output -> the final residual
 s = torch.load(hf_hub_download("{REPO}", "qwen3-8b/s-lens/mid.pt"), weights_only=True)
 K = s["K"][20]           # token embeddings -> layer 20's MLP input
+sigma = torch.load(hf_hub_download("{REPO}", "qwen3-8b/scale.pt"), weights_only=True)["mid"][20]
+# a read row c (W_gate[n] times the MLP input norm's weight g) as a vector for J_mid[20]: v = sigma / |g| * c
 img = torch.load(hf_hub_download("{REPO}", "gemma-4-12b/image/s-lens/mid.pt"), weights_only=True)
 K_img = img["K"][8] @ img["basis"]   # [3840, 3840]: image embeddings -> Gemma 4's layer 8 MLP input
 ```
@@ -687,13 +712,13 @@ Gemma 4 12B:
 | `write_R`, `write_R_z` | the R-lens, `softmax(W_U · norm(J^out_L w))`; `_val` are probabilities (the logit lens at the last layer) | the write `w` (Qwen3-8B: `±W_down[:, n]`) |
 | `write_S`, `write_S_z` | the S-lens to the layer's output: tokens whose footprint the write imitates | the write |
 | `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18; the idea is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s) |
-| `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` |
+| `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` as a vector, `s² ⊙ (â ± b̂)` |
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
 
-`â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight, normalized: `â ± b̂`
-is a heuristic direction for each pole; a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
+`â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight (covectors, what the activation applies
+to the residual), at unit length in the residual's metric: `â ± b̂` is a heuristic direction for each pole; a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
 past a half; §17) reads the up row alone, `∓b̂`, because SiLU is nearly flat there. Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
-cosine of the pole's write with the gate and up rows, each on the side its firings sit, positive where it writes toward
+cosine in the metric of the pole's write with the gate and up rows, each on the side its firings sit, positive where it writes toward
 them; §18), `null_share` (the share of the
 write in the bottom 1% of singular directions of `W_U diag(γ)`, where entropy neurons write; Stolfo et
 al. 2024) and `vocab_skew`, `vocab_kurt` of `W_U · norm(w)` (Gurnee et al. 2024's prediction and
@@ -773,9 +798,9 @@ differ: of a pole's top 16 driven-by sources, a median of 31-44% are in its top 
 What a neuron writes reaches every later layer's MLP input, so each pole has a direct edge to
 every pole of a later layer (§17). Per pole, its {TOP} strongest in-edges (`in_*`, from earlier poles) and
 out-edges (`out_*`, to later ones), strongest first: `_layer`, `_neuron`, `_pole` name the other pole;
-`_cos` is the cosine of the earlier pole's write with the later pole's read direction, and `_push` is
-`cos · act_top · ‖w‖ · gain / rms`, how far one of the earlier pole's top firings moves the later pole's
-normalized input along its read direction (`rms` the residual's median RMS at the later layer's MLP
+`_cos` is the cosine of the earlier pole's write with the later pole's read direction, in the residual's metric at
+the later pole's MLP input, and `_push` is `cos · act_top · ‖w‖ · gain / rms` (`‖w‖` in that metric), how far one of the
+earlier pole's top firings moves the later pole's normalized input along its read direction (`rms` the residual's median RMS at the later layer's MLP
 input; `gain` is 1 for Qwen3-8B and, for Gemma 4, the layer scalars between the two poles times the typical scale of the norm after the earlier MLP). Positive: the earlier pole's firing drives the later pole; negative: it pushes against it.
 Edges rank by |push| among those with |cos| ≥ 5/√d = 0.078; `−1` and NaN fill shorter lists.
 
@@ -1040,6 +1065,8 @@ def main() -> None:
     lens_root, data_root = DATA / "release", DATA / "release-data"
     if "lenses" in parts:
         facts["lenses"] = write_lenses(MODEL, lens_root / stem)
+    if parts & {"lenses", "scale"}:
+        facts["scale"] = write_scale(MODEL, lens_root / stem)
     files = catalog_files(MODEL)
     for part in parts & set(files):
         shutil.rmtree(data_root / stem / part, ignore_errors=True) if part != "files" else None
@@ -1069,10 +1096,12 @@ def main() -> None:
     api.create_repo(REPO, private=True, exist_ok=True)
     if args.branch:
         api.create_branch(REPO, branch=args.branch, exist_ok=True)
+    lens_files = [f"{stem}/**"] if "lenses" in parts else [f"{stem}/scale.pt"] if "scale" in parts else []
     api.upload_folder(repo_id=REPO, folder_path=lens_root, revision=args.branch,
-                      allow_patterns=["README.md", "figures/*"] + ([f"{stem}/**"] if "lenses" in parts else []),
+                      allow_patterns=["README.md", "figures/*"] + lens_files,
                       delete_patterns=["figures/*", "*/README.md", "*/figures/*"] + ([f"{stem}/**"] if "lenses" in parts else []),
-                      commit_message=f"{stem}: lenses, cards and figures" if "lenses" in parts else "Cards and figures")
+                      commit_message=(f"{stem}: {' and '.join(sorted(parts & {'lenses', 'scale'}))}, cards and figures"
+                                      if lens_files else "Cards and figures"))
     lens_rev = api.repo_info(REPO, revision=args.branch).sha[:10]
     print(f"{time.strftime('%H:%M:%S')} model repo at {lens_rev}: https://huggingface.co/{REPO}", flush=True)
     (data_root / "README.md").write_text(dataset_card(every, lens_rev, date))

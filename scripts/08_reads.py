@@ -5,26 +5,32 @@ attention outputs. Every read lists the top 64 kept tokens (``catalog.kept``), w
 that z-scores each token's score across the layer's poles or heads, which removes the hub tokens that
 top most raw reads (findings §6).
 
+A lens takes vectors or covectors as it was built: the R-lens transports a vector, the S-lens pulls back a
+covector. A read row (what a unit applies to the residual) is a covector, a write a vector, so a read that feeds
+one to a lens built for the other goes through the residual's metric (``neuron_lens.metric``: ``v = s² ⊙ c``,
+``s² = σ / |γ|``), which keeps the read free of the units each residual coordinate carries (findings §13).
+
 **Neurons** (``neurons/reads/L<layer>.parquet``), no forward pass:
 
 - ``write_R``: the write ``±W_down[:, n]`` through the R-lens, ``softmax(W_U · norm(J_L w))``
   (``_val``: probabilities; the logit lens at the last layer);
 - ``write_S``: the write through the S-lens to the layer's output, tokens ``v`` by
-  ``±w · K^out_L (e_v − ē)``: those whose footprint the write imitates (legible to about L8, where
+  ``±w · K^out_L (e_v − ē)``: those whose footprint the write imitates (a write against footprints in the raw basis,
+  which names the peak tokens far better than any metric does, §13) (legible to about L8, where
   early neurons write back the tokens they detect; §6, §7);
-- ``write_orth_R``, ``write_orth_S``: the same of the write with its components along the neuron's gate
-  and up rows removed, what it adds beyond anything it reads (§18);
-- ``read_R``: the read direction ``â ± b̂`` (gate and up rows times the post-attention norm weight,
-  normalized; the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe, ``acts``' ``neg_lobe`` past a
-  half, §17) through the R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it
-  drives the pole;
-- ``read_S``: the read direction through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
+- ``write_orth_R``, ``write_orth_S``: the same of the write minus its parts along the neuron's gate and up
+  patterns, so that neither row reads it (``neurons.orthogonal_write``), what it adds beyond anything it reads (§18);
+- ``read_R``: the read covector ``c = â ± b̂`` (gate and up rows times the MLP input norm's weight, each at
+  unit length in the metric; the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe, ``acts``'
+  ``neg_lobe`` past a half, §17) as a vector, ``s² ⊙ c`` (the raw rows times the residual's scale), through the
+  R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it drives the pole (§13);
+- ``read_S``: the read covector through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
   input tokens that drive the pole (legible at L0-L8);
-- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_gate_up``, ``cos_write_gate``, ``cos_write_up`` (the cosine of the
-  pole's write with the gate and up sides of what it reads: positive where it writes toward them; §18),
-  ``null_share`` (the share of the write's
-  squared norm in the bottom 1% of right-singular directions of ``W_U diag(γ)``, where entropy
-  neurons write; Stolfo et al. 2024), and ``vocab_skew``, ``vocab_kurt`` of ``W_U · norm(w)`` over
+- weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_gate_up``, ``cos_write_gate``, ``cos_write_up`` (cosines in the metric
+  at the MLP input; the latter two of the pole's write with the gate and up sides of what it reads: positive where it
+  writes toward them; §18), ``null_share`` (the share of the write's squared length in the bottom 1% of right-singular
+  directions of ``W_U diag(γ)``, Euclidean as the final norm's rms takes it, where entropy neurons write; Stolfo et al.
+  2024), and ``vocab_skew``, ``vocab_kurt`` of ``W_U · norm(w)`` over
   the vocabulary (Gurnee et al. 2024's prediction and suppression neurons).
 
 **Heads** (``heads/reads.parquet``; findings §11): a head reads token ``v`` as its S-lens
@@ -43,7 +49,7 @@ MLP input (``neuron_lens.heads``).
   ranks among the keys it favours as a query whose position holds it (its S-lens footprint as the query too),
   and the scalar ``qk_self_S`` the median of that z over tokens, which finds duplicate-token heads (§11);
   ``qk_self_R``: the same with the query the R-lens direction at ``L − 1``'s output that promotes the token
-  (``W_U diag(γ_f) J^out_{L−1}``, the position is about to say it), which finds the late heads that look up
+  (the covector ``W_U diag(γ_f) J^out_{L−1}`` as a vector in the metric, the position is about to say it), which finds the late heads that look up
   earlier copies of what is about to be said, with a negative ``ov_R_copy`` the copy suppressors (§11; from L1,
   empty at L0);
 - ``qk_ctx_rho``: Spearman over tokens between ``qk_S`` and the attention each key token receives
@@ -85,7 +91,8 @@ from neuron_lens.catalog import (
 )
 from neuron_lens import arch
 from neuron_lens.heads import copy_score, norm_derivative, own_token_z, rope_mean
-from neuron_lens.neurons import directions, orthogonal_write, read_rows, softcap, write_cosines
+from neuron_lens import metric
+from neuron_lens.neurons import orthogonal_write, poles, softcap, write_cosines
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads, s_tops
 from neuron_lens.stats import auroc, spearman
@@ -108,6 +115,7 @@ def neurons(layers: list[int], dev) -> None:
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
     gamma = head[nm["norm"]].to(dev, torch.float32)
+    # Euclidean, as the final norm's rms takes a write's size (an entropy neuron works through it)
     wu = head[nm["unembed"]].float() * head[nm["norm"]].float()
     null = torch.linalg.eigh(wu.T @ wu)[1][:, :max(1, int(NULL_SHARE * wu.shape[1]))].to(dev)  # ascending
     del wu
@@ -117,16 +125,13 @@ def neurons(layers: list[int], dev) -> None:
     K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)  # [L, d_out, d_in]
     for layer in layers:
         t0 = time.perf_counter()
-        w = directions(MODEL, layer)  # the write as the residual sees it; read rows times the MLP input norm
-        wd = w["write"].to(dev)
-        f = wd.shape[1]
-        a, b = w["gate"], w["up"]
-        a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
-        del w
         lobe = lobe_signs(layer)
+        p = poles(MODEL, layer, lobe, dev)  # the write as the residual sees it; read covectors and vectors in the metric
+        wd, a, b, s2 = p["write"], p["a"], p["b"], p["s2"]
+        f = wd.shape[1]
         cols = neuron_keys(layer, f)
-        w_norm, cos_gate_up = wd.norm(dim=0).cpu(), (a * b).sum(1)
-        cos_gate, cos_up = write_cosines(wd.cpu(), a, b, lobe)
+        w_norm, cos_gate_up = wd.norm(dim=0).cpu(), (a * metric.vector(b, s2)).sum(1).cpu()
+        cos_gate, cos_up = (x.cpu() for x in write_cosines(wd, a, b, lobe.to(dev), s2))
         cols["w_norm"] = pa.array(torch.cat([w_norm, w_norm]).numpy())
         cols["cos_gate_up"] = pa.array(torch.cat([cos_gate_up, cos_gate_up]).numpy())
         cols["cos_write_gate"], cols["cos_write_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
@@ -137,21 +142,22 @@ def neurons(layers: list[int], dev) -> None:
         r = layer_reads(wd, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
         put(cols, "write_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
         put(cols, "write_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
-        sw = (K_out[layer].to(dev).T @ wd).T  # [f, d_in]: each write as a covector on the embeddings
+        sw = wd.T @ K_out[layer].to(dev)  # [f, d_in]: each write as a covector on the embeddings (Euclidean, §13)
         s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
         for kind, name in (("raw", "write_S"), ("z", "write_S_z")):
             put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
-        orth = orthogonal_write(wd.cpu(), a, b).to(dev)
+        orth = orthogonal_write(wd, a, b, s2)
         r = layer_reads(orth, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
         put(cols, "write_orth_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
         put(cols, "write_orth_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
-        so = (K_out[layer].to(dev).T @ orth).T
+        so = orth.T @ K_out[layer].to(dev)
         s = s_tops(so / so.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
         for kind, name in (("raw", "write_orth_S"), ("z", "write_orth_S_z")):
             put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
         del orth, so
-        c = read_rows(a, b, lobe).to(dev)  # [2f, d]: the read directions, + poles then −
-        reads = [layer_reads(c[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP)
+        c, v = p["cov"], p["vec"]  # [2f, d]: the read covectors and their vectors, + poles then −
+        del p
+        reads = [layer_reads(v[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP)
                  for i in (0, 1)]
         put(cols, "read_R", keep[torch.cat([r["ids"][1] for r in reads])], torch.cat([r["probs"][1] for r in reads]))
         put(cols, "read_R_z", keep[torch.cat([r["zids"][1] for r in reads])], torch.cat([r["z"][1] for r in reads]))
@@ -216,7 +222,8 @@ def heads(dev) -> None:
             score[f"{name}_copy"][layer] = copy_score(A, B)
             del A
         del B
-        # QK: logit q̃ᵀ R̄ k̃, footprints at unit length (a footprint's size would rank keys across tokens).
+        # QK: logit q̃ᵀ R̄ k̃, footprints at unit length (a footprint's size would rank keys across tokens), Euclidean
+        # as the input norm's rms takes it.
         Xu = X / X.norm(dim=1, keepdim=True)
         # per-layer blocks of the statistics (padded to the largest head size and key-head count)
         Aq = norm_derivative(qk["q_norm"], st["q_r"][layer].float().to(dev),
@@ -233,8 +240,8 @@ def heads(dev) -> None:
         z["qk_S"][layer] = ((a - a.mean(0)) / a.std(0)).T.half().cpu()
         z["qk_self_S"][layer] = own_token_z(Kr, Qv).T.half().cpu()
         del Qv
-        if layer:  # the query the position's R-lens direction (what it says), the key its footprint
-            Ru = Wu @ J_out[layer - 1].to(dev)
+        if layer:  # the query the position's R-lens direction (what it says, a covector, as a vector), the key its footprint
+            Ru = metric.vector(Wu @ J_out[layer - 1].to(dev), metric.s2(MODEL, "in", layer, dev))
             Ru = Ru / Ru.norm(dim=1, keepdim=True)
             Qr = torch.einsum("hij,vhj->vhi", Aq, (Ru @ Wq.T).view(V, H, hd))
             z["qk_self_R"][layer] = own_token_z(Kr, Qr).T.half().cpu()

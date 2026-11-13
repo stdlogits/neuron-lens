@@ -31,6 +31,7 @@ from causal_lens import random_neurons  # noqa: E402
 
 from neuron_lens import arch  # noqa: E402
 from neuron_lens.catalog import MODEL, column, documents, kept, neuron_table, vocab  # noqa: E402
+from neuron_lens import metric  # noqa: E402
 from neuron_lens.neurons import directions, orthogonal_write  # noqa: E402
 from neuron_lens.paths import DATA, SUMMARY  # noqa: E402
 from neuron_lens.readout import rms_norm_columns  # noqa: E402
@@ -94,12 +95,13 @@ def measure(args) -> None:
     for L in ORDER:
         idx = sorted(rng.sample([i for i, p in enumerate(picks) if p[0] == L and p in rand], PER_LAYER))
         d = directions(MODEL, L, dev)
-        gn, un = unit(d["gate"]), unit(d["up"])
+        s2 = metric.s2(MODEL, "mid", L, dev)  # as neurons.poles
+        gn, un = (d[k] / metric.cov_norm(d[k], s2) for k in ("gate", "up"))
         W = d["write"]
         ns = torch.tensor([picks[i][1] for i in idx], device=dev)
-        plane = orthogonal_write(W, gn, un)
+        plane = orthogonal_write(W, gn, un, s2)
         state["L"] = L
-        rd = {pi: lens(unit(gn[ns] + s * un[ns]), J_mid[L]) for pi, s in enumerate((1.0, -1.0))}
+        rd = {pi: lens(unit(metric.vector(gn[ns] + s * un[ns], s2)), J_mid[L]) for pi, s in enumerate((1.0, -1.0))}
         t = pq.read_table(neuron_table("reads", L), columns=["read_R_ids"])
         for j, i in enumerate(idx):
             n = picks[i][1]

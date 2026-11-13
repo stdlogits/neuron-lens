@@ -1,4 +1,6 @@
-"""Fit an R-lens or an S-lens (``neuron_lens.transport``) over a lens corpus.
+"""Fit an R-lens or an S-lens (``neuron_lens.transport``) over a lens corpus, or the residual's scale (``--lens scale``,
+``neuron_lens.metric``: forward passes only, the per-coordinate σ of ``x / rms`` at every norm's input, which turns
+a covector into a vector for the R-lens; text only, minutes per 1,000 documents).
 
 Both lenses sum over offsets and take RelP derivatives. Documents are the first ``--docs`` rows
 of a corpus JSONL in ``data/corpus/``, read as Drowse reads them. Document ``i`` goes to half
@@ -35,6 +37,7 @@ import zlib
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
+from neuron_lens import metric
 from neuron_lens.corpus import lens_docs, rows_sha256
 from neuron_lens.paths import CORPUS_DIR, FITS, LOGS, ROOT
 from neuron_lens.transport import (
@@ -153,7 +156,10 @@ def fit(args, model, tok, device: str, dtype) -> None:
         same = all(saved["meta"].get(k, older.get(k)) == v for k, v in meta.items() if k not in loose)
         if not same:
             raise SystemExit(f"{path} was fitted with {saved['meta']}, not {meta}")
-        acc, next_doc = Accumulator.from_state(saved["state"], acc_device), saved["next_doc"]
+        kind = metric.Sums if args.lens == "scale" else Accumulator
+        acc, next_doc = kind.from_state(saved["state"], acc_device), saved["next_doc"]
+    elif args.lens == "scale":
+        acc, next_doc = metric.Sums(n, d, device=acc_device), 0
     else:
         layers = {t: target_layers(args.lens, t, n) for t in args.targets}
         acc, next_doc = Accumulator(layers, d, device=acc_device, d_in=None if basis is None else len(basis)), 0
@@ -169,7 +175,10 @@ def fit(args, model, tok, device: str, dtype) -> None:
     saved_at = time.monotonic()
     for count, i in enumerate(mine, 1):
         t0 = time.perf_counter()
-        if docs is None:
+        if args.lens == "scale":
+            metric.scale_doc(model, torch.tensor(rows[i]), acc, i % 2, SKIP_FIRST)
+            length = len(rows[i])
+        elif docs is None:
             lens_doc(args.lens, model, torch.tensor(rows[i]), acc, i % 2, dim_batch=args.dim_batch)
             length = len(rows[i])
         else:
@@ -190,7 +199,7 @@ def fit(args, model, tok, device: str, dtype) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--lens", choices=("R", "S"), required=True)
+    ap.add_argument("--lens", choices=("R", "S", "scale"), required=True)
     ap.add_argument("--model", default="Qwen/Qwen3-0.6B")
     ap.add_argument("--layers", type=int, default=None, help="first N decoder layers (default all)")
     ap.add_argument("--corpus", default=None,
@@ -213,7 +222,9 @@ def main() -> None:
     ap.add_argument("--save-minutes", type=float, default=10)
     ap.add_argument("--detach", action="store_true")
     args = ap.parse_args()
-    args.targets = tuple(args.targets.split(",")) if args.targets else TARGETS[args.lens]
+    if args.lens == "scale" and args.modality != "text":
+        raise SystemExit("the scale is the text lenses': a pole's read direction is one for every modality")
+    args.targets = tuple(args.targets.split(",")) if args.targets else TARGETS.get(args.lens, ("in", "mid"))
     args.corpus = args.corpus or {"text": "dclm.jsonl", "image": "coco", "audio": "esc50"}[args.modality]
     # Held-out tests (checks/rule_diag.py, on clips without silent frames) favour RelP for every
     # modality: on audio, true derivatives read worse (0.64 against 0.81 at L0-L11) and their

@@ -53,7 +53,7 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from causal_lens import CAUSAL, random_neurons
-from neuron_lens import arch
+from neuron_lens import arch, metric
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -102,9 +102,9 @@ def in_edges(layer: int, neurons: list[int]) -> torch.Tensor:
 
 
 class Model:
-    """The model in fp32 with what the decomposition needs: each pole's write size (``act_top · ‖w‖``)
-    and activation scale (``act_top``), ``[L, 2f]``, every layer's unit writes, and the typical scale of the norm
-    after each layer's MLP (``16_edges.py``'s; 1 where none follows)."""
+    """The model in fp32 with what the decomposition needs: each pole's activation scale (``act_top``, ``[L, 2f]``),
+    every layer's writes, and the typical scale of the norm after each layer's MLP (``16_edges.py``'s; 1 where none
+    follows). Writes and reads meet in the residual's metric at the firing pole's MLP input, as ``16_edges.py``."""
 
     def __init__(self, dev):
         lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(dev).eval().requires_grad_(False)
@@ -114,8 +114,6 @@ class Model:
         self.H = self.stack.config.num_attention_heads
         self.act_top = torch.stack([torch.from_numpy(pq.read_table(neuron_table("acts", l), columns=["act_top"])
                                                      .column(0).to_numpy().copy()).float() for l in range(self.L)]).to(dev)
-        self.unit = [w / w.norm(dim=0) for w in self.flow.neurons]  # [d, f]
-        self.size = self.act_top * torch.stack([w.norm(dim=0) for w in self.flow.neurons]).repeat(1, 2)
         saved = json.loads((SUMMARY / f"edges_{STEM}.json").read_text())
         self.mlp_scale = torch.tensor(saved.get("mlp_scale", [1.0] * self.L), device=dev)
 
@@ -151,13 +149,17 @@ class Model:
         sign = acts.sign()
         pid = (torch.arange(M, device=dev)[:, None] * 2 * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
         norm = arch.mid_norm(lay)
-        a_hat, b_hat = (r / r.norm(dim=1, keepdim=True) for r in (lay.mlp.gate_proj.weight[neuron] * norm.weight,
-                                                                  lay.mlp.up_proj.weight[neuron] * norm.weight))
+        s2 = metric.s2(MODEL, "mid", M, dev)
+        a_hat, b_hat = (r / metric.cov_norm(r, s2) for r in (lay.mlp.gate_proj.weight[neuron] * norm.weight,
+                                                             lay.mlp.up_proj.weight[neuron] * norm.weight))
         lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
-        c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as read_rows
-        cos = torch.cat([c_b / c_b.norm(dim=1, keepdim=True) @ self.unit[l] for l in range(M)], 1) * sign
+        c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as neurons.read_rows
+        c_b = c_b / metric.cov_norm(c_b, s2)
+        norms = [metric.vec_norm(w.T, s2).squeeze(1) for w in self.flow.neurons[:M]]  # each write's length at M, [f]
+        cos = torch.cat([c_b @ (w / n) for w, n in zip(self.flow.neurons[:M], norms)], 1) * sign
+        size = self.act_top[:M] * torch.stack(norms).repeat(1, 2)  # [M, 2f]
         gain = torch.stack([self.mlp_scale[l] * self.flow.scalars[l:M].prod() for l in range(M)])  # [M], as 16_edges.py
-        push = cos * self.size.flatten()[pid] * gain[pid.div(2 * f, rounding_mode="floor")]
+        push = cos * size.flatten()[pid] * gain[pid.div(2 * f, rounding_mode="floor")]
         return {"emb": emb, "heads": heads, "neurons": neurons, "acts": acts, "pid": pid, "cos": cos, "push": push, "g": g, "a": a}
 
     def fires(self, src: dict, r: int, q: torch.Tensor) -> torch.Tensor:

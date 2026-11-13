@@ -7,11 +7,11 @@ lists the ``TOP`` poles of earlier layers whose writes push it most (``in_*``) a
 later layers it pushes most (``out_*``), each as ``_layer``, ``_neuron``, ``_pole``, ``_push`` and
 ``_cos``, strongest first (``−1`` and NaN where fewer clear the floor):
 
-- ``cos``: the cosine of A's write ``±w_A`` (``neurons.directions``) with B's read direction
-  (``neurons.read_rows``, as ``08_reads.py``: ``â ± b̂``, the up row alone on the negative lobe, gate and up rows
-  times the MLP input norm's weight, normalized);
-- ``push``: ``cos · act_top_A · ‖w_A‖ · gain / rms_M``, how far one of A's top firings moves B's normalized
-  MLP input along B's read direction; ``rms_M`` is the median RMS of the residual entering layer M's
+- ``cos``: the cosine of A's write ``±w_A`` with B's read covector (``neurons.poles``, as ``08_reads.py``:
+  ``â ± b̂``, the up row alone on the negative lobe, gate and up rows times the MLP input norm's weight), in the
+  residual's metric at B's MLP input (``neuron_lens.metric``, findings §13);
+- ``push``: ``cos · act_top_A · ‖w_A‖ · gain / rms_M`` (``‖w_A‖`` in the same metric), how far one of A's top firings
+  moves B's normalized MLP input along B's read covector at unit length; ``rms_M`` is the median RMS of the residual entering layer M's
   MLP (``RMS_DOCS`` catalog documents, positions from 1). Positive: A's firing drives B's pole;
   negative: it pushes against it. ``gain`` is what happens to the write between layers: the layer scalars from
   A's layer to M, and, where a norm follows the MLP (Gemma 4), that norm's median scale at A's layer. The
@@ -48,7 +48,8 @@ from neuron_lens.catalog import (
     neuron_table,
     write,
 )
-from neuron_lens.neurons import directions, read_rows
+from neuron_lens import metric
+from neuron_lens.neurons import directions, poles as layer_poles
 from neuron_lens.paths import SUMMARY
 
 STEM = arch.stem(MODEL)
@@ -85,16 +86,13 @@ def residual_stats(dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             torch.stack([torch.cat(s).median() if s else torch.tensor(1.0) for s in scales]), scalars)
 
 
-def poles(layer: int, dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """A layer's unit writes ``[d, f]``, each pole's write size at its typical top firing
-    (``act_top · ‖w‖``, ``[2f]``, ``+`` poles first) and its read directions ``[2f, d]``."""
-    w = directions(MODEL, layer)
-    norm = w["write"].norm(dim=0)
+def poles(layer: int, dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """A layer's writes ``[d, f]``, each pole's ``act_top`` (``[2f]``, ``+`` poles first), its read covectors at unit
+    length in the metric at its MLP input ``[2f, d]`` and that metric ``[d]``."""
+    p = layer_poles(MODEL, layer, lobe_signs(layer), dev)
     act = torch.from_numpy(pq.read_table(neuron_table("acts", layer), columns=["act_top"]).column(0).to_numpy().copy()).float()
-    a = w["gate"] / w["gate"].norm(dim=1, keepdim=True)
-    b = w["up"] / w["up"].norm(dim=1, keepdim=True)
-    read = read_rows(a, b, lobe_signs(layer))
-    return (w["write"] / norm).to(dev), (act * torch.cat([norm, norm])).to(dev), (read / read.norm(dim=1, keepdim=True)).to(dev)
+    read = p["cov"] / metric.cov_norm(p["cov"], p["s2"])
+    return p["write"], act.to(dev), read, p["s2"]
 
 
 def merge(best: tuple, new: tuple, k: int) -> tuple:
@@ -112,6 +110,8 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
     L = len(rms)
     units = [poles(layer, dev) for layer in range(L)]
     d, f = units[0][0].shape
+    # writes in each target layer's metric: unit length there and their sizes, [d, f] and [2f]
+    unit = lambda w, s2: (w / metric.vec_norm(w.T, s2).T, metric.vec_norm(w.T, s2).squeeze(1))
     floor = SIGMAS / d ** 0.5
     empty = lambda: (torch.full((2 * f, k), -1.0, device=dev), torch.full((2 * f, k), -1, device=dev),
                      torch.full((2 * f, k), float("nan"), device=dev), torch.full((2 * f, k), float("nan"), device=dev))
@@ -120,14 +120,16 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
     prev = torch.full((L, 2, 2 * f), float("nan"))
     t0 = time.perf_counter()
     for m in range(1, L):
-        read = units[m][2]
+        read, s2 = units[m][2], units[m][3]
+        s = s2.sqrt()
         for l in range(m):
-            w, size, _ = units[l]
+            w, norm = unit(units[l][0], s2)
+            size = units[l][1] * torch.cat([norm, norm])
             c = read @ w
             cos = torch.cat([c, -c], 1)  # [2f B poles, 2f A poles]
             del c
-            if l == m - 1:
-                prev[m, 0], prev[m, 1] = cos.abs().amax(1).cpu(), (read @ (rot @ w)).abs().amax(1).cpu()
+            if l == m - 1:  # the rotation in the metric's orthonormal coordinates
+                prev[m, 0], prev[m, 1] = cos.abs().amax(1).cpu(), ((read * s) @ (rot @ (w / s[:, None]))).abs().amax(1).cpu()
             push = cos * size * (mlp_scale[l] * scalars[l + 1:m].prod()).item() / rms[m].item()  # ``size`` holds A's own scalar
             score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
             ids = l * 2 * f + torch.arange(2 * f, device=dev)

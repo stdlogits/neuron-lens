@@ -58,7 +58,7 @@ from neuron_lens.catalog import (MODEL, acts_path, column, firing_tokens, head_t
                                  neuron_table)
 from neuron_lens import arch
 from neuron_lens.heads import norm_derivative
-from neuron_lens.neurons import directions, orthogonal_write, read_rows
+from neuron_lens.neurons import orthogonal_write, poles
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
 from neuron_lens.stats import bh, null_p
@@ -147,21 +147,19 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         k_cur, k_nxt, k_drv = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (cur, nxt, drivers))
         ok_cur, ok_nxt = fired & (k_cur >= 0), fired & (k_nxt >= 0)
         perm = torch.cat([torch.randperm(f, generator=g), f + torch.randperm(f, generator=g)])
-        w = directions(MODEL, layer)  # the write as the residual sees it; read rows times the MLP input norm
-        wd = w["write"].to(dev)
+        p = poles(MODEL, layer, lobe_signs(layer), dev)  # as 08_reads.py, in the residual's metric
+        wd = p["write"]
         r = rms_norm_columns(transport(wd, J_out[layer] if layer < len(J_out) else None), gamma).T  # [f, d]
-        sw = (K_out[layer].to(dev).T @ wd).T
+        sw = wd.T @ K_out[layer].to(dev)
         sw = sw / sw.norm(dim=1, keepdim=True)
-        a, b = w["gate"], w["up"]
-        a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
-        del w
-        orth = orthogonal_write(wd.cpu(), a, b).to(dev)
+        orth = orthogonal_write(wd, p["a"], p["b"], p["s2"])
         ro = rms_norm_columns(transport(orth, J_out[layer] if layer < len(J_out) else None), gamma).T
-        so = (K_out[layer].to(dev).T @ orth).T
+        so = orth.T @ K_out[layer].to(dev)
         so = so / so.norm(dim=1, keepdim=True)
-        c = read_rows(a, b, lobe_signs(layer)).to(dev)
-        rr = rms_norm_columns(transport(c.T, J_mid[layer]), gamma).T
+        c = p["cov"]
+        rr = rms_norm_columns(transport(p["vec"].T, J_mid[layer]), gamma).T
         cs = c @ K_mid[layer].to(dev)
+        del p
         stats = {"write_R": mean_z(torch.cat([r, -r]).half(), unembed, k_nxt, ok_nxt, perm),
                  "write_S": mean_z(torch.cat([sw, -sw]).half(), emb, k_cur, ok_cur, perm),
                  "read_R": mean_z(rr.half(), unembed, k_drv, k_drv >= 0, perm),

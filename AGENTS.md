@@ -28,7 +28,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   reference; `rules.py` states the same rules as autograd patches, by operation, and is the test
   reference; `arch.py` holds each model's geometry (head layouts, weight
   names, token counts, which fits are of record) and `neurons.py` its neurons' read and write
-  directions; `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
+  directions (`poles`: in the residual's metric); `metric.py` the residual's metric, which turns a covector into a
+  vector and back (`02_fit.py --lens scale`); `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
   maps; `lenses.py` loads fits, released lenses and Drowse lenses; `media.py` builds Gemma's image and
   audio documents and reads its embedders backwards, `media_sets.py` streams the labelled image and
   audio collections; `corpus.py` the corpora (`act_file` names each slice's file); `catalog.py` holds
@@ -74,6 +75,13 @@ by `scripts/12_release.py`, one card per repo covering both models.
   and don't ship borrowed lenses (the J-lens, the logit lens) in the catalog; comparisons belong in
   checks. A head's keys and values are read with the S-lens (what a position holds); its query with the S-lens, or for
   `qk_self_R` with the R-lens at `L − 1`'s output (what the position is about to say; findings §11).
+- **Vectors and covectors.** The R-lens transports vectors (writes), the S-lens pulls back covectors (read rows). A
+  read that feeds a covector to the R-lens, or takes a cosine or a projection between a covector and a vector, goes
+  through the residual's metric (`neuron_lens.metric`: `v = s² ⊙ c`, `s² = σ / |γ|`, σ the
+  scale fit's): the raw basis carries a unit per coordinate (Gemma 4's span 80-1,600×), and a Euclidean read there
+  weighs coordinates by their units (findings §13). Pairing a covector with a vector needs no metric, and a length the
+  model takes itself (an RMSNorm's rms: a QK footprint's size, a write's energy at the final norm) stays Euclidean, as
+  does `write_S` (a write against footprints), where every metric tested names the peak tokens worse (§13).
 - **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
   firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
   card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded (`HELD_OUT`
@@ -105,7 +113,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **Fit files** in `data/fits/` are the authoritative lens format:
   `<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt` (`-T<len>`: documents of exactly
   that many tokens, `--full-length`), holding even- and odd-document sums per
-  target. Both lenses have an `out` target (layer outputs) and a `mid` target (each layer's MLP
+  target. `scale-<model>-L<layers>-dclm.pt` (`02_fit.py --lens scale`, forward passes over the text lens's corpus,
+  minutes) holds the residual's per-coordinate sums at every norm's input, the metric's σ; the release ships it as
+  `<model>/scale.pt`. Both lenses have an `out` target (layer outputs) and a `mid` target (each layer's MLP
   input): R `out` reads MLP writes, R `mid` reads MLP read directions and attention writes, S
   `mid` reads read directions, S `out` reads writes. `lenses.load_fits` adds shards and halves;
   `Accumulator.mean` averages the halves.
@@ -124,6 +134,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   input side (findings §6).
 - Kept for comparison: an R-lens fitted on 500 chat conversations (`data/lenses/chat`; findings
   §1).
+- **The scale:** for each model, `02_fit.py --lens scale --docs 1000 --seq-len 128` over the same documents
+  (split-half 0.01-0.04). A new lens of record gets its scale fit beside it.
 - **Gemma 4 12B:** both lenses on the same 1,000 DCLM documents (`<lens>-gemma-4-12b-L48-dclm`), and
   image and audio lenses (`02_fit.py --modality image|audio`: COCO 2014 val, 1,000 for S and 512 for
   R; ESC-50, 1,615 kept clips for S and 512 for R; fits `...-coco`, `...-esc50`). The media S-lenses

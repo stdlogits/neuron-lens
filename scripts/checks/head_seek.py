@@ -34,7 +34,7 @@ import time
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import arch
+from neuron_lens import arch, metric
 from neuron_lens.catalog import MODEL, acts_path, doc_tokens, head_table, kept
 from neuron_lens.heads import norm_derivative, own_token_z, rope_mean
 from neuron_lens.paths import DATA, SUMMARY
@@ -83,8 +83,9 @@ def diagonals(dev, tot: dict, extra: dict) -> dict:
                              tot["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(tot["n_k"]))
         off = tot["offset"][layer].float().to(dev)
         Rbar = rope_mean(off / off.sum(-1, keepdim=True), arch.layer_inv_freq(extra["inv_freq"], MODEL, layer).to(dev))
+        s2 = metric.s2(MODEL, "in", layer, dev)  # as 08_reads.py: the R side a covector, as a vector
         unit = lambda X: X / X.norm(dim=1, keepdim=True)
-        side = {"S": unit(E @ K_out[layer - 1].to(dev).T), "R": unit(Wu @ J_out[layer - 1].to(dev))}
+        side = {"S": unit(E @ K_out[layer - 1].to(dev).T), "R": unit(metric.vector(Wu @ J_out[layer - 1].to(dev), s2))}
 
         def keys(U):
             Kv = torch.einsum("gij,vgj->vgi", Ak, (U @ qk["Wk"].T).view(V, kvh, hd)).repeat_interleave(H // kvh, dim=1)

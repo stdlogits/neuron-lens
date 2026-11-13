@@ -48,7 +48,7 @@ from huggingface_hub import hf_hub_download
 
 from neuron_lens import arch
 from neuron_lens.catalog import MODEL, TOP, catalog_dir, kept, lobe_signs, neuron_keys, put, vocab, write
-from neuron_lens.neurons import directions, read_rows, softcap
+from neuron_lens.neurons import poles, softcap
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads
 from neuron_lens.weights import tensors
@@ -170,13 +170,10 @@ def main() -> None:
         xm = torch.load(xm_path, weights_only=False).get(modality, {}) if xm_path.exists() else {}
         for layer in range(lo, hi + 1):
             t0 = time.perf_counter()
-            w = directions(MODEL, layer, dev)
-            wd = w["write"]
+            p = poles(MODEL, layer, lobe_signs(layer), dev)
+            wd, c = p["write"], p["cov"]  # c [2f, d]: the read covectors (in the residual's metric), + poles then −
             f = wd.shape[1]
-            a, b = w["gate"], w["up"]
-            a, b = a / a.norm(dim=1, keepdim=True), b / b.norm(dim=1, keepdim=True)
-            del w
-            c = read_rows(a, b, lobe_signs(layer))  # [2f, d]: the read directions, + poles then −
+            del p
             coords = c @ S["K"][layer].float().to(dev)  # [2f, k]
             cols = neuron_keys(layer, f)
             cols["read_S_basis"] = pa.FixedSizeListArray.from_arrays(pa.array(coords.half().cpu().flatten().numpy()), coords.shape[1])

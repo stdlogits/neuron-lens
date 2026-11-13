@@ -127,6 +127,9 @@ Fused projections and CUDA graphs gave nothing more.
   128 tokens each, on one H100 in bf16, exported to `data/lenses/dclm` with its 500-document halves in
   `dclm-even` and `dclm-odd`. Split-half 0.06 or less at every layer (§1).
 - **S-lens:** the same documents, `02_fit.py --lens S`; split-half 0.00-0.05.
+- **Scale:** the same documents, `02_fit.py --lens scale` (forward passes only, a minute or two on an M5 Max): the
+  residual's per-coordinate σ at every norm's input, the metric that turns a covector into a vector (Reading
+  neurons); split-half 0.01-0.04.
 - **For comparison:** an R-lens fitted on 500 UltraChat conversations (`data/lenses/chat`, §1), and,
   in `checks/lens_compare.py`, the logit lens and Neuronpedia's J-lens. Borrowed lenses stay in checks;
   the catalog ships only the lenses of record.
@@ -144,23 +147,39 @@ record the comparison in the findings, and rerun `12_release.py`.
 
 ## Reading neurons
 
-`08_reads.py` reads every pole from the weights, with `w = ±W_down[:, n]`, `c = â ± b̂`, and `norm` the
-final RMSNorm with its weight (`neuron_lens/readout.py`):
+`08_reads.py` reads every pole from the weights, with `w = ±W_down[:, n]`, `c = â ± b̂` (the read covector:
+gate and up rows times the MLP input norm's weight, each at unit length in the residual's metric), `v = s² ⊙ c` its
+vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
 
 | columns | read |
 |---|---|
 | `write_R` | `softmax(W_U · norm(J_L^out w))`, the R-lens read of the write |
 | `write_S` | `w · K_L^out (W_E[v] − ē)`: the tokens whose footprint the write imitates |
-| `read_R` | `softmax(W_U · norm(J_L^mid c))`: what the residual says when it drives the pole |
+| `read_R` | `softmax(W_U · norm(J_L^mid v))`: what the residual says when it drives the pole |
 | `read_S` | `c · K_L^mid (W_E[v] − ē)`: the input tokens that drive the pole |
-| `w_norm`, `cos_gate_up` | `‖W_down[:, n]‖`, `cos(a, b)` |
-| `cos_write_gate`, `cos_write_up` | the cosine of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
+| `w_norm`, `cos_gate_up` | `‖W_down[:, n]‖`, `cos(a, b)` in the metric |
+| `cos_write_gate`, `cos_write_up` | the cosine in the metric of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
 | `vocab_skew`, `vocab_kurt` | of the pole's logit-lens logits: prediction and suppression neurons (Gurnee et al. 2024; §5) |
 | `null_share` | the write's share in the bottom 1% of singular directions of `W_U diag(γ)`: entropy neurons (Stolfo et al. 2024; §9) |
 
-- **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write with its components along
-  the neuron's gate and up rows removed (`neurons.orthogonal_write`), the part that adds something
-  beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
+- **The residual's metric** (`neuron_lens/metric.py`, §13). A read row is a covector (what a unit applies to the
+  residual), a write a vector; the R-lens transports vectors and the S-lens pulls back covectors. Pairing the two kinds
+  needs nothing more, but turning one into the other, or comparing two of a kind, needs a metric, and the raw basis
+  has none to offer: rescaling a residual coordinate, with every norm's weight compensating, leaves the model nearly
+  unchanged, and Gemma 4's coordinate scales span 80-1,600× (Qwen3-8B's 3-6×). In the frame a norm reads,
+  `y = γ ⊙ x / rms`, the coordinates don't move with that rescaling, so the map is built there: `v = s² ⊙ c` with
+  `s² = σ / |γ|`, `σ` the residual's per-coordinate standard deviation where that norm reads it (`x / rms`, over the
+  text lens's documents: `02_fit.py --lens scale`, `data/fits/scale-<model>-L<layers>-dclm.pt`, released as
+  `<model>/scale.pt`). For a neuron, `v` is its raw rows times the residual's scale, `σ ⊙ (ŵ_gate ± ŵ_up)`: between the
+  row itself in the norm's frame (`w / γ`, which needs a floor where `γ ≈ 0`) and the diagonal Haufe pattern
+  (`σ² γ ⊙ w`; Haufe et al. 2014). The same metric gives the cosines their lengths, the orthogonal writes their
+  projection, `16_edges.py` its cosines and pushes, and `qk_self_R` its query. A length the model takes itself stays
+  Euclidean: every RMSNorm divides by the raw basis's rms, so a QK footprint's size as a head sees it, and a write's
+  energy as the final norm sees it (`null_share`), are Euclidean. So does `write_S`, a write against footprints (two
+  vectors): every metric in the family names the peak tokens worse there, on both models (§13).
+- **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write minus its parts along the
+  neuron's gate and up patterns (`s² ⊙ â`, `s² ⊙ b̂`), so that neither row reads it (`neurons.orthogonal_write`), the
+  part that adds something beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
 - **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
   `neg_lobe` past a half) reads the up row alone, `∓b̂` (`neurons.read_rows`): SiLU is nearly flat there, so the activation
   follows `up`, and which way of the gate raises it varies from pole to pole. Its `read_*` and in-edges follow; `cos_write_gate` and
@@ -193,12 +212,12 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **QK** (`qk_S`, `qk_self_S`, `qk_self_R`): the attention logit between a query and a key footprint,
   through `q_norm` and `k_norm` (their true derivative, averaged over real positions) and RoPE's
   relative rotation averaged over the head's own attention offsets. Directions are taken at unit
-  length, since attends-to ranks keys across tokens. `qk_S`: each key token's z over the vocabulary
+  length (Euclidean, as the input norm takes it), since attends-to ranks keys across tokens. `qk_S`: each key token's z over the vocabulary
   under the head's mean query (what it attends to, whatever the query); `qk_self_S`: each token's z in
   its own row with its footprint as the query too (a position holding `v` seeks `v`: duplicate-token
   heads); `qk_self_R`: the same diagonal with the query the R-lens direction at `L − 1`'s output that
-  promotes `v`, `W_U diag(γ_f) J^out_{L−1}` (a position about to say `v` seeks earlier copies of `v`, the
-  QK half of copy suppression), from L1. The query reads what a position says, so it takes the R-lens; the
+  promotes `v`, the covector `W_U diag(γ_f) J^out_{L−1}` as a vector in the metric (a position about to say `v` seeks
+  earlier copies of `v`, the QK half of copy suppression), from L1. The query reads what a position says, so it takes the R-lens; the
   key and the value read what a position holds, so they take the S-lens (the lens rule holds: R `out` at
   `L − 1`). The diagonal's z come from the mean and covariance of the keys' projections, as OV's. The
   scalar columns `qk_self_S` and `qk_self_R` are each diagonal's median over tokens; `qk_ctx_rho` and
@@ -327,7 +346,10 @@ tables, tests and conventions are Qwen3-8B's, with these differences:
   residual, `s · γ_post ⊙ W_down[:, n]`, with the norm's scale held constant as the LN rule holds it
   (a direction: its size at a position also depends on that position's norm). The read rows are
   `W_gate[n]` and `W_up[n]` times the pre-feedforward norm's weight. Activations are
-  `gelu_tanh(a·x̂)(b·x̂)` and take both signs, so each neuron has two poles.
+  `gelu_tanh(a·x̂)(b·x̂)` and take both signs, so each neuron has two poles. The residual's coordinates differ in
+  scale by 80-1,600× (99th over 1st percentile) and the norms' weights undo it (`γ ≈ 1/σ`, correlation 0.91-0.99), so
+  a read that turns a row into a vector goes through the metric, or it lands on the few coordinates where the residual
+  barely moves (Reading neurons; §13).
 - **Heads.** Layers 5, 11, …, 47 are global; the others attend within a 1,024-token window. Sliding
   layers have 8 key-value heads of size 256; global layers one of size 512, whose keys are also its
   values (no `v_proj`), with RoPE on a quarter of each head. Values pass a weightless RMSNorm, read
