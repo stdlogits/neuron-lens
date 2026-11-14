@@ -1353,11 +1353,15 @@ over every upstream neuron, in the pole it is in, between its push and its contr
   What a head copies and what it can be found by come mostly from neurons; what it looks for takes a third to a half from earlier heads, which suggests composition between heads
   runs mainly through the query (Q-composition, Elhage et al. 2021, here measured at firings). There is no signed weight edge into a head: two heads meet through a matrix, not a dot product.
 
-- **Gemma 4** has the same split (the in-context sample, 3,008 poles): heads carry 12-26% of the activation, neurons 74-86%, and an edge's push ranks every upstream neuron at ρ 0.88-0.92. Over every
-  pole's first 5 firings, heads carry a median 13-26%. But its in-edges name almost none of the sources: they carry 0.00 of the activation at every band, recall is 0, and the driven-by lists share none of
-  them (0-19% with fires-with). The lists are full of a few hub neurons (the 1% most-listed sources hold 52-66% of the entries at L0-L11 and L24-L35) that fire at 0-1% of the pole's firings, and a pole's
-  largest |cos| with the layer before's writes is a median 0.002-0.018, below the 0.065 of the same writes rotated at random. That suggests its writes, scaled by the post-MLP norm's weights, mostly sit where the next
-  layers' reads don't look. Read Gemma 4's `edges` as a list of what could reach a pole, not of what does.
+- **Gemma 4** has the same split (the in-context sample, 3,008 poles): heads carry 12-26% of the activation, neurons 74-86%, and an edge's push ranks every
+  upstream neuron at ρ 0.89-0.92. Over every pole's first 5 firings, heads carry a median 13-26%. From L12 its edges behave as Qwen3-8B's: the in-edges
+  are 3-9% of the 64 largest contributors and carry 8-9% of the activation, their sources firing at 4-6% of the pole's firings (random sources 1-2%),
+  and a pole's top 16 driven-by sources are 13-19% in its top 16 in-edges, 25-31% in either list. At L1-L11 they name almost none of the sources (2% of
+  the largest, 0.6% of the activation; 0% of the driven-by, 6% in either list). A pole's largest |cos| with the layer before's writes is a median
+  0.08-0.15, against 0.066 for the same writes rotated at random, and the 1% most-listed sources hold 12-28% of the entries. Taken in the raw basis,
+  these were 0.002-0.018 and 52-66%, and the in-edges carried none of the activation at any band: the cosine that admits an edge pairs a write with a
+  read row, which the raw basis weighs by each coordinate's units (Gemma 4's span 80-1,600×), so it let through a few hub neurons and dropped the rest
+  (§13).
 
 **What this means.** The edges are the model's wiring: what a pole's firing would do to each later pole,
 the counterpart of a write read (§3), and like it an average that leaves the context out (§4). Which
@@ -1432,5 +1436,5 @@ lens read of a pole's input at early layers is uninformative for many (§6). §3
 - Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads
   per slot, which would say where in an image a neuron looks.
 - Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §17).
-- Why Gemma 4's weight edges name so few of what drives a pole (§17).
+- Why Gemma 4's weight edges at L1-L11 name almost none of what drives a pole (§17).
 - Whether the firing-averaged RelP direction (the gate's and `up`'s weights set by each firing's activation) improves on the up row at L1-L3 (§17).
