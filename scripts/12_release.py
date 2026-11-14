@@ -286,14 +286,16 @@ def ladder_text(f: dict, ladder: dict) -> str:
         rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']}, {x['d_model']:,} | "
                     f"{t['R']}, {t['R_mid']} | {t['S_mid']}, {t['S_out']} | {x['scale']['split']} |")
     tied = [m.split("/")[-1] for m in ladder if arch.text_config(m).tie_word_embeddings]
+    tied = (f" {', '.join(tied)} {'ties its' if len(tied) == 1 else 'tie their'} embeddings: `W_U` and `W_E` are one "
+            f"matrix." if tied else "")
     docs = sorted({x["lenses"]["text"]["R_docs"] for x in ladder.values()} | {x["lenses"]["text"]["S_docs"] for x in ladder.values()})
     return f"""
 ## More sizes of Qwen3
 
-The same lenses for more of the Qwen3 family, post-trained and base (Qwen released dense bases up to 14B),
-fitted the same way on the same {' or '.join(f'{n:,}' for n in docs)} documents. Each folder holds the
-five text files above. Their neurons and heads are not in the catalog yet.{f" {', '.join(tied)} tie their embeddings: `W_U` and `W_E` are one matrix." if tied else ""}
-Split-half differences by layer:
+The same lenses for more of the Qwen3 family, post-trained and base (Qwen released dense bases up to
+14B), fitted the same way on the same {' or '.join(f'{n:,}' for n in docs)} documents. Each folder holds
+the five text files above. Their neurons and heads are not in the catalog yet.{tied} Split-half
+differences by layer:
 
 | model | folder | layers, d | R-lens (from outputs, from MLP inputs) | S-lens (to MLP inputs, to outputs) | scale |
 |---|---|---|---|---|---|
@@ -320,7 +322,7 @@ tags:
 - s-lens
 ---
 
-# R-lens and S-lens for Qwen3-8B and Gemma 4 12B
+# R-lens and S-lens for {"Qwen3" if ladder else "Qwen3-8B"} and Gemma 4 12B
 
 Linear lenses that turn a vector inside a model into a ranking over tokens, for
 [`Qwen/Qwen3-8B`](https://huggingface.co/Qwen/Qwen3-8B) and
