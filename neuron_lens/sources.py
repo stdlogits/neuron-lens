@@ -97,6 +97,15 @@ class Stream:
                      self.head_of[:self.head_end[M]], (M + 1) * self.n_heads, lay.mlp.act_fn)
 
 
+def times(r: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+    """``r @ w``; on MPS, whose tensors stop at 2³¹ elements (Gemma 4's writes from 37 layers up pass it), in column
+    blocks under it."""
+    if w.device.type != "mps" or w.numel() < 2**31:
+        return r @ w
+    step = 2**30 // w.shape[0]
+    return torch.cat([r @ w[:, i:i + step].contiguous() for i in range(0, w.shape[1], step)], 1)
+
+
 def split(rg: torch.Tensor, ru: torch.Tensor, x: torch.Tensor, inv: torch.Tensor, emb: torch.Tensor,
           z: torch.Tensor, acts: torch.Tensor, downs: torch.Tensor, wos: torch.Tensor, head_of: torch.Tensor, n_heads: int,
           act: Callable) -> dict:
@@ -112,7 +121,7 @@ def split(rg: torch.Tensor, ru: torch.Tensor, x: torch.Tensor, inv: torch.Tensor
     share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
     e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
     per = lambda r: torch.zeros(len(rg), n_heads, device=z.device).index_add_(1, head_of, (r @ wos) * z) * inv
-    return {"g": g, "a": a, "emb": e, "heads": share(per(rg), per(ru)), "neurons": share((rg @ downs) * acts * inv, (ru @ downs) * acts * inv)}
+    return {"g": g, "a": a, "emb": e, "heads": share(per(rg), per(ru)), "neurons": share(times(rg, downs) * acts * inv, times(ru, downs) * acts * inv)}
 
 
 def merged(rows: torch.Tensor, ids: torch.Tensor, vals: torch.Tensor, n_ids: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
