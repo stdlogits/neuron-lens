@@ -26,6 +26,12 @@ barely fill: ``--full-length`` fits documents of exactly ``--seq-len`` tokens (t
 the corpus that long). On an H100, a dim batch of 32 with the sums on the GPU takes about 19 s per
 512-token document for either lens (a larger batch is no faster). On CUDA in bf16, fp32 matrix
 products run in TF32, as DeltaNet's kernels do (``neuron_lens.kernels``).
+
+A model whose layers don't fit on the GPU beside the fit's working set keeps the first ``--offload``
+layers there and streams the others from pinned host memory (``layers.offload``): Qwen3-32B on an
+80 GB H100 holds 62 GB of layers against about 60 GB of tangents, contracted MLPs and sums.
+
+    python scripts/02_fit.py --lens R --model Qwen/Qwen3-32B --docs 1000 --offload 12 --device cuda --detach
 """
 import argparse
 import os
@@ -39,6 +45,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens import metric
 from neuron_lens.corpus import lens_docs, rows_sha256
+from neuron_lens.layers import offload
 from neuron_lens.paths import CORPUS_DIR, FITS, LOGS, ROOT
 from neuron_lens.transport import (
     DIM_BATCH,
@@ -81,6 +88,8 @@ def load_model(args):
             tc.layer_types = tc.layer_types[:args.layers]
     lm = AutoModelForCausalLM.from_pretrained(args.model, config=config, dtype=dtype).eval().requires_grad_(False)
     if args.modality == "text":  # the decoder stack alone
+        if args.offload is not None and args.lens != "scale":  # the scale's forward pass is the model's own
+            return offload(decoder_stack(lm), device, args.offload), device, dtype
         return decoder_stack(lm).to(device), device, dtype
     args.lm = lm.to(device)  # image and audio documents need the whole model's embedders
     return decoder_stack(lm), device, dtype
@@ -218,10 +227,14 @@ def main() -> None:
     ap.add_argument("--device", default="auto", help="auto (cuda, else cpu), cuda, mps, cpu")
     ap.add_argument("--dtype", default="auto", choices=("auto", "fp32", "bf16"))
     ap.add_argument("--acc-device", default="auto", help="where the sums live (auto: the model's)")
+    ap.add_argument("--offload", type=int, default=None,
+                    help="keep the first N decoder layers on the GPU and stream the rest from host memory")
     ap.add_argument("--shard", default="0/1", help="i/n: this process fits documents i, i+n, ...")
     ap.add_argument("--save-minutes", type=float, default=10)
     ap.add_argument("--detach", action="store_true")
     args = ap.parse_args()
+    if args.offload is not None and args.modality != "text":
+        raise SystemExit("--offload is for text fits")
     if args.lens == "scale" and args.modality != "text":
         raise SystemExit("the scale is the text lenses': a pole's read direction is one for every modality")
     args.targets = tuple(args.targets.split(",")) if args.targets else TARGETS.get(args.lens, ("in", "mid"))

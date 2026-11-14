@@ -58,8 +58,12 @@ Rows are the ``N`` valid positions, as in ``transport``; keys (and DeltaNet's me
 ``T`` positions, padded with masked ones to a multiple of 8 (``Tp``) so that rows of the attention
 products stay 16-byte aligned, which cuBLAS's fast kernels need. Tangents enter at valid positions
 only, so the convolution and the delta rule's tangents start from zero at the first valid position.
+
+A stack too large to sit on one GPU beside a fit's working set can hold its upper layers in host
+memory (``offload``): each moves to the GPU while a pass is at it (``resident``).
 """
 import inspect
+from dataclasses import dataclass
 from typing import NamedTuple
 
 import torch
@@ -532,6 +536,7 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
         both = F.pad(b[:, None] & b[None, :], (0, tp - T))
     maps = []
     for i, layer in enumerate(model.layers):
+        resident(model, i)
         n1, post1, n2, post2 = _norms(layer)
         x, r1 = _rms(n1, h)
         if hasattr(layer, "linear_attn"):
@@ -594,6 +599,53 @@ def linearize(model, ids: torch.Tensor, embeds: torch.Tensor | None = None, bloc
     after it), which saves their work. ``rules="true"`` keeps every norm's and the dense MLP's
     true derivative (audio documents read better so)."""
     return _run(model, ids, embeds, block, first, rules)[0]
+
+
+@dataclass
+class _Offload:
+    device: torch.device
+    keep: int
+    host: dict  # layer → [(parameter or buffer, its pinned host storage)]
+    on: int | None = None  # the streamed layer on the GPU now
+
+
+def offload(model, device, keep: int):
+    """Place a decoder stack loaded on the CPU: everything on ``device`` except layers ``keep..``,
+    which stay in pinned host memory and move to the GPU one at a time (``resident``). For a model
+    whose weights don't fit on one GPU beside a fit's working set (Qwen3-32B: 62 GB of layers, and
+    about 60 GB of tangents, contracted MLPs and sums). The maps hold the layers' parameters, whose
+    storage moves under them, so every pass calls ``resident`` before it uses a layer: the primal
+    (``_run``), and the fits' sweeps, which take each layer once per document (layer-major,
+    ``transport._sweeps``); a streamed layer crosses to the GPU twice a document. Returns the stack."""
+    for child in model.children():
+        if child is not model.layers:
+            child.to(device)
+    host = {}
+    for i, layer in enumerate(model.layers):
+        if i < keep:
+            layer.to(device)
+            continue
+        ts = [*layer.parameters(), *layer.buffers()]
+        for t in ts:
+            t.data = t.data.pin_memory()
+        host[i] = [(t, t.data) for t in ts]
+    model._offload = _Offload(torch.device(device), keep, host)
+    return model
+
+
+def resident(model, i: int) -> None:
+    """Layer ``i`` on the GPU, if the stack is offloaded (``offload``); the streamed layer before it
+    goes back to host memory. Everything runs on one stream, so the copy waits for the work queued
+    before it, and a dropped layer's memory is reused only by work queued after."""
+    o = getattr(model, "_offload", None)
+    if o is None or i < o.keep or o.on == i:
+        return
+    if o.on is not None:
+        for t, h in o.host[o.on]:
+            t.data = h
+    for t, h in o.host[i]:
+        t.data = h.to(o.device, non_blocking=True)
+    o.on = i
 
 
 # ------------------------------------------------------------------------------- attention

@@ -124,13 +124,20 @@ def _blocks(k: int, dim_batch: int) -> list[tuple[int, int]]:
     return [(s, min(dim_batch, k - s)) for s in range(0, k, dim_batch)]
 
 
-def _sweeps(maps: list, order, blocks: list[tuple[int, int]], contract: bool):
+def _sweeps(model, maps: list, order, blocks: list[tuple[int, int]], contract: bool):
     """``(layer, its map, block index)`` in sweep order: each block through every layer in turn, or, with
-    ``contract``, each layer's map multiplied out once and every block through it."""
+    ``contract``, each layer's map multiplied out once and every block through it; an offloaded stack
+    (``layers.offload``) streams each layer in once, so it needs the second order."""
     from neuron_lens import layers
     if not contract:
+        if getattr(model, "_offload", None) is not None:
+            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, gated MLPs)")
         return ((layer, maps[layer], i) for i in range(len(blocks)) for layer in order)
-    return ((layer, m, i) for layer, m in ((l, layers.contract(maps[l])) for l in order) for i in range(len(blocks)))
+
+    def at(l):
+        layers.resident(model, l)
+        return layers.contract(maps[l])
+    return ((layer, m, i) for layer, m in ((l, at(l)) for l in order) for i in range(len(blocks)))
 
 
 def _contracts(maps: list, tangents: int, d: int) -> bool:
@@ -178,7 +185,7 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
          basis[start:start + b].to(dev, torch.float32)[:, None].expand(b, N, d).contiguous() for start, b in blocks]
     if src is not None:
         X = [x * src for x in X]
-    for layer, m, i in _sweeps(maps, range(len(maps)), blocks, _contracts(maps, k, d)):
+    for layer, m, i in _sweeps(model, maps, range(len(maps)), blocks, _contracts(maps, k, d)):
         X[i], *ests = step(m, X[i], w)
         start, b = blocks[i]
         for kind, e in zip(("mid", "out"), ests):
@@ -211,7 +218,7 @@ def r_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     row_w = None if read_rows is None else read_rows.to(dev).float() / read_rows.sum()
     blocks = _blocks(d, dim_batch)
     G = [_seed(b, N, d, start, dev) * (1 if seeds is None else seeds) for start, b in blocks]
-    for layer, m, i in _sweeps(maps, range(len(maps) - 1, last - 1, -1), blocks, _contracts(maps, d, d)):
+    for layer, m, i in _sweeps(model, maps, range(len(maps) - 1, last - 1, -1), blocks, _contracts(maps, d, d)):
         G[i], mid, est = vjp(m, G[i], None, row_w)
         start, b = blocks[i]
         if "mid" in kinds:
@@ -247,7 +254,9 @@ def input_reads_doc(model, ids: torch.Tensor, covectors: torch.Tensor, layers: l
     at = torch.as_tensor(layers, device=dev)
     rows = torch.ones(N, device=dev) if seed_rows is None else seed_rows.to(dev).float()
     G = torch.zeros(len(c), N, d, device=dev)
+    from neuron_lens.layers import resident
     for layer in range(int(at.max()), -1, -1):
+        resident(model, layer)
         seed = (c * (at == layer)[:, None])[:, None] * (rows / rows.sum())[None, :, None]
         G, _, _ = vjp(maps[layer], G, seed)
     return G.sum(1) if source_rows is None else G[:, source_rows.to(dev)].sum(1)

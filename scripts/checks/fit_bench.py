@@ -9,6 +9,9 @@ a new machine:
         [--dim-batch 128,256,512] [--compare-fp32]
     python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3.5-35B-A3B \
         --seq-len 512 --dim-batch 16,32,64
+    python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-32B --offload 12
+
+``--offload N`` keeps the first N layers on the GPU and streams the rest (``layers.offload``).
 """
 import argparse
 import time
@@ -17,7 +20,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens.corpus import lens_docs
-from neuron_lens.layers import CHUNK
+from neuron_lens.layers import CHUNK, offload
 from neuron_lens.paths import CORPUS_DIR
 from neuron_lens.transport import (
     SKIP_FIRST,
@@ -37,9 +40,9 @@ def sync(device: str) -> None:
         torch.mps.synchronize()
 
 
-def load(model_id: str, dtype, device: str):
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    return decoder_stack(model).to(device).eval().requires_grad_(False)
+def load(model_id: str, dtype, device: str, keep: int | None = None):
+    stack = decoder_stack(AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)).eval().requires_grad_(False)
+    return stack.to(device) if keep is None else offload(stack, device, keep)
 
 
 def active(layer, T: int) -> int:
@@ -97,6 +100,7 @@ def main() -> None:
     ap.add_argument("--compare-fp32", action="store_true")
     ap.add_argument("--seq-len", type=int, default=128, help="one document of exactly this many tokens")
     ap.add_argument("--acc-device", default=None, help="where the sums live (default: the model's)")
+    ap.add_argument("--offload", type=int, default=None, help="layers kept on the GPU; the rest stream from host memory")
     args = ap.parse_args()
     dtype = torch.float32 if args.device == "cpu" else torch.bfloat16
     print(f"device {args.device}, {dtype}", flush=True)
@@ -104,7 +108,7 @@ def main() -> None:
         tok = AutoTokenizer.from_pretrained(model_id)
         row = lens_docs(CORPUS_DIR / "dclm.jsonl", tok, 1, args.seq_len, SKIP_FIRST + 2, full=True)[0]
         ids = torch.tensor(row)
-        model = load(model_id, dtype, args.device)
+        model = load(model_id, dtype, args.device, args.offload)
         print(f"one document of {len(row)} tokens", flush=True)
         print(f"\n{model_id}: {len(model.layers)} layers, d {model.config.hidden_size}", flush=True)
         est = {}
