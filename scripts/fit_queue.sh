@@ -15,7 +15,6 @@ source .venv/bin/activate
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}" PYTHONUNBUFFERED=1
 DOCS="${DOCS:-1000}"
 DROP_GB="${DROP_GB:-10}"
-CACHE="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}"
 mkdir -p logs
 fit() {  # fit <gpu> <lens> <model> <stem> [02_fit.py flags]
     local gpu="$1" lens="$2" model="$3" name="fit_${2,,}_$4"; shift 4
@@ -52,9 +51,13 @@ for spec in "$@"; do
         failed=1
         continue
     fi
-    dir="$CACHE/models--${model//\//--}"
-    if [ -d "$dir" ] && [ "$(du -sk "$dir" | cut -f1)" -gt $((DROP_GB * 1024 * 1024)) ]; then
-        rm -rf "$dir"
+    gb=$(python - "$model" <<'EOF'
+import sys
+from huggingface_hub import scan_cache_dir
+print(sum(r.size_on_disk for r in scan_cache_dir().repos if r.repo_type == "model" and r.repo_id == sys.argv[1]) >> 30)
+EOF
+)
+    if [ "$gb" -gt "$DROP_GB" ] && hf cache rm -y "model/$model" > /dev/null; then
         echo "$(date '+%F %T') dropped $model from the cache"
     fi
 done
