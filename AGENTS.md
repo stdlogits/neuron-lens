@@ -172,13 +172,13 @@ by `scripts/12_release.py`, one card per repo covering both models.
   effect. Effect sizes need the activation scale (`act_top`); don't rank neurons by lens
   probability across layers.
 - **Which side, which depth** (findings §6, §7, for Qwen3-8B; Gemma 4 has the same shape at its own
-  depths, §13). Input side: the S-lens read at L0-L7 (raw at L0-L4, naming literal tokens), both
+  depths, its `read_R` from L11, §13). Input side: the S-lens read at L0-L7 (raw at L0-L4, naming literal tokens), both
   lenses at L8, the R-lens `mid` read from L9 (`read_S_z` as a concept-level second view), and at
   L13-L20 the R-lens read with exact drivers and activations beside it. Write side: the
   S-lens (`write_S`) through L8, where early neurons write back the tokens they detect; the R-lens,
   legible from about L4. Heads: OV `ov_S` through L8, `ov_R` from L9; QK `qk_S` throughout (uninformative
   at L13-L20), and its diagonal as `qk_self_S` through L20 (duplicate-token heads) and `qk_self_R` late (L28-L35, mixed
-  at L21-L27; Gemma 4 from L24, weaker; findings §11, §13). These bands are a prior: weigh a unit's sides by its reads,
+  at L21-L27; Gemma 4 from L24; findings §11, §13). These bands are a prior: weigh a unit's sides by its reads,
   contexts and drivers together. Don't force a word reading where a side is uninformative, and say which side a
   description rests on.
 - **Firings are a sample, not a ground truth.** A top firing is one context, summarized by a token. Where a read and a

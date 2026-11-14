@@ -419,12 +419,12 @@ Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
 ![Gemma 4: lens reads against steering](figures/19_gemma_steering.png)
 
 - **The S-lens reads early layers' input side.** Through L8 of Qwen3-8B (L13 of Gemma 4) it names the
-  tokens that make a neuron fire (Qwen3-8B, L0: the firing token is in its top 10 for 38% of top
+  tokens that make a neuron fire (Qwen3-8B, L0: the firing token is in its top 10 for 36% of top
   firings; another neuron's read: under 0.1%), and what early neurons write back. Past them its raw reads are
   swamped by hub tokens; z-scored across the layer they name concepts.
-- **From L9 of Qwen3-8B, read input directions with `r-lens/mid.pt`.** It names the exact tokens that
-  drive a neuron more often than the S-lens (5-8% of its top 10 at L9-L12 and L22-L30). L13-L20 is hard
-  for every weight-only input read.
+- **From L9 of Qwen3-8B (L11 of Gemma 4), read input directions with `r-lens/mid.pt`,** made vectors through
+  `scale.pt`. It names the exact tokens that drive a neuron more often than the S-lens (Qwen3-8B: 4-8% of its top 10
+  at L9-L12 and L22-L30). L13-L20 of Qwen3-8B is hard for every weight-only input read.
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
@@ -512,7 +512,7 @@ def seek_text(q: dict, g: dict) -> str:
             f"{qb['L28-35']['rho_seek']['RS']:+.2f} across Qwen3-8B's L28-L35 heads (another head's read "
             f"{qb['L28-35']['rho_seek_control']:+.2f}, `qk_self_S` {qb['L28-35']['rho_seek']['SS']:+.2f}), and it finds the "
             f"{qs['heads']} heads of L21-L35 that seek and lower that token's logit, copy suppression, at AUROC {qs['RS']:.2f}. "
-            f"On Gemma 4 the same holds more weakly: {gb['L24-35']['rho_seek']['RS']:+.2f} at L24-L35 and "
+            f"On Gemma 4 the same holds: {gb['L24-35']['rho_seek']['RS']:+.2f} at L24-L35 and "
             f"{gb['L36-47']['rho_seek']['RS']:+.2f} at L36-L47 (`qk_self_S` {gb['L24-35']['rho_seek']['SS']:+.2f} and "
             f"{gb['L36-47']['rho_seek']['SS']:+.2f}), AUROC {gs['RS']:.2f} for its {gs['heads']} seek-and-suppress heads (§13).")
 
@@ -657,7 +657,7 @@ heads) and `qk_self_R` late (L28-L35; mixed at L21-L27), the heads that look up 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
 Gemma 4's map has the same shape at its own depths: `read_S` through L13 (falling to under 1% at L9 and rising again at L10-L13),
-`write_R` from about L33 (for steering from L11), and `qk_self_R` from L24, more weakly than Qwen3-8B's (§13).
+`read_R` from L11, `write_R` from about L33 (for steering from L11), and `qk_self_R` from L24 (§13).
 
 ![Both models by relative depth](figures/18_two_models.png)
 
