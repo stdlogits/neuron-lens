@@ -238,7 +238,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   commands to copy the results back. The `score` half runs where the comparison lenses are.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,
   runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
-  torch's default of one thread per core makes CPU ops on small tensors spin for minutes. Run one
+  torch's default of one thread per core makes CPU ops on small tensors spin for minutes. If Hub
+  downloads stall (a burst, then minutes at 0 B/s, as Xet did on a vast.ai box), export
+  `HF_HUB_DISABLE_XET=1`: plain HTTP ran at 170 MB/s there. Run one
   process per GPU (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`) and copy `data/fits/` off a
   temporary machine before it goes. `scripts/fit_queue.sh` fits a list of models on a two-GPU box
   (the scale and the R-lens on GPU 0, the S-lens on GPU 1), downloading each model at its turn and
