@@ -5,8 +5,11 @@ text side, three ways, each as the rank of that label among all the modality's l
 
 1. **text firing** (causal): the neuron's activation over a label's tokens when the model reads
    ``"Here is an example: {label}."``, one prompt per label;
-2. **S-lens text read** (weights): ``u = c · K_L`` (the text S-lens, ``mid`` target) scored on
-   each label's tokens (the mean of their centred embeddings);
+2. **S-lens text read** (weights): ``u = c · K_L`` (the text S-lens, ``mid`` target), ``c`` the pole's read covector as
+   the catalog's ``read_S`` takes it (``neurons.poles``), scored on each label's tokens (the mean of their centred
+   embeddings). The recorded run (findings §15) normalized the gate and up rows in the raw basis and read every pole as
+   ``â ± b̂``: within a median cosine of 0.995-1.000 of the catalog's covector by layer, except on the negative-lobe poles
+   (0.1-15% of a layer's, most at L4-L8), which the catalog reads by the up row alone (median cosine −0.6 to −0.8);
 3. **R-lens write** (weights): ``W_U diag(γ) J_L w`` (the text R-lens; the identity at the last
    layer) scored on the label's first token.
 
@@ -28,6 +31,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from neuron_lens.catalog import lobe_signs
+from neuron_lens.neurons import poles
 from neuron_lens.paths import DATA, FITS
 from neuron_lens.transport import Accumulator, decoder_stack
 
@@ -129,10 +134,8 @@ def main():
                 cols = (Lyr * f + ns).tolist()
                 F_ = p * fire[:, cols].to(dev).float()  # [labels, k]
                 layer = model.layers[Lyr]
-                g = layer.pre_feedforward_layernorm.weight.float()
-                a = layer.mlp.gate_proj.weight[ns].float() * g
-                b = layer.mlp.up_proj.weight[ns].float() * g
-                c = a / a.norm(dim=1, keepdim=True) + p * b / b.norm(dim=1, keepdim=True)  # [k, d]
+                # The poles' read covectors as the catalog's read_S takes them (neurons.poles: + poles, then −).
+                c = poles(MODEL, Lyr, lobe_signs(Lyr, MODEL), dev)["cov"][ns.to(dev) + (0 if p > 0 else f)]  # [k, d]
                 K = K_of(Lyr).to(dev)
                 S_ = lab_emb.to(dev) @ (c @ K).T  # [labels, k]
                 w = p * float(layer.layer_scalar) * (layer.post_feedforward_layernorm.weight.float()[:, None]

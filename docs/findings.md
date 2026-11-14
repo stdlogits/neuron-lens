@@ -1211,7 +1211,10 @@ label's tokens. A rank of 0.95 or more passes; a shuffled pairing passes 5%.
 
 **Limits.** Label words are English and scored in one template; a rank among the modality's labels
 says the pole prefers this label to the others, not that the concept is all it does. Exemplar labels
-come from the collections, whose coverage of a concept varies.
+come from the collections, whose coverage of a concept varies. The S-lens test read every pole as `â ± b̂` with the rows
+at unit length in the raw basis, as measured; the catalog's `read_S` now normalizes them in the residual's metric (§13;
+median cosine 0.995-1.000 by layer) and reads the negative-lobe poles by the up row alone (§17; 0.1-15% of a layer's
+poles, most at L4-L8), which `checks/crossmodal.py` now follows. It was not rerun.
 
 ## §16. Attention heads in image and audio contexts
 
