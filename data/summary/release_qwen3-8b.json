@@ -96,5 +96,9 @@
  "docs": 63990,
  "positions": 15367795,
  "kept": 103830,
- "causal_picks": 1194
+ "causal_picks": 1194,
+ "scale": {
+  "docs": 1000,
+  "split": "0.01-0.04"
+ }
 }

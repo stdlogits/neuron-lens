@@ -1051,7 +1051,13 @@ while its write reads were fine.
   2 → 6, a border pole 2 → 5) and trades a word's spelling variants for its neighbours in meaning (Qwen3-8B L8: a "period"
   pole's `-period`, `_period` for ` cycle`, ` cycles`). Gemma 4's `write_S` stays
   illegible at L0-L6 under every read tested. The catalog takes the polar factor for every vector read against S-lens
-  footprints: `write_S`, `write_orth_S`, `ov_S` and the firings' `before_S` and `mlp_S`.
+  footprints: `write_S`, `write_orth_S`, `ov_S` and the firings' `before_S` and `mlp_S`. At the firings the Euclidean
+  `before_S` listed the layer's hubs: 95-100% of its top 10 were among the 100 tokens the layer's poles list most. Through
+  the polar factor, the share of a pole's top firings whose peak token is in its top 16 rises at Qwen3-8B L0-L28 from
+  0.02-0.14 to 0.13-0.56 (hubs 0.45-0.90 of the top 10; L35 0.03 → 0.06), and on Gemma 4 at L0, L8 and L12 from
+  0.00-0.07 to 0.17-0.37 (L4 0.01 → 0.04). From Gemma 4's L16 both reads list hubs only (0.96-1.00), and peak tokens
+  reach their top 16 at 0.00-0.17 either way. `before_S_z`, z-scored across the layer's poles, gains less (Qwen3-8B L0
+  0.58 → 0.66; Gemma 4 L0 0.05 → 0.34, L8 0.17 → 0.34). The sources and `before_R` are unchanged.
 - **Tested and dropped for `write_S`:** whitening by the residual's covariance (total, between-token, or within-token as in
   LDA), metrics from what reads the write downstream (the next layer's read rows, the logit pullback), the reciprocal of
   `read_R`'s metric, and down-weighting coordinates by an estimate of their training noise (`w / γ_post²`): none reads
