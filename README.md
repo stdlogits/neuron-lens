@@ -151,7 +151,7 @@ every column.
 **Which read to use where.** No single read works at every depth. The S-lens names what early neurons detect, and the R-lens
 says what a neuron writes and, from the middle of the network on, what it reads
 (findings [§7](docs/findings.md#7-what-each-read-names)). For Qwen3-8B (Gemma 4's map has the same shape at its own depths: the S-lens
-for inputs through L13 and the R-lens for writes from L11, while its R-lens read of an input direction doesn't work yet;
+for inputs through L13, and the R-lens for inputs and writes from L11;
 [§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)):
 
 | layers | what drives a pole | what a pole writes |
@@ -323,8 +323,8 @@ the attended token ranks in the head's actual output at each firing (Spearman +0
 another head). The QK map finds the duplicate-token heads from the weights (AUROC 0.96), and late
 heads attend to the classes they copy or suppress. With an R-lens query against S-lens keys (`qk_self_R`)
 it finds the late heads that attend to earlier copies of the token their position is about to say; with a
-negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91; on Gemma 4 the
-same, more weakly) ([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token),
+negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91; on Gemma 4, 25
+heads at L24-L47, AUROC 0.88) ([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token),
 [§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
 
 ![Which lens on each side of a head](docs/figures/16_head_lens_sides.png)
@@ -347,8 +347,10 @@ catalog shows the same picture. The R-lens read of a write predicts steering fro
 0.53 at L12-L23, 0.82 at L24-L35, 0.97 at L36-L47), ahead of the logit lens; before L11, pushes at a
 neuron's natural size move the output too little for either lens to predict, though larger pushes
 still raise the tokens the R-lens names. The S-lens read of a neuron's input names its firing token through L13, about the same
-relative depth as Qwen3-8B's L8, and the write promotes the next token from L33. The R-lens read of a neuron's input direction
-fails on this model, a matter of how the read rows meet the input norm. Claude Haiku labelled every pole and head;
+relative depth as Qwen3-8B's L8, and the write promotes the next token from L33. Its R-lens read of a neuron's input direction
+names the exact drivers for 29% of poles, once the read row, a covector, is made a vector by the residual's own scale:
+Gemma 4's residual coordinates differ in scale by up to 1,600×, and read as a vector in the raw basis, as released, it named
+them for 2% ([Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) spotted the junk reads). Claude Haiku labelled every pole and head;
 checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are near
 chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.72)
 ([§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).

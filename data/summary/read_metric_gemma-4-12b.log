@@ -1,0 +1,60 @@
+the catalog's read_R_z top 64 in before_R_z's [another pole], google/gemma-4-12B, mean over layers
+L0-11    0.008 [0.001]
+L12-23   0.042 [0.001]
+L24-35   0.121 [0.001]
+L36-47   0.152 [0.001]
+L0-47    0.081 [0.001]
+
+read_R by covector-to-vector map, google/gemma-4-12B: net (exact drivers) / firing (top 64 in before_R_z's) / hub
+  L6 euclidean net +0.005  firing 0.001 [0.001]  hub 0.36
+  L6 w/γ       net +0.014  firing 0.002 [0.001]  hub 0.32
+  L6 w/γ reg   net +0.014  firing 0.002 [0.001]  hub 0.31
+  L6 σ⊙w       net +0.018  firing 0.002 [0.001]  hub 0.30
+  L6 σ²γ⊙w     net +0.018  firing 0.002 [0.001]  hub 0.37
+  L6 1/‖J‖     net +0.013  firing 0.003 [0.001]  hub 0.52
+  L12 euclidean net +0.017  firing 0.002 [0.001]  hub 0.32
+  L12 w/γ       net +0.027  firing 0.002 [0.001]  hub 0.32
+  L12 w/γ reg   net +0.132  firing 0.014 [0.001]  hub 0.31
+  L12 σ⊙w       net +0.167  firing 0.019 [0.001]  hub 0.29
+  L12 σ²γ⊙w     net +0.157  firing 0.019 [0.001]  hub 0.29
+  L12 1/‖J‖     net +0.017  firing 0.002 [0.001]  hub 0.36
+  L18 euclidean net +0.044  firing 0.005 [0.001]  hub 0.16
+  L18 w/γ       net +0.100  firing 0.012 [0.001]  hub 0.21
+  L18 w/γ reg   net +0.273  firing 0.034 [0.001]  hub 0.21
+  L18 σ⊙w       net +0.312  firing 0.041 [0.001]  hub 0.17
+  L18 σ²γ⊙w     net +0.327  firing 0.042 [0.001]  hub 0.14
+  L18 1/‖J‖     net +0.154  firing 0.021 [0.001]  hub 0.11
+  L24 euclidean net +0.015  firing 0.002 [0.001]  hub 0.25
+  L24 w/γ       net +0.121  firing 0.022 [0.001]  hub 0.24
+  L24 w/γ reg   net +0.133  firing 0.025 [0.001]  hub 0.23
+  L24 σ⊙w       net +0.142  firing 0.037 [0.001]  hub 0.14
+  L24 σ²γ⊙w     net +0.134  firing 0.040 [0.001]  hub 0.09
+  L24 1/‖J‖     net +0.045  firing 0.011 [0.001]  hub 0.14
+  L30 euclidean net +0.094  firing 0.004 [0.001]  hub 0.31
+  L30 w/γ       net +0.258  firing 0.089 [0.001]  hub 0.06
+  L30 w/γ reg   net +0.222  firing 0.099 [0.001]  hub 0.06
+  L30 σ⊙w       net +0.256  firing 0.105 [0.001]  hub 0.06
+  L30 σ²γ⊙w     net +0.212  firing 0.096 [0.001]  hub 0.08
+  L30 1/‖J‖     net +0.149  firing 0.044 [0.001]  hub 0.09
+  L36 euclidean net +0.059  firing 0.003 [0.001]  hub 0.35
+  L36 w/γ       net +0.582  firing 0.190 [0.001]  hub 0.02
+  L36 w/γ reg   net +0.586  firing 0.190 [0.001]  hub 0.02
+  L36 σ⊙w       net +0.544  firing 0.205 [0.001]  hub 0.03
+  L36 σ²γ⊙w     net +0.472  firing 0.179 [0.001]  hub 0.05
+  L36 1/‖J‖     net +0.549  firing 0.150 [0.001]  hub 0.01
+  L42 euclidean net +0.068  firing 0.001 [0.001]  hub 0.43
+  L42 w/γ       net +0.489  firing 0.118 [0.001]  hub 0.01
+  L42 w/γ reg   net +0.465  firing 0.119 [0.001]  hub 0.01
+  L42 σ⊙w       net +0.417  firing 0.127 [0.001]  hub 0.01
+  L42 σ²γ⊙w     net +0.345  firing 0.115 [0.001]  hub 0.02
+  L42 1/‖J‖     net +0.447  firing 0.107 [0.001]  hub 0.02
+
+write_S, Euclidean against the footprints or through the S-lens's polar factor, google/gemma-4-12B: net (peak tokens)
+  L0 euclidean net +0.062
+  L0 polar     net +0.075
+  L11 euclidean net +0.108
+  L11 polar     net +0.179
+  L12 euclidean net +0.183
+  L12 polar     net +0.243
+  L13 euclidean net +0.202
+  L13 polar     net +0.274

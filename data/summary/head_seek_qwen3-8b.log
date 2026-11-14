@@ -1,63 +1,63 @@
 QK's cross-lens diagonal, Qwen/Qwen3-8B: 35 layers × 32 heads from L1; RS (R-lens query, S-lens key), SS (08_reads.py's qk_self_S, recomputed: max |Δz| 0.000), RR; in context over every 32th activation document (2,000), queries with an earlier copy of the target per layer (mean): lens 153,674, final 194,492, ctrl 432,204
 
 by band: median over heads of each head's median z, RS / SS / RR; median rho(RS, ov_R) over tokens; attention per matching key relative to uniform, mean over heads, lens / final / ctrl
-  L1-8: +0.08 / +0.33 / +0.48   rho_ov +0.02   lift 5.13 / 1.78 / 0.81
-  L9-12: +0.18 / +1.13 / +0.90   rho_ov +0.02   lift 0.77 / 1.18 / 0.79
-  L13-20: +0.19 / +1.33 / +1.26   rho_ov +0.04   lift 1.42 / 1.51 / 0.82
-  L21-27: +0.18 / +1.28 / +0.88   rho_ov +0.02   lift 2.36 / 1.91 / 0.79
-  L28-35: +0.20 / +1.17 / +0.93   rho_ov -0.01   lift 2.73 / 2.12 / 0.77
-  L1-35: +0.17 / +1.23 / +0.88   rho_ov +0.02   lift 2.68 / 1.75 / 0.80
+  L1-8: +0.08 / +0.33 / +0.29   rho_ov +0.01   lift 5.13 / 1.78 / 0.81
+  L9-12: +0.18 / +1.13 / +0.60   rho_ov +0.03   lift 0.77 / 1.18 / 0.79
+  L13-20: +0.22 / +1.33 / +1.71   rho_ov +0.04   lift 1.42 / 1.51 / 0.82
+  L21-27: +0.25 / +1.28 / +1.54   rho_ov +0.03   lift 2.36 / 1.91 / 0.79
+  L28-35: +0.19 / +1.17 / +0.94   rho_ov -0.00   lift 2.73 / 2.12 / 0.77
+  L1-35: +0.19 / +1.23 / +1.08   rho_ov +0.02   lift 2.68 / 1.75 / 0.80
 
 Spearman across heads with seek (lens target): RS own / RS control head / SS / RR; RS with seek (final target); seek with effect; RS with effect
-  L1-8: -0.16 / -0.16 / -0.15 / +0.02   final -0.04   seek–effect +0.20   RS–effect -0.01
-  L9-12: +0.09 / -0.01 / +0.49 / +0.41   final +0.13   seek–effect +0.48   RS–effect +0.09
-  L13-20: +0.39 / +0.06 / +0.27 / +0.50   final +0.31   seek–effect +0.04   RS–effect +0.06
-  L21-27: +0.21 / +0.09 / +0.09 / +0.18   final +0.23   seek–effect +0.00   RS–effect -0.33
-  L28-35: +0.62 / +0.11 / -0.17 / +0.12   final +0.58   seek–effect +0.05   RS–effect -0.05
-  L1-35: +0.12 / +0.02 / -0.11 / +0.05   final +0.25   seek–effect +0.16   RS–effect +0.02
+  L1-8: -0.15 / -0.12 / -0.15 / +0.07   final -0.01   seek–effect +0.20   RS–effect -0.04
+  L9-12: +0.09 / +0.02 / +0.49 / +0.41   final +0.17   seek–effect +0.48   RS–effect +0.06
+  L13-20: +0.46 / +0.15 / +0.27 / +0.57   final +0.43   seek–effect +0.04   RS–effect +0.01
+  L21-27: +0.33 / +0.11 / +0.09 / +0.21   final +0.33   seek–effect +0.00   RS–effect -0.37
+  L28-35: +0.54 / +0.08 / -0.17 / -0.13   final +0.50   seek–effect +0.05   RS–effect -0.12
+  L1-35: +0.13 / +0.03 / -0.11 / +0.05   final +0.28   seek–effect +0.16   RS–effect -0.03
 
 L21-35, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score
-  seek and suppress (17 heads): RS 0.91, SS 0.41, RR 0.75, −ov_R_copy 0.91
+  seek and suppress (17 heads): RS 0.91, SS 0.41, RR 0.69, −ov_R_copy 0.91
     L24h7, L24h21, L25h30, L27h7, L28h1, L28h2, L28h3, L28h23, L29h4, L29h5, L29h7, L29h16, L29h18, L31h30, L32h1, L32h9, L33h21
-  seek and boost (79 heads): RS 0.75, SS 0.32, RR 0.50, ov_R_copy 0.69
+  seek and boost (79 heads): RS 0.67, SS 0.32, RR 0.25, ov_R_copy 0.69
   copiers (ov_R_copy > 0.5): 169 heads, median seek final +1.09, lens +1.74; median effect (lens) +0.266
   suppressors (ov_R_copy < −0.5): 70 heads, median seek final +1.00, lens +1.76; median effect (lens) -0.153
 
 the top 12 heads by RS from L21:
-  L33h21: RS +2.42 SS +2.08 RR +1.42 rho_ov -0.41 ov_R_copy -1.00; seek lens +5.56 final +3.15, effect -1.716
-  L27h7: RS +2.02 SS +1.42 RR +3.11 rho_ov -0.68 ov_R_copy -0.96; seek lens +3.01 final +1.01, effect -0.673
-  L25h28: RS +1.47 SS +1.33 RR +0.81 rho_ov -0.34 ov_R_copy -0.98; seek lens +2.71 final +1.41, effect -0.158
-  L29h16: RS +1.36 SS +1.21 RR +1.83 rho_ov -0.29 ov_R_copy -0.98; seek lens +4.58 final +1.54, effect -0.514
-  L32h9: RS +1.32 SS +1.04 RR +1.62 rho_ov -0.41 ov_R_copy -1.00; seek lens +2.88 final +1.33, effect -0.688
-  L31h30: RS +1.32 SS +1.00 RR +1.31 rho_ov -0.18 ov_R_copy -0.55; seek lens +9.33 final +6.82, effect -0.425
-  L25h30: RS +1.25 SS +1.01 RR +1.13 rho_ov -0.18 ov_R_copy -0.97; seek lens +4.68 final +3.81, effect -0.383
-  L28h23: RS +1.25 SS +1.09 RR +1.67 rho_ov -0.43 ov_R_copy -0.86; seek lens +6.34 final +6.26, effect -0.132
-  L28h7: RS +1.20 SS +1.55 RR +5.16 rho_ov -0.57 ov_R_copy -0.80; seek lens +1.76 final +0.62, effect -1.790
-  L21h9: RS +1.15 SS +1.28 RR +3.65 rho_ov -0.18 ov_R_copy -0.24; seek lens +2.36 final +2.28, effect +0.007
-  L21h11: RS +1.14 SS +1.29 RR +3.71 rho_ov +0.23 ov_R_copy +0.33; seek lens +2.26 final +2.07, effect +0.017
-  L28h3: RS +1.13 SS +1.14 RR +1.51 rho_ov +0.03 ov_R_copy +0.37; seek lens +5.69 final +3.83, effect -0.056
+  L33h21: RS +2.43 SS +2.08 RR +2.19 rho_ov -0.39 ov_R_copy -1.00; seek lens +5.56 final +3.15, effect -1.716
+  L27h7: RS +2.20 SS +1.42 RR +4.10 rho_ov -0.66 ov_R_copy -0.96; seek lens +3.01 final +1.01, effect -0.673
+  L29h16: RS +1.66 SS +1.21 RR +2.45 rho_ov -0.24 ov_R_copy -0.98; seek lens +4.58 final +1.54, effect -0.514
+  L32h9: RS +1.42 SS +1.04 RR +1.64 rho_ov -0.35 ov_R_copy -1.00; seek lens +2.88 final +1.33, effect -0.688
+  L31h30: RS +1.39 SS +1.00 RR +1.20 rho_ov -0.19 ov_R_copy -0.55; seek lens +9.33 final +6.82, effect -0.425
+  L28h23: RS +1.38 SS +1.09 RR +1.52 rho_ov -0.43 ov_R_copy -0.86; seek lens +6.34 final +6.26, effect -0.132
+  L25h30: RS +1.37 SS +1.01 RR +2.50 rho_ov -0.14 ov_R_copy -0.97; seek lens +4.68 final +3.81, effect -0.383
+  L29h18: RS +1.36 SS +1.17 RR +2.34 rho_ov -0.31 ov_R_copy -0.92; seek lens +4.05 final +1.81, effect -0.477
+  L25h28: RS +1.35 SS +1.33 RR +1.68 rho_ov -0.17 ov_R_copy -0.98; seek lens +2.71 final +1.41, effect -0.158
+  L28h7: RS +1.32 SS +1.55 RR +5.24 rho_ov -0.58 ov_R_copy -0.80; seek lens +1.76 final +0.62, effect -1.790
+  L28h0: RS +1.27 SS +1.17 RR +1.87 rho_ov -0.01 ov_R_copy +0.66; seek lens +7.20 final +5.79, effect +0.064
+  L28h3: RS +1.24 SS +1.14 RR +1.83 rho_ov +0.03 ov_R_copy +0.37; seek lens +5.69 final +3.83, effect -0.056
 
 the top 12 heads by seek (lens):
-  L3h5: RS -0.18 SS +3.76 RR +3.14 rho_ov -0.01 ov_R_copy +0.13; seek lens +19.40 final +2.26, effect -0.000
-  L3h30: RS +0.14 SS +0.16 RR +0.03 rho_ov +0.02 ov_R_copy -0.13; seek lens +19.02 final +2.27, effect +0.001
-  L3h12: RS -0.04 SS +4.80 RR +3.79 rho_ov +0.13 ov_R_copy +0.32; seek lens +18.07 final +2.21, effect -0.004
-  L3h4: RS -0.07 SS -0.16 RR -0.30 rho_ov -0.07 ov_R_copy -0.03; seek lens +17.77 final +2.28, effect +0.005
-  L3h7: RS -0.09 SS +5.60 RR +3.78 rho_ov +0.10 ov_R_copy +0.18; seek lens +16.89 final +2.14, effect -0.002
-  L3h20: RS +0.08 SS -0.17 RR +0.61 rho_ov +0.03 ov_R_copy +0.18; seek lens +16.70 final +2.08, effect +0.004
-  L3h6: RS +0.03 SS +5.63 RR +3.51 rho_ov +0.01 ov_R_copy +0.09; seek lens +16.28 final +2.07, effect +0.015
-  L3h14: RS +0.12 SS +4.23 RR +2.11 rho_ov -0.03 ov_R_copy -0.24; seek lens +15.96 final +2.28, effect +0.002
-  L3h28: RS +0.27 SS +3.89 RR +3.31 rho_ov +0.02 ov_R_copy +0.12; seek lens +15.29 final +1.93, effect -0.000
-  L3h31: RS +0.14 SS +1.00 RR +1.07 rho_ov -0.01 ov_R_copy -0.09; seek lens +15.08 final +1.35, effect +0.004
-  L3h24: RS +0.03 SS +0.43 RR +0.69 rho_ov +0.04 ov_R_copy -0.08; seek lens +14.40 final +1.85, effect +0.001
-  L3h13: RS +0.12 SS -1.17 RR -0.26 rho_ov +0.07 ov_R_copy -0.11; seek lens +14.20 final +2.13, effect -0.002
+  L3h5: RS -0.19 SS +3.76 RR +2.30 rho_ov -0.02 ov_R_copy +0.13; seek lens +19.40 final +2.26, effect -0.000
+  L3h30: RS +0.15 SS +0.16 RR -0.18 rho_ov -0.00 ov_R_copy -0.13; seek lens +19.02 final +2.27, effect +0.001
+  L3h12: RS -0.09 SS +4.80 RR +2.75 rho_ov +0.13 ov_R_copy +0.32; seek lens +18.07 final +2.21, effect -0.004
+  L3h4: RS -0.10 SS -0.16 RR -0.10 rho_ov -0.05 ov_R_copy -0.03; seek lens +17.77 final +2.28, effect +0.005
+  L3h7: RS -0.05 SS +5.60 RR +3.06 rho_ov +0.13 ov_R_copy +0.18; seek lens +16.89 final +2.14, effect -0.002
+  L3h20: RS +0.08 SS -0.17 RR +0.54 rho_ov +0.04 ov_R_copy +0.18; seek lens +16.70 final +2.08, effect +0.004
+  L3h6: RS +0.01 SS +5.63 RR +2.96 rho_ov +0.00 ov_R_copy +0.09; seek lens +16.28 final +2.07, effect +0.015
+  L3h14: RS +0.02 SS +4.23 RR +1.76 rho_ov -0.05 ov_R_copy -0.24; seek lens +15.96 final +2.28, effect +0.002
+  L3h28: RS +0.28 SS +3.89 RR +2.87 rho_ov +0.04 ov_R_copy +0.12; seek lens +15.29 final +1.93, effect -0.000
+  L3h31: RS +0.15 SS +1.00 RR +0.83 rho_ov -0.04 ov_R_copy -0.09; seek lens +15.08 final +1.35, effect +0.004
+  L3h24: RS +0.01 SS +0.43 RR +0.30 rho_ov +0.02 ov_R_copy -0.08; seek lens +14.40 final +1.85, effect +0.001
+  L3h13: RS +0.13 SS -1.17 RR -0.60 rho_ov +0.07 ov_R_copy -0.11; seek lens +14.20 final +2.13, effect -0.002
 
 named:
-  L32h9: RS +1.32 SS +1.04 RR +1.62 rho_ov -0.41 ov_R_copy -1.00; seek lens +2.88 final +1.33, effect -0.688
-  L33h21: RS +2.42 SS +2.08 RR +1.42 rho_ov -0.41 ov_R_copy -1.00; seek lens +5.56 final +3.15, effect -1.716
-  L27h7: RS +2.02 SS +1.42 RR +3.11 rho_ov -0.68 ov_R_copy -0.96; seek lens +3.01 final +1.01, effect -0.673
-  L31h30: RS +1.32 SS +1.00 RR +1.31 rho_ov -0.18 ov_R_copy -0.55; seek lens +9.33 final +6.82, effect -0.425
-  L28h23: RS +1.25 SS +1.09 RR +1.67 rho_ov -0.43 ov_R_copy -0.86; seek lens +6.34 final +6.26, effect -0.132
-  L29h11: RS +0.70 SS +1.50 RR +0.99 rho_ov -0.04 ov_R_copy +0.33; seek lens +9.15 final +9.46, effect +0.106
-  L23h4: RS +0.03 SS +1.46 RR +0.80 rho_ov -0.08 ov_R_copy +0.91; seek lens +3.90 final +6.55, effect +0.040
-  L22h23: RS -0.02 SS +3.06 RR +1.45 rho_ov +0.03 ov_R_copy +0.97; seek lens +1.60 final +4.05, effect +0.069
-  L1h28: RS +0.40 SS +5.25 RR +2.44 rho_ov +0.13 ov_R_copy +0.18; seek lens +5.31 final +1.38, effect -0.009
+  L32h9: RS +1.42 SS +1.04 RR +1.64 rho_ov -0.35 ov_R_copy -1.00; seek lens +2.88 final +1.33, effect -0.688
+  L33h21: RS +2.43 SS +2.08 RR +2.19 rho_ov -0.39 ov_R_copy -1.00; seek lens +5.56 final +3.15, effect -1.716
+  L27h7: RS +2.20 SS +1.42 RR +4.10 rho_ov -0.66 ov_R_copy -0.96; seek lens +3.01 final +1.01, effect -0.673
+  L31h30: RS +1.39 SS +1.00 RR +1.20 rho_ov -0.19 ov_R_copy -0.55; seek lens +9.33 final +6.82, effect -0.425
+  L28h23: RS +1.38 SS +1.09 RR +1.52 rho_ov -0.43 ov_R_copy -0.86; seek lens +6.34 final +6.26, effect -0.132
+  L29h11: RS +0.82 SS +1.50 RR +1.18 rho_ov -0.06 ov_R_copy +0.33; seek lens +9.15 final +9.46, effect +0.106
+  L23h4: RS +0.25 SS +1.46 RR +1.39 rho_ov -0.16 ov_R_copy +0.91; seek lens +3.90 final +6.55, effect +0.040
+  L22h23: RS +0.06 SS +3.06 RR +1.58 rho_ov +0.09 ov_R_copy +0.97; seek lens +1.60 final +4.05, effect +0.069
+  L1h28: RS +0.55 SS +5.25 RR +3.22 rho_ov +0.17 ov_R_copy +0.18; seek lens +5.31 final +1.38, effect -0.009

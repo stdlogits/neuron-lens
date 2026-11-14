@@ -1,9 +1,9 @@
-direct weight edges, google/gemma-4-12B: top 64 in and out per pole by |push| among |cos| >= 5.0/sqrt(d) = 0.081; residual RMS at the MLP input L0 5.2, L4 0.9, L8 0.8, L12 1.8, L16 3.9, L20 3.5, L24 4.0, L28 2.7, L32 2.5, L36 2.5, L40 1.6, L44 1.5, L47 1.0
+direct weight edges, google/gemma-4-12B: top 64 in and out per pole by |push| among |cos| >= 5.0/sqrt(d) = 0.081; residual RMS at the MLP input L0 5.2, L4 0.9, L8 0.8, L12 1.8, L16 3.9, L20 3.5, L24 4.0, L28 2.7, L32 2.5, L36 2.4, L40 1.5, L44 1.5, L47 1.0
 
 band     prev  rotated  edged  top|cos|  top push  in-edges  gap1  gap  pos   hubs | out-edged  out-edges  out gap
   (prev, rotated: median of each pole's largest |cos| with the layer before's writes, and with them rotated at random; edged: share of poles with an in-edge; top |cos|, top push: medians of the strongest in-edge's; in-edges: median count above the floor, of k; gap1: share of strongest in-edges from the layer before; gap: median layer gap; pos: share of strongest in-edges that drive the pole; hubs: share of the band's in-list entries held by the 1% most-listed sources; out-: the same for out-lists)
-L0-11    0.007    0.065   0.47     0.094     0.003         0  0.00    7  0.52  0.52 |      0.87         10       10
-L12-23   0.003    0.065   0.13     0.083     0.000         0  0.00   12  0.52  0.11 |      0.37          0       14
-L24-35   0.018    0.066   0.84     0.119     0.008        64  0.00   20  0.51  0.66 |      0.01          0        1
-L36-47   0.002    0.066   1.00     0.157     0.001        64  0.00   30  0.48  0.31 |      0.00          0        4
-L0-47    0.005    0.066   0.61     0.124     0.002        34  0.00   22  0.50  0.75 |      0.31          0       13
+L0-11    0.148    0.066   0.87     0.104     0.761        48  0.81    1  0.53  0.13 |      1.00         64        1
+L12-23   0.111    0.066   0.93     0.099     1.994        16  0.81    1  0.72  0.12 |      1.00         64        1
+L24-35   0.137    0.066   0.99     0.110     1.116        64  0.79    1  0.66  0.13 |      0.99         64        1
+L36-47   0.083    0.066   0.95     0.102     1.186        24  0.26    3  0.80  0.28 |      0.67          3        1
+L0-47    0.120    0.066   0.94     0.103     1.222        34  0.67    1  0.68  0.14 |      0.92         64        1

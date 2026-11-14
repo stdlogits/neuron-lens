@@ -662,10 +662,10 @@ def fig_side_agreement() -> None:
     pred = r["write_R"]["mean"]
     peak = max(range(len(pred)), key=pred.__getitem__)
     finish(fig, "10_side_agreement", "Writes predict the next token late; reads name the firing token early",
-           "Mean share of each pole's 24 top firings whose token is in its read's top 10, all 884,736 poles; "
+           "Mean share of each pole's 64 top firings whose token is in its read's top 10, all 884,736 poles; "
            "control: a random pole's read. Right panel on a log scale, floored at 0.1%.",
            "findings §5, §6; data/summary/side_agreement_qwen3-8b.json",
-           f"Left: prediction rises from L20 and peaks at {pred[peak]:.1%} at L{peak}; suppression overtakes it at L35 "
+           f"Left: prediction rises from L20 and peaks at {pred[peak]:.1%} at L{peak}; suppression overtakes it at L34 "
            "(early layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 "
            f"({r['read_S']['mean'][0]:.0%} at L0), with a spike at L8; the R-lens read from the MLP input takes over "
            "from L9.")
@@ -691,12 +691,12 @@ def fig_drivers() -> None:
     legend_above(ax, 4)
     s, rr = r["drivers_S"]["mean"], r["drivers_R"]["mean"]
     span = lambda v: f"{min(v):.0%}-{max(v):.0%}".replace("%-", "-")
-    finish(fig, "11_drivers", "The S-lens names a neuron's real input tokens early, the R-lens from L8",
+    finish(fig, "11_drivers", "The S-lens names a neuron's real input tokens early, the R-lens from L9",
            "Every common token placed in 8 real documents; a pole's exact drivers are the 20 that raise it most. "
            "Share of each weight-only read's top 10 among them; log scale, floored at 0.1%.",
            "findings §6; data/summary/side_agreement_qwen3-8b.json; neurons/drivers",
            f"At L0, {s[0]:.0%} of the S-lens read's top 10 are exact drivers, and {span(s[1:5])} at L1-L4; the R-lens "
-           f"read of the input direction leads from L8 ({span(rr[8:13] + rr[22:30])} at L8-L12 and L22-L29). L13-L20 "
+           f"read of the input direction leads from L9 ({span(rr[9:13] + rr[22:30])} at L9-L12 and L22-L29). L13-L20 "
            f"is the weakest stretch for every weight-only input read (R-lens {span(rr[13:21])}, S-lens at most "
            f"{max(s[13:21]):.0%}).")
 
@@ -964,11 +964,12 @@ def fig_gemma_census() -> None:
            "discovery rate (as figure 3 for Qwen3-8B).",
            "findings §13; data/summary/reads_at_firings_gemma-4-12b.json",
            "The S-lens read names the firing token for {:.0f}-{:.0f}% of L0-L1's poles, falls to {:.1f}% at L9, and rises again "
-           "at L10-L13 ({:.0f}-{:.0f}%), where the S-lens write also names it for {:.0f}-{:.0f}% at L11-L13. The weight-only R-lens read "
-           "of the input names exact drivers for at most {:.0f}% of any layer's poles (§13). The R-lens write promotes the token "
+           "at L10-L13 ({:.0f}-{:.0f}%), where the S-lens write also names it for {:.0f}-{:.0f}% at L11-L13. The R-lens read of the "
+           "input, made a vector by the residual's metric (§13), names exact drivers for {:.0f}-{:.0f}% of poles at L13-L23 and "
+           "{:.0f}-{:.0f}% at L34-L42. The R-lens write promotes the token "
            "after a firing from L32, for {:.0f}-{:.0f}% of poles at L33-L40, falling to {:.0f}-{:.0f}% at L44-L47.".format(
                *span("read_S", 0, 1), 100 * rows[9]["read_S"], *span("read_S", 10, 13), *span("write_S", 11, 13),
-               100 * max(r["read_R"] for r in rows), *span("write_R", 33, 40), *span("write_R", 44, 47)))
+               *span("read_R", 13, 23), *span("read_R", 34, 42), *span("write_R", 33, 40), *span("write_R", 44, 47)))
 
 
 def fig_media_reads() -> None:

@@ -1,11 +1,11 @@
 head reads, Qwen/Qwen3-8B: 36 × 32 heads, 103830 tokens; QK statistics over 63990 documents, 66350 tokens seen 10+ times as keys
 
-qk_self_S against duplicate-token heads (duplicate > 0.3, 33 heads): AUROC 0.96, Spearman with the duplicate score +0.40; qk_self_R 0.51 (from L1)
+qk_self_S against duplicate-token heads (duplicate > 0.3, 33 heads): AUROC 0.96, Spearman with the duplicate score +0.40; qk_self_R 0.52 (from L1)
 
 by band: qk_ctx_rho mean (own / control head), share past +0.2 (own / control); qk_ov_rho mean (own / control), share past +0.2 and under −0.2 (own / control); ov_R_copy and ov_S_copy medians; qk_self_S and qk_self_R medians
   L0-8: ctx +0.18/+0.07 (0.38/0.15)  align +0.014/+0.010 (+ 0.01/0.00, − 0.00/0.00)  copy R +0.09 S +0.68  self S +0.33 R +0.08
-  L9-12: ctx +0.14/+0.10 (0.38/0.14)  align +0.012/+0.004 (+ 0.00/0.00, − 0.00/0.00)  copy R +0.06 S +0.65  self S +1.13 R +0.18
-  L13-20: ctx -0.00/-0.02 (0.01/0.01)  align +0.013/+0.012 (+ 0.01/0.01, − 0.00/0.00)  copy R +0.11 S +0.76  self S +1.33 R +0.19
-  L21-27: ctx +0.02/-0.02 (0.01/0.00)  align +0.028/+0.004 (+ 0.04/0.05, − 0.01/0.02)  copy R +0.31 S +0.84  self S +1.28 R +0.18
-  L28-35: ctx +0.17/+0.01 (0.33/0.03)  align +0.047/-0.010 (+ 0.12/0.01, − 0.03/0.02)  copy R +0.23 S +0.72  self S +1.17 R +0.20
-  L0-35: ctx +0.10/+0.02 (0.21/0.06)  align +0.024/+0.004 (+ 0.04/0.02, − 0.01/0.01)  copy R +0.14 S +0.75  self S +1.23 R +0.17
+  L9-12: ctx +0.14/+0.10 (0.38/0.14)  align +0.012/+0.004 (+ 0.00/0.00, − 0.00/0.00)  copy R +0.06 S +0.66  self S +1.13 R +0.18
+  L13-20: ctx -0.00/-0.02 (0.01/0.01)  align +0.013/+0.012 (+ 0.01/0.01, − 0.00/0.00)  copy R +0.11 S +0.47  self S +1.33 R +0.22
+  L21-27: ctx +0.02/-0.02 (0.01/0.00)  align +0.028/+0.004 (+ 0.04/0.05, − 0.01/0.02)  copy R +0.31 S +0.64  self S +1.28 R +0.25
+  L28-35: ctx +0.17/+0.01 (0.33/0.03)  align +0.047/-0.010 (+ 0.12/0.01, − 0.03/0.02)  copy R +0.23 S +0.31  self S +1.17 R +0.19
+  L0-35: ctx +0.10/+0.02 (0.21/0.06)  align +0.024/+0.004 (+ 0.04/0.02, − 0.01/0.01)  copy R +0.14 S +0.56  self S +1.23 R +0.19

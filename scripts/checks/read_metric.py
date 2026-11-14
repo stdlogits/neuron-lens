@@ -26,7 +26,7 @@ lens's polar factor (``metric.polar``, the catalog's), scored on the peak tokens
 fit's (``02_fit.py --lens scale``). Writes ``data/summary/read_metric_<model>.{log,json}``.
 
     python scripts/checks/read_metric.py --layers 9,12,16,20,24,28,31
-    NEURON_LENS_MODEL=google/gemma-4-12B python scripts/checks/read_metric.py --layers 6,12,18,24,30,36,42
+    NEURON_LENS_MODEL=google/gemma-4-12B python scripts/checks/read_metric.py --layers 6,12,18,24,30,36,42 --write-layers 0,11,12,13
 """
 import argparse
 import json
@@ -198,7 +198,7 @@ def write_arms(layers: list[int]) -> tuple[list[str], dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layers", default="16,30")
-    ap.add_argument("--write-layers", default="0,4,8", help="layers for the write_S arms")
+    ap.add_argument("--write-layers", default="0,4,8", help="layers for the write_S arms (Gemma 4: 0,11,12,13, where its write_S reads)")
     args = ap.parse_args()
     lines, by_band = bands()
     more, by_layer = arms([int(x) for x in args.layers.split(",")])
