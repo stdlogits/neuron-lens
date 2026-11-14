@@ -1,0 +1,26 @@
+{
+ "model": "Qwen/Qwen3-0.6B",
+ "dir": "qwen3-0.6b",
+ "layers": 28,
+ "d_model": 1024,
+ "neurons": 3072,
+ "heads": 16,
+ "lenses": {
+  "text": {
+   "R_docs": 1000,
+   "S_docs": 1000,
+   "R": "0.00-0.05",
+   "R_mid": "0.00-0.05",
+   "S_mid": "0.00-0.04",
+   "S_out": "0.01-0.04",
+   "corpus": "HuggingFaceFW/dclm_100BT-shuffled",
+   "revision": "2fa015e4044ec442a0734e89658cdcc538d10dd4",
+   "rows_sha": "ca09a4d8081c7a07",
+   "t_max": 128
+  }
+ },
+ "scale": {
+  "docs": 1000,
+  "split": "0.00-0.02"
+ }
+}
