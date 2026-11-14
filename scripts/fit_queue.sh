@@ -13,6 +13,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}" PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # large models fill the GPU
 DOCS="${DOCS:-1000}"
 DROP_GB="${DROP_GB:-10}"
 mkdir -p logs

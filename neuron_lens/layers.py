@@ -871,22 +871,26 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
 
 # --------------------------------------------------------------------------------- the MLPs
 
-def contract(m: Layer, chunk: int = 16) -> Layer:
+def contract(m: Layer, out: torch.Tensor | None = None, budget: int = 2**30) -> Layer:
     """The layer with its gated MLP's map multiplied out, one ``[d, d]`` matrix per row:
     ``W_d (diag(cg) W_g + diag(cu) W_u)``. Building them is one matrix product over the rows and
     each tangent then costs one ``d × d`` product where the map costs three through ``d_ff``, so the
     whole map costs ``N d² (2 d_ff + 2 d)`` for all ``d`` tangents against ``6 N d² d_ff``: it pays
-    from about ``3 d / 8`` tangents. ``chunk`` rows are built at a time, for memory."""
+    from about ``3 d / 8`` tangents. Rows are built a few at a time, as many as keep each
+    ``[d_ff, n, d]`` product under ``budget`` bytes, into ``out`` (``[N, d, d]``) when it is given:
+    a sweep reuses one buffer for all its layers (Qwen3-32B: 5.5 GiB a layer)."""
     g = m.mlp
     if not isinstance(g, GatedMLP):
         return m
-    N, d = g.cg.shape[0], g.wg.shape[1]
-    parts = []
+    N, (f, d) = g.cg.shape[0], g.wg.shape
+    chunk = max(1, budget // (f * d * g.wg.element_size()))
+    if out is None:
+        out = torch.empty(N, d, d, dtype=g.wd.dtype, device=g.wd.device)
     for s in range(0, N, chunk):
         cg, cu = g.cg[s:s + chunk].T, g.cu[s:s + chunk].T  # [f, n]
         rows = (cg[..., None] * g.wg[:, None] + cu[..., None] * g.wu[:, None]).flatten(1)  # [f, n·d]
-        parts.append((g.wd @ rows).unflatten(1, (cg.shape[1], d)).transpose(0, 1))  # [n, d, d]
-    return m._replace(mlp=Contracted(torch.cat(parts)))
+        out[s:s + cg.shape[1]] = (g.wd @ rows).unflatten(1, (cg.shape[1], d)).transpose(0, 1)  # [n, d, d]
+    return m._replace(mlp=Contracted(out))
 
 
 def _mlp_jvp(m: GatedMLP | Contracted, xn):

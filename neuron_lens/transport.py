@@ -126,17 +126,22 @@ def _blocks(k: int, dim_batch: int) -> list[tuple[int, int]]:
 
 def _sweeps(model, maps: list, order, blocks: list[tuple[int, int]], contract: bool):
     """``(layer, its map, block index)`` in sweep order: each block through every layer in turn, or, with
-    ``contract``, each layer's map multiplied out once and every block through it; an offloaded stack
+    ``contract``, each layer's map multiplied out once and every block through it. The multiplied-out
+    maps share one buffer, so a map holds until the sweep moves to the next layer. An offloaded stack
     (``layers.offload``) streams each layer in once, so it needs the second order."""
     from neuron_lens import layers
     if not contract:
         if getattr(model, "_offload", None) is not None:
             raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, gated MLPs)")
         return ((layer, maps[layer], i) for i in range(len(blocks)) for layer in order)
+    buf = None
 
     def at(l):
+        nonlocal buf
         layers.resident(model, l)
-        return layers.contract(maps[l])
+        m = layers.contract(maps[l], buf)
+        buf = m.mlp.m
+        return m
     return ((layer, m, i) for layer, m in ((l, at(l)) for l in order) for i in range(len(blocks)))
 
 
