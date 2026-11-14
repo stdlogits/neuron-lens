@@ -1278,11 +1278,11 @@ Shares of the activation at the pole's top firings (medians over poles of each p
 
 | band | heads | neurons | top 64 neuron poles | firing among them | the 64 in-edges | 64 random poles | in-edge sources firing | recall (control) | ρ |
 |---|---|---|---|---|---|---|---|---|---|
-| L1-L8 | 0.33 | 0.66 | 0.82 | 0.41 | 0.05 | 0.00 | 0.03 | 0.06 (0.00) | 0.88 |
-| L9-L12 | 0.25 | 0.74 | 1.13 | 0.45 | 0.15 | 0.00 | 0.04 | 0.06 (0.00) | 0.89 |
-| L13-L20 | 0.49 | 0.51 | 1.03 | 0.55 | 0.10 | 0.00 | 0.03 | 0.07 (0.00) | 0.87 |
+| L1-L8 | 0.33 | 0.66 | 0.81 | 0.41 | 0.05 | 0.00 | 0.03 | 0.06 (0.00) | 0.88 |
+| L9-L12 | 0.25 | 0.74 | 1.13 | 0.45 | 0.14 | 0.00 | 0.04 | 0.06 (0.00) | 0.89 |
+| L13-L20 | 0.49 | 0.51 | 1.03 | 0.55 | 0.09 | 0.00 | 0.03 | 0.07 (0.00) | 0.87 |
 | L21-L27 | 0.42 | 0.58 | 0.72 | 0.59 | 0.09 | 0.00 | 0.04 | 0.08 (0.00) | 0.87 |
-| L28-L35 | 0.19 | 0.81 | 0.79 | 0.62 | 0.11 | 0.00 | 0.07 | 0.05 (0.00) | 0.88 |
+| L28-L35 | 0.19 | 0.81 | 0.79 | 0.62 | 0.10 | 0.00 | 0.07 | 0.04 (0.00) | 0.88 |
 
 *Firing*: at `act_top / 4` or more in its pole (the `acts` tables' rate threshold). *Recall*: the share
 of the 64 largest |contributions| that are in-edges (control: another pole's in-edges). *ρ*: Spearman
@@ -1293,8 +1293,8 @@ over every upstream neuron, in the pole it is in, between its push and its contr
   L13-L20; the embedding 2% at most (at L1), under 0.5% from L7. Over every pole's first 5 firings (the `sources` table) heads carry
   a median 19-52% by band.
 - **The edges get the direction right, not the traffic.** An edge's push ranks every upstream neuron's
-  contribution at Spearman 0.87-0.89: the weights say what each would do. But the in-edges are 5-8% of
-  the 64 largest contributors and carry 5-15% of the activation, because their sources fire at only
+  contribution at Spearman 0.87-0.89: the weights say what each would do. But the in-edges are 4-8% of
+  the 64 largest contributors and carry 5-14% of the activation, because their sources fire at only
   3-7% of the pole's top firings. What drives a pole is which units fire with it, which no list from
   the weights can know (the same gap as between global weights and attribution graphs over transcoder
   features; Ameisen et al. 2025).

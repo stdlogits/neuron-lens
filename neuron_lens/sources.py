@@ -100,7 +100,7 @@ class Stream:
 def times(r: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
     """``r @ w``; on MPS, whose tensors stop at 2³¹ elements (Gemma 4's writes from 37 layers up pass it), in column
     blocks under it."""
-    if w.device.type != "mps" or w.numel() < 2**31:
+    if w.device.type != "mps" or w.untyped_storage().nbytes() < 2**31 * w.element_size():  # a view counts its base
         return r @ w
     step = 2**30 // w.shape[0]
     return torch.cat([r @ w[:, i:i + step].contiguous() for i in range(0, w.shape[1], step)], 1)
