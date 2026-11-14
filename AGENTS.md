@@ -231,8 +231,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
   24 GB card fits it at the default 32 documents a batch).
 - The catalog's GPU stages: `scripts/catalog_box.sh` installs on a GPU machine and starts
-  `scripts/catalog_queue.sh`, detached and resumable: `06`, `17`, `07` for each model, then
-  `08`, `09`, `16` and the `measure` half of `checks/edges_in_context.py` (`MEDIA=1` adds `13`, `14`). Each table goes to the
+  `scripts/catalog_queue.sh` for `MODELS`, detached and resumable, model by model: `06`, `17`, `07`, then
+  `08`, `checks/reads_at_firings.py`, `16` and the `measure` half of `checks/edges_in_context.py` (`MEDIA=1` adds `13`, `14`);
+  with several GPUs, one queue per GPU. Each table goes to the
   `UPLOAD` branch of the Hub dataset as soon as its stage has run (`12_release.py --tables`). The release is a full `12_release.py` to that branch, then the same without `--branch` for `main`; it deletes what this machine's catalog lacks, so bring the catalog up to date and run it with `--dry-run` first, which lists the deletions. `catalog_box.sh`'s header has the
   commands to copy the results back. The `score` half runs where the comparison lenses are.
 - New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,

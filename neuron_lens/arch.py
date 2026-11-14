@@ -71,7 +71,15 @@ def names(model_id: str) -> dict:
     if is_gemma4(model_id):
         e = "model.language_model.embed_tokens.weight"
         return {"embed": e, "unembed": e, "norm": "model.language_model.norm.weight"}  # tied
-    return {"embed": "model.embed_tokens.weight", "unembed": "lm_head.weight", "norm": "model.norm.weight"}
+    e = "model.embed_tokens.weight"  # Qwen3 to 4B ties the unembedding to it, and stores no lm_head
+    return {"embed": e, "unembed": e if text_config(model_id).tie_word_embeddings else "lm_head.weight",
+            "norm": "model.norm.weight"}
+
+
+def chat_model(model_id: str) -> str:
+    """The model whose chat template renders the chat slice (``05_act_corpus.py``): its own, except that a Qwen3 base
+    reads its post-trained sibling's transcripts, so the two meet the same text (the bases' own template differs)."""
+    return model_id.removesuffix("-Base") if model_id.startswith("Qwen/Qwen3-") else model_id
 
 
 def embed_scale(model_id: str) -> float:

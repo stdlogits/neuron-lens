@@ -615,7 +615,7 @@ def main() -> None:
     args = ap.parse_args()
     if args.detach:
         LOGS.mkdir(exist_ok=True)
-        log = LOGS / "activations.log"
+        log = LOGS / f"activations_{MODEL.split('/')[-1].lower()}.log"
         cmd = [sys.executable, __file__, *[a for a in sys.argv[1:] if a != "--detach"]]
         if sys.platform == "darwin":
             cmd = ["caffeinate", "-i", *cmd]

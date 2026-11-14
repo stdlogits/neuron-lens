@@ -7,7 +7,8 @@
   lines (license headers) dropped.
 - ``chat``: UltraChat-200k ``test_sft``, rendered with the model's chat template, so the chat
   model is seen in the speaker frame it was trained for (a base model without one, as Gemma 4
-  12B, sees plain ``User:`` / ``Assistant:`` turns).
+  12B, sees plain ``User:`` / ``Assistant:`` turns; a Qwen3 base, its post-trained sibling's
+  transcripts, ``arch.chat_model``). Every model's chat slice draws the same rows.
 
 Each slice goes to ``data/corpus/act-<slice>.jsonl`` (``text`` and ``id``; the chat slice, rendered for
 its model, to ``act-chat-<model>.jsonl``, ``corpus.act_file``) with a provenance record
@@ -26,6 +27,7 @@ from datasets import load_dataset
 from huggingface_hub import HfApi
 from transformers import AutoTokenizer
 
+from neuron_lens.arch import chat_model
 from neuron_lens.catalog import MODEL
 from neuron_lens.corpus import act_file
 from neuron_lens.paths import CORPUS_DIR
@@ -51,7 +53,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--docs", default="dclm=4000,zh=1000,code=1000,chat=1000")
     args = ap.parse_args()
-    tok = AutoTokenizer.from_pretrained(MODEL)
+    tok = AutoTokenizer.from_pretrained(chat_model(MODEL))  # it renders the chat slice
     CORPUS_DIR.mkdir(parents=True, exist_ok=True)
     for item in args.docs.split(","):
         name, n = item.split("=")
@@ -62,6 +64,8 @@ def main() -> None:
             revision = json.loads(recorded.read_text())["revision"]
         elif name == "dclm":
             revision = json.loads((CORPUS_DIR / "dclm.provenance.json").read_text())["revision"]
+        elif name == "chat" and (others := sorted(CORPUS_DIR.glob("act-chat-*.provenance.json"))):
+            revision = json.loads(others[0].read_text())["revision"]  # another model's rows
         else:
             revision = HfApi().dataset_info(repo).sha
         stream = load_dataset(repo, config, split=split, streaming=True, revision=revision)
@@ -88,6 +92,8 @@ def main() -> None:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
         record = {"repo": repo, "config": config, "split": split, "revision": revision,
                   "file": path.name, "skip": skip, "n": len(rows), "ids": [r["id"] for r in rows]}
+        if name == "chat":
+            record["template"] = chat_model(MODEL) if tok.chat_template else None
         path.with_name(path.name.replace(".jsonl", ".provenance.json")).write_text(json.dumps(record, indent=1) + "\n")
         print(f"{path}: {len(rows)} docs at {repo} {revision[:12]}", flush=True)
 
