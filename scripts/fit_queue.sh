@@ -4,9 +4,11 @@
 # GPU 1. Each model downloads when its turn comes and, past DROP_GB of weights, is deleted from the cache after its
 # fits (the catalog stages download it again). Fits save every 10 minutes and resume when rerun; a finished one leaves
 # logs/fit_<lens>_<model>.done and is skipped. A failed fit is logged, keeps its model, and the queue moves on.
+# UPLOAD=1 releases each model's lenses to the Hub as soon as its fits are done (12_release.py --parts lenses: a model
+# in its LADDER or MODELS), one upload at a time in the background, and deletes the staged files after.
 # Progress in logs/fit_queue.log, each fit's output in logs/fit_<lens>_<model>.log. After scripts/gpu_box.sh:
 #
-#   setsid nohup bash scripts/fit_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-0.6B-Base ... > logs/fit_queue.log 2>&1 &
+#   UPLOAD=1 setsid nohup bash scripts/fit_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-0.6B-Base ... > logs/fit_queue.log 2>&1 &
 #
 # A model may carry flags for its R and S fits after a colon, as one argument: "Qwen/Qwen3-32B:--offload 20".
 set -uo pipefail
@@ -16,6 +18,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}" PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # large models fill the GPU
 DOCS="${DOCS:-1000}"
 DROP_GB="${DROP_GB:-10}"
+UPLOAD="${UPLOAD:-0}"
 mkdir -p logs
 fit() {  # fit <gpu> <lens> <model> <stem> [02_fit.py flags]
     local gpu="$1" lens="$2" model="$3" name="fit_${2,,}_$4"; shift 4
@@ -30,6 +33,20 @@ fit() {  # fit <gpu> <lens> <model> <stem> [02_fit.py flags]
         return 1
     fi
 }
+upload() {  # upload <model> <stem>: in the background, after any upload still running
+    [ "$UPLOAD" = 1 ] && [ ! -e "logs/upload_$2.done" ] || return 0
+    (
+        flock 9
+        echo "$(date '+%F %T') start upload_$2"
+        if NEURON_LENS_MODEL="$1" python scripts/12_release.py --parts lenses >> "logs/upload_$2.log" 2>&1; then
+            touch "logs/upload_$2.done"
+            rm -rf "data/release/$2"
+            echo "$(date '+%F %T') done upload_$2"
+        else
+            echo "$(date '+%F %T') FAILED upload_$2: see logs/upload_$2.log"
+        fi
+    ) 9> logs/upload.lock &
+}
 failed=0
 for spec in "$@"; do
     model="${spec%%:*}"
@@ -37,6 +54,10 @@ for spec in "$@"; do
     [ "$spec" != "$model" ] && read -ra flags <<< "${spec#*:}"
     stem="$(tr '[:upper:]' '[:lower:]' <<< "${model##*/}")"
     echo "$(date '+%F %T') model $model ${flags[*]}"
+    if [ -e "logs/fit_scale_$stem.done" ] && [ -e "logs/fit_r_$stem.done" ] && [ -e "logs/fit_s_$stem.done" ]; then
+        upload "$model" "$stem"
+        continue
+    fi
     if ! hf download "$model" > /dev/null; then
         echo "$(date '+%F %T') FAILED download $model"
         failed=1
@@ -52,6 +73,7 @@ for spec in "$@"; do
         failed=1
         continue
     fi
+    upload "$model" "$stem"
     gb=$(python - "$model" <<'EOF'
 import sys
 from huggingface_hub import scan_cache_dir
@@ -62,5 +84,6 @@ EOF
         echo "$(date '+%F %T') dropped $model from the cache"
     fi
 done
+wait  # the uploads
 echo "$(date '+%F %T') QUEUE DONE$([ $failed = 0 ] || echo ', with failures')"
 exit $failed

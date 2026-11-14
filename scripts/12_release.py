@@ -59,6 +59,11 @@ from neuron_lens.transport import SKIP_FIRST, Accumulator
 REPO = "stdlogits/rs-lenses"
 DATASET = "stdlogits/neuron-lens"
 MODELS = ("Qwen/Qwen3-8B", "google/gemma-4-12B")  # the released models, in the cards' order
+# The Qwen3 family in the model card's order. Those not in MODELS (the ladder) have their lenses released ahead of their
+# catalogs: a run for one uploads its lens files and the model card, which lists those with a release record in data/summary/.
+QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwen3-1.7B-Base", "Qwen/Qwen3-4B",
+         "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
+LADDER = tuple(m for m in QWEN3 if m not in MODELS)
 PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
@@ -270,15 +275,42 @@ def split_text(t: dict) -> str:
     return f"R-lens {t['R']}, S-lens {t['S']}, by layer over both targets"
 
 
-def model_card(f: dict, date: str) -> str:
+def ladder_text(f: dict, ladder: dict) -> str:
+    """The model card's section on the rest of the Qwen3 family (``LADDER``), with Qwen3-8B in its place."""
+    if not ladder:
+        return ""
+    rows = []
+    for m in (m for m in QWEN3 if m in f or m in ladder):
+        x = f[m] if m in f else ladder[m]
+        t = x["lenses"]["text"]
+        rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']}, {x['d_model']:,} | "
+                    f"{t['R']}, {t['R_mid']} | {t['S_mid']}, {t['S_out']} | {x['scale']['split']} |")
+    tied = [m.split("/")[-1] for m in ladder if arch.text_config(m).tie_word_embeddings]
+    docs = sorted({x["lenses"]["text"]["R_docs"] for x in ladder.values()} | {x["lenses"]["text"]["S_docs"] for x in ladder.values()})
+    return f"""
+## More sizes of Qwen3
+
+The same lenses for more of the Qwen3 family, post-trained and base (Qwen released dense bases up to 14B),
+fitted the same way on the same {' or '.join(f'{n:,}' for n in docs)} documents. Each folder holds the
+five text files above. Their neurons and heads are not in the catalog yet.{f" {', '.join(tied)} tie their embeddings: `W_U` and `W_E` are one matrix." if tied else ""}
+Split-half differences by layer:
+
+| model | folder | layers, d | R-lens (from outputs, from MLP inputs) | S-lens (to MLP inputs, to outputs) | scale |
+|---|---|---|---|---|---|
+""" + "\n".join(rows) + "\n"
+
+
+def model_card(f: dict, ladder: dict, date: str) -> str:
     q, g = f["Qwen/Qwen3-8B"], f["google/gemma-4-12B"]
     qt, gt = q["lenses"]["text"], g["lenses"]["text"]
     gi, ga = g["lenses"]["image"], g["lenses"]["audio"]
+    base_models = "\n".join(f"- {m}" for m in [*MODELS, *ladder])
+    more = (f" The same lenses for {len(ladder)} more Qwen3 models, post-trained and base, are under "
+            f"[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
     return f"""---
 license: cc-by-4.0
 base_model:
-- Qwen/Qwen3-8B
-- google/gemma-4-12B
+{base_models}
 tags:
 - interpretability
 - jacobian-lens
@@ -303,7 +335,7 @@ Gemma 4 takes images and sound through linear embedders, so its lenses are also 
 sounds, where the S-lens reads back to pixels or audio samples. Every MLP neuron and attention head of
 both models read through these lenses is the dataset
 [`{DATASET}`](https://huggingface.co/datasets/{DATASET}). Code, methods and findings (cited here as
-§N) are on [GitHub](https://github.com/stdlogits/neuron-lens).
+§N) are on [GitHub](https://github.com/stdlogits/neuron-lens).{more}
 
 ![The logit lens, the J-lens and R-lens, and the K-lens and S-lens](figures/02_lenses.png)
 
@@ -341,7 +373,7 @@ coordinates where the residual barely moves (§13). A vector set against the S-l
 `write_S`, a head's output in `ov_S`, the residual at a pole's firings in `before_S`, `mlp_S`) meets them through the
 lens's nearest rotation: with `K = (K Kᵀ)^½ U`, the read is `w · U ē`, the footprints with the lens's stretch removed,
 which asks which input token would put the vector there (§13).
-
+{ladder_text(f, ladder)}
 ## Definition
 
 Both average a Jacobian of the residual stream over the corpus, summed over positions as in the
@@ -477,7 +509,7 @@ With [Drowse](https://github.com/stdlogits/drowse) (6.0 or later), the text lens
 
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The lenses are derived from
 [`Qwen/Qwen3-8B`](https://huggingface.co/Qwen/Qwen3-8B) and
-[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B) (both Apache 2.0) and fitted on
+[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B){" and the other Qwen3 models above" if ladder else ""} (Apache 2.0) and fitted on
 [`{qt['corpus']}`](https://huggingface.co/datasets/{qt['corpus']}) (CC BY 4.0), and Gemma 4's media
 lenses on [COCO 2014](https://cocodataset.org) images (CC BY 4.0, Flickr terms for the images) and
 [ESC-50](https://github.com/karolpiczak/ESC-50) (CC BY-NC 3.0). By [@_a9lim](https://x.com/_a9lim) and
@@ -1056,6 +1088,10 @@ def main() -> None:
     parts = set(filter(None, args.parts.split(",")))
     if parts - set(PARTS):
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
+    if MODEL not in MODELS + LADDER:
+        raise ValueError(f"{MODEL} is in neither MODELS nor LADDER")
+    if MODEL in LADDER and parts - {"lenses", "scale"}:
+        raise ValueError(f"{MODEL}'s catalog is not released yet: --parts lenses or scale")
     stem = arch.stem(MODEL)
     facts_path = SUMMARY / f"release_{stem}.json"
     facts = json.loads(facts_path.read_text()) if facts_path.exists() else {}
@@ -1079,6 +1115,7 @@ def main() -> None:
         facts |= catalog_facts(MODEL, data_root / stem)
     facts_path.write_text(json.dumps(facts, indent=1) + "\n")
     every = {m: json.loads((SUMMARY / f"release_{arch.stem(m)}.json").read_text()) for m in MODELS}
+    ladder = {m: json.loads(p.read_text()) for m in LADDER if (p := SUMMARY / f"release_{arch.stem(m)}.json").exists()}
 
     # The cards, and the figures they show, for both repos.
     date = time.strftime("%Y-%m-%d")
@@ -1086,7 +1123,7 @@ def main() -> None:
         shutil.rmtree(root / "figures", ignore_errors=True)
         for name in names:
             link(FIGURES / name, root / "figures" / name)
-    (lens_root / "README.md").write_text(model_card(every, date))
+    (lens_root / "README.md").write_text(model_card(every, ladder, date))
     built = [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
     stale = ["figures/*", "*/README.md", "*/figures/*"] + (
         [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
@@ -1107,6 +1144,8 @@ def main() -> None:
                                       if lens_files else "Cards and figures"))
     lens_rev = api.repo_info(REPO, revision=args.branch).sha[:10]
     print(f"{time.strftime('%H:%M:%S')} model repo at {lens_rev}: https://huggingface.co/{REPO}", flush=True)
+    if MODEL in LADDER:  # no catalog yet: the dataset and its card stay as they are
+        return
     (data_root / "README.md").write_text(dataset_card(every, lens_rev, date))
     api.create_repo(DATASET, repo_type="dataset", private=True, exist_ok=True)
     if args.branch:
