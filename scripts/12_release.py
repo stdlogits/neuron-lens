@@ -307,8 +307,8 @@ def model_card(f: dict, ladder: dict, date: str) -> str:
     qt, gt = q["lenses"]["text"], g["lenses"]["text"]
     gi, ga = g["lenses"]["image"], g["lenses"]["audio"]
     base_models = "\n".join(f"- {m}" for m in [*MODELS, *ladder])
-    more = (f" The same lenses for {len(ladder)} more Qwen3 models, post-trained and base, are under "
-            f"[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
+    more = (" The same lenses for more of the Qwen3 family, post-trained and base, are under "
+            "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
     return f"""---
 license: cc-by-4.0
 base_model:
