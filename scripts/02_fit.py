@@ -29,9 +29,9 @@ products run in TF32, as DeltaNet's kernels do (``neuron_lens.kernels``).
 
 A model whose layers don't fit on the GPU beside the fit's working set keeps the first ``--offload``
 layers there and streams the others from pinned host memory (``layers.offload``): Qwen3-32B on an
-80 GB H100 holds 62 GB of layers against about 60 GB of tangents, contracted MLPs and sums.
+80 GB H100 holds 62 GB of layers against about 50 GB of sums, tangents and contracted MLPs.
 
-    python scripts/02_fit.py --lens R --model Qwen/Qwen3-32B --docs 1000 --offload 12 --device cuda --detach
+    python scripts/02_fit.py --lens R --model Qwen/Qwen3-32B --docs 1000 --offload 20 --device cuda --detach
 """
 import argparse
 import os

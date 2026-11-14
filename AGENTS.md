@@ -213,9 +213,13 @@ by `scripts/12_release.py`, one card per repo covering both models.
 ## Running jobs
 
 - A Mac with Apple silicon (MPS) runs everything except the lens fits and the GPU passes; the fits
-  take about 3 hours (Qwen3-8B), 4.5 hours (Gemma 4) or 5.5 hours (Qwen3.5-35B-A3B, 512-token
-  documents, `--dim-batch 32`) per text lens per 1,000 documents on one H100
-  (`02_fit.py --device cuda`, bf16 with fp32 sums), 45-90 minutes per media lens.
+  take about 2.5-3 hours (Qwen3-8B), 5 hours (Qwen3-14B), 12 hours (Qwen3-32B), 4.5 hours (Gemma 4)
+  or 5.5 hours (Qwen3.5-35B-A3B, 512-token documents, `--dim-batch 32`) per text lens per 1,000
+  documents on one H100 (`02_fit.py --device cuda`, bf16 with fp32 sums), 45-90 minutes per media
+  lens. A stack whose layers don't fit on the GPU beside a fit's working set keeps its first layers
+  there and streams the rest from pinned host memory (`02_fit.py --offload N`; the sums come out the
+  same to the bit): Qwen3-32B's 62 GB of layers meet about 50 GB of sums, tangents and multiplied-out
+  MLPs, so it keeps 20 of its 64 (67 GiB at the peak, 43 s a document).
 - `13_media_activations.py` keeps every document's activations for all of Gemma's neurons in RAM
   (about 220 GB for the images): run the two modalities one at a time.
 - One GPU process per GPU. Before GPU work, check for running jobs (`ps`, `nvidia-smi`); on a
@@ -235,7 +239,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
   runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
   torch's default of one thread per core makes CPU ops on small tensors spin for minutes. Run one
   process per GPU (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`) and copy `data/fits/` off a
-  temporary machine before it goes.
+  temporary machine before it goes. `scripts/fit_queue.sh` fits a list of models on a two-GPU box
+  (the scale and the R-lens on GPU 0, the S-lens on GPU 1), downloading each model at its turn and
+  dropping it from the cache after.
 
 ## Recording results
 

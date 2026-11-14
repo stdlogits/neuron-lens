@@ -613,7 +613,7 @@ def offload(model, device, keep: int):
     """Place a decoder stack loaded on the CPU: everything on ``device`` except layers ``keep..``,
     which stay in pinned host memory and move to the GPU one at a time (``resident``). For a model
     whose weights don't fit on one GPU beside a fit's working set (Qwen3-32B: 62 GB of layers, and
-    about 60 GB of tangents, contracted MLPs and sums). The maps hold the layers' parameters, whose
+    about 50 GB of sums, tangents and contracted MLPs). The maps hold the layers' parameters, whose
     storage moves under them, so every pass calls ``resident`` before it uses a layer: the primal
     (``_run``), and the fits' sweeps, which take each layer once per document (layer-major,
     ``transport._sweeps``); a streamed layer crosses to the GPU twice a document. Returns the stack."""

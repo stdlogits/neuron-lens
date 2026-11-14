@@ -9,7 +9,7 @@ a new machine:
         [--dim-batch 128,256,512] [--compare-fp32]
     python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3.5-35B-A3B \
         --seq-len 512 --dim-batch 16,32,64
-    python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-32B --offload 12
+    python scripts/checks/fit_bench.py --device cuda --models Qwen/Qwen3-32B --offload 20
 
 ``--offload N`` keeps the first N layers on the GPU and streams the rest (``layers.offload``).
 """

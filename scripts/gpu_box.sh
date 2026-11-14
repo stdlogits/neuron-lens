@@ -20,7 +20,7 @@
 #   python scripts/02_fit.py --lens R --model "$MODEL" --docs "$DOCS" --detach
 #
 # or one lens per GPU (CUDA_VISIBLE_DEVICES=0 ... --lens R, CUDA_VISIBLE_DEVICES=1 ... --lens S),
-# and copy data/fits/ off the box before destroying it.
+# or a list of models with scripts/fit_queue.sh, and copy data/fits/ off the box before destroying it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DOCS="${DOCS:-1000}"

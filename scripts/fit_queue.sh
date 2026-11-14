@@ -8,7 +8,7 @@
 #
 #   setsid nohup bash scripts/fit_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-0.6B-Base ... > logs/fit_queue.log 2>&1 &
 #
-# A model may carry flags for its R and S fits after a colon, as one argument: "Qwen/Qwen3-32B:--offload 12".
+# A model may carry flags for its R and S fits after a colon, as one argument: "Qwen/Qwen3-32B:--offload 20".
 set -uo pipefail
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
