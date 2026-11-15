@@ -6,17 +6,17 @@
 
 ## The card
 
-- **Attention pattern:** the head's mean attention to position 0 (the sink, where heads park when they have nothing to do), to the previous token and to itself; and, on random text said twice, from the second copy to the token after the earlier occurrence (induction: high means it copies the continuation of a repeat) and to the earlier occurrence itself (duplicate: high means it looks for earlier copies of the current token). Values near 1 are strong; most heads are low on all of them.
-- **Firing:** how often its output is past a quarter of its typical high.
-- **OV read** (weight-only), one of two, the better one at the head's depth (the guide below): for each token the head could attend to, where that token ranks in what the head writes when it reads it.
+- **attention:** the head's mean attention to position 0 (**sink**, where heads park when they have nothing to do), to the **previous token** and to itself (**self**); and, on random text said twice, from the second copy to the token after the earlier occurrence (**induction:** high means it copies the continuation of a repeat) and to the earlier occurrence itself (**duplicate:** high means it looks for earlier copies of the current token). Values near 1 are strong; most heads are low on all of them.
+- **fires at:** the share of positions where its output is past a quarter of its typical high.
+- **OV read** (weight-only), the better of two at the head's depth (the guide below): for each token the head could attend to, where that token ranks in what the head writes when it reads it.
   - **OV·R:** in what its output makes the model say. "Copies most" are tokens it passes on (reading `cat` makes the model say `cat`); "suppresses most" are tokens it pushes down when it reads them (copy suppression).
   - **OV·S:** whether the output makes the residual look as if the token were present.
-  - The copying score is +1 for a head that copies everything it reads, −1 for one that suppresses everything.
-- **QK reads** (weight-only): which key tokens the head favours under its average query. They read the content a head looks for, not position: a previous-token or induction head shows little here.
-  - **Self-seeking:** tokens that, as the query, favour the same token as the key. A high median means a duplicate-token head.
-  - **Seeks what it is about to say:** tokens that a query about to say them (what the residual there predicts) favours as the key. A high median, mostly in late layers, means a head that looks up earlier copies of the coming token: with a negative copying score it pushes that token down (copy suppression); with a positive one it passes it on.
-  - **Attends to what it copies:** high when the tokens it attends to are the ones it copies.
-- **Drivers in real text:** tokens swept through real documents. As the query: the tokens at which its output is largest. As the key: the tokens it attends to most from the 16 positions after them.
+  - The **copying score** is +1 for a head that copies everything it reads, −1 for one that suppresses everything.
+- **QK·S** (weight-only): which key tokens the head favours under its average query, whatever the query. It reads the content a head looks for, not position: a previous-token or induction head shows little here.
+  - **self-seeking:** tokens that, as the query, favour the same token as the key. A high median z means a duplicate-token head.
+  - **seeks what it is about to say:** tokens that a query about to say them (what the residual there predicts) favours as the key. A high median z, mostly in late layers, means a head that looks up earlier copies of the coming token: with a negative copying score it pushes that token down (copy suppression); with a positive one it passes it on.
+  - **attends to what it copies:** the rank correlation of QK·S with OV·R over tokens: high when the tokens it attends to are the ones it copies.
+- **drivers** in real text: tokens swept through real documents. **As the query:** the tokens at which its output is largest. **As the key:** the tokens it attends to most from the 16 positions after them.
 - **Contexts:** its 5 strongest firings, the query token in ⟦ ⟧ and the token it attended to most in ⟪ ⟫ (when it attended to the query itself, only ⟦ ⟧ shows). "…" marks a gap when the attended token is far back.
 
 A list shows up to 24 tokens in two rank tiers, 1-8 ‖ 9-24; variants of one word are merged as `word×count`, and `⏎×count` merges runs of line breaks. A theme spread across many tokens counts for more than one token at the top. English and Chinese tokens of one concept are one concept.
@@ -30,12 +30,11 @@ A list shows up to 24 tokens in two rank tiers, 1-8 ‖ 9-24; variants of one wo
 - **The contexts are the best guide to where a head fires and what it attends to.** Look at what the ⟦ ⟧ tokens share, and at how the ⟪ ⟫ token relates to them: the same token earlier (duplicate), the token after an earlier copy (induction), the previous token, a name, an opening bracket or quote, the subject of the sentence, a keyword in code.
 - **The pattern scores name the classic heads.** Previous-token, induction and duplicate-token heads show it in their scores; sink-heavy heads attend to position 0 most of the time and act only at some positions.
 - **The OV read is the best guide to what a head writes.** If it copies most of what it reads, "writes" is "copies the attended token" (say what kind of token, from the contexts and drivers). If its copy list has a theme, name it.
-- Heads in the same layer that share a key-value head attend from the same keys but can do different things.
 
 ## Output
 
 Exactly one JSON object per head, one per line (JSON Lines), nothing else:
-{"id": "<the head's id from its ## line, e.g. L20h17>", "fires": {"label": "<≤12 words>", "confidence": <0-1>}, "attends": {"label": "<≤12 words>", "confidence": <0-1>}, "writes": {"label": "<≤12 words>", "confidence": <0-1>}, "note": "<≤25 words: what each label rests on>"}
+{"id": "<L and h with the ## line's layer and head: layer 20, attention head 17 is L20h17>", "fires": {"label": "<≤12 words>", "confidence": <0-1>}, "attends": {"label": "<≤12 words>", "confidence": <0-1>}, "writes": {"label": "<≤12 words>", "confidence": <0-1>}, "note": "<≤25 words: what each label rests on>"}
 
 Rules:
 - The labels will be tested blind. "Fires" and "attends" are tested on other firings of the head, next to another head's firings. "Writes" is tested against what the head's output promotes in real text, next to other heads' labels. Be specific enough to tell this head from others: name concrete tokens, words, topics or structures where the evidence supports them.

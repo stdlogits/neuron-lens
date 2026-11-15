@@ -321,7 +321,7 @@ def head_plan(layer: int) -> tuple[list[str], str]:
 
 
 # Gemma 4's layers alternate sliding-window and global attention (design.md); Qwen3-8B's are all global.
-SPAN = {"sliding_attention": ", a sliding-window layer (1,024 tokens)", "full_attention": ", a global layer"}
+SPAN = {"sliding_attention": "a sliding-window layer (1,024 tokens)", "full_attention": "a global layer"}
 
 
 def head_cards() -> None:
@@ -341,30 +341,29 @@ def head_cards() -> None:
     def tokens(r: dict, name: str) -> str:
         return grouped([dec(i) for i in r[f"{name}_ids"]][:SHOW])[0]
 
+    layout = arch.layout(MODEL)
+    mixed = len({x.kind for x in layout}) > 1
+
     (OUT["heads"] / "cards").mkdir(parents=True, exist_ok=True)
     by_layer = collections.defaultdict(list)
     for r in rows:
         layer, h = r["layer"], r["head"]
         ov, _ = head_plan(layer)
-        span = SPAN.get(arch.layout(MODEL)[layer].kind, "")
-        tag = "OV·R (what reading a token makes it say)" if ov == "ov_R" else "OV·S (the write's footprint: as if the token were there)"
-        lines = [f"## L{layer}h{h} (layer {layer} of {L}{span}, query head {h}, key-value head {r['kv_head']})",
-                 (f"- attention pattern: to position 0 (the sink) {r['sink']:.2f}, to the previous token {r['prev']:.2f}, "
-                  f"to itself {r['self']:.2f}; on random text said twice, from the second copy to the token after the "
-                  f"first occurrence (induction) {r['induction']:.2f} and to the occurrence itself (duplicate) {r['duplicate']:.2f}"),
-                 f"- fires (output past a quarter of its typical high) at {100 * r['rate']:.2g}% of positions",
-                 f"- {tag}: copying score {r[f'{ov}_copy']:+.2f} (+1 copies what it reads, −1 suppresses)",
+        span = SPAN.get(layout[layer].kind) if mixed else None  # said only where a model has both kinds of layer
+        lines = [f"## layer {layer}, attention head {h}"] + ([f"- {span}"] if span else []) + [
+                 (f"- attention: sink {r['sink']:.2f}, previous token {r['prev']:.2f}, self {r['self']:.2f}, "
+                  f"induction {r['induction']:.2f}, duplicate {r['duplicate']:.2f}"),
+                 f"- fires at {100 * r['rate']:.2g}% of positions",
+                 f"- {'OV·R' if ov == 'ov_R' else 'OV·S'}, copying score {r[f'{ov}_copy']:+.2f}",
                  f"  - copies most: {tokens(r, ov)}",
                  f"  - suppresses most: {tokens(r, f'{ov}_neg')}",
-                 f"- QK·S (what it attends to under its mean query, whatever the query): {tokens(r, 'qk_S')}",
-                 (f"- self-seeking (a token as the query favours the same token as the key): median z {r['qk_self_S']:+.2f}; "
-                  f"most: {tokens(r, 'qk_self_S')}")]
+                 f"- QK·S: {tokens(r, 'qk_S')}",
+                 f"- self-seeking, median z {r['qk_self_S']:+.2f}: {tokens(r, 'qk_self_S')}"]
         if layer:  # no R-lens input at L0
-            lines.append(f"- seeks what it is about to say (a query about to say a token favours earlier copies of it as the "
-                         f"key): median z {r['qk_self_R']:+.2f}; most: {tokens(r, 'qk_self_R')}")
-        lines.append(f"- attends to what it copies (Spearman of QK·S with OV·R over tokens): {r['qk_ov_rho']:+.2f}")
-        lines.append(f"- drivers in real text: as the query, the tokens that make its output largest: {tokens(r, 'drivers')}")
-        lines.append(f"  - as the key, the tokens it attends to most from the 16 after them: {tokens(r, 'keys')}")
+            lines.append(f"- seeks what it is about to say, median z {r['qk_self_R']:+.2f}: {tokens(r, 'qk_self_R')}")
+        lines.append(f"- attends to what it copies: {r['qk_ov_rho']:+.2f}")
+        lines.append(f"- drivers as the query: {tokens(r, 'drivers')}")
+        lines.append(f"- drivers as the key: {tokens(r, 'keys')}")
         lines += [f"  - context: {c}" for c in str(r["contexts"]).split(" ‖ ")[:N_CONTEXTS] if c]
         by_layer[layer].append({"layer": layer, "unit": h, "card": "\n".join(lines)})
     for layer, cs in by_layer.items():
