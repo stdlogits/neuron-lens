@@ -43,8 +43,10 @@ nothing is sent to the API without an explicit stage):
   (this model's, else the newest of another's, scaled to this model's cards) projects under ``--cap`` dollars and
   parsed 90%;
 - ``status``, ``collect`` (labels to ``labels/L<layer>.jsonl``), ``retry`` (failed or unparsed
-  requests, once);
-- ``shards``: the ``labels`` table, ``neurons/labels/L<layer>.parquet`` or ``heads/labels.parquet``;
+  requests: as they were the first time, card by card once a request has failed twice, so a card the API refuses
+  costs only its own labels);
+- ``shards``: the ``labels`` table, ``neurons/labels/L<layer>.parquet`` or ``heads/labels.parquet``; a pole or head
+  left without a label gets empty labels, NaN confidences and a note saying why;
 - ``check`` (heads): the blind check, into ``data/summary/labels_heads_<model>.{json,md}`` (the
   card's section).
 
@@ -109,7 +111,7 @@ SHOW = 24  # tokens a read shows: rank tiers 1-8 ‖ 9-24
 SLICES = ("dclm", "zh", "code", "chat")
 READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z": "in·R z",
         "write_S": "out·S", "write_S_z": "out·S z", "write_R": "out·R", "write_R_z": "out·R z"}
-ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])$"), "heads": re.compile(r"^L(\d+)[hH](\d+)$")}
+ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])(?:\s.*)?$"), "heads": re.compile(r"^L(\d+)[hH](\d+)(?:\s.*)?$")}
 # The reading plan, per model: by depth, (last layer, the read a card shows, the prompt's line on it), for the input
 # and the write side of a neuron, and of a head (its OV read); the layer from which a
 # peaked write gets its note (§5); and the bands of the head check. A card shows one read a side: the one raters found
@@ -419,9 +421,18 @@ def chunks(side: str) -> dict:
     return out
 
 
+def part_of(allc: dict, cid: str) -> list:
+    """A request's cards: a chunk's (``L13_0494``), or one card of it (``L13_0494_3``, a retry card by card)."""
+    if cid in allc:
+        return allc[cid]
+    chunk, k = cid.rsplit("_", 1)
+    return [allc[chunk][int(k)]]
+
+
 def request(side: str, cid: str, part: list, system: str, thinking: str) -> dict:
     extra = {} if thinking == "on" else {"thinking": {"type": "disabled"}}  # allowed at effort high or below
-    what = f"{len(part)} neurons, {2 * len(part)} poles" if side == "neurons" else f"{len(part)} heads"
+    n = len(part)
+    what = (f"{n} neuron{'s' * (n > 1)}, {2 * n} poles" if side == "neurons" else f"{n} head{'s' * (n > 1)}")
     return {"custom_id": cid, "params": {
         "model": LABELLER, "max_tokens": MAX_TOKENS, "output_config": {"effort": "low"}, **extra,
         "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -569,7 +580,7 @@ def collect(args) -> None:
     side = args.side
     s, c, allc = load_state(side), client(), chunks(side)
     (OUT[side] / "labels").mkdir(exist_ok=True)
-    fails = set(s.get("failed", []))
+    fails, refused = set(s.get("failed", [])), set(s.get("refused", []))
     for i, info in s["batches"].items():
         if info["collected"] or c.messages.batches.retrieve(i).processing_status != "ended":
             continue
@@ -579,16 +590,19 @@ def collect(args) -> None:
                 fails.add(r.custom_id)
                 continue
             s["spent"] = s.get("spent", 0) + cost(usage_of(r.result.message))
-            labs = parse(side, text_of(r.result.message), allc[r.custom_id])
+            labs = parse(side, text_of(r.result.message), part_of(allc, r.custom_id))
             if labs is None:
                 fails.add(r.custom_id)
+                if r.result.message.stop_reason == "refusal":
+                    refused.add(r.custom_id)
             else:
                 fails.discard(r.custom_id)
+                refused.discard(r.custom_id)
                 out[labs[0]["layer"]] += labs
         for layer, labs in out.items():
             with open(OUT[side] / "labels" / f"L{layer:02d}.jsonl", "a", encoding="utf-8") as fh:
                 fh.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in labs)
-        info["collected"], s["failed"] = True, sorted(fails)
+        info["collected"], s["failed"], s["refused"] = True, sorted(fails), sorted(refused)
         save_state(side, s)
         print(f"{time.strftime('%H:%M:%S')} collected {i}", flush=True)
     print(f"{len(fails)} requests failed or unparsed; spent ${s.get('spent', 0):.2f}")
@@ -597,23 +611,49 @@ def collect(args) -> None:
 def retry(args) -> None:
     side = args.side
     s, c, system, allc = load_state(side), client(), system_prompt(side), chunks(side)
-    if s.get("failed"):
-        b = c.messages.batches.create(requests=[request(side, cid, allc[cid], system, args.thinking) for cid in s["failed"]])
-        s["batches"][b.id] = {"ids": s["failed"], "collected": False, "thinking": args.thinking, "retry": True}
+    sent = collections.Counter(x for b in s["batches"].values() for x in b["ids"])
+    # a chunk that failed twice goes card by card: a refusal never passes as it was, and one card's slip sinks ten
+    ids = [y for x in s.get("failed", [])
+           for y in ([f"{x}_{k}" for k in range(len(allc[x]))] if x in allc and sent[x] >= 2 else [x])]
+    if ids:
+        b = c.messages.batches.create(requests=[request(side, cid, part_of(allc, cid), system, args.thinking) for cid in ids])
+        split = set(s["failed"]) - set(ids)
+        s["batches"][b.id] = {"ids": ids, "collected": False, "thinking": args.thinking, "retry": True}
+        s["failed"] = sorted(set(s["failed"]) - split)  # a split chunk's cards stand for it now
+        s["refused"] = sorted(set(s.get("refused", [])) - split)
         save_state(side, s)
-        print("retry batch", b.id, len(s["failed"]), "requests")
+        print("retry batch", b.id, len(ids), "requests", f"({len(split)} chunks card by card)" if split else "")
 
 
 def shards(args) -> None:
-    """The labels table in catalog row order, new labels landing on the table already there (``cards --flipped`` covers
-    only some neurons); a pole or head missing from both is a KeyError."""
+    """The labels table in catalog row order. A layer whose every unit has a card takes its labels from this run alone;
+    one carded in part (``cards --flipped``) lands its new labels on the table already there. A carded pole or head the
+    run left without a label gets empty labels, NaN confidences and a note saying why; one neither carded nor in the
+    table is a KeyError."""
     side, fields = args.side, FIELDS[args.side]
+    s, allc = load_state(side), chunks(side)
+    unit = (lambda layer, u, p: (layer, u, p)) if side == "neurons" else (lambda layer, u, p: (layer, u))
+    signs = (1, -1) if side == "neurons" else (None,)
+    carded = {unit(layer, u, p) for part in allc.values() for layer, u, _ in part for p in signs}
+    why = {}
+    for cid in s.get("failed", []):
+        for layer, u, _ in part_of(allc, cid):
+            for p in signs:
+                why[unit(layer, u, p)] = ("no label: the API refused this card" if cid in s.get("refused", [])
+                                          else "no label: the labeller's replies to this card didn't parse")
     got = {}
     for path in sorted((OUT[side] / "labels").glob("L*.jsonl")):
         with open(path, encoding="utf-8") as fh:
             for line in fh:
                 o = json.loads(line)
                 got[(o["layer"], o["neuron"], o["pole"]) if side == "neurons" else (o["layer"], o["head"])] = o
+
+    def blank(key) -> dict:
+        names = ("layer", "neuron", "pole") if side == "neurons" else ("layer", "head")
+        return dict(zip(names, key)) | {k: "" for k in fields} | {f"{k}_conf": float("nan") for k in fields} | {
+            "note": why.get(key, "no label: not collected")}
+    missing = sorted(carded - set(got))
+    got |= {k: blank(k) for k in missing}
 
     def columns(rows: list[dict]) -> dict:
         cols = {}
@@ -623,19 +663,21 @@ def shards(args) -> None:
         cols["note"] = pa.array([r["note"] for r in rows])
         return cols
     if side == "neurons":
-        for layer in sorted({k[0] for k in got}):
+        for layer in sorted({k[0] for k in carded}):
             path = neuron_table("labels", layer)
+            here = {k: v for k, v in got.items() if k[0] == layer and k in carded}
             have = {(r["layer"], r["neuron"], r["pole"]): r for r in pq.read_table(path).to_pylist()} if path.exists() else {}
-            have |= {k: v for k, v in got.items() if k[0] == layer}
-            f = len(have) // 2
-            rows = [have[(layer, n, 1)] for n in range(f)] + [have[(layer, n, -1)] for n in range(f)]
+            f = max(n for _, n, _ in (have.keys() | here.keys())) + 1
+            if len(here) < 2 * f:  # carded in part: the rest stay as they were
+                here = have | here
+            rows = [here[(layer, n, 1)] for n in range(f)] + [here[(layer, n, -1)] for n in range(f)]
             write(neuron_keys(layer, f) | columns(rows), path)
     else:
         keys = pq.read_table(head_table("reads"), columns=["layer", "head", "kv_head"])
         L, H = max(keys.column("layer").to_pylist()) + 1, keys.num_rows // (max(keys.column("layer").to_pylist()) + 1)
         rows = [got[(layer, h)] for layer in range(L) for h in range(H)]
         write(head_keys(L, H, H // (max(keys.column("kv_head").to_pylist()) + 1)) | columns(rows), head_table("labels"))
-    print(f"{time.strftime('%H:%M:%S')} {side}/labels written")
+    print(f"{time.strftime('%H:%M:%S')} {side}/labels written" + (f", {len(missing)} without a label" if missing else ""))
 
 
 # The blind check of the head labels.

@@ -321,6 +321,20 @@ def split_text(t: dict) -> str:
     return f"R-lens {t['R']}, S-lens {t['S']}, by layer over both targets"
 
 
+def ladder_labels(ladder: dict) -> str:
+    """How the ladder's released catalogs stand on labels: which have them (a ``labels`` config of both sides)."""
+    def has(m):
+        names = {c for c, *_ in ladder[m].get("configs", [])}
+        return {f"{ladder[m]['dir']}-neurons-labels", f"{ladder[m]['dir']}-heads-labels"} <= names
+    labelled = [m.split("/")[-1] for m in QWEN3 if m in ladder and has(m)]
+    if not labelled:
+        return "without labels"
+    if len(labelled) == len(ladder):
+        return "with labels"
+    names = labelled[0] if len(labelled) == 1 else f"{', '.join(labelled[:-1])} and {labelled[-1]}"
+    return f"with labels for {names}, not the others"
+
+
 def ladder_text(f: dict, ladder: dict) -> str:
     """The model card's section on the rest of the Qwen3 family (``LADDER``), with Qwen3-8B in its place."""
     if not ladder:
@@ -336,10 +350,11 @@ def ladder_text(f: dict, ladder: dict) -> str:
             f"matrix." if tied else "")
     docs = sorted({x["lenses"]["text"]["R_docs"] for x in ladder.values()} | {x["lenses"]["text"]["S_docs"] for x in ladder.values()})
     catalogued = [m.split("/")[-1] for m in QWEN3 if m in ladder and "configs" in ladder[m]]
+    labels = ladder_labels({m: x for m, x in ladder.items() if "configs" in x})
     catalogued = (f" Their neurons and heads are in the catalog, [`{DATASET}`](https://huggingface.co/datasets/{DATASET}), "
-                  "without labels." if len(catalogued) == len(ladder) else
+                  f"{labels}." if len(catalogued) == len(ladder) else
                   f" {', '.join(catalogued)} {'has its' if len(catalogued) == 1 else 'have their'} neurons and heads in the catalog, "
-                  f"[`{DATASET}`](https://huggingface.co/datasets/{DATASET}), without labels." if catalogued else
+                  f"[`{DATASET}`](https://huggingface.co/datasets/{DATASET}), {labels}." if catalogued else
                   " Their neurons and heads are not in the catalog yet.")
     return f"""
 ## More sizes of Qwen3
@@ -641,7 +656,7 @@ def head_media_text(j: dict) -> str:
 
 
 def ladder_catalog_text(ladder: dict) -> str:
-    """The dataset card's section on the Qwen3 family's other sizes, catalogued without labels (findings §19)."""
+    """The dataset card's section on the Qwen3 family's other sizes (findings §19), labelled where their release has labels."""
     if not ladder:
         return ""
     rows = []
@@ -651,17 +666,19 @@ def ladder_catalog_text(ladder: dict) -> str:
         edge = next(L for L in range(len(r)) if min(r[L:]) >= 0.35)
         rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']} × {x['neurons']:,} | "
                     f"{2 * x['layers'] * x['neurons']:,} | {x['layers']} × {x['heads']} | {x['kept']:,} | L{edge} |")
-    sides = {side: [c.removeprefix(f"{x['dir']}-{side}-") for c, *_ in x["configs"] if c.startswith(f"{x['dir']}-{side}-")]
+    sides = {side: list(dict.fromkeys(c.removeprefix(f"{x['dir']}-{side}-") for x in ladder.values() for c, *_ in x["configs"]
+                                      if c.startswith(f"{x['dir']}-{side}-") and not c.endswith("-labels")))
              for side in ("neurons", "heads")}
     docs = " or ".join(sorted({f"{x['docs']:,} documents ({x['positions']:,} positions)" for x in ladder.values()}))
     return f"""
 ## More sizes of Qwen3
 
 The rest of the Qwen3 family to 14B, post-trained and base (Qwen released dense bases up to 14B), catalogued as
-Qwen3-8B is but without labels, to see what changes with size (§19). Each has its own lenses (in
+Qwen3-8B is to see what changes with size (§19), {ladder_labels(ladder)}. Each has its own lenses (in
 [`{REPO}`](https://huggingface.co/{REPO})), the same {docs} of activation text (a base renders the chat slice
-with its post-trained sibling's template) and the same tables but `labels`: for neurons {", ".join(f"`{s}`" for s in sides["neurons"])},
-for heads {", ".join(f"`{s}`" for s in sides["heads"])}; and the same plain files, its causal sample 32 random neurons a layer.
+with its post-trained sibling's template) and the same tables: for neurons {", ".join(f"`{s}`" for s in sides["neurons"])},
+for heads {", ".join(f"`{s}`" for s in sides["heads"])}, and `labels` where it has labels; and the same plain files, its causal
+sample 32 random neurons a layer.
 Configs are named as above, `<folder>-neurons-<table>` and `<folder>-heads-<table>`, a row per pole or head.
 
 | model | folder | neurons | poles | heads | kept tokens | R-lens reads writes from |
@@ -681,10 +698,14 @@ def dataset_card(f: dict, ladder: dict, lens_rev: str, date: str) -> str:
     configs = [c for x in f.values() for c in x["configs"]]
     yaml = "\n".join(f"- config_name: {c}\n  data_files: \"{glob}\"" + ("\n  default: true" if i == 0 else "")
                      for i, (c, glob, _, _) in enumerate(configs + [c for x in ladder.values() for c in x["configs"]]))
-    more_sizes = ("\n\nThe rest of the Qwen3 family, 0.6B to 14B, post-trained and base, is catalogued the same way without labels: "
+    more_sizes = (f"\n\nThe rest of the Qwen3 family, 0.6B to 14B, post-trained and base, is catalogued the same way, {ladder_labels(ladder)}: "
                   "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
     ladder_folders = ", and those under [More sizes of Qwen3](#more-sizes-of-qwen3)" if ladder else ""
-    ladder_limit = " (Qwen3's other sizes without labels)" if ladder else ""
+    ladder_limit = f" (Qwen3's other sizes catalogued too, {ladder_labels(ladder)})" if ladder else ""
+    ladder_labelled = ("\n\nQwen3's other sizes are labelled from a leaner card (§8): no thinking, reads cut to 24 tokens, and "
+                       "per pole only the input and write reads its model's plan names for that depth, with a one-line "
+                       "shadow note. A pole the API refused to label has empty labels and says so in `note`."
+                       if ladder_labels(ladder) != "without labels" else "")
     ladder_license = (", and for [More sizes of Qwen3](#more-sizes-of-qwen3) the models listed there (Apache 2.0)") if ladder else ""
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("reads_at_firings_qwen3-8b.json"), summary("reads_at_firings_gemma-4-12b.json")
@@ -895,7 +916,7 @@ toward when amplified), each with a confidence 0-1, and `note`. Each model has i
 cards show only those. Qwen3-8B's labels were made from an earlier build of its tables, whose reads
 kept byte-fallback pieces; Gemma 4's from text alone (its cards show no images or sounds). Neurons with a
 negative-lobe pole (`neg_lobe` past a half) were labelled again from their up-row reads, and a pole that is a faint
-shadow of the neuron's other pole is marked on its card (§8, §17).
+shadow of the neuron's other pole is marked on its card (§8, §17).{ladder_labelled}
 
 Qwen3-8B, checked blind on 100 poles: firing labels separate held-out top firings from quiet positions at AUROC
 0.82 [0.78, 0.85] (another pole's label: 0.56); a judge picks a pole's write label out of four from
