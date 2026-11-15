@@ -115,8 +115,8 @@ def save(name: str, meta: dict, state: dict, next_doc: int) -> None:
 def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumulator, Sources]:
     if args.device == "cuda":
         torch.set_float32_matmul_precision("high")
-    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(args.device).eval().requires_grad_(False)
-    stack = decoder_stack(lm)
+    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval().requires_grad_(False)
+    stack = decoder_stack(lm).to(args.device)  # the unembedding stays on the CPU: the pass reads the stream, not logits
     cfg = stack.config
     acc = Accumulator({l: layer_plan(l) for l in layers}, cfg.intermediate_size, cfg.hidden_size, args.device)
     src = Sources(stack, [l for l in layers if l > 0], args.device, sum(len(d) for d in docs))
@@ -224,8 +224,8 @@ def head_sources(args, docs: list[torch.Tensor]) -> None:
     """``heads/sources.parquet``: what drives each head when it fires, by channel."""
     if args.device == "cuda":
         torch.set_float32_matmul_precision("high")
-    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(args.device).eval().requires_grad_(False)
-    src = HeadSources(decoder_stack(lm), args.device, sum(len(d) for d in docs))
+    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval().requires_grad_(False)
+    src = HeadSources(decoder_stack(lm).to(args.device), args.device, sum(len(d) for d in docs))
     t0 = time.perf_counter()
     src.run(docs)
     print(f"{time.strftime('%H:%M:%S')} heads: {int(src.count.sum())} firings in {time.perf_counter() - t0:.0f}s", flush=True)
