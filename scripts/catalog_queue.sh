@@ -7,7 +7,8 @@
 # finished stage leaves logs/<stage>_<model>.done and is skipped. Each model downloads at its turn; DROP=1 deletes it
 # from the cache after its stages. With several GPUs, run one queue per GPU (CUDA_VISIBLE_DEVICES=i), each with its
 # own models. MEDIA=1 also reruns Gemma 4's media stages (13, 14), which need about 220 GB of RAM. UPLOAD names the
-# branch of the Hub dataset each table goes to as soon as its stage has run, in the background (unset: none).
+# branch of the Hub dataset each table goes to as soon as its stage has run, in the background (unset: none); the plain
+# files (token counts, the causal sample) go after the steering check.
 # FIRINGS_SAVE_MINUTES=0 keeps 17's state in memory only, where its checkpoints don't fit the disk (Qwen3-14B: 91 GB).
 #
 #   UPLOAD=b setsid nohup bash scripts/catalog_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-1.7B >> logs/catalog_queue.log 2>&1 &
@@ -44,7 +45,7 @@ for m in "$@"; do
     run "reads_at_firings_$s" "$m" python scripts/checks/reads_at_firings.py
     run "edges_$s" "$m" python scripts/16_edges.py && up "edges_$s" "$m" edges
     run "edges_context_$s" "$m" python scripts/checks/edges_in_context.py measure
-    run "causal_$s" "$m" python scripts/checks/causal_lens.py measure &&
+    run "causal_$s" "$m" python scripts/checks/causal_lens.py measure && up "files_$s" "$m" files &&
         run "causal_score_$s" "$m" python scripts/checks/causal_lens.py score --lenses hub
     if [ "${MEDIA:-0}" = 1 ] && [ "$s" = gemma-4-12b ]; then
         run media_image "$m" python scripts/13_media_activations.py --device cuda --modalities image

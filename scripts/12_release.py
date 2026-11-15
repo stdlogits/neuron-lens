@@ -47,7 +47,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 import torch
-from huggingface_hub import HfApi
+from huggingface_hub import CommitOperationAdd, HfApi
 from huggingface_hub.utils import filter_repo_objects
 
 from neuron_lens import arch
@@ -1067,13 +1067,18 @@ and [@treetowntree](https://x.com/treetowntree) with Claude (Anthropic), {date}.
 
 def upload_tables(model: str, tables: list[str], branch: str) -> None:
     """``tables`` of the model's catalog, as they are, to the dataset's ``branch``. A table is its ``neurons/<t>/`` shards,
-    ``heads/<t>.parquet`` and ``neurons/<t>_optimised.parquet``, whichever exist; ``docs`` is ``docs.parquet``, ``media`` the media documents."""
+    ``heads/<t>.parquet`` and ``neurons/<t>_optimised.parquet``, whichever exist; ``docs`` is ``docs.parquet``, ``media`` the media documents;
+    ``files`` the release's plain files (``catalog_files``: the documents, ``token_counts.pt``, the causal sample, the media documents)."""
     stem, api = arch.stem(model), HfApi()
     named = {"docs": ["docs.parquet"], "media": ["media/*_docs.parquet"]}
     api.create_branch(DATASET, repo_type="dataset", branch=branch, exist_ok=True)
-    api.upload_folder(repo_id=DATASET, repo_type="dataset", revision=branch, folder_path=catalog_dir(model), path_in_repo=stem,
-                      allow_patterns=[p for t in tables for p in named.get(t, [f"neurons/{t}/L*.parquet", f"heads/{t}.parquet", f"neurons/{t}_optimised.parquet"])],
-                      commit_message=f"{stem}: {', '.join(tables)}")
+    if "files" in tables:
+        api.create_commit(DATASET, repo_type="dataset", revision=branch, commit_message=f"{stem}: files",
+                          operations=[CommitOperationAdd(f"{stem}/{dest}", src) for src, dest in catalog_files(model)["files"] if src.exists()])
+    if rest := [t for t in tables if t != "files"]:
+        api.upload_folder(repo_id=DATASET, repo_type="dataset", revision=branch, folder_path=catalog_dir(model), path_in_repo=stem,
+                          allow_patterns=[p for t in rest for p in named.get(t, [f"neurons/{t}/L*.parquet", f"heads/{t}.parquet", f"neurons/{t}_optimised.parquet"])],
+                          commit_message=f"{stem}: {', '.join(rest)}")
     print(f"{time.strftime('%H:%M:%S')} {stem}: {', '.join(tables)} on {DATASET}@{branch}", flush=True)
 
 
