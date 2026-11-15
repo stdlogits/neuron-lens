@@ -37,6 +37,7 @@ from neuron_lens.rules import norm_eps
 RANK = 256  # candidates kept per firing for driven-by
 RANK_WITH = 1024  # ... and for fires-with, where a source shared by several firings needs to survive each
 FIRE = 1 / 4  # of act_top: the acts tables' rate threshold
+PIECE = 2**26  # entries in one [firings, M·f] table at a time: Qwen3-14B's late layers made 2 GB ones a batch
 CHANNELS = ("v", "q", "k")  # a head's inputs: value, query, key
 
 
@@ -243,8 +244,9 @@ class Sources:
     @torch.inference_mode()
     def split(self) -> None:
         for M, (row, u) in self.pending.items():
-            if len(row):
-                self.layer(M, row, u)
+            step = max(1, PIECE // max(1, M * self.f))  # firings at a time (each one's split is its own)
+            for i in range(0, len(row), step):
+                self.layer(M, row[i:i + step], u[i:i + step])
         self.cap.clear()
 
     def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> None:

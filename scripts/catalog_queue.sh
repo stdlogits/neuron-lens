@@ -15,6 +15,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}" PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # large models fill the GPU
 run() {
     local name="$1" model="$2"; shift 2
     [ -e "logs/$name.done" ] && return 0
