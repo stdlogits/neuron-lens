@@ -22,5 +22,70 @@
  "scale": {
   "docs": 1000,
   "split": "0.00-0.02"
- }
+ },
+ "configs": [
+  [
+   "qwen3-0.6b-neurons-acts",
+   "qwen3-0.6b/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   172032
+  ],
+  [
+   "qwen3-0.6b-neurons-drivers",
+   "qwen3-0.6b/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   172032
+  ],
+  [
+   "qwen3-0.6b-neurons-reads",
+   "qwen3-0.6b/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   172032
+  ],
+  [
+   "qwen3-0.6b-neurons-edges",
+   "qwen3-0.6b/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   172032
+  ],
+  [
+   "qwen3-0.6b-neurons-firings",
+   "qwen3-0.6b/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   172032
+  ],
+  [
+   "qwen3-0.6b-neurons-sources",
+   "qwen3-0.6b/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   165888
+  ],
+  [
+   "qwen3-0.6b-heads-acts",
+   "qwen3-0.6b/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   448
+  ],
+  [
+   "qwen3-0.6b-heads-drivers",
+   "qwen3-0.6b/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   448
+  ],
+  [
+   "qwen3-0.6b-heads-reads",
+   "qwen3-0.6b/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   448
+  ],
+  [
+   "qwen3-0.6b-heads-sources",
+   "qwen3-0.6b/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
+   448
+  ]
+ ],
+ "docs": 63990,
+ "positions": 15367795,
+ "kept": 103830
 }

@@ -22,5 +22,70 @@
  "scale": {
   "docs": 1000,
   "split": "0.00-0.04"
- }
+ },
+ "configs": [
+  [
+   "qwen3-1.7b-base-neurons-acts",
+   "qwen3-1.7b-base/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   344064
+  ],
+  [
+   "qwen3-1.7b-base-neurons-drivers",
+   "qwen3-1.7b-base/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   344064
+  ],
+  [
+   "qwen3-1.7b-base-neurons-reads",
+   "qwen3-1.7b-base/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   344064
+  ],
+  [
+   "qwen3-1.7b-base-neurons-edges",
+   "qwen3-1.7b-base/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   344064
+  ],
+  [
+   "qwen3-1.7b-base-neurons-firings",
+   "qwen3-1.7b-base/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   344064
+  ],
+  [
+   "qwen3-1.7b-base-neurons-sources",
+   "qwen3-1.7b-base/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   331776
+  ],
+  [
+   "qwen3-1.7b-base-heads-acts",
+   "qwen3-1.7b-base/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   448
+  ],
+  [
+   "qwen3-1.7b-base-heads-drivers",
+   "qwen3-1.7b-base/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   448
+  ],
+  [
+   "qwen3-1.7b-base-heads-reads",
+   "qwen3-1.7b-base/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   448
+  ],
+  [
+   "qwen3-1.7b-base-heads-sources",
+   "qwen3-1.7b-base/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
+   448
+  ]
+ ],
+ "docs": 63990,
+ "positions": 15367795,
+ "kept": 103830
 }
