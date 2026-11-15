@@ -321,6 +321,28 @@ def split_text(t: dict) -> str:
     return f"R-lens {t['R']}, S-lens {t['S']}, by layer over both targets"
 
 
+def label_check_text(models: list[str]) -> str:
+    """The card's table of the neuron labels' blind check (``checks/relabel_check.py --poles all``), for the models it ran on."""
+    rows, n = [], set()
+    for m in dict.fromkeys(models):
+        path = SUMMARY / f"label_check_{arch.stem(m)}.json"
+        if not path.exists():
+            continue
+        r = json.loads(path.read_text())
+        x, n = r["summary"], n | {len(r["poles"])}
+        old = f"{x['old'][0]:.2f}" if "old" in x else "–"
+        quarters = " / ".join(f"{x['new_by_quarter'][str(q)][0]:.2f}" for q in range(4) if str(q) in x["new_by_quarter"])
+        rows.append(f"| {m.split('/')[-1]} | {x['new'][0]:.2f} [{x['new'][1]:.2f}, {x['new'][2]:.2f}] | {x['control'][0]:.2f} | {old} | {quarters} |")
+    if not rows:
+        return ""
+    return (f"\nChecked blind by Claude Sonnet 5.5 on {' or '.join(map(str, sorted(n)))} random firing poles a model: given a pole's `fires` "
+            "label and 8 contexts, 4 of its held-out top firings (ranks 6-24, off every card) and 4 of another firing pole of its "
+            "layer, the scorer's AUROC per pole, for the label, for another pole's label on the same contexts, and for the pole's "
+            "earlier label where it had one:\n\n"
+            "| model | label | another pole's label | earlier label | label by depth quarter |\n|---|---|---|---|---|\n"
+            + "\n".join(rows) + "\n")
+
+
 def ladder_labels(ladder: dict) -> str:
     """How the ladder's released catalogs stand on labels: which have them (a ``labels`` config of both sides)."""
     def has(m):
@@ -702,10 +724,7 @@ def dataset_card(f: dict, ladder: dict, lens_rev: str, date: str) -> str:
                   "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
     ladder_folders = ", and those under [More sizes of Qwen3](#more-sizes-of-qwen3)" if ladder else ""
     ladder_limit = f" (Qwen3's other sizes catalogued too, {ladder_labels(ladder)})" if ladder else ""
-    ladder_labelled = ("\n\nThe labels of Qwen3's other sizes come from a leaner card (§8): no thinking, reads cut to 24 tokens, and "
-                       "per pole only the input and write reads its model's plan names for that depth, with a one-line "
-                       "shadow note. A pole the API refused to label has empty labels and says so in `note`."
-                       if ladder_labels(ladder) != "without labels" else "")
+    label_checks = label_check_text([m for m in QWEN3 + MODELS if m in f or m in ladder])
     ladder_license = (", and for [More sizes of Qwen3](#more-sizes-of-qwen3) the models listed there (Apache 2.0)") if ladder else ""
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("reads_at_firings_qwen3-8b.json"), summary("reads_at_firings_gemma-4-12b.json")
@@ -909,20 +928,17 @@ shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §6).
 
 ### `<model>-neurons-labels`: a label for every pole
 
-Every pole described by Claude Haiku 5.5 from its reads and top contexts (batch API, effort low, adaptive
-thinking; §8): `fires` (where it fires, 12 words or fewer), `writes` (what its write pushes the model
-toward when amplified), each with a confidence 0-1, and `note`. Each model has its own prompt
-(`scripts/prompts/<model>/neurons.md` on GitHub), which says which reads hold at each depth, and its
-cards show only those. Qwen3-8B's labels were made from an earlier build of its tables, whose reads
-kept byte-fallback pieces; Gemma 4's from text alone (its cards show no images or sounds). Neurons with a
-negative-lobe pole (`neg_lobe` past a half) were labelled again from their up-row reads, and a pole that is a faint
-shadow of the neuron's other pole is marked on its card (§8, §17).{ladder_labelled}
-
-Qwen3-8B, checked blind on 100 poles: firing labels separate held-out top firings from quiet positions at AUROC
-0.82 [0.78, 0.85] (another pole's label: 0.56); a judge picks a pole's write label out of four from
-steered text 61% of the time [0.52, 0.69] (chance 25%). Firing labels at confidence 0.7 or more score
-0.94. They hold best early (83% of L0-L8's firing labels reach AUROC 0.8, 31% of L21-L27's), and write
-labels late (80% picked at L28-L35, 41% at L0-L8). Of Gemma 4's neuron labels, only the relabelled negative-lobe poles are checked blind (§8).
+Every pole described by Claude Haiku 5.5 from a card of its evidence (batch API, effort low, no thinking; §8):
+`fires` (where it fires, 12 words or fewer), `writes` (what its write pushes the model toward when amplified),
+each with a confidence 0-1, and `note`. A card shows how often the pole fires and which text slices it favours,
+one input read and one write read, 24 tokens each (the reads its model's reading plan names for that depth, §8),
+and its first 5 top contexts; a pole that is a faint shadow of the neuron's other pole keeps only its write read
+and is marked (§17). Each model has its own prompt with worked examples (`scripts/prompts/<model>/neurons.md` on
+GitHub). Gemma 4's cards are text alone (no images or sounds). A handful of poles have empty labels.
+{label_checks}
+The earlier labels (a longer card: every tier of reads, with their strengths) were checked on Qwen3-8B with steering
+as well: a judge picked a pole's write label out of four from steered text 61% of the time [0.52, 0.69] (chance 25%),
+best late (80% at L28-L35, 41% at L0-L8; §8).
 
 ![Random poles read blind](figures/14_lens_blind.png)
 
