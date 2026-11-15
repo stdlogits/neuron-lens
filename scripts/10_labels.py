@@ -16,11 +16,10 @@ confidence, and a note. Thinking is off by default. The first full run (2026-10-
 earlier card: up to eight reads of 64 tokens with strength percentiles): 44,244 requests of 10 neurons, $105.41 at batch
 prices with thinking on (effort low), checked blind on 100 poles (``checks/haiku_blind.py``, §8).
 
-**Heads** (``--side heads``): the card per head shows its attention pattern scores, its output
-scale, its OV reads (what it copies and suppresses; through the S-lens too through L8, §11), its
-QK reads (what it attends to and avoids, the tokens that seek themselves, and from L1 those a query about to say
-them seeks), its exact drivers as the
-query and as the key, and its first 5 top contexts with the query in ``⟦ ⟧`` and the attended token
+**Heads** (``--side heads``): the card per head shows its attention pattern scores, how often it fires, one OV read
+(what it copies and suppresses: through the S-lens early, the R-lens after, as its model's plan says; §11), its QK reads
+(what it attends to, the tokens that seek themselves, and from L1 those a query about to say them seeks), its exact
+drivers as the query and as the key, each list to 24 tokens, without layer percentiles, and its first 5 top contexts with the query in ``⟦ ⟧`` and the attended token
 in ``⟪ ⟫``. Labels: ``fires``, ``attends`` and ``writes``. Like the neuron cards, nothing on a card
 summarizes the held-out top firings (ranks 6-24): no token counts or tests over them, and no
 in-context output read. ``check`` tests the labels blind on ``CHECK_PER_BAND`` random heads a band:
@@ -111,7 +110,7 @@ READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z":
         "write_S": "out·S", "write_S_z": "out·S z", "write_R": "out·R", "write_R_z": "out·R z"}
 ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])$"), "heads": re.compile(r"^L(\d+)h(\d+)$")}
 # The reading plan, per model: by depth, (last layer, the read a card shows, the prompt's line on it), for the input
-# and the write side of a neuron, and (last layer, the OV reads shown, the line) for a head; the layer from which a
+# and the write side of a neuron, and of a head (its OV read); the layer from which a
 # peaked write gets its note (§5); and the bands of the head check. A card shows one read a side: the one raters found
 # most coherent at that depth, blind to the lens (``checks/depth_reads.py``, two raters a model, 8-16 layers, findings
 # §8); the write read is the R-lens's everywhere, which also predicts steering (§3, §19). Where the input read is the
@@ -127,8 +126,8 @@ R_IN = "the concept around where the pole fires, and late often the word about t
 W_EARLY = "what its push makes the model say; this early, steering follows the read less closely than later"
 W_MID = "what its push makes the model say"
 W_LATE = "often the next word it predicts"
-H_EARLY = "the write's footprint (OV·S) is often the better write read this early; OV·R shows too"
-H_MID = "OV·R is the write read"
+H_EARLY = "OV·S, the write's footprint (as if the attended token were there), is the better write read this early"
+H_MID = "OV·R, what reading a token makes the head say, is the write read"
 H_LATE = ("OV·R most often names what late heads copy, and 'seeks what it is about to say' tracks where they look: with a "
           "negative copying score, copy suppression")
 
@@ -141,7 +140,7 @@ def qwen_plan(layers: int, s_last: int, assoc_last: int, write_edge: int, late: 
     last = layers - 1
     ins = [(s_last, s_read, S_Z_IN if s_read.endswith("_z") else S_IN)] + ([(assoc_last, "read_R", R_ASSOC)] if assoc_last > s_last else []) + [(last, "read_R", R_IN)]
     outs = ([(write_edge - 1, "write_R", W_EARLY)] if write_edge > 0 else []) + [(late - 1, "write_R", W_MID), (last, "write_R", W_LATE)]
-    heads = [(heads_early, ["ov_S", "ov_R"], H_EARLY), (heads_late - 1, ["ov_R"], H_MID), (last, ["ov_R"], H_LATE)]
+    heads = [(heads_early, "ov_S", H_EARLY), (heads_late - 1, "ov_R", H_MID), (last, "ov_R", H_LATE)]
     return {"in": ins, "out": outs, "heads": heads, "late": late, "check_bands": tuple(arch.bands(layers))}
 
 
@@ -152,11 +151,11 @@ PLANS = {
     "qwen3-14b": qwen_plan(40, s_last=8, assoc_last=11, write_edge=7, late=23, heads_early=4, heads_late=28),
     "qwen3-8b": qwen_plan(36, s_last=3, assoc_last=8, write_edge=4, late=21, heads_early=8, heads_late=28) | {
         "heads": [
-            (3, ["ov_S", "ov_R"], "the write's footprint (OV·S) is the better write read this early, and the QK reads track real attention best at layer 0"),
-            (8, ["ov_S", "ov_R"], "OV·S and OV·R both show what a head writes"),
-            (20, ["ov_R"], "OV·R is the write read; under the head's average query the QK reads say little about these heads"),
-            (27, ["ov_R"], "OV·R is the write read; some heads already seek what they are about to say"),
-            (35, ["ov_R"], "late heads often attend to what they copy; " + H_LATE),
+            (3, "ov_S", H_EARLY + ", and the QK reads track real attention best at layer 0"),
+            (8, "ov_S", "OV·S is still the better write read, though OV·R carries signal from about layer 4"),
+            (20, "ov_R", H_MID + "; under the head's average query the QK reads say little about these heads"),
+            (27, "ov_R", H_MID + "; some heads already seek what they are about to say"),
+            (35, "ov_R", "late heads often attend to what they copy; " + H_LATE),
         ]},
     "gemma-4-12b": {
         "in": [(19, "read_R", R_ASSOC), (47, "read_R", R_IN)],
@@ -164,9 +163,9 @@ PLANS = {
                                  "moves the output, and steering doesn't follow the read"),
                 (32, "write_R", W_MID), (47, "write_R", W_LATE)],
         "heads": [
-            (13, ["ov_S", "ov_R"], "early heads often attend by token identity or position: the pattern scores and the contexts show it best"),
-            (32, ["ov_R"], H_MID),
-            (47, ["ov_R"], H_LATE),
+            (13, "ov_R", "early heads often attend by token identity or position: the pattern scores and the contexts show it best"),
+            (32, "ov_R", H_MID),
+            (47, "ov_R", H_LATE),
         ],
         "late": 33,
         "check_bands": ((0, 4), (5, 13), (14, 32), (33, 47)),
@@ -338,17 +337,9 @@ def head_cards() -> None:
     t = load_heads()
     rows = t.to_pylist()
     L = max(r["layer"] for r in rows) + 1
-    pct = {}
-    for k in ("ov_R_copy", "ov_S_copy", "qk_self_S", "qk_self_R", "out_top"):
-        for layer in range(L):
-            pct[k, layer] = sorted(r[k] for r in rows if r["layer"] == layer)
 
-    def rank(r: dict, k: str) -> str:
-        s = pct[k, r["layer"]]
-        return f"percentile {100 * bisect.bisect_left(s, r[k]) / len(s):.0f} of the layer"
-
-    def tokens(r: dict, name: str, skip=()) -> tuple[str, set]:
-        return grouped([dec(i) for i in r[f"{name}_ids"]], skip)
+    def tokens(r: dict, name: str) -> str:
+        return grouped([dec(i) for i in r[f"{name}_ids"]][:SHOW])[0]
 
     (OUT["heads"] / "cards").mkdir(parents=True, exist_ok=True)
     by_layer = collections.defaultdict(list)
@@ -356,35 +347,24 @@ def head_cards() -> None:
         layer, h = r["layer"], r["head"]
         ov, _ = head_plan(layer)
         span = SPAN.get(arch.layout(MODEL)[layer].kind, "")
+        tag = "OV·R (what reading a token makes it say)" if ov == "ov_R" else "OV·S (the write's footprint: as if the token were there)"
         lines = [f"## L{layer}h{h} (layer {layer} of {L}{span}, query head {h}, key-value head {r['kv_head']})",
                  (f"- attention pattern: to position 0 (the sink) {r['sink']:.2f}, to the previous token {r['prev']:.2f}, "
                   f"to itself {r['self']:.2f}; on random text said twice, from the second copy to the token after the "
                   f"first occurrence (induction) {r['induction']:.2f} and to the occurrence itself (duplicate) {r['duplicate']:.2f}"),
-                 (f"- output: typical high norm {r['out_top']:.2f} ({rank(r, 'out_top')}), past a quarter of it at "
-                  f"{100 * r['rate']:.2g}% of positions")]
-        for name in ov:
-            tag = "OV·R (what reading a token makes it say)" if name == "ov_R" else "OV·S (the write's footprint: as if the token were there)"
-            lines.append(f"- {tag}: copying score {r[f'{name}_copy']:+.2f} (+1 copies what it reads, −1 suppresses; "
-                         f"{rank(r, f'{name}_copy')})")
-            body, keys = tokens(r, name)
-            lines.append(f"  - copies most: {body}")
-            body_z, _ = tokens(r, f"{name}_z", keys)
-            lines.append(f"  - against the layer's heads, also: {body_z or '(nothing new)'}")
-            body, keys = tokens(r, f"{name}_neg")
-            lines.append(f"  - suppresses most: {body}")
-        body, keys = tokens(r, "qk_S")
-        lines.append(f"- QK·S (what it attends to under its mean query, whatever the query): {body}")
-        body_z, _ = tokens(r, "qk_S_z", keys)
-        lines.append(f"  - against the layer's heads, also: {body_z or '(nothing new)'}")
-        lines.append(f"  - avoids: {tokens(r, 'qk_S_neg')[0]}")
-        lines.append(f"- self-seeking (a token as the query favours the same token as the key): median z "
-                     f"{r['qk_self_S']:+.2f} ({rank(r, 'qk_self_S')}); most: {tokens(r, 'qk_self_S')[0]}")
+                 f"- fires (output past a quarter of its typical high) at {100 * r['rate']:.2g}% of positions",
+                 f"- {tag}: copying score {r[f'{ov}_copy']:+.2f} (+1 copies what it reads, −1 suppresses)",
+                 f"  - copies most: {tokens(r, ov)}",
+                 f"  - suppresses most: {tokens(r, f'{ov}_neg')}",
+                 f"- QK·S (what it attends to under its mean query, whatever the query): {tokens(r, 'qk_S')}",
+                 (f"- self-seeking (a token as the query favours the same token as the key): median z {r['qk_self_S']:+.2f}; "
+                  f"most: {tokens(r, 'qk_self_S')}")]
         if layer:  # no R-lens input at L0
             lines.append(f"- seeks what it is about to say (a query about to say a token favours earlier copies of it as the "
-                         f"key): median z {r['qk_self_R']:+.2f} ({rank(r, 'qk_self_R')}); most: {tokens(r, 'qk_self_R')[0]}")
+                         f"key): median z {r['qk_self_R']:+.2f}; most: {tokens(r, 'qk_self_R')}")
         lines.append(f"- attends to what it copies (Spearman of QK·S with OV·R over tokens): {r['qk_ov_rho']:+.2f}")
-        lines.append(f"- drivers in real text: as the query, the tokens that make its output largest: {tokens(r, 'drivers')[0]}")
-        lines.append(f"  - as the key, the tokens it attends to most from the 16 after them: {tokens(r, 'keys')[0]}")
+        lines.append(f"- drivers in real text: as the query, the tokens that make its output largest: {tokens(r, 'drivers')}")
+        lines.append(f"  - as the key, the tokens it attends to most from the 16 after them: {tokens(r, 'keys')}")
         lines += [f"  - context: {c}" for c in str(r["contexts"]).split(" ‖ ")[:N_CONTEXTS] if c]
         by_layer[layer].append({"layer": layer, "unit": h, "card": "\n".join(lines)})
     for layer, cs in by_layer.items():
