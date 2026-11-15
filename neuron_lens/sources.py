@@ -40,6 +40,21 @@ FIRE = 1 / 4  # of act_top: the acts tables' rate threshold
 CHANNELS = ("v", "q", "k")  # a head's inputs: value, query, key
 
 
+def joined(parts: list[torch.Tensor]) -> torch.Tensor:
+    """``parts`` side by side, ``[d, Σ cols]``. A part that is the model's own weight (fp32, no norm folded in: Qwen3's
+    ``o_proj`` and ``down_proj``) becomes a view of the result, so the stack isn't held twice: Qwen3-14B's fp32
+    weights (59 GB) and a second copy of its writes (18.5 GB) don't fit an 80 GB GPU beside a pass."""
+    whole = torch.empty(parts[0].shape[0], sum(p.shape[1] for p in parts), dtype=parts[0].dtype, device=parts[0].device)
+    start = 0
+    for p in parts:
+        end = start + p.shape[1]
+        whole[:, start:end] = p
+        if isinstance(p, torch.nn.Parameter):
+            p.data = whole[:, start:end]
+        start = end
+    return whole
+
+
 class Stream:
     """A decoder stack's residual as a sum of writes, for any model ``arch``'s geometry covers."""
 
@@ -47,8 +62,8 @@ class Stream:
         self.layers, self.embed = stack.layers, stack.embed_tokens
         self.n_heads = stack.config.num_attention_heads
         heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd], hd may differ by layer (Gemma 4's full-attention layers)
-        self.all_heads = torch.cat(heads, 1)  # a layer's sources are a prefix of these
-        self.all_neurons = torch.cat([arch.mlp_write(lay) for lay in self.layers], 1)  # [d, L·f]
+        self.all_heads = joined(heads)  # a layer's sources are a prefix of these
+        self.all_neurons = joined([arch.mlp_write(lay) for lay in self.layers])  # [d, L·f]
         self.neurons = self.all_neurons.split(stack.config.intermediate_size, 1)  # per layer, views of it
         dev = self.all_neurons.device
         self.head_end = torch.tensor([w.shape[1] for w in heads]).cumsum(0).tolist()  # layer l's heads end at this column
