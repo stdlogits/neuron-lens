@@ -1,0 +1,10 @@
+head reads, Qwen/Qwen3-0.6B: 28 × 16 heads, 103830 tokens; QK statistics over 63990 documents, 66350 tokens seen 10+ times as keys
+
+qk_self_S against duplicate-token heads (duplicate > 0.3, 18 heads): AUROC 0.96, Spearman with the duplicate score +0.50; qk_self_R 0.79 (from L1)
+
+by band: qk_ctx_rho mean (own / control head), share past +0.2 (own / control); qk_ov_rho mean (own / control), share past +0.2 and under −0.2 (own / control); ov_R_copy and ov_S_copy medians; qk_self_S and qk_self_R medians
+  L0-6: ctx +0.18/+0.05 (0.46/0.09)  align +0.015/-0.020 (+ 0.07/0.01, − 0.06/0.03)  copy R +0.28 S +0.72  self S +0.99 R +0.53
+  L7-13: ctx +0.18/+0.13 (0.41/0.25)  align +0.023/+0.003 (+ 0.03/0.02, − 0.00/0.01)  copy R +0.20 S +0.55  self S +2.53 R +1.10
+  L14-20: ctx +0.24/+0.17 (0.63/0.42)  align +0.048/+0.021 (+ 0.12/0.05, − 0.04/0.06)  copy R +0.34 S +0.45  self S +2.66 R +0.99
+  L21-27: ctx +0.40/+0.10 (0.73/0.18)  align +0.155/+0.004 (+ 0.38/0.04, − 0.08/0.03)  copy R +0.36 S +0.31  self S +1.87 R +1.12
+  L0-27: ctx +0.25/+0.11 (0.56/0.23)  align +0.060/+0.002 (+ 0.15/0.03, − 0.04/0.03)  copy R +0.27 S +0.52  self S +2.03 R +0.96
