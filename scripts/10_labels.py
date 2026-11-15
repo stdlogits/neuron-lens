@@ -781,10 +781,11 @@ def summarize(per: dict, result: dict) -> list[str]:
     result["summary"] = {"firing": own, "control": ctl, "writes": wr,
                          "bands": {b: {k: stat(k, b)[0] for k in ("own", "control", "writes")}
                                    for b in sorted({v["band"] for v in per.values()}, key=lambda s: int(s[1:].split("-")[0]))}}
-    lines = ["Every head described by Claude Haiku 5.5 from its card (batch API, effort low, adaptive thinking):",
+    lines = ["Every head described by Claude Haiku 5.5 from its card (batch API, effort low, no thinking):",
              "`fires` (where its output is large), `attends` (what it attends to there) and `writes` (what its",
              "output promotes), each with a confidence 0-1, and `note`. The cards show the head's pattern scores,",
-             "output scale, OV and QK reads, drivers and first 5 top contexts; nothing about its other top firings.",
+             "how often it fires, one OV read for its depth, its QK reads and its drivers as query and key (24 tokens",
+             "each), and its first 5 top contexts; nothing about its other top firings.",
              f"The prompt is `scripts/prompts/heads.md` with `scripts/prompts/{NAME}/heads.md` on GitHub.", "",
              f"**Checked blind** on {len(per)} random heads, {result['per_band']} a band, by Claude Sonnet 5.5:", "",
              (f"- **Firing:** given a head's `fires` and `attends` labels and {2 * result['shown']} contexts, "
