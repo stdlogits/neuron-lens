@@ -1,0 +1,9 @@
+direct weight edges, Qwen/Qwen3-1.7B: top 64 in and out per pole by |push| among |cos| >= 5.0/sqrt(d) = 0.110; residual RMS at the MLP input L0 0.2, L4 0.8, L8 1.4, L12 3.1, L16 5.4, L20 16.5, L24 41.3, L27 74.3
+
+band     prev  rotated  edged  top|cos|  top push  in-edges  gap1  gap  pos   hubs | out-edged  out-edges  out gap
+  (prev, rotated: median of each pole's largest |cos| with the layer before's writes, and with them rotated at random; edged: share of poles with an in-edge; top |cos|, top push: medians of the strongest in-edge's; in-edges: median count above the floor, of k; gap1: share of strongest in-edges from the layer before; gap: median layer gap; pos: share of strongest in-edges that drive the pole; hubs: share of the band's in-list entries held by the 1% most-listed sources; out-: the same for out-lists)
+L0-6     0.110    0.085   0.50     0.124     1.689         0  0.70    1  0.61  0.28 |      0.83          4        1
+L7-13    0.133    0.085   0.87     0.131     1.711        10  0.51    1  0.71  0.10 |      0.99         24        1
+L14-20   0.156    0.085   0.95     0.141     1.494        30  0.60    1  0.69  0.10 |      0.98         28        1
+L21-27   0.119    0.085   0.87     0.139     3.005        12  0.37    2  0.79  0.14 |      0.71          4        2
+L0-27    0.128    0.085   0.80     0.134     1.839        10  0.53    1  0.71  0.11 |      0.88         13        1
