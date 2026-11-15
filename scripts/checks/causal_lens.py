@@ -42,6 +42,7 @@ scalar is the model's own); log-probs are after the final softcap; no named pole
 """
 import argparse
 import json
+import os
 import random
 import time
 
@@ -151,7 +152,8 @@ def measure(args) -> None:
     def checkpoint() -> None:
         nonlocal saved
         if time.perf_counter() - saved > 60 * args.save_minutes:
-            torch.save(out, partial)
+            torch.save(out, partial.with_suffix(".tmp"))  # a save cut short leaves the last checkpoint whole
+            os.replace(partial.with_suffix(".tmp"), partial)
             saved = time.perf_counter()
 
     # Steering: conditions (pick, pole, dose), args.cond_batch per forward pass, one layer at a time.
