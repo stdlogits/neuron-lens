@@ -33,21 +33,29 @@ New repos are created private. Run where the fits and the catalog are, logged in
 that branch of both repos, made from ``main`` if it is new. ``--tables`` sends only those tables, as the catalog holds them,
 to the dataset's ``--branch``, leaving the cards alone, so a run can publish each table as soon as its stage is done
 (``scripts/catalog_queue.sh``). A release deletes what this machine's catalog lacks from the folders it covers (the
-whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-run`` lists that against the revision it would upload to, with what it would add and change in size:
+whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-run`` lists that against the revision it would upload to, with what it would add and change in size.
+``--from-branch`` releases the catalog a branch of the dataset holds instead of this machine's (a GPU box's, sent with
+``--tables``): the model's whole folder is copied on the Hub, the card's numbers read from its parquet files' footers, and
+what the target has in that folder and the branch lacks is deleted. The Qwen3 family's other sizes (``LADDER``) get a
+section of each card:
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
+    NEURON_LENS_MODEL=... python scripts/12_release.py --parts neurons,heads,files --from-branch b [--dry-run]
 """
 import argparse
 import json
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pyarrow.parquet as pq
 import torch
-from huggingface_hub import CommitOperationAdd, HfApi
+from fsspec.implementations.local import LocalFileSystem
+from huggingface_hub import CommitOperationAdd, CommitOperationCopy, CommitOperationDelete, HfApi, HfFileSystem
+from huggingface_hub.errors import RemoteEntryNotFoundError
 from huggingface_hub.utils import filter_repo_objects
 
 from neuron_lens import arch
@@ -59,8 +67,8 @@ from neuron_lens.transport import SKIP_FIRST, Accumulator
 REPO = "stdlogits/rs-lenses"
 DATASET = "stdlogits/neuron-lens"
 MODELS = ("Qwen/Qwen3-8B", "google/gemma-4-12B")  # the released models, in the cards' order
-# The Qwen3 family in the model card's order. Those not in MODELS (the ladder) have their lenses released ahead of their
-# catalogs: a run for one uploads its lens files and the model card, which lists those with a release record in data/summary/.
+# The Qwen3 family in the cards' order. Those not in MODELS (the ladder) have lenses and catalogs without labels; each card
+# has a section on them, listing those with a release record in data/summary/ (with ``configs``, a released catalog).
 QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwen3-1.7B-Base", "Qwen/Qwen3-4B",
          "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
 LADDER = tuple(m for m in QWEN3 if m not in MODELS)
@@ -224,28 +232,66 @@ def remote_changes(built: list[str], stale: list[str], root: Path, stem: str, br
         print(f"  delete {p}")
 
 
-def catalog_facts(model: str, root: Path) -> dict:
-    """What the card says about the model's staged catalog in ``root``: its viewer configs with row
-    counts, its documents and positions, its kept tokens and its causal sample."""
+def catalog_facts(model: str, root: str, fs) -> dict:
+    """What the card says about the model's catalog at ``root`` on ``fs``, this machine's staging or a branch of the dataset
+    (``HfFileSystem``, through the parquet files' footers): its viewer configs with row counts, its documents and positions,
+    its kept tokens and, staged here, the size of its causal sample (read whole)."""
     stem = arch.stem(model)
-    configs = []
+
+    def rows(path: str) -> int:
+        with fs.open(path) as f:
+            return pq.ParquetFile(f).metadata.num_rows
+
+    found = []  # [config, glob, what, paths]
     for side, tables in TABLES.items():
         for t, what in tables.items():
-            paths = sorted((root / side / t).glob("L*.parquet")) if side == "neurons" else [root / side / f"{t}.parquet"]
-            paths = [p for p in paths if p.exists()]
+            paths = sorted(fs.glob(f"{root}/{side}/{t}/L*.parquet")) if side == "neurons" else [f"{root}/{side}/{t}.parquet"]
+            paths = [p for p in paths if fs.exists(p)]
             if paths:
                 glob = f"{stem}/{side}/{t}/*.parquet" if side == "neurons" else f"{stem}/{side}/{t}.parquet"
-                configs.append([f"{stem}-{side}-{t}", glob, what, sum(pq.ParquetFile(p).metadata.num_rows for p in paths)])
+                found.append([f"{stem}-{side}-{t}", glob, what, paths])
         if side == "neurons":
             for m, what in OPTIMISED.items():
-                p = root / "neurons" / f"{m}_optimised.parquet"
-                if p.exists():
-                    configs.append([f"{stem}-neurons-{m}-optimised", f"{stem}/neurons/{m}_optimised.parquet", what,
-                                    pq.ParquetFile(p).metadata.num_rows])
-    tokens = pq.read_table(root / "docs.parquet", columns=["tokens"]).column(0).to_numpy()
-    causal = torch.load(root / "causal" / "causal.pt", weights_only=False, map_location="cpu", mmap=True)
-    return {"configs": configs, "docs": len(tokens), "positions": int((tokens - 1).sum()), "kept": len(kept(model)),
-            "causal_picks": len(causal["picks"])}
+                if fs.exists(p := f"{root}/neurons/{m}_optimised.parquet"):
+                    found.append([f"{stem}-neurons-{m}-optimised", f"{stem}/neurons/{m}_optimised.parquet", what, [p]])
+    with ThreadPoolExecutor(16) as pool:
+        configs = [[c, glob, what, sum(pool.map(rows, paths))] for c, glob, what, paths in found]
+    with fs.open(f"{root}/docs.parquet") as f:
+        tokens = pq.read_table(f, columns=["tokens"]).column(0).to_numpy()
+    facts = {"configs": configs, "docs": len(tokens), "positions": int((tokens - 1).sum()), "kept": len(kept(model))}
+    if isinstance(fs, LocalFileSystem):
+        causal = torch.load(Path(root) / "causal" / "causal.pt", weights_only=False, map_location="cpu", mmap=True)
+        facts["causal_picks"] = len(causal["picks"])
+    return facts
+
+
+def copy_branch(stem: str, src: str, dst: str | None, dry_run: bool) -> None:
+    """The model's folder as the dataset's branch ``src`` holds it, onto ``dst`` (default main), copied on the Hub; what
+    ``dst`` has in that folder and ``src`` lacks is deleted. With ``dry_run``, what that would add, change in size and delete."""
+    api = HfApi()
+
+    def files(rev: str | None) -> dict:
+        try:
+            return {f.path: f.size for f in api.list_repo_tree(DATASET, repo_type="dataset", revision=rev, path_in_repo=stem,
+                                                               recursive=True) if hasattr(f, "size")}
+        except RemoteEntryNotFoundError:
+            return {}
+
+    have, want = files(dst), files(src)
+    if not want:
+        raise SystemExit(f"{DATASET}@{src} holds no {stem}/")
+    new = [p for p in want if p not in have]
+    changed = [p for p in want if p in have and have[p] != want[p]]
+    gone = [p for p in have if p not in want]
+    print(f"{stem}: {len(want):,} files ({sum(want.values()) / 1e9:.1f} GB) from {src} onto {dst or 'main'}: {len(new):,} new, "
+          f"{len(changed):,} changed in size, {len(gone):,} deleted", flush=True)
+    for name, paths in (("new", new), ("changed", changed), ("deleted", gone)):
+        for p in paths[:5]:
+            print(f"  {name}: {p}")
+    if dry_run:
+        return
+    api.create_commit(DATASET, repo_type="dataset", revision=dst, commit_message=f"{stem}: the catalog from {src}",
+                      operations=[CommitOperationCopy(p, p, src_revision=src) for p in want] + [CommitOperationDelete(p) for p in gone])
 
 
 # ---------------------------------------------------------------- the cards
@@ -289,12 +335,18 @@ def ladder_text(f: dict, ladder: dict) -> str:
     tied = (f" {', '.join(tied)} {'ties its' if len(tied) == 1 else 'tie their'} embeddings: `W_U` and `W_E` are one "
             f"matrix." if tied else "")
     docs = sorted({x["lenses"]["text"]["R_docs"] for x in ladder.values()} | {x["lenses"]["text"]["S_docs"] for x in ladder.values()})
+    catalogued = [m.split("/")[-1] for m in QWEN3 if m in ladder and "configs" in ladder[m]]
+    catalogued = (f" Their neurons and heads are in the catalog, [`{DATASET}`](https://huggingface.co/datasets/{DATASET}), "
+                  "without labels." if len(catalogued) == len(ladder) else
+                  f" {', '.join(catalogued)} {'has its' if len(catalogued) == 1 else 'have their'} neurons and heads in the catalog, "
+                  f"[`{DATASET}`](https://huggingface.co/datasets/{DATASET}), without labels." if catalogued else
+                  " Their neurons and heads are not in the catalog yet.")
     return f"""
 ## More sizes of Qwen3
 
 The same lenses for more of the Qwen3 family, post-trained and base (Qwen released dense bases up to
 14B), fitted the same way on the same {' or '.join(f'{n:,}' for n in docs)} documents. Each folder holds
-the five text files above. Their neurons and heads are not in the catalog yet.{tied} Split-half
+the five text files above.{catalogued}{tied} Split-half
 differences by layer:
 
 | model | folder | layers, d | R-lens (from outputs, from MLP inputs) | S-lens (to MLP inputs, to outputs) | scale |
@@ -588,11 +640,52 @@ def head_media_text(j: dict) -> str:
                              + ". For sound, no head passes either.")
 
 
-def dataset_card(f: dict, lens_rev: str, date: str) -> str:
+def ladder_catalog_text(ladder: dict) -> str:
+    """The dataset card's section on the Qwen3 family's other sizes, catalogued without labels (findings §19)."""
+    if not ladder:
+        return ""
+    rows = []
+    for m, x in ladder.items():
+        steer = summary(f"causal_lens_{x['dir']}.json")["targets"]["steer 1x"]
+        r = next(v for k, v in steer.items() if k not in ("logit", "J"))["r_med"]  # the model's own R-lens
+        edge = next(L for L in range(len(r)) if min(r[L:]) >= 0.35)
+        rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']} × {x['neurons']:,} | "
+                    f"{2 * x['layers'] * x['neurons']:,} | {x['layers']} × {x['heads']} | {x['kept']:,} | L{edge} |")
+    sides = {side: [c.removeprefix(f"{x['dir']}-{side}-") for c, *_ in x["configs"] if c.startswith(f"{x['dir']}-{side}-")]
+             for side in ("neurons", "heads")}
+    docs = " or ".join(sorted({f"{x['docs']:,} documents ({x['positions']:,} positions)" for x in ladder.values()}))
+    return f"""
+## More sizes of Qwen3
+
+The rest of the Qwen3 family to 14B, post-trained and base (Qwen released dense bases up to 14B), catalogued as
+Qwen3-8B is but without labels, to see what changes with size (§19). Each has its own lenses (in
+[`{REPO}`](https://huggingface.co/{REPO})), the same {docs} of activation text (a base renders the chat slice
+with its post-trained sibling's template) and the same tables but `labels`: for neurons {", ".join(f"`{s}`" for s in sides["neurons"])},
+for heads {", ".join(f"`{s}`" for s in sides["heads"])}; and the same plain files, its causal sample 32 random neurons a layer.
+Configs are named as above, `<folder>-neurons-<table>` and `<folder>-heads-<table>`, a row per pole or head.
+
+| model | folder | neurons | poles | heads | kept tokens | R-lens reads writes from |
+|---|---|---|---|---|---|---|
+""" + "\n".join(rows) + """
+
+The last column is the first layer from which the R-lens read of a write predicts steering at a median r of 0.35 or more
+(§3's protocol; 0.98-0.99 in every model's last quarter). Before it the S-lens reads both sides, as through Qwen3-8B's L3,
+and inputs turn to the R-lens at about a quarter of the depth (§19), later in the bases. The S-lens names firing tokens far
+more often at 28 layers than from 36 on, past the first quarter (16-26% of firing poles against 2-10%).
+"""
+
+
+def dataset_card(f: dict, ladder: dict, lens_rev: str, date: str) -> str:
     q, g = f["Qwen/Qwen3-8B"], f["google/gemma-4-12B"]
+    ladder = {m: ladder[m] for m in QWEN3 if m in ladder and "configs" in ladder[m]}  # those with a released catalog
     configs = [c for x in f.values() for c in x["configs"]]
     yaml = "\n".join(f"- config_name: {c}\n  data_files: \"{glob}\"" + ("\n  default: true" if i == 0 else "")
-                     for i, (c, glob, _, _) in enumerate(configs))
+                     for i, (c, glob, _, _) in enumerate(configs + [c for x in ladder.values() for c in x["configs"]]))
+    more_sizes = ("\n\nThe rest of the Qwen3 family, 0.6B to 14B, post-trained and base, is catalogued the same way without labels: "
+                  "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
+    ladder_folders = ", and those under [More sizes of Qwen3](#more-sizes-of-qwen3)" if ladder else ""
+    ladder_limit = " (Qwen3's other sizes without labels)" if ladder else ""
+    ladder_license = (", and for [More sizes of Qwen3](#more-sizes-of-qwen3) the models listed there (Apache 2.0)") if ladder else ""
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("reads_at_firings_qwen3-8b.json"), summary("reads_at_firings_gemma-4-12b.json")
     neuron_cols = {"read_R": "`read_R`", "read_S": "`read_S`", "write_R": "`write_R`", "write_S": "`write_S`",
@@ -630,7 +723,7 @@ sides:
 
 Gemma 4 takes images and sound too, so each of its neurons is also read through lenses fitted on images
 and sounds, and against {media['image']['documents']:,} labelled images and {media['audio']['documents']:,}
-labelled sounds.
+labelled sounds.{more_sizes}
 
 ![What neurons and heads do](figures/01_anatomy.png)
 
@@ -994,7 +1087,7 @@ mean percentile among the classes, against 200 label shuffles); `top1_mid`, `top
 
 ## Plain files
 
-Per model folder (`qwen3-8b/`, `gemma-4-12b/`):
+Per model folder (`qwen3-8b/`, `gemma-4-12b/`{ladder_folders}):
 
 - `docs.parquet`: each activation document's `slice`, its `line` in the slice's file and its length.
   The slices' sources, revisions and row ids are in `data/corpus/act-<slice>.provenance.json` on GitHub:
@@ -1015,7 +1108,7 @@ Per model folder (`qwen3-8b/`, `gemma-4-12b/`):
   `caption`, `ref` (JSON: the dataset, config, split and revision, the row's own identifiers, the media
   file's path and its bytes' SHA-1) and `link`. The images and sounds are not re-hosted;
   `data/corpus/media-<modality>.provenance.json` on GitHub lists every source with its license.
-
+{ladder_catalog_text(ladder)}
 ## Loading
 
 ```python
@@ -1035,7 +1128,7 @@ image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4],
 
 ## Limits
 
-- Two models; the text lenses are fitted on English-heavy web text, Gemma 4's media lenses on COCO
+- Two models read in depth{ladder_limit}; the text lenses are fitted on English-heavy web text, Gemma 4's media lenses on COCO
   photos and ESC-50 sounds.
 - Activation statistics come from bf16 passes over documents of up to 256 tokens; top firings are one
   per document.
@@ -1050,7 +1143,7 @@ image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4],
 
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The catalog is derived from
 [`Qwen/Qwen3-8B`](https://huggingface.co/Qwen/Qwen3-8B) and
-[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B) (both Apache 2.0). Its `contexts` quote
+[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B) (both Apache 2.0){ladder_license}. Its `contexts` quote
 short excerpts of the activation corpora, which keep their own terms:
 [DCLM](https://huggingface.co/datasets/HuggingFaceFW/dclm_100BT-shuffled) (CC BY 4.0),
 [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2) (ODC-By 1.0),
@@ -1088,6 +1181,8 @@ def main() -> None:
     ap.add_argument("--branch", default=None, help="the branch of both repos to upload to (default main)")
     ap.add_argument("--tables", default=None, help="only these catalog tables, to --branch, without the cards")
     ap.add_argument("--dry-run", action="store_true", help="build the files and cards, list what the upload would delete or change, upload nothing")
+    ap.add_argument("--from-branch", default=None, help="release the catalog this branch of the dataset holds (sent there with --tables), "
+                                                        "not this machine's: the model's folder copied on the Hub")
     args = ap.parse_args()
     if args.tables is not None:
         upload_tables(MODEL, args.tables.split(","), args.branch)
@@ -1097,8 +1192,8 @@ def main() -> None:
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
     if MODEL not in MODELS + LADDER:
         raise ValueError(f"{MODEL} is in neither MODELS nor LADDER")
-    if MODEL in LADDER and parts - {"lenses", "scale"}:
-        raise ValueError(f"{MODEL}'s catalog is not released yet: --parts lenses or scale")
+    if args.from_branch and parts != {"neurons", "heads", "files"}:
+        raise ValueError("--from-branch releases the model's whole catalog folder: --parts neurons,heads,files")
     stem = arch.stem(MODEL)
     facts_path = SUMMARY / f"release_{stem}.json"
     facts = json.loads(facts_path.read_text()) if facts_path.exists() else {}
@@ -1114,12 +1209,15 @@ def main() -> None:
     if parts & {"lenses", "scale"}:
         facts["scale"] = write_scale(MODEL, lens_root / stem)
     files = catalog_files(MODEL)
-    for part in parts & set(files):
-        shutil.rmtree(data_root / stem / part, ignore_errors=True) if part != "files" else None
-        for src, rel in files[part]:
-            link(src, data_root / stem / rel)
-    if parts & set(files):
-        facts |= catalog_facts(MODEL, data_root / stem)
+    if args.from_branch:
+        facts |= catalog_facts(MODEL, f"datasets/{DATASET}@{args.from_branch}/{stem}", HfFileSystem())
+    else:
+        for part in parts & set(files):
+            shutil.rmtree(data_root / stem / part, ignore_errors=True) if part != "files" else None
+            for src, rel in files[part]:
+                link(src, data_root / stem / rel)
+        if parts & set(files):
+            facts |= catalog_facts(MODEL, str(data_root / stem), LocalFileSystem())
     facts_path.write_text(json.dumps(facts, indent=1) + "\n")
     every = {m: json.loads((SUMMARY / f"release_{arch.stem(m)}.json").read_text()) for m in MODELS}
     ladder = {m: json.loads(p.read_text()) for m in LADDER if (p := SUMMARY / f"release_{arch.stem(m)}.json").exists()}
@@ -1131,13 +1229,15 @@ def main() -> None:
         for name in names:
             link(FIGURES / name, root / "figures" / name)
     (lens_root / "README.md").write_text(model_card(every, ladder, date))
-    built = [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
-    stale = ["figures/*", "*/README.md", "*/figures/*"] + (
+    built = [] if args.from_branch else [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
+    stale = ["figures/*", "*/README.md", "*/figures/*"] + ([] if args.from_branch else
         [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
     if args.dry_run:
-        (data_root / "README.md").write_text(dataset_card(every, "(dry run)", date))
+        (data_root / "README.md").write_text(dataset_card(every, ladder, "(dry run)", date))
         print(f"dry run: cards in {lens_root} and {data_root}")
-        if built:
+        if args.from_branch:
+            copy_branch(stem, args.from_branch, args.branch, dry_run=True)
+        elif built:
             remote_changes(built, stale, data_root, stem, args.branch)
         return
     api.create_repo(REPO, private=True, exist_ok=True)
@@ -1151,12 +1251,14 @@ def main() -> None:
                                       if lens_files else "Cards and figures"))
     lens_rev = api.repo_info(REPO, revision=args.branch).sha[:10]
     print(f"{time.strftime('%H:%M:%S')} model repo at {lens_rev}: https://huggingface.co/{REPO}", flush=True)
-    if MODEL in LADDER:  # no catalog yet: the dataset and its card stay as they are
+    if MODEL in LADDER and not parts & set(files):  # its lenses alone: the dataset and its card stay as they are
         return
-    (data_root / "README.md").write_text(dataset_card(every, lens_rev, date))
+    (data_root / "README.md").write_text(dataset_card(every, ladder, lens_rev, date))
     api.create_repo(DATASET, repo_type="dataset", private=True, exist_ok=True)
     if args.branch:
         api.create_branch(DATASET, repo_type="dataset", branch=args.branch, exist_ok=True)
+    if args.from_branch:
+        copy_branch(stem, args.from_branch, args.branch, dry_run=False)
     api.upload_folder(repo_id=DATASET, repo_type="dataset", folder_path=data_root, revision=args.branch,
                       allow_patterns=["README.md", "figures/*", *built], delete_patterns=stale,
                       commit_message=(f"{stem}: {', '.join(sorted(parts - {'lenses'}))}, cards" if parts - {"lenses"} else "Cards")
