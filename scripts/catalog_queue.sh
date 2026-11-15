@@ -8,6 +8,7 @@
 # from the cache after its stages. With several GPUs, run one queue per GPU (CUDA_VISIBLE_DEVICES=i), each with its
 # own models. MEDIA=1 also reruns Gemma 4's media stages (13, 14), which need about 220 GB of RAM. UPLOAD names the
 # branch of the Hub dataset each table goes to as soon as its stage has run, in the background (unset: none).
+# FIRINGS_SAVE_MINUTES=0 keeps 17's state in memory only, where its checkpoints don't fit the disk (Qwen3-14B: 91 GB).
 #
 #   UPLOAD=b setsid nohup bash scripts/catalog_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-1.7B >> logs/catalog_queue.log 2>&1 &
 set -uo pipefail
@@ -36,7 +37,7 @@ for m in "$@"; do
     echo "$(date '+%F %T') model $m"
     hf download "$m" > /dev/null || { echo "$(date '+%F %T') FAILED download $m"; continue; }
     run "acts_$s" "$m" python scripts/06_activations.py && up "acts_$s" "$m" acts,docs &&
-        run "firings_$s" "$m" python scripts/17_firings.py && up "firings_$s" "$m" firings,sources &&
+        run "firings_$s" "$m" python scripts/17_firings.py --save-minutes "${FIRINGS_SAVE_MINUTES:-30}" && up "firings_$s" "$m" firings,sources &&
         run "drivers_$s" "$m" python scripts/07_drivers.py && up "drivers_$s" "$m" drivers || continue
     run "reads_$s" "$m" python scripts/08_reads.py && up "reads_$s" "$m" reads
     run "reads_at_firings_$s" "$m" python scripts/checks/reads_at_firings.py

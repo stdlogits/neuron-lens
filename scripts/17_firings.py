@@ -146,7 +146,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
         src.split()
         tokens += int(mask.sum())
         last = i + 1 == len(batches)
-        if args.docs is None and (last or time.monotonic() - saved_at > 60 * args.save_minutes):
+        if args.docs is None and args.save_minutes > 0 and (last or time.monotonic() - saved_at > 60 * args.save_minutes):
             save("firings", meta, acc.state(), b)
             save("sources", meta, src.state(), b)
             saved_at = time.monotonic()
@@ -247,7 +247,8 @@ def main() -> None:
     ap.add_argument("--docs", type=int, default=None, help="a smoke test over the first N documents, writing no table")
     ap.add_argument("--batch-docs", type=int, default=32)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
-    ap.add_argument("--save-minutes", type=float, default=30)
+    ap.add_argument("--save-minutes", type=float, default=30,
+                    help="0: never, the state kept in memory only (a crash reruns the pass): Qwen3-14B's is 91 GB on disk, twice that while it replaces the last")
     ap.add_argument("--detach", action="store_true")
     ap.add_argument("--parts", default="neurons,heads", help="neurons (firings and sources), heads (heads/sources)")
     args = ap.parse_args()
