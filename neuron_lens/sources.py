@@ -183,7 +183,9 @@ def head_list(cols: dict, name: str, mean: torch.Tensor, H: int, silent: torch.T
     pad = TOP - v.shape[1]
     ids = torch.nn.functional.pad(i, (0, pad), value=-1)
     share = torch.nn.functional.pad(mean.gather(1, i), (0, pad), value=float("nan"))
+    none = torch.nn.functional.pad(v == 0, (0, pad), value=True)  # fewer heads before it than TOP: the rest are no source
     ids[silent], share[silent] = -1, float("nan")
+    ids[none], share[none] = -1, float("nan")
     cols[f"{name}_head_layer"] = fixed(torch.where(ids >= 0, ids // H, -1).to(torch.int16))
     cols[f"{name}_head"] = fixed(torch.where(ids >= 0, ids % H, -1).to(torch.int16))
     cols[f"{name}_head_share"] = fixed(share)
