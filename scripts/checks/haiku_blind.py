@@ -37,7 +37,7 @@ lb.PER_BAND = "about 20"  # only printed in grade's header
 lb.ARMS = {"h_lens": ("lens", "haiku"), "h_both": ("both", "haiku"), "h_v8": ("v8", "haiku"),
            "h_v8both": ("v8both", "haiku"), "s_both": ("both", "sonnet")}
 POLES = SUMMARY / "haiku_blind_poles.json"
-CONTEXT_LINE = re.compile(r"^(- activation: |  - context: |- near-silent: )")
+CONTEXT_LINE = re.compile(r"^(- activation: |- fires at |  - context: |- near-silent: )")
 
 
 def cards(args) -> None:

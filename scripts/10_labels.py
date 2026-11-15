@@ -1,17 +1,20 @@
 """Label every neuron pole and attention head with Claude Haiku 5.5 from its lens reads and top
 contexts: the catalog's ``labels`` tables (pipeline stage 10).
 
-**Neurons** (``--side neurons``): the evidence card per neuron (both poles) is the "both" card of
-``checks/lens_blind.py`` (findings §8) made depth-aware: of the eight reads in ``neurons/reads``,
-only those that carry signal at the neuron's layer (§6, §7), primary first, each to 64 tokens, in
-rank tiers (1-8 ‖ 9-24 ‖ 25-64) with variants merged (``release×9``), the layer's hub tokens (in 3%+
-of its raw top 64s) dropped from raw reads, a strength percentile among the layer's poles, the
-tokens two lenses or the two sides share, from L21 a note on peaked (high-kurtosis) writes
-(§5), and a line marking a pole that is a faint shadow of the other (§17); then ``neurons/acts``'
-activation line and first 5 top contexts. Labels: ``fires`` and ``writes``, each with a confidence.
-This arm was checked blind on 100 poles with ``checks/haiku_blind.py`` (§8). The full run
-(2026-10-29, on the first release's tables): 44,244 requests of 10 neurons, $105.41 at batch prices
-with thinking on (effort low), 1,071 poles' labels recovered from malformed JSON.
+**Neurons** (``--side neurons``): the evidence card per neuron (both poles) shows, for each pole, one input read and one
+write read of ``neurons/reads``, the ones its model's reading plan (``PLANS``) picks for the neuron's layer: the read
+raters found most coherent there, blind to the lens (``checks/depth_reads.py``; the write read is the R-lens's at every
+depth, which also predicts steering, §3). Each shows its first 24 tokens in rank tiers (1-8 ‖ 9-24), variants merged
+(``release×9``, runs of line breaks as ``⏎``), the layer's hub tokens (in 3%+ of its raw top 64s) dropped from raw reads;
+then the tokens the other lens's reads agree on, those both sides share, from the plan's late layer a note on peaked
+(high-kurtosis) writes (§5), a line marking a faint shadow of the other pole (§17, which then drops its input read), the
+pole's firing rate with the corpus slices where it fires at least twice or under half as often, and ``neurons/acts``'
+first 5 top contexts. No strengths or activation scale: a label's confidence is how clearly the card shows one theme.
+The prompt is shared by every model (``scripts/prompts/neurons.md``); a model's own file says what the model is and gives
+its worked examples, and its plan fills the guide to the reads by depth. Labels: ``fires`` and ``writes``, each with a
+confidence, and a note. Thinking is off by default. The first full run (2026-10-29, on the first release's tables and an
+earlier card: up to eight reads of 64 tokens with strength percentiles): 44,244 requests of 10 neurons, $105.41 at batch
+prices with thinking on (effort low), checked blind on 100 poles (``checks/haiku_blind.py``, §8).
 
 **Heads** (``--side heads``): the card per head shows its attention pattern scores, its output
 scale, its OV reads (what it copies and suppresses; through the S-lens too through L8, §11), its
@@ -29,13 +32,13 @@ in-context output read. ``check`` tests the labels blind on ``CHECK_PER_BAND`` r
   in-context output read, not on the card) and picks the head's ``writes`` label out of four from
   its band (chance 25%).
 
-The prompts are ``scripts/prompts/<model>/<side>.md``. Stages (under ``data/labels/<model>/<side>/``;
+The prompts are ``scripts/prompts/<side>.md`` with ``scripts/prompts/<model>/<side>.md`` filled in. Stages (under ``data/labels/<model>/<side>/``;
 nothing is sent to the API without an explicit stage):
 
 - ``cards``: ``cards/L<layer>.jsonl``, one card per neuron or head; ``--flipped``, only the neurons with a pole on SiLU's
   negative lobe (``acts``' ``neg_lobe`` past a half), whose input reads turned round when those poles began to be read
   the right way (findings §17), for relabelling just those: ``shards`` lands the new labels on the table already there;
-- ``pilot``: one batch of ``--n`` random requests; measures tokens (thinking included) and the parse
+- ``pilot``: one batch of ``--n`` random requests; measures tokens (thinking included, with ``--thinking on``) and the parse
   rate and projects the full run's cost into ``state.json``;
 - ``submit``: every request, in batches under the API's limits; refuses unless a pilot at the same
   thinking setting projected under ``--cap`` dollars and parsed 90%;
@@ -90,7 +93,8 @@ from neuron_lens.paths import DATA, ROOT, SUMMARY
 NAME = arch.stem(MODEL)
 LAYERS = arch.text_config(MODEL).num_hidden_layers
 OUT = {side: DATA / "labels" / NAME / side for side in ("neurons", "heads")}
-PROMPT = {side: ROOT / "scripts" / "prompts" / NAME / f"{side}.md" for side in OUT}
+TEMPLATE = {side: ROOT / "scripts" / "prompts" / f"{side}.md" for side in OUT}  # shared by every model
+PROMPT = {side: ROOT / "scripts" / "prompts" / NAME / f"{side}.md" for side in OUT}  # the model's own: about it, examples
 LABELLER, SCORER = "claude-haiku-5-5", "claude-sonnet-5-5"
 PRICE = {"input": 0.05, "output": 0.25, "cache_read": 0.005, "cache_write": 0.0625}  # $/MTok, Haiku's batch prices
 PER_REQUEST = {"neurons": 10, "heads": 8}  # cards per request
@@ -100,76 +104,76 @@ MAX_REQUESTS, MAX_BYTES = 3000, 200_000_000  # per batch, under the API's 100,00
 SILENT = 0.05  # act_top under this: near-silent (§7, §8)
 SHADOW = 1 / 4  # a pole on the negative lobe under this share of its partner's act_top is a faint shadow of it (§17)
 HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (§6)
+INPUTS, WRITES = ("read_S", "read_S_z", "read_R", "read_R_z"), ("write_R", "write_R_z", "write_S", "write_S_z")
+SHOW = 24  # tokens a read shows: rank tiers 1-8 ‖ 9-24
+SLICES = ("dclm", "zh", "code", "chat")
 READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z": "in·R z",
         "write_S": "out·S", "write_S_z": "out·S z", "write_R": "out·R", "write_R_z": "out·R z"}
 ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])$"), "heads": re.compile(r"^L(\d+)h(\d+)$")}
-# The reading plan, per model: by depth, (last layer, the reads shown primary first, the card's line on
-# them), for the input and output side of a neuron and the OV side of a head; the layer from which a
-# peaked write gets its note (§5); and the bands of the head check. Qwen3-8B's follows §6, §7 and §11,
-# Gemma 4's its census in §13, in four bands: token (L0-L4), early (L5-L13), middle (L14-L32), late.
+# The reading plan, per model: by depth, (last layer, the read a card shows, the prompt's line on it), for the input
+# and the write side of a neuron, and (last layer, the OV reads shown, the line) for a head; the layer from which a
+# peaked write gets its note (§5); and the bands of the head check. A card shows one read a side: the one raters found
+# most coherent at that depth, blind to the lens (``checks/depth_reads.py``, two raters a model, 8-16 layers, findings
+# §8); the write read is the R-lens's everywhere, which also predicts steering (§3, §19). Where the input read is the
+# R-lens's but rarely names the contexts' tokens, the line says so: it can name a concept associated with what drives
+# the pole rather than the tokens it fires on. The head plans follow each model's census of head reads (§11, §12, §19).
+S_IN = "the literal tokens that drive the pole, at its position or a few before"
+S_Z_IN = ("the tokens that drive the pole, at its position or a few before, scored against the layer's other neurons: what "
+          "is specific to it, often a concept more than a token")
+R_ASSOC = ("what the model is getting ready to say when the pole is driven; here that often differs from the tokens it fires on "
+           "(an associated concept, a style or a script): take where it fires from the contexts, and say in the note what the "
+           "read adds")
+R_IN = "the concept around where the pole fires, and late often the word about to come next"
+W_EARLY = "what its push makes the model say; this early, steering follows the read less closely than later"
+W_MID = "what its push makes the model say"
+W_LATE = "often the next word it predicts"
+H_EARLY = "the write's footprint (OV·S) is often the better write read this early; OV·R shows too"
+H_MID = "OV·R is the write read"
+H_LATE = ("OV·R most often names what late heads copy, and 'seeks what it is about to say' tracks where they look: with a "
+          "negative copying score, copy suppression")
+
+
+def qwen_plan(layers: int, s_last: int, assoc_last: int, write_edge: int, late: int, heads_early: int, heads_late: int,
+              s_read: str = "read_S") -> dict:
+    """A Qwen3 size's plan from its depths: the S-lens input read through ``s_last``, the R-lens's after (with the
+    association line through ``assoc_last``); early writes before ``write_edge``, next-word writes from ``late``; heads'
+    OV·S through ``heads_early``, the late line from ``heads_late``."""
+    last = layers - 1
+    ins = [(s_last, s_read, S_Z_IN if s_read.endswith("_z") else S_IN)] + ([(assoc_last, "read_R", R_ASSOC)] if assoc_last > s_last else []) + [(last, "read_R", R_IN)]
+    outs = ([(write_edge - 1, "write_R", W_EARLY)] if write_edge > 0 else []) + [(late - 1, "write_R", W_MID), (last, "write_R", W_LATE)]
+    heads = [(heads_early, ["ov_S", "ov_R"], H_EARLY), (heads_late - 1, ["ov_R"], H_MID), (last, ["ov_R"], H_LATE)]
+    return {"in": ins, "out": outs, "heads": heads, "late": late, "check_bands": tuple(arch.bands(layers))}
+
+
 PLANS = {
-    "qwen3-8b": {
-        "in": [
-            (4, ["read_S", "read_S_z"], "in·S names the literal tokens it fires on; in·R carries nothing here"),
-            (7, ["read_S_z", "read_S"], "in·S is weaker than at L0-L4 but still the input read; in·R carries almost nothing"),
-            (8, ["read_S", "read_S_z", "read_R", "read_R_z"], "the crossover: in·S and in·R both carry signal"),
-            (12, ["read_R", "read_R_z"], "in·R is the input read from here; in·S has gone to noise"),
-            (20, ["read_R_z", "read_R"], "the weakest band for every input read: expect little, say unclear freely"),
-            (35, ["read_R", "read_R_z", "read_S_z"], "in·R is often the word about to come next; in·S z names concepts"),
-        ],
-        "out": [
-            (4, ["write_R_z", "write_S_z"], "raw out·R is hub noise here; writes are weak this early"),
-            (20, ["write_R", "write_R_z", "write_S_z"],
-             "out·R is what its push makes the model say (it predicts steering for 92-100% of poles from L5)"),
-            (35, ["write_R", "write_R_z"], "out·R is usually the next word it predicts"),
-        ],
+    "qwen3-0.6b": qwen_plan(28, s_last=5, assoc_last=8, write_edge=0, late=16, heads_early=3, heads_late=20),
+    "qwen3-1.7b": qwen_plan(28, s_last=9, assoc_last=18, write_edge=0, late=16, heads_early=3, heads_late=20),
+    "qwen3-4b": qwen_plan(36, s_last=5, assoc_last=8, write_edge=3, late=21, heads_early=4, heads_late=26, s_read="read_S_z"),
+    "qwen3-14b": qwen_plan(40, s_last=8, assoc_last=11, write_edge=7, late=23, heads_early=4, heads_late=28),
+    "qwen3-8b": qwen_plan(36, s_last=3, assoc_last=8, write_edge=4, late=21, heads_early=8, heads_late=28) | {
         "heads": [
-            (3, ["ov_S", "ov_R"], ("the write's footprint (OV·S) is the output read here; OV·R is weak this early. "
-                                  "QK reads track real attention best at layer 0")),
-            (8, ["ov_S", "ov_R"], "OV·S is the record through layer 8, OV·R carries signal from about layer 4"),
-            (12, ["ov_R"], "OV·R is the output read from here"),
-            (20, ["ov_R"], "the weakest band for every head read: QK reads are uninformative here, expect little, say unclear freely"),
-            (27, ["ov_R"], ("OV·R is the output read here; the QK reads carry little, though some heads already seek what "
-                            "they are about to say")),
-            (35, ["ov_R"], ("OV·R and the QK reads are most reliable here; late heads often attend to what they copy, and "
-                            "'seeks what it is about to say' tracks where they look: with a negative copying score, copy suppression")),
-        ],
-        "late": 21,
-        "check_bands": ((0, 8), (9, 12), (13, 20), (21, 27), (28, 35)),
-    },
+            (3, ["ov_S", "ov_R"], "the write's footprint (OV·S) is the better write read this early, and the QK reads track real attention best at layer 0"),
+            (8, ["ov_S", "ov_R"], "OV·S and OV·R both show what a head writes"),
+            (20, ["ov_R"], "OV·R is the write read; under the head's average query the QK reads say little about these heads"),
+            (27, ["ov_R"], "OV·R is the write read; some heads already seek what they are about to say"),
+            (35, ["ov_R"], "late heads often attend to what they copy; " + H_LATE),
+        ]},
     "gemma-4-12b": {
-        "in": [
-            (4, ["read_S", "read_S_z"], ("in·S names the literal tokens it fires on (it holds for 32-88% of poles here); "
-                                        "in·R carries nothing")),
-            (13, ["read_S_z", "read_S"], ("in·S fades by layer 9 and returns at layers 10-13 (23-57% of poles); "
-                                         "in·R carries nothing")),
-            (32, ["read_S_z", "read_R_z"], ("the weakest band for every input read (most poles here pass no test): "
-                                           "expect little, say unclear freely")),
-            (47, ["read_S_z", "read_R"], ("in·R sometimes names the word about to come next and in·S z a concept, "
-                                         "but both are weak: lean on the contexts")),
-        ],
-        "out": [
-            (4, ["write_R_z", "write_S_z"], "writes are weak this early: neither lens predicts a natural-size push before layer 11"),
-            (13, ["write_S", "write_R", "write_R_z"], ("out·S holds at layers 11-13 (10-22% of poles), where neurons write back "
-                                                      "the tokens they detect; out·R predicts what an amplified push does from layer 11")),
-            (32, ["write_R", "write_R_z"], ("out·R is what its push makes the model say (r 0.5-0.8 with steering), "
-                                           "though it rarely names the next word here")),
-            (47, ["write_R", "write_R_z"], ("out·R is often the next word it predicts (it holds for 21-37% of poles at "
-                                           "layers 33-40, 8-14% after)")),
-        ],
+        "in": [(19, "read_R", R_ASSOC), (47, "read_R", R_IN)],
+        "out": [(10, "write_R", "what its push would make the model say; at these layers a push at its natural size barely "
+                                 "moves the output, and steering doesn't follow the read"),
+                (32, "write_R", W_MID), (47, "write_R", W_LATE)],
         "heads": [
-            (13, ["ov_S", "ov_R"], ("neither OV read passes its test this early (with 16 heads a layer the tests are weak); "
-                                   "early heads often attend by token identity or position: lean on the pattern and the contexts")),
-            (32, ["ov_R"], "the weakest band for every head read: 70% of heads here pass no test, expect little, say unclear freely"),
-            (47, ["ov_R"], ("OV·R is most reliable here: it holds for about a fifth of the heads at layers 36-47; 'seeks what "
-                            "it is about to say' tracks where late heads look a little better than self-seeking, though weakly "
-                            "on this model, and with a negative copying score marks copy suppression")),
+            (13, ["ov_S", "ov_R"], "early heads often attend by token identity or position: the pattern scores and the contexts show it best"),
+            (32, ["ov_R"], H_MID),
+            (47, ["ov_R"], H_LATE),
         ],
         "late": 33,
         "check_bands": ((0, 4), (5, 13), (14, 32), (33, 47)),
     },
-}[NAME]
-BANDS = PLANS["check_bands"]
+}
+PLAN = PLANS.get(NAME)  # None for a model without a reading plan: its cards are refused
+BANDS = PLAN["check_bands"] if PLAN else ()
 CHECK_PER_BAND = 20
 CHECK_SHOWN = 4  # held-out firings per head in a firing check
 
@@ -180,18 +184,40 @@ def lenient(side: str) -> re.Pattern:
         rf'.*?"{k}"\s*:\s*\{{\s*"label"\s*:\s*"(.*?)"\s*,\s*"confidence"\s*:\s*([0-9.]+)' for k in FIELDS[side]))
 
 
-def at_depth(side: str, layer: int) -> tuple[list[str], str]:
-    return next((reads, line) for last, reads, line in PLANS[side] if layer <= last)
+def at_depth(side: str, layer: int):
+    """The read (for heads, the OV reads) a card shows at this depth, and the prompt's line on it."""
+    return next((reads, line) for last, reads, line in PLAN[side] if layer <= last)
 
 
-def plan(layer: int) -> tuple[list[str], list[str], str, str]:
-    """The reads shown at this depth (input, output), primary first, with a line on each side."""
-    (i, ni), (o, no) = at_depth("in", layer), at_depth("out", layer)
-    return i, o, ni, no
+def depth_table(side: str) -> str:
+    """The prompt's guide to the reads by depth, from the plan: what the card shows at each depth and how far it goes."""
+    def spans(plan):
+        first = 0
+        for last, reads, line in plan:
+            yield (f"layer {first}" if first == last else f"layers {first}-{last}"), reads, line
+            first = last + 1
+    if side == "heads":
+        return "\n".join(f"- {span}: {line}." for span, _, line in spans(PLAN["heads"]))
+    return ("The input read on each card, by depth:\n" + "\n".join(f"- {span}, {READ[r]}: {line}." for span, r, line in spans(PLAN["in"]))
+            + "\n\nThe write read on each card, by depth:\n"
+            + "\n".join(f"- {span}, {READ[r]}: {line}." for span, r, line in spans(PLAN["out"])))
+
+
+def system_prompt(side: str) -> str:
+    """The shared prompt with the model's parts filled in: its own file (``PROMPT``) up to ``## Worked examples`` says
+    what the model is, the rest is its worked examples; the depth guide comes from its plan."""
+    if PLAN is None:
+        raise SystemExit(f"no reading plan for {NAME} in PLANS")
+    about, mark, examples = PROMPT[side].read_text().partition("## Worked examples")
+    return (TEMPLATE[side].read_text().replace("{about}", about.strip()).replace("{depths}", depth_table(side))
+            .replace("{examples}", (mark + examples).strip()))
 
 
 def stem(t: str) -> str:
-    """Variant key: case, leading punctuation and common English suffixes removed (release, Released, -releases)."""
+    """Variant key: case, leading punctuation and common English suffixes removed (release, Released, -releases); every
+    run of line breaks is one key (⏎, ⏎⏎⏎, ␍⏎)."""
+    if t.strip() and set(t) <= set("⏎␍ \t"):
+        return "⏎"
     k = t.strip().lower().lstrip("_-.").lstrip("/([")
     for suf in ("ing", "ed", "es", "s", "ly"):
         if k.endswith(suf) and len(k) - len(suf) >= 4:
@@ -213,8 +239,20 @@ def grouped(tokens: list[str], skip=()) -> tuple[str, set]:
         count[k] += 1
     tiers = [[], [], []]
     for k, t in order:
-        tiers[0 if rank[k] < 8 else 1 if rank[k] < 24 else 2].append(t + (f"×{count[k]}" if count[k] > 1 else ""))
+        tiers[0 if rank[k] < 8 else 1 if rank[k] < 24 else 2].append((k if k == "⏎" else t) + (f"×{count[k]}" if count[k] > 1 else ""))
     return " ‖ ".join(" | ".join(x) for x in tiers if x), set(count)
+
+
+def lens(read: str) -> str:
+    return "S" if "_S" in read else "R"
+
+
+def firing_line(r: dict) -> str:
+    """How often the pole fires, and the corpus slices where it fires at least twice as often or under half as often."""
+    rate = r["rate"]
+    odd = [f"{s} {r[f'rate_{s}'] / rate:.2g}×" for s in SLICES
+           if rate > 0 and (r[f"rate_{s}"] >= 2 * rate or r[f"rate_{s}"] <= rate / 2)]
+    return f"- fires at {rate:.1e} of positions" + (f"; {', '.join(odd)}" if odd else "")
 
 
 def cards_layer(layer: int, flipped: bool = False) -> int:
@@ -229,59 +267,47 @@ def cards_layer(layer: int, flipped: bool = False) -> int:
             cache[i] = t if t.strip() else repr(t)
         return cache[i]
 
-    ins, outs, ni, no = plan(layer)
-    shown = ins + outs
+    (main_in, _), (main_out, _) = at_depth("in", layer), at_depth("out", layer)
+    other = {main_in: [b for b in INPUTS if lens(b) != lens(main_in)], main_out: [b for b in WRITES if lens(b) != lens(main_out)]}
+    used = [main_in, main_out, *other[main_in], *other[main_out]]
     t = load_layer(layer)
     f = t.num_rows // 2  # rows: the + poles of neurons 0..f-1, then the − poles
-    strength, hub = {}, {}
-    for b in shown:
-        strength[b] = sorted(sum(v[:8]) / 8 for v in t.column(f"{b}_val").to_pylist())
+    hub = {}
+    for b in used:
         c = collections.Counter()
         for ids in t.column(b + "_ids").to_pylist():
             c.update(set(ids))
         hub[b] = set() if b.endswith("_z") else {k for k, v in c.items() if v / t.num_rows >= HUB}
     kurt = sorted(t.column("vocab_kurt").to_pylist())
-    keep = ["vocab_skew", "vocab_kurt", "act_top", "act_max", "rate", "rate_dclm", "rate_zh", "rate_code",
-            "rate_chat", "contexts"] + [c for b in shown for c in (b + "_ids", f"{b}_val")]
+    keep = ["vocab_skew", "vocab_kurt", "act_top", "rate", *(f"rate_{s}" for s in SLICES), "contexts"] + [b + "_ids" for b in used]
     rows = t.select(keep).to_pylist()
     lobe = t.column("neg_lobe").to_pylist()
     with open(OUT["neurons"] / "cards" / f"L{layer:02d}.jsonl", "w", encoding="utf-8") as fh:
         for n in range(f):
             if flipped and lobe[n] <= 0.5 and lobe[f + n] <= 0.5:
                 continue
-            lines = [f"## layer {layer}, neuron {n}", f"input reads at this depth: {ni}.", f"output reads at this depth: {no}."]
-            for pole, r, other, on_lobe in ((1, rows[n], rows[f + n], lobe[n]), (-1, rows[f + n], rows[n], lobe[f + n])):
-                lines.append(f"\n### L{layer} n{n} {'+' if pole > 0 else '−'}")
-                if on_lobe > 0.5 and other["act_top"] >= SILENT and r["act_top"] < SHADOW * other["act_top"]:
-                    lines.append(f"faint shadow of the {'−' if pole > 0 else '+'} pole: this pole fires on the activation's negative lobe, at "
-                                 f"{100 * r['act_top'] / other['act_top']:.0f}% of that pole's typical size. Its input reads show the up row the two poles share, "
-                                 "so they may name what the other pole fires on, not this one.")
-                toks, keys = {}, {}
-                for b in shown:
-                    toks[b] = [dec(i) for i in r[b + "_ids"] if i not in hub[b]]
-                    pct = 100 * bisect.bisect_left(strength[b], sum(r[f"{b}_val"][:8]) / 8) / len(strength[b])
-                    twin = next((c for c in keys if c.removesuffix("_z") == b.removesuffix("_z")), None)
-                    body, keys[b] = grouped(toks[b], keys[twin] if twin else ())
-                    lines.append(f"{READ[b] + ' adds' if twin else READ[b]} (strength: {pct:.0f}th percentile of the layer): "
-                                 + (body or "(nothing new)" if twin else body or "(only the layer's hub tokens)"))
-                for side in (ins, outs):
-                    for j, a in enumerate(side):
-                        for c in side[j + 1:]:
-                            if a.removesuffix("_z") == c.removesuffix("_z"):
-                                continue  # a read and its own z version share most tokens by construction
-                            sh = {stem(x) for x in toks[a]} & {stem(x) for x in toks[c]} - {""}
-                            if sh:
-                                lines.append(f"shared by {READ[a]} and {READ[c]}: " + " | ".join(sorted(sh)[:16]))
-                sh = {stem(x) for b in ins for x in toks[b]} & {stem(x) for b in outs for x in toks[b]} - {""}
-                lines.append("shared by the input and output sides: " + (" | ".join(sorted(sh)[:16]) if sh else "none"))
-                if layer >= PLANS["late"]:
-                    kp = 100 * bisect.bisect_left(kurt, r["vocab_kurt"]) / len(kurt)
-                    if kp >= 90:
-                        lines.append(f"write shape: peaked (kurtosis {kp:.0f}th percentile), skew {r['vocab_skew']:+.2f}: "
-                                     + ("a next-word predictor" if r["vocab_skew"] > 0 else "its bottom tokens may be the next word it suppresses"))
-                lines.append(f"- activation: typical high {r['act_top']:.2f}, max {r['act_max']:.2f}; fires (past a "
-                             f"quarter of typical) at {r['rate']:.1e} of positions; by slice: "
-                             + ", ".join(f"{s} {r[f'rate_{s}']:.1e}" for s in ("dclm", "zh", "code", "chat")))
+            lines = [f"## layer {layer}, neuron {n}"]
+            for pole, r, partner, on_lobe in ((1, rows[n], rows[f + n], lobe[n]), (-1, rows[f + n], rows[n], lobe[f + n])):
+                lines.append(f"\n### {'+' if pole > 0 else '−'}")
+                shadow = on_lobe > 0.5 and partner["act_top"] >= SILENT and r["act_top"] < SHADOW * partner["act_top"]
+                toks = {b: [dec(i) for i in r[b + "_ids"] if i not in hub[b]] for b in used}
+                stems = {b: {stem(x) for x in toks[b]} - {""} for b in used}
+                if shadow:
+                    lines.append(f"This pole fires on the activation's negative lobe, a faint shadow of the {'−' if pole > 0 else '+'} pole: "
+                                 "its input reads would name what that pole fires on, so the card leaves them out.")
+                for b in ([main_out] if shadow else [main_in, main_out]):
+                    lines.append(f"{READ[b]}: " + (grouped(toks[b][:SHOW])[0] or "(only the layer's hub tokens)"))
+                for b in ([main_out] if shadow else [main_in, main_out]):
+                    sh = stems[b] & set().union(*(stems[c] for c in other[b]))
+                    if sh:
+                        lines.append(f"{READ[other[b][0]]} agrees on: " + " | ".join(sorted(sh)[:16]))
+                sh = set() if shadow else stems[main_in] & stems[main_out]
+                if sh:
+                    lines.append("shared by both sides: " + " | ".join(sorted(sh)[:16]))
+                if layer >= PLAN["late"] and bisect.bisect_left(kurt, r["vocab_kurt"]) >= 0.9 * len(kurt):
+                    lines.append("write shape: peaked, " + ("a next-word predictor" if r["vocab_skew"] > 0
+                                                           else "its bottom tokens may be the next word it suppresses"))
+                lines.append(firing_line(r))
                 if r["act_top"] < SILENT:
                     lines.append("- near-silent: no top context recorded")
                 else:
@@ -328,10 +354,9 @@ def head_cards() -> None:
     by_layer = collections.defaultdict(list)
     for r in rows:
         layer, h = r["layer"], r["head"]
-        ov, note = head_plan(layer)
+        ov, _ = head_plan(layer)
         span = SPAN.get(arch.layout(MODEL)[layer].kind, "")
         lines = [f"## L{layer}h{h} (layer {layer} of {L}{span}, query head {h}, key-value head {r['kv_head']})",
-                 f"at this depth: {note}.",
                  (f"- attention pattern: to position 0 (the sink) {r['sink']:.2f}, to the previous token {r['prev']:.2f}, "
                   f"to itself {r['self']:.2f}; on random text said twice, from the second copy to the token after the "
                   f"first occurrence (induction) {r['induction']:.2f} and to the occurrence itself (duplicate) {r['duplicate']:.2f}"),
@@ -369,6 +394,7 @@ def head_cards() -> None:
 
 
 def cards(args) -> None:
+    system_prompt(args.side)  # refuses a model without a plan or a prompt
     if args.side == "heads":
         head_cards()
         return
@@ -476,7 +502,7 @@ def wait(c, batch_id: str) -> None:
 
 def pilot(args) -> None:
     side = args.side
-    c, system, allc = client(), PROMPT[side].read_text(), chunks(side)
+    c, system, allc = client(), system_prompt(side), chunks(side)
     pick = random.Random(1031).sample(sorted(allc), min(args.n, len(allc)))
     b = c.messages.batches.create(requests=[request(side, cid, allc[cid], system, args.thinking) for cid in pick])
     print("pilot batch", b.id, flush=True)
@@ -500,7 +526,7 @@ def submit(args) -> None:
     p = s.get(f"pilot_{args.thinking}")
     if not p or p["projected_total"] > args.cap or p["parsed"] < 0.9 * p["requests"]:
         raise SystemExit(f"refusing: run a pilot at --thinking {args.thinking} that projects under ${args.cap} and parses 90%")
-    c, system, allc = client(), PROMPT[side].read_text(), chunks(side)
+    c, system, allc = client(), system_prompt(side), chunks(side)
     sent = {x for b in s["batches"].values() for x in b["ids"]}
     batch, size = [], 0
     for cid in [x for x in allc if x not in sent] + [None]:
@@ -556,7 +582,7 @@ def collect(args) -> None:
 
 def retry(args) -> None:
     side = args.side
-    s, c, system, allc = load_state(side), client(), PROMPT[side].read_text(), chunks(side)
+    s, c, system, allc = load_state(side), client(), system_prompt(side), chunks(side)
     if s.get("failed"):
         b = c.messages.batches.create(requests=[request(side, cid, allc[cid], system, args.thinking) for cid in s["failed"]])
         s["batches"][b.id] = {"ids": s["failed"], "collected": False, "thinking": args.thinking, "retry": True}
@@ -703,7 +729,7 @@ def summarize(per: dict, result: dict) -> list[str]:
              "`fires` (where its output is large), `attends` (what it attends to there) and `writes` (what its",
              "output promotes), each with a confidence 0-1, and `note`. The cards show the head's pattern scores,",
              "output scale, OV and QK reads, drivers and first 5 top contexts; nothing about its other top firings.",
-             f"The prompt is `scripts/prompts/{NAME}/heads.md` on GitHub.", "",
+             f"The prompt is `scripts/prompts/heads.md` with `scripts/prompts/{NAME}/heads.md` on GitHub.", "",
              f"**Checked blind** on {len(per)} random heads, {result['per_band']} a band, by Claude Sonnet 5.5:", "",
              (f"- **Firing:** given a head's `fires` and `attends` labels and {2 * result['shown']} contexts, "
               f"{result['shown']} of its held-out top firings (ranks 6-24) and {result['shown']} of another head of its band, "
@@ -727,7 +753,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=("cards", "pilot", "submit", "status", "collect", "retry", "shards", "check"))
     ap.add_argument("--side", choices=("neurons", "heads"), default="neurons")
-    ap.add_argument("--thinking", choices=("on", "off"), default="on")
+    ap.add_argument("--thinking", choices=("on", "off"), default="off")
     ap.add_argument("--n", type=int, default=60, help="pilot requests")
     ap.add_argument("--cap", type=float, default=90.0, help="most the projected full run may cost, dollars")
     ap.add_argument("--workers", type=int, default=4)

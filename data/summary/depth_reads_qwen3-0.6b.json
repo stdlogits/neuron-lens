@@ -1,0 +1,650 @@
+{
+ "model": "Qwen/Qwen3-0.6B",
+ "raters": [
+  "claude",
+  "codex"
+ ],
+ "agreement": [
+  {
+   "raters": [
+    "claude",
+    "codex"
+   ],
+   "lists": 1024,
+   "pearson": 0.8491470966660819,
+   "exact": 0.8486328125
+  }
+ ],
+ "layers": [
+  {
+   "layer": 0,
+   "read_S": {
+    "coherence": 1.3125,
+    "agreement": 0.6875,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.4375,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.125,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 0.875,
+    "agreement": 0.5,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.3125,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.125,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.75,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.6875,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.8654941993046226,
+    "read_R": 0.44797264289203714,
+    "write_R": 0.028659829874416065,
+    "write_S": 0.2587526560877962
+   }
+  },
+  {
+   "layer": 4,
+   "read_S": {
+    "coherence": 1.5,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.4375,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 0.875,
+    "agreement": 0.5625,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 0.8125,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.75,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.1875,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.625,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.875,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.59814453125,
+    "read_R": 0.39404296875,
+    "write_R": 0.0257161483168602,
+    "write_S": 0.2486979216337204
+   }
+  },
+  {
+   "layer": 6,
+   "read_S": {
+    "coherence": 1,
+    "agreement": 0.625,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.1875,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.4375,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.25,
+    "agreement": 0.3125,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.5625,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.1875,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 1.0625,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.3836887315547977,
+    "read_R": 0.3716425199431997,
+    "write_R": 0.03206902413474602,
+    "write_S": 0.1408106837899682
+   }
+  },
+  {
+   "layer": 8,
+   "read_S": {
+    "coherence": 0.78125,
+    "agreement": 0.40625,
+    "n": 32
+   },
+   "read_S_z": {
+    "coherence": 0.96875,
+    "agreement": 0.34375,
+    "n": 32
+   },
+   "read_R": {
+    "coherence": 1.40625,
+    "agreement": 0.40625,
+    "n": 32
+   },
+   "read_R_z": {
+    "coherence": 1.3125,
+    "agreement": 0.28125,
+    "n": 32
+   },
+   "write_R": {
+    "coherence": 1.40625,
+    "n": 32
+   },
+   "write_R_z": {
+    "coherence": 1.03125,
+    "n": 32
+   },
+   "write_S": {
+    "coherence": 0.53125,
+    "n": 32
+   },
+   "write_S_z": {
+    "coherence": 0.75,
+    "n": 32
+   },
+   "census": {
+    "read_S": 0.30929512273710913,
+    "read_R": 0.3438059580026447,
+    "write_R": 0.02099951163936608,
+    "write_S": 0.13771772749537756
+   }
+  },
+  {
+   "layer": 10,
+   "read_S": {
+    "coherence": 0.9375,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 0.875,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.4375,
+    "agreement": 0.6875,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.5625,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.375,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.125,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.5625,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.5625,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.2293294370174408,
+    "read_R": 0.380859375,
+    "write_R": 0.014973958022892475,
+    "write_S": 0.0914713516831398
+   }
+  },
+  {
+   "layer": 12,
+   "read_S": {
+    "coherence": 0.90625,
+    "agreement": 0.46875,
+    "n": 32
+   },
+   "read_S_z": {
+    "coherence": 0.9375,
+    "agreement": 0.5,
+    "n": 32
+   },
+   "read_R": {
+    "coherence": 1.53125,
+    "agreement": 0.59375,
+    "n": 32
+   },
+   "read_R_z": {
+    "coherence": 1.28125,
+    "agreement": 0.53125,
+    "n": 32
+   },
+   "write_R": {
+    "coherence": 1.625,
+    "n": 32
+   },
+   "write_R_z": {
+    "coherence": 1.15625,
+    "n": 32
+   },
+   "write_S": {
+    "coherence": 0.75,
+    "n": 32
+   },
+   "write_S_z": {
+    "coherence": 0.8125,
+    "n": 32
+   },
+   "census": {
+    "read_S": 0.1316731870174408,
+    "read_R": 0.29296875,
+    "write_R": 0.013346354477107525,
+    "write_S": 0.0343424491584301
+   }
+  },
+  {
+   "layer": 14,
+   "read_S": {
+    "coherence": 0.9375,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.125,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.5625,
+    "agreement": 0.5,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.3125,
+    "agreement": 0.5625,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.25,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.5625,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.4375,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.1236979141831398,
+    "read_R": 0.2286783903837204,
+    "write_R": 0.014648438431322575,
+    "write_S": 0.02978515625
+   }
+  },
+  {
+   "layer": 15,
+   "read_S": {
+    "coherence": 1,
+    "agreement": 0.25,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 0.8125,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.3125,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.0625,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.6875,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.4375,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.4375,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.5,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.1279296875,
+    "read_R": 0.2535807192325592,
+    "write_R": 0.0201822929084301,
+    "write_S": 0.0348307304084301
+   }
+  },
+  {
+   "layer": 17,
+   "read_S": {
+    "coherence": 1,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 0.8125,
+    "agreement": 0.25,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.5625,
+    "agreement": 0.625,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.5625,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.625,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.5,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.20068359375,
+    "read_R": 0.32373046875,
+    "write_R": 0.0701497346162796,
+    "write_S": 0.0568033866584301
+   }
+  },
+  {
+   "layer": 19,
+   "read_S": {
+    "coherence": 0.9375,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 0.9375,
+    "agreement": 0.375,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.0625,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 0.9375,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 0.6875,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.875,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.2189127653837204,
+    "read_R": 0.33935546875,
+    "write_R": 0.15771484375,
+    "write_S": 0.0804036408662796
+   }
+  },
+  {
+   "layer": 21,
+   "read_S": {
+    "coherence": 0.875,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.25,
+    "agreement": 0.5625,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.6875,
+    "agreement": 0.625,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.6875,
+    "agreement": 0.625,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.125,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.125,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.875,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 1.0625,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.26025390625,
+    "read_R": 0.4905599057674408,
+    "write_R": 0.2893880009651184,
+    "write_S": 0.0748697891831398
+   }
+  },
+  {
+   "layer": 23,
+   "read_S": {
+    "coherence": 1.4375,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.375,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.625,
+    "agreement": 0.8125,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.625,
+    "agreement": 0.8125,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 1.0625,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 1.25,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.9375,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 1.125,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.2757161259651184,
+    "read_R": 0.38427734375,
+    "write_R": 0.3302408754825592,
+    "write_S": 0.0496419295668602
+   }
+  },
+  {
+   "layer": 25,
+   "read_S": {
+    "coherence": 1.125,
+    "agreement": 0.4375,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.3125,
+    "agreement": 0.8125,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.4375,
+    "agreement": 0.6875,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.4375,
+    "agreement": 0.75,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 0.625,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 0.9375,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 0.8125,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 1.1875,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.22900390625,
+    "read_R": 0.2872721254825592,
+    "write_R": 0.2071940153837204,
+    "write_S": 0.008626301772892475
+   }
+  },
+  {
+   "layer": 27,
+   "read_S": {
+    "coherence": 0.9375,
+    "agreement": 0.3125,
+    "n": 16
+   },
+   "read_S_z": {
+    "coherence": 1.1875,
+    "agreement": 0.3125,
+    "n": 16
+   },
+   "read_R": {
+    "coherence": 1.625,
+    "agreement": 0.6875,
+    "n": 16
+   },
+   "read_R_z": {
+    "coherence": 1.75,
+    "agreement": 0.6875,
+    "n": 16
+   },
+   "write_R": {
+    "coherence": 0.75,
+    "n": 16
+   },
+   "write_R_z": {
+    "coherence": 0.6875,
+    "n": 16
+   },
+   "write_S": {
+    "coherence": 1,
+    "n": 16
+   },
+   "write_S_z": {
+    "coherence": 1.0625,
+    "n": 16
+   },
+   "census": {
+    "read_S": 0.12778772089959795,
+    "read_R": 0.195181517343476,
+    "write_R": 0.1334852578493931,
+    "write_S": 0.00569754160716607
+   }
+  }
+ ]
+}

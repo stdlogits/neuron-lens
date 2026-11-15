@@ -594,6 +594,25 @@ model: 4 of a pole's held-out firings (ranks 6-24) against 4 of another flipped 
 The new labels are at least as good, likely a little better on Qwen3-8B, and no more confident (firing confidence 0.21 against 0.24 on
 Qwen3-8B, 0.25 for both on Gemma 4). Every other pole keeps its first label.
 
+**The reading plans** (2026-11-15; `checks/depth_reads.py`, `10_labels.py`'s `PLANS`). For the labels of the Qwen3 family
+(§19) and the relabel of Qwen3-8B and Gemma 4 after the residual's metric (§13), a card shows one input read and one write read a
+pole, 24 tokens each, without strengths: confidence is how clearly the card shows one theme. Which read, at each depth, was set
+by reading. For each model, 15-16 layers spread over the depth and around its transitions, 8 random firing poles a layer, the
+eight weight reads shuffled under neutral names; two raters of different lineages (Claude Opus, Codex) rated each list's
+coherence (0-2) and, for input reads, whether it agrees with the pole's five contexts (0-1). They agreed closely: Pearson
+0.83-0.90 over 1,024 lists a model, the same score for 80-87%. The plans take the most coherent read: the S-lens input read in
+the first layers (Qwen3-0.6B L0-L5, 1.7B L0-L9, 4B L0-L5 through its z read, 8B L0-L3, 14B L0-L8, none in Gemma 4), the R-lens
+input read after, and the R-lens write read everywhere, which also predicts steering (§3, §19).
+- **Coherent is not the same as matching the contexts.** Gemma 4's R-lens input read rates 1.0-1.9 at L0-L18 but agrees with
+  the contexts for 0-38% of poles there. Its themes are each pole's own (another pole of the layer shares under 1% of its
+  first 24 tokens): British spellings or Spanish names on poles that fire on punctuation and possessives. A read can name what
+  drives a pole through a concept, a style or a script that five firings don't show (§4), so agreement didn't decide the
+  plans; the prompt says where the input read often differs from the firing tokens, and to label firing from the contexts.
+- **The census's weak band reads well.** At Qwen3-8B's L13-L20, where few reads name the exact firing token or drivers (§7),
+  the R-lens reads rate 1.0-1.9 and the write reads 1.6-1.75, among the most coherent of any depth.
+- Ratings, keys and per-layer means: `data/summary/depth_reads/`, `data/summary/depth_reads_<model>.{json,log}`. Two raters,
+  8 poles a layer and round: a qualitative check, not a measurement of every pole. Head plans follow the census (§11, §12).
+
 **Limits.** Positives come from the high-activation regime (top documents only), and quiet positions
 are an easier contrast than near misses. 32 poles a band is about ±15 points (100 poles for the Haiku
 test, ±20). Steering is amplified past natural firing (5-18× in the blind test, 7-29× in the Haiku
