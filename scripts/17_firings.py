@@ -155,6 +155,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
     for h in hooks:
         h.remove()
     src.stack = src.flow = None
+    acc.weights, acc.map, acc.scale = {}, {}, {}  # the layers' gate and up rows (the stack's own in fp32: 29 GB for Qwen3-14B)
     del lm, stack
     gc.collect()
     torch.cuda.empty_cache() if torch.cuda.is_available() else None
