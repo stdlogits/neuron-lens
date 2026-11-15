@@ -109,7 +109,7 @@ SHOW = 24  # tokens a read shows: rank tiers 1-8 ‖ 9-24
 SLICES = ("dclm", "zh", "code", "chat")
 READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z": "in·R z",
         "write_S": "out·S", "write_S_z": "out·S z", "write_R": "out·R", "write_R_z": "out·R z"}
-ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])$"), "heads": re.compile(r"^L(\d+)h(\d+)$")}
+ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])$"), "heads": re.compile(r"^L(\d+)[hH](\d+)$")}
 # The reading plan, per model: by depth, (last layer, the read a card shows, the prompt's line on it), for the input
 # and the write side of a neuron, and of a head (its OV read); the layer from which a
 # peaked write gets its note (§5); and the bands of the head check. A card shows one read a side: the one raters found
