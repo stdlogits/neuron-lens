@@ -7,13 +7,16 @@ three ways: from their weights alone, through two Jacobian lenses; from what the
 real text; and from the exact tokens that drive them. Gemma 4 also takes images and sound, so its
 neurons are read through images and sound too. The result is a public catalog, the lenses that
 produced it, and measurements of how each way of reading compares with steering, firings and token swaps.
+The rest of the Qwen3 family up to 14B, post-trained and base, is catalogued the same way without
+labels, to see what changes with size.
 
 - **Lenses:** [`stdlogits/rs-lenses`](https://huggingface.co/stdlogits/rs-lenses), the R-lens and S-lens
-  for Qwen3-8B, and for Gemma 4 12B in text, images and sound.
+  for Qwen3-8B, for Gemma 4 12B in text, images and sound, and for Qwen3 from 0.6B to 14B, post-trained and base.
 - **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every
   neuron's and head's reads, activation statistics, token drivers and tests of each read; what the residual
   holds where each neuron fires, what drives it and how neurons are wired; labels in
-  words; and for Gemma 4, what each neuron responds to in images and sound.
+  words; for Gemma 4, what each neuron responds to in images and sound; and the same tables, without labels,
+  for nine more Qwen3 models.
 - **Results:** [docs/findings.md](docs/findings.md). **Methods:** [docs/design.md](docs/design.md).
 
 By [@_a9lim](https://x.com/_a9lim) and [@treetowntree](https://x.com/treetowntree), with Claude. [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) raised the
@@ -95,7 +98,8 @@ directions, so reads describe directions, not effect sizes.
 ## The catalog
 
 Every neuron has a `+` and a `−` pole, so the catalog has 884,736 neuron entries and 1,152 heads for
-Qwen3-8B, and 1,474,560 neuron entries and 768 heads for Gemma 4 12B. Each is read from three sides:
+Qwen3-8B, and 1,474,560 neuron entries and 768 heads for Gemma 4 12B. Qwen3-0.6B, 1.7B, 4B and 14B and the
+bases 0.6B to 14B add 6,103,040 neuron entries and 8,448 heads, without labels. Each is read from three sides:
 
 - **from the weights,** through both lenses: what a neuron writes and what its read direction responds
   to; what a head copies (OV) and attends to (QK), token by token;
@@ -166,7 +170,7 @@ for inputs through L13, and the R-lens for inputs and writes from L11;
 
 ## Findings
 
-Findings 1-12, 17 and 18 are Qwen3-8B's, 13-16 Gemma 4 12B's. Numbers are medians or means over a layer's poles
+Findings 1-12, 17 and 18 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 compares Qwen3's sizes. Numbers are medians or means over a layer's poles
 unless stated. Each heading links to its findings section, with setup, controls and limits.
 
 ### 1. The lenses are stable, and their corpus changes tokens, not concepts
@@ -431,9 +435,20 @@ and husbands; with what it reads removed, its write reads parenting, childbirth 
 write through L20 is as often unrelated to the pole's read as the same concept, and from L22 usually a related one
 ([§18](docs/findings.md#18-what-a-write-adds-beyond-what-it-reads)).
 
+### 19. Across Qwen3's sizes, late reads hold and early ones fall
+
+Nine more Qwen3 models, 0.6B to 14B, post-trained and base, each with its own lenses and the same documents, show which
+reads depend on size. Late ones don't: at every size a late write's R-lens read predicts steering at r 0.98-0.99 and promotes
+what follows the firings for a quarter of poles, and the R-lens names the inputs of a fifth to a third. Early ones do. The
+S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers on, and early
+writes predict steering less at every step in size (first-quarter r 0.62 at 0.6B, 0.31 at 14B). Heads' reads fall a little
+with size too. The bases read like their siblings except through the R-lens, whose input reads trail at every size, which suggests
+post-training lines up what a neuron reads with what the model is about to say
+([§19](docs/findings.md#19-the-qwen3-family-what-changes-with-size)).
+
 ### Limits
 
-- Two models; one lens corpus for text (English-heavy web text), and COCO photos and ESC-50 sounds for
+- Two models read in depth, and nine Qwen3 sizes without labels; one lens corpus for text (English-heavy web text), and COCO photos and ESC-50 sounds for
   Gemma 4's media lenses; lenses averaged over 128-token documents.
 - Activations are bf16 passes over documents of up to 256 tokens; the exact drivers match an fp32 rerun
   through L9 on Qwen3-8B, and later layers are unchecked.

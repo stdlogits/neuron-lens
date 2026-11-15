@@ -1,7 +1,7 @@
 # Findings
 
-What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17) and Gemma 4 12B
-(§13-§16, in text, images and sound), and how far each way of reading them goes. Each section gives
+What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17, §18), Gemma 4 12B
+(§13-§16, in text, images and sound) and the rest of the Qwen3 family to 14B (§19), and how far each way of reading them goes. Each section gives
 its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
 and the overview in the [README](../README.md).
 
@@ -37,6 +37,8 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§15](#15-one-concept-in-text-images-and-sound) | 4,382 poles keep their image label on every text test; 19 hold one concept across all three modalities |
 | [§16](#16-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
 | [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
+| [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
+| [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1425,13 +1427,73 @@ A read of the residual after the layer was tested and dropped: it is the sum of 
 **Limits.** One model; a rater per comparison and many unclear lists, so the counts describe poles legible on both sides. The read direction is a heuristic, the
 lens read of a pole's input at early layers is uninformative for many (§6). §3 and §4 stand as first measured, with 24 top firings a pole; §2, §7, §12, §13 and §17 are from this release's tables, whose lists hold 64.
 
+## §19. The Qwen3 family: what changes with size
+
+**Setup** (`scripts/catalog_queue.sh` on two H100s, Qwen3-8B's stages and precision). Nine more catalogs: the post-trained
+Qwen3-0.6B, 1.7B, 4B and 14B, and the bases 0.6B, 1.7B, 4B, 8B and 14B (Qwen released dense bases up to 14B). Each model has its
+own R-lens, S-lens and scale, fitted on the same 1,000 DCLM documents as Qwen3-8B's (split-half 0.06 or less at every layer of
+every one; the model card lists them by model), and its catalog covers the same 63,990 activation documents (a base renders the
+chat slice with its post-trained sibling's template): every table but `labels`. Steering is §3's protocol through each model's
+own R-lens (`checks/causal_lens.py`: 32 random neurons a layer, 16 contexts of 64 tokens, 1× `act_top`); the reads are tested
+at the firings as in §7 (`checks/reads_at_firings.py`), as shares of the poles that fire (not near-silent) past the mismatched
+pairs' 99% point, net of theirs. Models are compared by quarter of relative depth. Depth and width grow together in this family:
+0.6B and 1.7B have 28 layers (1,024 and 2,048 wide), 4B and 8B 36 (2,560 and 4,096), 14B 40 (5,120).
+
+Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
+
+| model | `read_S` names the firing token | `read_R` names the drivers | `write_R` promotes the next token | steering r (median) | near-silent poles, Q1 |
+|---|---|---|---|---|---|
+| 0.6B | .60 / .23 / .18 / .23 | .37 / .33 / .31 / .34 | .02 / .02 / .09 / .24 | .62 / .80 / .90 / .99 | .00 |
+| 1.7B | .57 / .25 / .19 / .16 | .15 / .21 / .26 / .19 | .02 / .01 / .08 / .29 | .49 / .73 / .90 / .99 | .01 |
+| 4B | .40 / .08 / .08 / .05 | .15 / .19 / .21 / .27 | .02 / .02 / .08 / .24 | .40 / .65 / .87 / .98 | .14 |
+| 8B | .32 / .04 / .05 / .02 | .09 / .16 / .23 / .23 | .03 / .02 / .07 / .24 | .36 / .66 / .90 / .99 | .19 |
+| 14B | .43 / .05 / .04 / .02 | .10 / .17 / .22 / .28 | .03 / .02 / .07 / .23 | .31 / .58 / .87 / .98 | .20 |
+
+- **The S-lens's input reads fall between 28 and 36 layers.** Past the first quarter it names the firing token for 16-25% of
+  the 28-layer models' firing poles and 2-8% of the 36- and 40-layer models'. At 28 layers width changes little (0.6B and 1.7B
+  within 0.07 of each other in every quarter); at 36 the wider 8B sits below the 4B (0.02-0.05 against 0.05-0.08); the 14B, 4
+  layers deeper and 1,024 wider, matches the 8B. This suggests depth first, then a floor, but five sizes that grow in both
+  can't separate the two.
+- **The R-lens's input reads hold.** In the last quarter it names the drivers of 19-34% of firing poles at every size. The
+  input side turns to it (the first layer where its read passes for as many firing poles as the S-lens's, on three-layer
+  medians, and keeps doing so on half the layers after) at about a quarter of the depth: L7 of 28 (0.6B), L10 of 28 (1.7B),
+  L10 of 36 (4B), L9 of 36 (8B, §6), L10 of 40 (14B).
+- **Late writes read the same at every size.** The write's R-lens read promotes what follows the firings for 23-29% of
+  firing poles in the last quarter, and steering's median r is 0.87-0.90 in the third quarter and 0.98-0.99 in the last.
+- **Early writes are less legible in larger models.** The first quarter's median steering r falls at every step in size, 0.62,
+  0.49, 0.40, 0.36, 0.31 (second quarter 0.80, 0.73, 0.65, 0.66, 0.58), and the first layer from which it stays at 0.35 or
+  more moves from L0 (both 28-layer models) to L3 (4B), L4 (8B) and L7 (14B).
+- **Near-silent poles appear at 36 layers** (§2): 1% or less of the 28-layer models' first-quarter poles, 14%, 19% and 20% of
+  the 4B's, 8B's and 14B's, none later at any size.
+- **Fewer one-token detectors.** Poles with a third of their top firings on one token, of the first quarter's firing poles:
+  0.40, 0.35, 0.35, 0.33, 0.29. These are the poles the S-lens reads best, so their decline accounts for part of its drop.
+- **Heads read less with size** (uncorrected p ≤ 0.05, 5% by chance; §12). In the last quarter the OV read promotes what follows
+  the query for 45%, 44%, 40%, 41% and 37% of heads, and the QK read names the attended token for 32%, 31%, 27%, 24% and 22%.
+- **What drives a pole** (`sources`, §17) splits between earlier neurons and heads alike at every size: neurons carry 54-59% of
+  it on average from L4 through the third quarter (36-76% by layer) and 76-82% in the last quarter.
+- **The bases differ from their siblings on the R-lens's reads.** On the S-lens's reads, steering and near-silent poles they
+  match within 0.03; the write's next-token read trails a little (last quarter 0.19-0.24 against 0.23-0.29); the input read
+  trails at every size: last quarter 0.19 against 0.34 (0.6B), 0.11 against 0.19 (1.7B), 0.14 against 0.27 (4B), 0.09 against
+  0.23 (8B), 0.21 against 0.28 (14B). So their input side turns to the R-lens later (L10, L11 and L11 for the 0.6B-, 4B- and
+  8B-Base; the 14B-Base at L10 like the 14B), and the 1.7B-Base's never does: by quarter its R-lens read passes for 6-16% of
+  firing poles, its S-lens read for 18-58%. Why post-training aligns read directions with the R-lens's forward reads was not
+  tested.
+
+**Limits.** One family, five sizes, and depth and width grow together; quarters average layers of different roles; the shares
+are token-level (§7), not judgments of coherence, and with no labels §8's blind tests weren't run on these models. Every lens was
+fitted on 1,000 documents whatever the model's size. At L1-L3, a few firings with near-zero gate or `up` dominate `sources`'
+layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sources bullet starts at L4. Compact outputs are
+`data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads}_<model>.*`.
+
 ## Open questions
 
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
   flat from L4 to L17 (§6).
 - What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§11).
 - Whether J++ filtering (Ayonrinde 2026) or a longer context improves early and mid-network reads.
-- The same catalog for Qwen3-8B-Base, as a neuron-by-neuron diff of what post-training changed.
+- With each base catalogued (§19), a neuron-by-neuron diff of what post-training changed, and why it improves the R-lens's input reads.
+- Whether depth or width sets the S-lens's input reads (§19): a family that varies one at a time, and Qwen3-32B (64 layers).
+- Whether the poles of larger models read as coherently to a rater as they pass token-level tests (§19 counts hits only).
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).
 - Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads
   per slot, which would say where in an image a neuron looks.
