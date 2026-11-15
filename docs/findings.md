@@ -613,6 +613,37 @@ input read after, and the R-lens write read everywhere, which also predicts stee
 - Ratings, keys and per-layer means: `data/summary/depth_reads/`, `data/summary/depth_reads_<model>.{json,log}`. Two raters,
   8 poles a layer and round: a qualitative check, not a measurement of every pole. Head plans follow the census (§11, §12).
 
+**The lean card's run** (2026-11-15; `10_labels.py`, `checks/relabel_check.py --poles all`, `10_labels.py check`). With these
+plans, Claude Haiku 5.5 (Batch API, effort low, no thinking, 10 neurons a request) labelled every pole and head of Qwen3-0.6B,
+1.7B, 4B and 14B, and labelled Qwen3-8B and Gemma 4 again, replacing all their earlier labels (the negative-lobe relabels above
+included): 4,968,448 poles and 5,568 heads for $303 (Qwen3-8B $52.78 and Gemma 4 $90.26, against $105 and $172 for the
+earlier card; heads $0.05-0.19 a model). One 60-request pilot on Qwen3-8B priced every model to within 2%. 0.1-0.4% of
+requests came back with a pole missing or a note after an id and were sent again; a request that failed twice went card by
+card. The API refused one chunk of ten Qwen3-1.7B cards three times, whose cards then passed one at a time, and one Qwen3-14B
+neuron (L34 n15908) even alone: its poles have empty labels and a note saying so. Two other poles have empty labels from Haiku
+itself. Checked blind by Claude Sonnet 5.5 on 150 random firing poles a model, as the relabel above (4 held-out firings, ranks
+6-24, against 4 of another firing pole of the layer; AUROC per pole, the earlier labels at the release before the run):
+
+| | lean label | another pole's label | earlier label | lean − earlier | by depth quarter |
+|---|---|---|---|---|---|
+| Qwen3-0.6B | 0.86 [0.82, 0.90] | 0.51 | | | 0.88 / 0.85 / 0.81 / 0.89 |
+| Qwen3-1.7B | 0.88 [0.84, 0.91] | 0.54 | | | 0.85 / 0.83 / 0.88 / 0.95 |
+| Qwen3-4B | 0.86 [0.82, 0.89] | 0.51 | | | 0.94 / 0.82 / 0.84 / 0.82 |
+| Qwen3-8B | 0.84 [0.80, 0.87] | 0.44 | 0.81 [0.77, 0.86] | +0.03 [−0.02, 0.07] | 0.79 / 0.84 / 0.84 / 0.87 |
+| Qwen3-14B | 0.82 [0.78, 0.87] | 0.50 | | | 0.85 / 0.81 / 0.82 / 0.82 |
+| Gemma 4 12B | 0.82 [0.77, 0.86] | 0.50 | 0.81 [0.77, 0.85] | +0.01 [−0.04, 0.05] | 0.78 / 0.85 / 0.85 / 0.80 |
+
+- **As good as the earlier card at half the cost, and surer.** On the same poles and contexts the lean labels score at least
+  as well as the earlier ones, with mean firing confidence 0.44 against 0.34 (Qwen3-8B) and 0.40 against 0.30 (Gemma 4).
+- **Firing labels hold at every depth and size.** No quarter of any model falls below 0.78; the smaller models score a little
+  higher (0.86-0.88, against 0.82-0.84 at 8B, 12B and 14B).
+- **Heads** (`10_labels.py check`, 20 random heads a band): Qwen3-8B's firing labels score 0.72 [0.66, 0.78] (the earlier
+  card's 0.70) and its write labels are picked 51% of the time [40, 61] (54%); Gemma 4's 0.78 [0.72, 0.84] (0.71) and 32%
+  [22, 42] (32%). Tables by band: `data/summary/labels_heads_<model>.md`.
+- Firing labels only: no write label was steered this time (the earlier card's 61% on Qwen3-8B, above, is that card's). The
+  contrast is another firing pole of the layer, harder than the quiet positions of the 100-pole test. 150 poles is about ±4
+  points a model, a quarter about ±8. `data/summary/label_check_<model>.json`.
+
 **Limits.** Positives come from the high-activation regime (top documents only), and quiet positions
 are an easier contrast than near misses. 32 poles a band is about ±15 points (100 poles for the Haiku
 test, ±20). Steering is amplified past natural firing (5-18× in the blind test, 7-29× in the Haiku
@@ -1104,7 +1135,8 @@ neurons each, $171.66).
   are least sure at L14-L32 (median 0.20; 0.30 in every other band), and write labels most sure there (0.30; 0.10 at
   L0-L4, 0.20 at L5-L13, 0.15 at L33-L47), where `out·R` predicts steering. Of Gemma 4's neuron labels, only
   the relabelled negative-lobe poles are checked blind (§8). From L14 their cards show the released R-lens read of the input, the
-  covector read as a vector (above), with priors telling the labeller to expect little: the labels predate the fix.
+  covector read as a vector (above), with priors telling the labeller to expect little: the labels predate the fix. The
+  lean card's run (§8) replaced them after it: blind, 0.82 against 0.81 for these on the same poles.
 
 - **Head labels: the firing labels hold, the write labels barely do.** Checked blind as §12's, on 80 random
   heads (20 a band) by Claude Sonnet 5.5: the `fires` and `attends` labels tell 4 of a head's held-out
@@ -1116,7 +1148,7 @@ neurons each, $171.66).
   context; the labels follow the cards (`data/summary/labels_heads_gemma-4-12b.md`).
 
 **Limits.** The base model, not a chat model; 24 random neurons a layer for the causal sample; no
-J-lens for Gemma 4, and of its neuron labels only the relabelled poles are checked blind (§8; `checks/haiku_blind.py` steers on a
+J-lens for Gemma 4, and its neuron labels are checked blind for firing only (§8; `checks/haiku_blind.py` steers on a
 GPU). The head tests have too little power for a false discovery rate.
 
 ## §14. Images and sound: what drives a neuron
@@ -1499,7 +1531,8 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
   tested.
 
 **Limits.** One family, five sizes, and depth and width grow together; quarters average layers of different roles; the shares
-are token-level (§7), not judgments of coherence, and with no labels §8's blind tests weren't run on these models. Every lens was
+are token-level (§7), not judgments of coherence; the post-trained models' labels are checked for firing only (§8), and the
+bases have none. Every lens was
 fitted on 1,000 documents whatever the model's size. At L1-L3, a few firings with near-zero gate or `up` dominate `sources`'
 layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sources bullet starts at L4. Compact outputs are
 `data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads}_<model>.*`.

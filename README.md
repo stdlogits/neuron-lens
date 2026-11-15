@@ -15,8 +15,8 @@ labels, to see what changes with size.
 - **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every
   neuron's and head's reads, activation statistics, token drivers and tests of each read; what the residual
   holds where each neuron fires, what drives it and how neurons are wired; labels in
-  words; for Gemma 4, what each neuron responds to in images and sound; and the same tables, without labels,
-  for nine more Qwen3 models.
+  words; for Gemma 4, what each neuron responds to in images and sound; and the same tables for nine more
+  Qwen3 models, with labels for the post-trained ones.
 - **Results:** [docs/findings.md](docs/findings.md). **Methods:** [docs/design.md](docs/design.md).
 
 By [@_a9lim](https://x.com/_a9lim) and [@treetowntree](https://x.com/treetowntree), with Claude. [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) raised the
@@ -99,7 +99,7 @@ directions, so reads describe directions, not effect sizes.
 
 Every neuron has a `+` and a `−` pole, so the catalog has 884,736 neuron entries and 1,152 heads for
 Qwen3-8B, and 1,474,560 neuron entries and 768 heads for Gemma 4 12B. Qwen3-0.6B, 1.7B, 4B and 14B and the
-bases 0.6B to 14B add 6,103,040 neuron entries and 8,448 heads, without labels. Each is read from three sides:
+bases 0.6B to 14B add 6,103,040 neuron entries and 8,448 heads, labelled but for the bases. Each is read from three sides:
 
 - **from the weights,** through both lenses: what a neuron writes and what its read direction responds
   to; what a head copies (OV) and attends to (QK), token by token;
@@ -284,7 +284,10 @@ at L28-L35, 34% at L0-L8; chance 25%). Firing labels are scored on firings, whic
 tie them at L13-L27 and lead for writes (contexts: 54%); both together reach 0.89 and 63%. Claude Opus explains no better than Sonnet, which suggests
 the bottleneck is the evidence. Claude Haiku then labelled all 884,736 poles for $105; on 100 more
 random poles, with a card that keeps only the reads that carry signal at each layer plus top contexts,
-it matches Sonnet (0.82 against 0.83) ([§8](docs/findings.md#8-describing-neurons)).
+it matches Sonnet (0.82 against 0.83). The labels in the catalog now come from a leaner card, one input and one write
+read a pole chosen for its depth, for Qwen3-0.6B to 14B and Gemma 4: their firing labels pick a pole's held-out firings out from
+another pole's at 0.82-0.88 (another pole's label: 0.44-0.54), as well as the earlier labels on the same poles, at half the
+cost ([§8](docs/findings.md#8-describing-neurons)).
 
 ![Blind test](docs/figures/14_lens_blind.png)
 
