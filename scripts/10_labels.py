@@ -39,8 +39,9 @@ nothing is sent to the API without an explicit stage):
   the right way (findings §17), for relabelling just those: ``shards`` lands the new labels on the table already there;
 - ``pilot``: one batch of ``--n`` random requests; measures tokens (thinking included, with ``--thinking on``) and the parse
   rate and projects the full run's cost into ``state.json``;
-- ``submit``: every request, in batches under the API's limits; refuses unless a pilot at the same
-  thinking setting projected under ``--cap`` dollars and parsed 90%;
+- ``submit``: every request, in batches under the API's limits; refuses unless a pilot at the same thinking setting
+  (this model's, else the newest of another's, scaled to this model's cards) projects under ``--cap`` dollars and
+  parsed 90%;
 - ``status``, ``collect`` (labels to ``labels/L<layer>.jsonl``), ``retry`` (failed or unparsed
   requests, once);
 - ``shards``: the ``labels`` table, ``neurons/labels/L<layer>.parquet`` or ``heads/labels.parquet``;
@@ -479,6 +480,35 @@ def wait(c, batch_id: str) -> None:
         time.sleep(60)
 
 
+def extent(allc: dict, ids) -> dict:
+    """Requests, cards and card characters among ``ids``: what a run's cost scales with."""
+    parts = [allc[i] for i in ids]
+    return {"requests": len(parts), "cards": sum(len(p) for p in parts), "chars": sum(len(c) for p in parts for _, _, c in p)}
+
+
+def projected(p: dict, whole: dict) -> float:
+    """A full run's cost from a pilot: its input tokens per card character, output tokens per card and cached prompt
+    per request, scaled to ``whole`` (``extent``), which may be another model's: one pilot prices every model."""
+    u, n = p["usage"], p["size"]
+    return cost({"input_tokens": u.get("input_tokens", 0) / n["chars"] * whole["chars"],
+                 "output_tokens": u.get("output_tokens", 0) / n["cards"] * whole["cards"],
+                 "cache_read_input_tokens": (u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0))
+                                            / n["requests"] * whole["requests"]})
+
+
+def latest_pilot(side: str, thinking: str) -> tuple[str, dict] | None:
+    """This model's pilot at this thinking setting, else the newest of any model's."""
+    own = load_state(side).get(f"pilot_{thinking}")
+    if own and "size" in own:
+        return NAME, own
+    found = []
+    for path in (DATA / "labels").glob(f"*/{side}/state.json"):
+        p = json.loads(path.read_text()).get(f"pilot_{thinking}")
+        if p and "size" in p:
+            found.append((path.stat().st_mtime, path.parent.parent.name, p))
+    return max(found)[1:] if found else None
+
+
 def pilot(args) -> None:
     side = args.side
     c, system, allc = client(), system_prompt(side), chunks(side)
@@ -493,8 +523,8 @@ def pilot(args) -> None:
             use.update(usage_of(r.result.message))
             ok += parse(side, text_of(r.result.message), allc[r.custom_id]) is not None
     s = load_state(side)  # another pilot may have saved meanwhile
-    s[f"pilot_{args.thinking}"] = {"batch": b.id, "requests": n, "parsed": ok, "usage": dict(use), "spent": cost(use),
-                                   "projected_total": cost(use) / max(n, 1) * len(allc), "requests_total": len(allc)}
+    p = {"batch": b.id, "requests": n, "parsed": ok, "usage": dict(use), "spent": cost(use), "size": extent(allc, pick)}
+    s[f"pilot_{args.thinking}"] = p | {"projected_total": projected(p, extent(allc, allc)), "requests_total": len(allc)}
     save_state(side, s)
     print(json.dumps(s[f"pilot_{args.thinking}"], indent=1))
 
@@ -502,10 +532,15 @@ def pilot(args) -> None:
 def submit(args) -> None:
     side = args.side
     s = load_state(side)
-    p = s.get(f"pilot_{args.thinking}")
-    if not p or p["projected_total"] > args.cap or p["parsed"] < 0.9 * p["requests"]:
-        raise SystemExit(f"refusing: run a pilot at --thinking {args.thinking} that projects under ${args.cap} and parses 90%")
     c, system, allc = client(), system_prompt(side), chunks(side)
+    found = latest_pilot(side, args.thinking)
+    if not found:
+        raise SystemExit(f"refusing: no pilot at --thinking {args.thinking} for {side}, of this model or another")
+    source, p = found
+    cost_here = projected(p, extent(allc, allc))
+    print(f"pilot of {source}: parsed {p['parsed']}/{p['requests']}; this model's run projects ${cost_here:.2f}", flush=True)
+    if cost_here > args.cap or p["parsed"] < 0.9 * p["requests"]:
+        raise SystemExit(f"refusing: the projection is over ${args.cap} or the pilot parsed under 90%")
     sent = {x for b in s["batches"].values() for x in b["ids"]}
     batch, size = [], 0
     for cid in [x for x in allc if x not in sent] + [None]:
