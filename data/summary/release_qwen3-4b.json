@@ -43,6 +43,12 @@
    700416
   ],
   [
+   "qwen3-4b-neurons-labels",
+   "qwen3-4b/neurons/labels/*.parquet",
+   "every pole's labels, by Claude Haiku 5.5",
+   700416
+  ],
+  [
    "qwen3-4b-neurons-edges",
    "qwen3-4b/neurons/edges/*.parquet",
    "every pole's strongest direct weight edges from earlier poles and to later ones",
@@ -76,6 +82,12 @@
    "qwen3-4b-heads-reads",
    "qwen3-4b/heads/reads.parquet",
    "every head's OV and QK circuits read per token",
+   1152
+  ],
+  [
+   "qwen3-4b-heads-labels",
+   "qwen3-4b/heads/labels.parquet",
+   "every head's labels, by Claude Haiku 5.5",
    1152
   ],
   [
