@@ -702,7 +702,7 @@ def dataset_card(f: dict, ladder: dict, lens_rev: str, date: str) -> str:
                   "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
     ladder_folders = ", and those under [More sizes of Qwen3](#more-sizes-of-qwen3)" if ladder else ""
     ladder_limit = f" (Qwen3's other sizes catalogued too, {ladder_labels(ladder)})" if ladder else ""
-    ladder_labelled = ("\n\nQwen3's other sizes are labelled from a leaner card (§8): no thinking, reads cut to 24 tokens, and "
+    ladder_labelled = ("\n\nThe labels of Qwen3's other sizes come from a leaner card (§8): no thinking, reads cut to 24 tokens, and "
                        "per pole only the input and write reads its model's plan names for that depth, with a one-line "
                        "shadow note. A pole the API refused to label has empty labels and says so in `note`."
                        if ladder_labels(ladder) != "without labels" else "")
