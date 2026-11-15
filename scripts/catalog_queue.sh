@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The catalog's stages for each model given (default Qwen/Qwen3-8B and google/gemma-4-12B; scripts/catalog_box.sh starts
 # this), model by model: the GPU passes 06, 17 and 07, then what follows from their tables: 08, the reads-at-firings
-# check, 16 and the measuring half of the edges check (its `score` half runs where the comparison lenses are). A failed
+# check, 16, the measuring half of the edges check (its `score` half runs where the comparison lenses are) and the
+# steering check of the released R-lens (checks/causal_lens.py: with reads-at-firings, the site's depth bands). A failed
 # GPU pass skips the rest of its model; after those, a failure is logged and the queue carries on. Rerun to resume: a
 # finished stage leaves logs/<stage>_<model>.done and is skipped. Each model downloads at its turn; DROP=1 deletes it
 # from the cache after its stages. With several GPUs, run one queue per GPU (CUDA_VISIBLE_DEVICES=i), each with its
@@ -41,6 +42,8 @@ for m in "$@"; do
     run "reads_at_firings_$s" "$m" python scripts/checks/reads_at_firings.py
     run "edges_$s" "$m" python scripts/16_edges.py && up "edges_$s" "$m" edges
     run "edges_context_$s" "$m" python scripts/checks/edges_in_context.py measure
+    run "causal_$s" "$m" python scripts/checks/causal_lens.py measure &&
+        run "causal_score_$s" "$m" python scripts/checks/causal_lens.py score --lenses hub
     if [ "${MEDIA:-0}" = 1 ] && [ "$s" = gemma-4-12b ]; then
         run media_image "$m" python scripts/13_media_activations.py --device cuda --modalities image
         run media_audio "$m" python scripts/13_media_activations.py --device cuda --modalities audio
