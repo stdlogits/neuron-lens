@@ -38,7 +38,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§16](#16-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
 | [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
 | [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
-| [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail |
+| [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1527,15 +1527,51 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
   trails at every size: last quarter 0.19 against 0.34 (0.6B), 0.11 against 0.19 (1.7B), 0.14 against 0.27 (4B), 0.09 against
   0.23 (8B), 0.21 against 0.28 (14B). So their input side turns to the R-lens later (L10, L11 and L11 for the 0.6B-, 4B- and
   8B-Base; the 14B-Base at L10 like the 14B), and the 1.7B-Base's never does: by quarter its R-lens read passes for 6-16% of
-  firing poles, its S-lens read for 18-58%. Why post-training aligns read directions with the R-lens's forward reads was not
-  tested.
+  firing poles, its S-lens read for 18-58%. The gap is in the test's null, not in the reads (two bullets below).
+- **What post-training changed** (`checks/post_training.py`: Qwen3-8B and Qwen3-4B against their bases, weights only, each
+  model's lenses of record; post-training keeps the neurons' indices). Every matrix moves by 5-11% of its norm in the 8B and
+  6-13% in the 4B, the norms by 6% or less and the final norm by 0.3-0.4%; the embedding and unembedding by 7% and 9% (the
+  4B's, tied, 12%). The change is spread out: `ΔW_down`'s participation ratio is 824-2,506 of the 8B's 4,096 dimensions
+  (664-1,667 of the 4B's 2,560), its top direction 0.2-2.6% of it. Neurons keep their directions (write and read cosines
+  0.991-0.998), and a write's R-lens top 10 keeps 4-5 of its tokens at L0-L3 and 7-9 in the last quarter (medians). The clearest
+  directions of `ΔW_down`, read through the post-trained R-lens from L12 on, are questions (`?`, `吗`), hedges (`maybe`,
+  `perhaps`, `也许`, `可能`), contrast (`但`, `but`), consequence (`因此`, `thus`) and explanation (`也就是说`, `例如`), in both
+  models; the 4B adds `Wait` (L34), `Let` and `让我们` (L29) and the chat template's `<think>` and `<|im_start|>` (L31-L33).
+  That suggests the style of the models' reasoning traces; a direction's sign isn't fixed (both ends are listed), and each
+  holds about 1% or less of a layer's change past L3.
+- **The bases' input reads trail because of the test's null.** Swapping read rows between a model and its base moves
+  `read_R`'s share by 0.01 at most; swapping the R-lens moves all of it, through its Jacobian in the 8B (the base's
+  Jacobian with the post-trained unembedding scores close to the base) and in the 4B's last quarter, while the 4B's readout,
+  its tied embedding, carries most of it earlier. `reads_at_firings.py` scores each pole against a null pooled over its
+  layer's mismatched pairs, and the base's lens widens that null with a few promiscuous reads: the 1% of poles that score
+  highest on other poles' drivers (through the 8B-Base's lens, mostly frequent function words across scripts such as `在`,
+  `对`, `に`, `を`, tabs and single capitals) hold 53-81% of the null's 99%-point exceedances by quarter, against 34-60%
+  through the post-trained lens, and lift that point from 1.2-1.5 to 1.6-2.4.
+  Held to a null of its own (its score on its drivers against its score on 16 other poles'), a pole passes as often through
+  either lens:
+
+  | model, read_R | pooled null, by quarter | own null, by quarter |
+  |---|---|---|
+  | 8B, its lens | .06 / .16 / .25 / .25 | .29 / .36 / .41 / .61 |
+  | 8B, its base's lens | .03 / .03 / .13 / .07 | .35 / .37 / .42 / .62 |
+  | 4B, its lens | .13 / .20 / .23 / .33 | .40 / .36 / .38 / .59 |
+  | 4B, its base's lens | .07 / .10 / .17 / .13 | .44 / .37 / .38 / .61 |
+
+  The 8B-Base's own drivers give the same shares within 0.01. So post-training doesn't line up what neurons read with what
+  the model says, or change how well a base's R-lens names a pole's drivers; it makes a few of the lens's reads less
+  promiscuous. The logit lens on read directions (the identity in place of the Jacobian) has the 8B's narrowest null (a 99%
+  point of 0.85-1.13) but passes fewer poles against their own in both models (.16 / .31 / .34 / .55 in the 8B).
 
 **Limits.** One family, five sizes, and depth and width grow together; quarters average layers of different roles; the shares
 are token-level (§7), not judgments of coherence; the post-trained models' labels are checked for firing only (§8), and the
 bases have none. Every lens was
 fitted on 1,000 documents whatever the model's size. At L1-L3, a few firings with near-zero gate or `up` dominate `sources`'
-layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sources bullet starts at L4. Compact outputs are
-`data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads}_<model>.*`.
+layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sources bullet starts at L4. The pooled null's
+shares (this section's, by `reads_at_firings.py`) depend on its tail, which a few promiscuous reads lift, so a comparison
+between lenses or models on them can move under a null per pole; only `read_R` between the bases and their siblings was
+checked. The weight diff covers two sizes, reads the MLPs' writes and no heads, and uses the post-trained model's lobe
+signs and near-silent poles for its base. Compact outputs are
+`data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads,post_training}_<model>.*`.
 
 ## Open questions
 
@@ -1543,7 +1579,8 @@ layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sour
   flat from L4 to L17 (§6).
 - What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§11).
 - Whether J++ filtering (Ayonrinde 2026) or a longer context improves early and mid-network reads.
-- With each base catalogued (§19), a neuron-by-neuron diff of what post-training changed, and why it improves the R-lens's input reads.
+- Why a base's R-lens maps a few read directions onto frequent function words (§19), and whether a null per pole changes the
+  other comparisons between lenses and models (§7, §19).
 - Whether depth or width sets the S-lens's input reads (§19): a family that varies one at a time, and Qwen3-32B (64 layers).
 - Whether the poles of larger models read as coherently to a rater as they pass token-level tests (§19 counts hits only).
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).

@@ -445,13 +445,16 @@ reads depend on size. Late ones don't: at every size a late write's R-lens read 
 what follows the firings for a quarter of poles, and the R-lens names the inputs of a fifth to a third. Early ones do. The
 S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers on, and early
 writes predict steering less at every step in size (first-quarter r 0.62 at 0.6B, 0.31 at 14B). Heads' reads fall a little
-with size too. The bases read like their siblings except through the R-lens, whose input reads trail at every size, which suggests
-post-training lines up what a neuron reads with what the model is about to say
+with size too. The bases read like their siblings. Their R-lens input reads seem to trail at every size, but only against a
+null pooled over each layer: through a base's lens about 1% of poles read as frequent function words and match every pole's
+drivers, which raises the bar for all; held to its own null, a pole passes as often in the base (Qwen3-8B and 4B). Post-training
+moves every matrix by 5-13% and keeps each neuron's directions (cosines above 0.99); its clearest added directions read as
+questions, hedges and contrast (and `Wait` in the 4B), likely the style of the models' reasoning
 ([§19](docs/findings.md#19-the-qwen3-family-what-changes-with-size)).
 
 ### Limits
 
-- Two models read in depth, and nine Qwen3 sizes without labels; one lens corpus for text (English-heavy web text), and COCO photos and ESC-50 sounds for
+- Two models read in depth, and nine more Qwen3 models (the four post-trained ones labelled, the bases not); one lens corpus for text (English-heavy web text), and COCO photos and ESC-50 sounds for
   Gemma 4's media lenses; lenses averaged over 128-token documents.
 - Activations are bf16 passes over documents of up to 256 tokens; the exact drivers match an fp32 rerun
   through L9 on Qwen3-8B, and later layers are unchecked.

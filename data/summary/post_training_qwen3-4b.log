@@ -1,0 +1,146 @@
+weights, Qwen/Qwen3-4B against Qwen/Qwen3-4B-Base: global relative change embed 0.115, unembed 0.119, final norm 0.004
+
+layers    q     k     v     o     gate  up    down  in-norm  cos write  cos read  write_R top 10 kept  ΔW_down PR  top direction
+L0    0.076 0.069 0.065 0.077 0.075 0.081 0.078  0.028    0.9970     0.9969    0.4                    1539      0.0025
+L1    0.081 0.073 0.070 0.077 0.056 0.078 0.084  0.030    0.9968     0.9963    0.4                     826      0.0226
+L2    0.084 0.076 0.069 0.077 0.068 0.069 0.078  0.019    0.9964     0.9953    0.4                     664      0.0261
+L3    0.082 0.078 0.068 0.076 0.063 0.081 0.085  0.016    0.9962     0.9969    0.5                    1302      0.0088
+L4    0.085 0.081 0.071 0.077 0.062 0.085 0.089  0.013    0.9961     0.9972    0.5                    1648      0.0023
+L5    0.083 0.081 0.070 0.078 0.068 0.084 0.089  0.012    0.9960     0.9969    0.5                    1636      0.0024
+L6    0.085 0.083 0.072 0.078 0.075 0.086 0.089  0.009    0.9961     0.9965    0.5                    1667      0.0025
+L7    0.085 0.082 0.070 0.084 0.078 0.087 0.091  0.007    0.9959     0.9964    0.5                    1650      0.0022
+L8    0.091 0.085 0.073 0.083 0.088 0.089 0.092  0.006    0.9958     0.9960    0.5                    1592      0.0023
+L9    0.099 0.092 0.075 0.089 0.085 0.091 0.095  0.006    0.9955     0.9960    0.5                    1596      0.0024
+L10   0.093 0.089 0.076 0.082 0.090 0.090 0.094  0.005    0.9957     0.9959    0.5                    1634      0.0024
+L11   0.100 0.094 0.080 0.088 0.095 0.091 0.097  0.007    0.9954     0.9957    0.6                    1642      0.0023
+L12   0.104 0.102 0.077 0.085 0.101 0.093 0.098  0.007    0.9951     0.9952    0.5                    1580      0.0024
+L13   0.107 0.104 0.084 0.093 0.109 0.097 0.101  0.009    0.9946     0.9944    0.5                    1580      0.0021
+L14   0.111 0.108 0.083 0.087 0.115 0.099 0.103  0.006    0.9945     0.9938    0.5                    1569      0.0023
+L15   0.109 0.110 0.085 0.089 0.121 0.105 0.107  0.006    0.9939     0.9929    0.5                    1515      0.0025
+L16   0.120 0.116 0.087 0.095 0.121 0.105 0.107  0.004    0.9940     0.9928    0.5                    1482      0.0026
+L17   0.117 0.120 0.087 0.088 0.123 0.107 0.108  0.004    0.9939     0.9925    0.5                    1430      0.0029
+L18   0.123 0.122 0.089 0.089 0.128 0.111 0.112  0.004    0.9934     0.9920    0.6                    1384      0.0034
+L19   0.121 0.124 0.092 0.089 0.130 0.113 0.113  0.003    0.9934     0.9918    0.6                    1370      0.0038
+L20   0.122 0.132 0.095 0.099 0.133 0.113 0.112  0.004    0.9933     0.9915    0.6                    1348      0.0044
+L21   0.122 0.131 0.094 0.096 0.134 0.112 0.111  0.003    0.9935     0.9914    0.6                    1291      0.0055
+L22   0.124 0.132 0.095 0.090 0.129 0.109 0.106  0.002    0.9943     0.9920    0.6                    1328      0.0047
+L23   0.118 0.130 0.091 0.094 0.125 0.108 0.106  0.002    0.9944     0.9924    0.7                    1428      0.0031
+L24   0.118 0.127 0.095 0.100 0.123 0.106 0.103  0.002    0.9948     0.9931    0.7                    1485      0.0028
+L25   0.120 0.124 0.095 0.101 0.121 0.105 0.104  0.002    0.9947     0.9933    0.7                    1493      0.0027
+L26   0.127 0.132 0.097 0.111 0.121 0.104 0.103  0.002    0.9950     0.9937    0.7                    1524      0.0026
+L27   0.127 0.130 0.096 0.108 0.120 0.103 0.103  0.001    0.9950     0.9939    0.7                    1538      0.0026
+L28   0.121 0.130 0.098 0.105 0.120 0.104 0.103  0.002    0.9949     0.9938    0.8                    1542      0.0024
+L29   0.117 0.128 0.099 0.111 0.117 0.100 0.101  0.001    0.9952     0.9943    0.8                    1588      0.0020
+L30   0.122 0.123 0.091 0.108 0.117 0.100 0.100  0.000    0.9951     0.9943    0.8                    1605      0.0021
+L31   0.116 0.122 0.091 0.104 0.117 0.100 0.100  0.000    0.9951     0.9942    0.8                    1610      0.0021
+L32   0.118 0.117 0.091 0.104 0.122 0.101 0.100  0.000    0.9950     0.9938    0.8                    1584      0.0024
+L33   0.122 0.133 0.086 0.099 0.125 0.101 0.099  0.000    0.9952     0.9937    0.8                    1505      0.0033
+L34   0.125 0.120 0.078 0.097 0.119 0.096 0.095  0.000    0.9956     0.9939    0.8                    1313      0.0070
+L35   0.116 0.114 0.075 0.087 0.105 0.087 0.089  0.000    0.9963     0.9952    0.8                    1015      0.0103
+
+ΔW_down's top directions (z through the post-trained model's R-lens; both ends):
+L0 #1 (0.0025): ' something' ' someone' ' yes' ' avoid' ' idea' ' thinking' ' think' ' approach'  |  '所产生的' '均由' ' Indices' ' \'\\"' '建设工程' '_spell' '相继' 'Successfully'
+L0 #2 (0.0023): '人在' '一本书' '不在' 'setEnabled' '颈部' '保证金' '行为' '书'  |  ' (' ' bl' ',' ' gr' ' sp' ' fl' ' co' ' or'
+L1 #1 (0.0226): 'Yet' '-than' 'ショ' 'ches' ' сл' ' slid' ' hesitate' ' relent'  |  ' Mog' "()['" " '\r\n" '本次活动' " '+" ' researched' "',\r\n" ' \\\r\n'
+L1 #2 (0.0051): '\n\n\n\n' '\n\n\n\n\n\n\n\n\n\n\n\n\n\n' '\n\n\n\n\n\n\n\n\n\n' '\n\n\n\n\n\n' '\n\n\n\n\n\n\n' '\n\n' ' dr' '\n\n\n\n\n\n\n\n'  |  '互通' '[level' '在整个' '的过程中' '[arr' '明确了' '安倍' '-instance'
+L2 #1 (0.0261): ' exper' ' experiencing' ' format' ' intake' ' zoning' ' wand' 'off' ' combination'  |  ' ISIL' '/");\n' '>");\n' ' eerie' ':");\n' ' nominees' ' Mahmoud' 'POSE'
+L2 #2 (0.0072): 'tering' 'issa' 'Nothing' 'itation' 'keley' 'Unsigned' '寞' 'Unless'  |  " ',\n" " '[" " '." " '," " '}" " ';" ' ranking' " #'"
+L3 #1 (0.0088): 'HEEL' ' GOOGLE' 'ッツ' '(curl' 'EDGE' '(SP' '.getB' ' SPF'  |  '_,' ' _,' '._' '}_' '_;' '_>' '}`,' '._\n\n'
+L3 #2 (0.0046): 'estate' 'cestor' '<think>' 'startIndex' 'umerator' 'rowCount' '洁净' '主动性'  |  ' on' ' from' ' by' ' used' ' these' ' two' ' in' ' around'
+L4 #1 (0.0023): 'umerator' '-pencil' 'pendicular' 'maxLength' 'jmp' 'setEnabled' '落' '条规定'  |  ' this' ' these' ' under' ' and' ' un' ' a' ' in' ' over'
+L4 #2 (0.0021): ' at' ' and' ',' ' in' ' under' ' with' ' as' ' or'  |  '<think>' 'umerator' 'rowCount' 'isEmpty' 'startIndex' '<|im_start|>' 'endTime' ' resultList'
+L5 #1 (0.0024): 'umerator' '作品内容' 'restriction' '间距' '条规定' '现出' 'tyard' '两条'  |  ' under' ' un' ' over' ' in' ',' ' and' ' a' ' after'
+L5 #2 (0.0022): '-re' '-to' '-in' ' counter' '-m' '-under' '-h' ' theoretically'  |  ')!\n' ' ])\n' ' MEMBER' ' ]).' ' ")"\n' ']).\n' ' Permissions' ',))\n'
+L6 #1 (0.0025): 'adders' '行走' '女性朋友' 'nid' '方式进行' 'PropertyName' '人才队伍' 'MethodName'  |  '.\n\n' ' comparable' ' --' ' performance' ' critical' ' near' ' sales' ' .'
+L6 #2 (0.0021): 'delimiter' ' ErrorResponse' '<think>' 'texto' ' getopt' 'suspend' ' GetString' '</think>'  |  ' end' '[' ' (' ' w' ' and' ' W' '-' ' '
+L7 #1 (0.0022): 'y' 's' 't' 'i' 'n' '为进一步' 'er' 'ne'  |  '肯定是' ' layoffs' '的話' 'vro' '"After' '-sales' '_subscribe' ' serialized'
+L7 #2 (0.0019): ' •' ' —' ' nearly' ' mult' ' ·' ' cross' ' ~' ' –'  |  'Posting' 'DataService' '(KeyEvent' 'atham' '_PS' 'adier' '.chunk' '_CP'
+L8 #1 (0.0023): 's' 'y' 't' 'er' 'i' 'n' 'ing' '\r\n'  |  '-du' '-router' '第三个' '-zone' 'jen' '-handle' '_zones' '_splits'
+L8 #2 (0.0021): ' maybe' ' something' ' might' ' here' ' perhaps' ' setting' ' things' ' setup'  |  '并向' '整整' '€™' '[array' 'Л' 'pageSize' '-Length' '_Length'
+L9 #1 (0.0024): 's' 'n' ' by' '[' ' described' ' more' ' or' ' now'  |  '第三个' '三点' '三是' '一个是' '四是' '第二个' 'Spacing' '-slide'
+L9 #2 (0.0020): 'startIndex' ' resultList' 'rowCount' '并向' 'pageSize' '并通过' 'currentIndex' '邻'  |  ' maybe' ' perhaps' ' something' ' might' ' here' ' things' ' like' ' if'
+L10 #1 (0.0024): ' or' ' now' ',' ' as' '.\n\n' ' yet' ':' ' ['  |  'orpion' '其次是' '三是' '三次' '三個' 'istles' '设有' 'Cel'
+L10 #2 (0.0018): ' maybe' ' might' ' perhaps' 'maybe' ' sorts' ' hmm' ' stuff' ' something'  |  '不但' ' \xad' ' Likewise' 'ُ' 'َ' 'Â' ' Furthermore' 'Furthermore'
+L11 #1 (0.0023): 'osex' '骚扰' "{}'." ' Palmer' ' Sanford' 'izzard' ' sodom' ' purposely'  |  ' mà' 's' ' oneself' 'ว' ' ک' 'nya' 'wis' 'nam'
+L11 #2 (0.0019): ' might' ' maybe' ' something' ' would' ' okay' ' perhaps' ' here' ' needing'  |  ',’”' 'ّ' '不但' ' \xad' '’un' '’une' 'oriously' '并向'
+L12 #1 (0.0024): ' fetched' '      \n\n' ' yeah' '🤔' '\n    \n\n' '就得' ' might' '     \n\n'  |  '˚' '绝大多数' '―' "']['" ' \xad' '\x92' '将近' 'osex'
+L12 #2 (0.0021): '一个问题' ' postings' '很多事情' '等问题' '谁知道' ' commenter' 'xDA' 'Hmm'  |  '—including' '—with' '––' '—for' ' wholly' '\xa0\xa0\xa0\xa0\xa0\xa0\xa0' '绝大多数' 'Furthermore'
+L13 #1 (0.0021): ' statements' '      \n\n' ' pointers' ' tokens' ' might' '東西' ' versa' ' terms'  |  ' \xad' '不但' '―' '学前' '’Brien' '—including' '”—' '″'
+L13 #2 (0.0018): ' generous' 'strong' ' biggest' ' strong' 'ager' ' gladly' 'Strong' ' tough'  |  '/process' '/system' '扦' '/tag' 'RACT' '章' ' \\(' '作为一种'
+L14 #1 (0.0023): ' might' ' would' ' thread' ' something' ' pos' ' approach' ' threads' ' perhaps'  |  '几乎' '绝大多数' '十' '唯一' '铁' '’Brien' '}],\n' '″'
+L14 #2 (0.0019): ' comfort' ' snug' ' tough' ' slight' ' easy' ' little' ' comfortable' ' kid'  |  '实际上' '？' '实际上是' '是指' '?\\' '?action' '才是' '并非'
+L15 #1 (0.0025): '暨' '绝大多数' '不但' '十分' ' hugely' 'irteen' 'ighton' '钢'  |  ' might' ' would' ' something' ' wouldn' ' references' ' mention' '?]' ' certain'
+L15 #2 (0.0022): '也就是说' '是由' '实际上是' '即' '被称为' '换句话说' '是指' '称为'  |  ' plenty' ' pop' ' comfort' ' quick' ' quicker' '也没什么' ' sooner' ' spare'
+L16 #1 (0.0026): ' might' ' something' '?)' ' maybe' '?).' '?)\n\n' ' perhaps' ' stuff'  |  '不但' '绝大多数' ',’’' '十分' " ';\n" '骨干' '″' 'Nearly'
+L16 #2 (0.0023): '也就是说' '也就是' '即' '根据' '?action' '！！' '整个' '是指'  |  ' comfort' ' comfortable' ' hum' ' hard' ' useful' ' less' ' chalk' ' sp'
+L17 #1 (0.0029): '?)' '?\\' ' ???' '？' '???' '))?' '?\r\n' '?'  |  '不但' ' kilomet' '’Brien' ' thankful' '_SHOW' '锉' '′' '‟'
+L17 #2 (0.0028): '经' '钢' '即' '均为' '实' '单' '郭' '从'  |  ' might' ' sp' ' more' ' feel' ' com' ' humming' ' fl' ' less'
+L18 #1 (0.0034): '???' '!?' '????' '?!' '？' '?\\' '??' '"?'  |  '‟' '’ll' '-most' ' worthwhile' '’es' ' thankful' 'laces' 'ﬂ'
+L18 #2 (0.0031): '高度' '非常' '：\n' '即' '也就是说' '两个' '出' '第二个'  |  ' might' ' but' ' perhaps' ' maybe' ' unsure' ' etc' ' don' ' culture'
+L19 #1 (0.0038): ' worthwhile' '‟' 'erable' ' comfortably' ' toler' ' gladly' '锉' ' unsur'  |  '？' '()?' '????' '???' '!?' '??' '?)' ']?'
+L19 #2 (0.0036): '也就是说' '直径' '经' '十分' '非常' '具有' '一共' '针对'  |  ' might' ' but' ' maybe' ' perhaps' ' etc' ' though' '…but' '.But'
+L20 #1 (0.0044): '乐意' ' worthwhile' ' comfortably' 'ewise' 'erable' '不乏' ' nicely' '‟'  |  '!?' '????' '???' ' ???' '?!' '?)' '??' '?).'
+L20 #2 (0.0037): '也就是说' '一共' '恰好' '直径' '也就是' '必须' 'AVOR' "'RE"  |  '.But' ' maybe' ' but' ' etc' ' perhaps' '…but' ' unsure' ' might'
+L21 #1 (0.0055): 'ewise' ' Goodman' ' worthwhile' 'erable' '富有' 'gien' 'ञ' ' StringBuffer'  |  '???' '!?' '????' '?!' '??' '?)' '?' '？'
+L21 #2 (0.0039): '也就是说' '也就是' ':"\n' '一共' " '':\n" '("***' '(pub' '":\n'  |  '…but' ' etc' '等等' '.But' 'etc' '不過' '-but' '等领域'
+L22 #1 (0.0047): '？' '?' '؟' '()?' ')?' '?\\' '?)' '}?'  |  ".'," ' œ' ".',\n" 'gien' '."\\' '鸯' '.",' 'uego'
+L22 #2 (0.0033): '首先是' " '':\n" ':"\n' '因为在' '":\n' '：\n' "':\n" ':\n'  |  'but' '但这' ',but' ' but' '但也' '但' '.But' '但在'
+L23 #1 (0.0031): '?' '？' '?)' '؟' '???' '??' '?!' '????'  |  ' consequently' '因而' ".'," '因此' ' therefore' ' hence' ' donc' ' Accordingly'
+L23 #2 (0.0024): ':\n' ":')\n" ":')" ':\r\n' ':")\n' ' :\n' ":');\n" ':")'  |  'but' ',but' '但这' ' but' '…but' '.but' '但是' '但'
+L24 #1 (0.0028): ".'," ' consequently' '因而' ' Thus' ".',\n" '因此' ' hence' ' Hence'  |  '?' '؟' '？' '?)' '?\n\n' '?)\n\n' ')?' '?).'
+L24 #2 (0.0024): '?)\n\n' ')?\n\n' ' maybe' '?\n\n' '؟' 'maybe' '??\n\n' '???\n\n'  |  '但由于' ' Additionally' '作为一个' '中含有' '作为一种' '企业在' '同时还' '之所以'
+L25 #1 (0.0027): ".'," '因而' ' hence' '因此' ".',\n" ' therefore' 'avour' ' Hence'  |  '?' '؟' '？' '?\n\n' '?)' '?),' '?).' ')?'
+L25 #2 (0.0023): ')?\n\n' '?\n\n' '?)\n\n' '؟' '?:' '？' '?)' '?'  |  '所以在' '但由于' '所以我们' '所需要' ' therefore' '参与到' '因为在' ' because'
+L26 #1 (0.0026): ".'," ".',\n" '.",' '.",\n' '.\n' ".';\n" '."\'' ".':"  |  '?' '？' '؟' '?\n\n' '?)' ')?' '?\n' '?),'
+L26 #2 (0.0022): ' but' '但由于' 'but' '但在' '但' 'But' ' But' '但是'  |  ' maybe' ' Maybe' '也许' 'maybe' ' perhaps' 'Maybe' ' Perhaps' 'perhaps'
+L27 #1 (0.0026): '.\n' ".',\n" ".'," '.,\n' '.)\n' '/.\n' ':\n' '/.\n\n'  |  '?' '？' '؟' '?)' '?\n\n' ')?' '?),' '()?'
+L27 #2 (0.0021): '但' '但是' 'but' ' but' 'But' ' BUT' '但在' ' But'  |  ' perhaps' ' maybe' 'perhaps' ' Maybe' ' possibly' 'maybe' ' Perhaps' '也许'
+L28 #1 (0.0024): '?' '؟' '？' '?\n\n' '?\n' '?)' ' maybe' ' perhaps'  |  '.)\n' '.).\n\n' ".'," '.\n' ".'''\n" '."\'' ' ).\n' ".')\n"
+L28 #2 (0.0021): ' maybe' 'maybe' 'Maybe' ' Maybe' '也许' '可能' 'perhaps' ' peut'  |  '?' '?\n\n' '？' '؟' ')?' '?\n' ')?\n\n' '?!'
+L29 #1 (0.0020): '?' '?\n\n' '?)\n\n' '?)' '？' '؟' '?),' '?"\n\n'  |  '.\n' ".',\n" '\n' '.,\n' ',\n' '().\n' ' sangat' ' adalah'
+L29 #2 (0.0019): ' lets' ' let' '让我们' ' Let' ' Lets' 'Lets' 'Let' ' LET'  |  "'?" '"?' '？' '\tis' '的是' '他是' '是' "?',"
+L30 #1 (0.0021): ' maybe' ' perhaps' '?' 'maybe' '?\n\n' ' Maybe' '？' ' possibly'  |  '.\n' '.",\n' ".'," ".',\n" '\n' ',\n' "'.\n" ".'\n"
+L30 #2 (0.0020): '可能' ' maybe' ' might' '也许' '可能会' 'Maybe' ' peut' ' Maybe'  |  '所以' ' so' 'So' '所以在' ' So' 'so' '.So' '所以我们'
+L31 #1 (0.0021): ' maybe' ' perhaps' 'maybe' 'perhaps' ' possibly' ' probably' '可能' 'probably'  |  ' ' '\n' '.' ' the' '的' '1' "'" "'s"
+L31 #2 (0.0020): '<think>' '天空部落' ' maybe' ' onslaught' '،' ' peut' '個人資訊' '<|im_end|>'  |  '的实际' '?\n\n' ' (' '是一个' '的选择' 'this' '的技术' '的一个'
+L32 #1 (0.0024): '\n' ' ' ' ...\n' '...\n' '\t' '.' '\n\n' ' cialis'  |  ' perhaps' '可能' ' maybe' 'maybe' '可能存在' '可能是' 'perhaps' 'Maybe'
+L32 #2 (0.0021): '<think>' '<|im_start|>' '</think>' '<|im_end|>' ' goodies' ' plentiful' ' famed' ' pioneered'  |  ' but' "'s" ' (' " '" ' if' ' ' "'t" 'But'
+L33 #1 (0.0033): '<think>' '<|im_start|>' '</think>' '<|im_end|>' ' hugely' '使用網路' ' afore' ' didnt'  |  ' (' "'s" ' ' " '" ' any' ':\n\n' ' or' ' even'
+L33 #2 (0.0029): ' maybe' ' perhaps' 'maybe' 'perhaps' '可能是' 'Maybe' '可能' '也许'  |  '\n' ' Pfizer' '\n\n' ' cialis' '/AIDS' ' Jasmine' ' Jewelry' ' Erectile'
+L34 #1 (0.0070): ' afore' ' hugely' '使用者或' ' thankfully' ' hookers' ' amazingly' ' rumours' '爲'  |  ' (' ' [' ' =' ' first' ' with' '=' ' or' ' from'
+L34 #2 (0.0035): ' Wait' 'Wait' '_wait' ' wait' 'wait' '\twait' ' WAIT' '等待'  |  ' perhaps' ' ?' ' maybe' ' possibly' '?' ' (' 'perhaps' ' probably'
+L35 #1 (0.0103): ' sodom' ' Prostit' ' masturb' ' Decorating' ' crappy' ' incompet' ' murderous' ' bureaucr'  |  ' D' '\xa0' ' S' '1' ' B' ' P' ' R' ' G'
+L35 #2 (0.0059): ' ' ',' ' (' '\n' '.' '(' ':' '1'  |  ' 😉\n\n' ' 🙂\n\n' '…”\n\n' ',…\n\n' ' 😀' ' ”\n\n' '"\r\n\r\n\r\n' '哈哈哈哈'
+
+reads, Qwen/Qwen3-4B against Qwen/Qwen3-4B-Base: read_R's share of poles passing, by quarter of depth (mean over layers). pooled: reads_at_firings.py's test (BH at 5% over a null pooled across the layer); per pole: beats its own score on all 16 partners' drivers (chance 1/17); tail: the share of the pooled null's 99%-point exceedances from the top 1% of poles by mean score on others' drivers; null q99 that point.
+
+on the post model's drivers
+condition                                      L0-8                       L9-17                      L18-26                      L27-35
+post                     0.13 / 0.40 q99 1.19 tail 0.50  0.20 / 0.36 q99 1.19 tail 0.46  0.23 / 0.38 q99 1.24 tail 0.41  0.33 / 0.59 q99 1.17 tail 0.53
+base                     0.07 / 0.44 q99 1.88 tail 0.61  0.10 / 0.37 q99 1.81 tail 0.58  0.17 / 0.38 q99 1.64 tail 0.53  0.13 / 0.61 q99 1.99 tail 0.76
+post rows, base lens     0.07 / 0.45 q99 1.87 tail 0.60  0.10 / 0.37 q99 1.80 tail 0.58  0.17 / 0.39 q99 1.63 tail 0.53  0.13 / 0.61 q99 1.98 tail 0.77
+base rows, post lens     0.13 / 0.40 q99 1.18 tail 0.50  0.20 / 0.36 q99 1.19 tail 0.46  0.23 / 0.37 q99 1.24 tail 0.41  0.33 / 0.59 q99 1.16 tail 0.52
+base J, post readout     0.14 / 0.45 q99 1.44 tail 0.57  0.18 / 0.38 q99 1.39 tail 0.53  0.20 / 0.39 q99 1.44 tail 0.52  0.19 / 0.61 q99 1.60 tail 0.72
+identity                 0.15 / 0.39 q99 1.13 tail 0.55  0.10 / 0.30 q99 1.19 tail 0.61  0.10 / 0.32 q99 1.29 tail 0.59  0.12 / 0.53 q99 1.42 tail 0.76
+
+the most promiscuous poles' reads (highest mean score on others' drivers), post-trained drivers:
+L0 post: '_not' '(int' '.Not' '(min' ',int' ' что' || '_b' '_id' '_h' '_st' '_re' '_f' || 'Feb' '.Ad' 'Apr' 'Jan' '0' 'Aug'
+L0 base: 'foreach' 'elseif' 'append' 'overlay' 'concat' 'vertex' || '-inverse' '\ttmp' ':test' '\ttemp' 'uploader' '\tfull' || 'utils' ',params' 'arrays' 'upd' 'geometry' 'odb'
+L4 post: '畅' 'xx' ' contiguous' ' đề' '悲' '.path' || 'Three' 'Rest' 'John' 'Wednesday' 'First' 'June' || 'Let' 'Hand' 'Third' 'Black' 'Second' 'Michael'
+L4 base: '袒' '\\V' '∶' '\\Lib' '妩' 'Ρ' || '憑' ' FOUND' '混淆' '同時' ' entend' ' CONTEXT' || '(uint' 'Ids' ' onError' '_repeat' '_duplicate' ' startIndex'
+L8 post: 'Ђ' 'adding' 'В' ',model' ',st' 'political' || '作为' '的' '非常' ' 的' ' 对' ' 在' || 'イン' '與' 'ג' '้' '增强' 'エ'
+L8 base: '-class' '-oriented' '-series' '-defined' '-design' 'atic' || ' json' ' ascii' ' javascript' 'NG' 'code' 'json' || ' Writers' ' Archives' '\tThis' ' Film' ' Films' ' Wildlife'
+L12 post: 'す' 'issant' ' fait' 'ifie' 'asion' 'め' || '哎' 'о' '関' 'lection' 'して' 'У' || 'sections' 'CONT' ' Dann' 'section' ' CONT' 'pun'
+L12 base: ' |\n' '__\n' '是什么' '|"' '____' ' |' || '\tthe' '\t   ' '\treturn' '\tis' '\t  ' '\tdo' || '/index' '_slug' '/co' '.slug' '/j' ' Reynolds'
+L16 post: 'Vs' ' pode' '區' 'なら' 'します' 'レ' || ' wieder' ' HC' ' HF' ' Gh' ' MJ' 'III' || ' "]' ' HASH' ' LORD' 'amente' ' GENERAL' ' LL'
+L16 base: '印尼' '然而' '印度' '菲律宾' '伊' '而' || '_Res' '_In' '_Z' '_F' '_RES' '.getZ' || '_pr' 'LE' '這是' '_tr' '_this' '_can'
+L20 post: '\x08' '\x06' '\x1f' '\x1c' '\x1d' '年夜' || 'Ö' ',st' ',out' 'Ein' 'Ä' 'Auf' || 'As' 'By' 'Let' 'Want' ',A' 'David'
+L20 base: '中华' '是中国' '东方' '汉字' '【' '中原' || 'nce' 'lse' ' ange' 'nces' 'tion' 'れて' || ' ]\n' '|.\n' ']])\n' '.")\n' ".')\n" "'.\n"
+L24 post: '，并' '而' '。' '并' '，在' '，' || ' 和' ' 的' ' 上' ' 是' ' 设' ' 在' || 'Per' 'Gab' 'All' 'Mark' 'Cor' 'Tar'
+L24 base: ' \t' ' ،' ' \t\t' ' ，' ' ：' ' 。' || '、' '、“' '、「' '）、' ' 和' '與' || '-D' '-class' '-card' '-phase' 'ort' 'ph'
+L28 post: 'thes' 'Als' 'wh' 'inth' 'enc' '.userid' || ' ese' ' lor' ' پ' ' ي' ' cuz' ' yer' || ' CK' ' CC' ' Ci' ' GG' ' LS' ' RS'
+L28 base: 'MAS' ' GX' ' Ci' ' Roz' ' LJ' 'Ci' || '\t' 'In' ' \t' 'An' 'for' 'with' || ' JL' ' PN' ' VN' ' Hu' ' JM' ' TJ'
+L32 post: 'These' 'This' 'The' 'There' 'What' 'When' || ' sixty' ' eighty' ' forty' '6' ' seventy' '8' || ' Parliament' ' counterfeit' '要不然' 'Everybody' ' banquet' ' bulletin'
+L32 base: ' ב' ' في' 'these' ' ו' ' ל' ',s' || ' =' 'Feb' '.jpg' '=' '.pdf' 'We' || 'ak' 'ag' 'ig' 'ade' 'ach' 'il'
+L35 post: ' BALL' ' sturdy' ' AMAZ' ' classy' ' Cottage' ' PHOTO' || ' impecc' '👌' ' 😀' ' BUY' ' LOL' ' HERO' || ' revamped' ' Emoji' ' Tatto' ' Assigned' ' Identified' ' Erotic'
+L35 base: ' Playstation' ' impecc' ' HERO' ' BUY' ' Sniper' '👌' || '😭' '<|im_end|>' '<|im_start|>' '<think>' '</think>' ' Politico' || ' snapchat' ' BALL' ' MOTOR' ' TEMPLATE' ' PHOTO' '-football'
