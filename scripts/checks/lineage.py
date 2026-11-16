@@ -33,7 +33,7 @@ base) and its parent (``PARENT``: the 8B or the 1.7B, the same kind), which have
   its own lens; a match needs 4 shared tokens and a unique best). A parent is *identified* when a signal's best is the
   weight match (chance, against shuffled neurons, is reported beside it); *supported* when the weight match is in a
   signal's top 4.
-- ``refine``: round 2. The identified pairs are anchors for maps of each layer's own (rows: gate and up; writes: down
+- ``refine``: round 2. The identified pairs (where two share a parent, the one with the better weight score) are anchors for maps of each layer's own (rows: gate and up; writes: down
   columns; ridge), cross-fitted in two folds so a held-out anchor tests the map; the other neurons are rescored against
   the parents no anchor holds (a one-to-one assignment) and checked against the three signals again. Every neuron ends
   with a parent and a status: identified (round 1 or 2), supported, or weights only.
@@ -282,7 +282,7 @@ def mlp_acts(model: str, layers: list[int], ids: torch.Tensor, dev: str, batch: 
     return buf
 
 
-def zscores(x: torch.Tensor, dev: str, ranks: bool, chunk: int = 2048) -> torch.Tensor:
+def zscores(x: torch.Tensor, dev: str, ranks: bool, chunk: int = 512) -> torch.Tensor:
     """Each column standardized (``ranks``: its ranks), so their products averaged over positions are Pearson's r
     (Spearman's ρ)."""
     out = torch.empty(x.shape, device=dev)
@@ -401,8 +401,17 @@ def refine() -> tuple[list[str], dict, dict]:
         pg, pu, pd = unit(pg), unit(pu), unit(pd)
         c = cert[layer]
         parent = c["parent"].long()
-        anchor = torch.nonzero(c["identified"]).squeeze(1)
-        rest = torch.nonzero(~c["identified"]).squeeze(1)
+        # a parent has one child: where identified neurons share one, the best weight score keeps it
+        ident = c["identified"].clone()
+        idx = torch.nonzero(ident).squeeze(1)
+        order = idx[torch.argsort(c["w_score"][idx].float(), descending=True)]
+        seen = set()
+        for i in order.tolist():
+            if parent[i].item() in seen:
+                ident[i] = False
+            seen.add(parent[i].item())
+        anchor = torch.nonzero(ident).squeeze(1)
+        rest = torch.nonzero(~ident).squeeze(1)
         fold = torch.randint(0, 2, (len(anchor),), generator=rng)
 
         def fit(idx):
@@ -440,7 +449,8 @@ def refine() -> tuple[list[str], dict, dict]:
         status[rest[~same & in4]] = 3
         final[rest[same]] = new[same]
         n = len(parent)
-        row = {"layer": layer, "round1": len(anchor) / n, "held_out_recovered": float(held.float().mean()),
+        row = {"layer": layer, "round1": len(anchor) / n, "shared_parent": float((c["identified"] & ~ident).sum()) / n,
+               "held_out_recovered": float(held.float().mean()),
                "round2": float(same.sum()) / n, "round2_chance": float(chance.sum()) / n, "supported": float((~same & in4).sum()) / n,
                "identified": float((status == 1).sum() + (status == 2).sum()) / n,
                "margin_rest": float((top.values[:, 0] - top.values[:, 1]).median()) if len(rest) else None,
