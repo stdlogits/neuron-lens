@@ -23,10 +23,10 @@ base) and its parent (``PARENT``: the 8B or the 1.7B, the same kind), which have
   16, each model through its own lens) against random pairs.
 - ``coact`` (a GPU): both models over the same documents (the first ``--docs`` full 256-token rows of the dclm, zh and
   code activation slices, a third each); each neuron's activations (``down_proj``'s input, from position 1: position 0
-  holds the sink's huge values) rank-correlated (Spearman) with every parent neuron's of its layer. Per neuron: its top
-  parents, the margin of the best over the second, whether the match is mutual (each the other's best), each parent's
-  best neuron, a null (the best and the margin in a parent layer half a group of ``--group`` layers away) and a
-  one-to-one assignment (Hungarian). No catalog or residual map: it runs where the models are, and writes
+  holds the sink's huge values) correlated with every parent neuron's of its layer, by Pearson's r and by Spearman's ρ.
+  Per neuron and statistic: its top parents, the margin of the best over the second, whether the match is mutual (each
+  the other's best), each parent's best neuron, and a null (the best and the margin in a parent layer half a group of
+  ``--group`` layers away). No catalog or residual map: it runs where the models are, and writes
   ``data/checks/lineage_coact_<model>.pt``.
 - ``certainty``: the weight match (``neurons``) against the activation match (``coact``), per neuron. A parent is
   *identified* when the activation match is mutual, its margin clears the null margins' 99.9% point, and it is the
@@ -276,13 +276,18 @@ def mlp_acts(model: str, layers: list[int], ids: torch.Tensor, dev: str, batch: 
     return buf
 
 
-def zscores(x: torch.Tensor, dev: str, chunk: int = 2048) -> torch.Tensor:
-    """Each column's ranks, standardized: their products averaged over positions are Spearman's ρ."""
+def zscores(x: torch.Tensor, dev: str, ranks: bool, chunk: int = 2048) -> torch.Tensor:
+    """Each column standardized (``ranks``: its ranks), so their products averaged over positions are Pearson's r
+    (Spearman's ρ)."""
     out = torch.empty(x.shape, device=dev)
     for c in range(0, x.shape[1], chunk):
-        out[:, c:c + chunk] = x[:, c:c + chunk].to(dev).argsort(0).argsort(0).float()
-    out -= (len(x) - 1) / 2
+        col = x[:, c:c + chunk].to(dev)
+        out[:, c:c + chunk] = col.argsort(0).argsort(0).float() if ranks else col.float()
+    out -= out.mean(0)
     return out / out.std(0).clamp_min(1e-12)
+
+
+STATS = {"pearson": False, "spearman": True}
 
 
 def coact(dev: str, n_docs: int, group: int) -> tuple[list[str], dict, dict]:
@@ -296,51 +301,46 @@ def coact(dev: str, n_docs: int, group: int) -> tuple[list[str], dict, dict]:
         ids += [r for r, _ in zip(full, range(n_docs // 3))]
     ids = torch.tensor(ids)
     T = len(ids) * (SEQ - 1)
-    rows, data = [], {}
+    rows, data = {k: [] for k in STATS}, {k: {} for k in STATS}
     for g0 in range(0, L, group):
         layers = list(range(g0, min(L, g0 + group)))
         t0 = time.perf_counter()
         a = {m: mlp_acts(m, layers, ids, dev) for m in (MODEL, PARENT)}
         print(f"coact L{layers[0]}-L{layers[-1]}: activations over {T:,} positions ({time.perf_counter() - t0:.0f}s)", flush=True)
         for i, layer in enumerate(layers):
-            t0 = time.perf_counter()
-            z = zscores(a[MODEL][layer], dev)
-            C = z.T @ zscores(a[PARENT][layer], dev) / T  # [neurons, parent neurons], Spearman ρ
-            null = (z.T @ zscores(a[PARENT][layers[(i + len(layers) // 2) % len(layers)]], dev) / T).topk(2, dim=1).values
-            top = C.topk(4, dim=1)
-            margin = top.values[:, 0] - top.values[:, 1]
-            back = C.max(dim=0)
-            mutual = back.indices[top.indices[:, 0]] == torch.arange(len(C), device=dev)
-            Cc = C.cpu().numpy()
-            ri, ci = linear_sum_assignment(-Cc)
-            assign = np.full(len(Cc), -1)
-            assign[ri] = ci
-            null_margin = null[:, 0] - null[:, 1]
-            thr = float(null_margin.quantile(0.999))
-            ok = mutual & (margin > thr)
-            row = {"layer": layer, "best": float(top.values[:, 0].median()), "second": float(top.values[:, 1].median()),
-                   "null_best": float(null[:, 0].median()), "margin": float(margin.median()), "null_margin999": thr,
-                   "above_null": float((margin > thr).float().mean()), "mutual": float(mutual.float().mean()),
-                   "mutual_above": float(ok.float().mean()),
-                   "distinct": len(set(top.indices[:, 0].tolist())) / len(C),
-                   "assign_is_best": float((assign == top.indices[:, 0].cpu().numpy()).mean())}
-            rows.append(row)
-            data[layer] = {"top": top.indices.cpu().int(), "top_r": top.values.cpu().half(), "null": null.cpu().half(),
-                           "null_margin999": thr,
-                           "parent_best": back.indices.cpu().int(), "parent_best_r": back.values.cpu().half(),
-                           "mutual": mutual.cpu(), "assign": torch.from_numpy(assign).int(),
-                           "assign_r": torch.from_numpy(Cc[np.arange(len(Cc)), assign]).half()}
-            print(f"coact L{layer:2d}: best ρ {row['best']:.2f} (2nd {row['second']:.2f}; wrong layer {row['null_best']:.2f}); "
-                  f"margin {row['margin']:.3f} (null 99.9% {thr:.3f}); above {row['above_null']:.3f}, mutual {row['mutual']:.3f}, "
-                  f"both {row['mutual_above']:.3f}; distinct {row['distinct']:.3f} ({time.perf_counter() - t0:.0f}s)", flush=True)
-            del z, C, Cc
+            wrong = layers[(i + len(layers) // 2) % len(layers)]
+            for stat, ranks in STATS.items():
+                z = zscores(a[MODEL][layer], dev, ranks)
+                C = z.T @ zscores(a[PARENT][layer], dev, ranks) / T  # [neurons, parent neurons]
+                null = (z.T @ zscores(a[PARENT][wrong], dev, ranks) / T).topk(2, dim=1).values
+                top = C.topk(4, dim=1)
+                back = C.max(dim=0)
+                mutual = back.indices[top.indices[:, 0]] == torch.arange(len(C), device=dev)
+                margin = top.values[:, 0] - top.values[:, 1]
+                thr = float((null[:, 0] - null[:, 1]).quantile(0.999))
+                ok = mutual & (margin > thr)
+                row = {"layer": layer, "best": float(top.values[:, 0].median()), "second": float(top.values[:, 1].median()),
+                       "null_best": float(null[:, 0].median()), "margin": float(margin.median()), "null_margin999": thr,
+                       "above_null": float((margin > thr).float().mean()), "mutual": float(mutual.float().mean()),
+                       "mutual_above": float(ok.float().mean()), "distinct": len(set(top.indices[:, 0].tolist())) / len(C)}
+                rows[stat].append(row)
+                data[stat][layer] = {"top": top.indices.cpu().int(), "top_r": top.values.cpu().half(),
+                                     "null": null.cpu().half(), "null_margin999": thr, "mutual": mutual.cpu(),
+                                     "parent_best": back.indices.cpu().int(), "parent_best_r": back.values.cpu().half()}
+                print(f"coact L{layer:2d} {stat:8s}: best {row['best']:.2f} (2nd {row['second']:.2f}; wrong layer "
+                      f"{row['null_best']:.2f}); margin {row['margin']:.3f} (null 99.9% {thr:.3f}); mutual {row['mutual']:.3f}, "
+                      f"and above {row['mutual_above']:.3f}; distinct {row['distinct']:.3f}", flush=True)
+                del z, C
         del a
-    lines = [f"coact, {MODEL} against {PARENT}: Spearman ρ of activations over {T:,} positions ({len(ids)} documents of {SEQ}, "
-             "from position 1)",
-             "layer  best ρ  2nd   wrong layer  margin  null margin 99.9%  above  mutual  mutual+above  distinct  assignment = best"]
-    lines += [f"L{r['layer']:<4d} {r['best']:.2f}    {r['second']:.2f}  {r['null_best']:.2f}         {r['margin']:.3f}   "
-              f"{r['null_margin999']:.3f}              {r['above_null']:.3f}  {r['mutual']:.3f}   {r['mutual_above']:.3f}         "
-              f"{r['distinct']:.3f}     {r['assign_is_best']:.3f}" for r in rows]
+    lines = []
+    for stat in STATS:
+        lines += [f"coact, {MODEL} against {PARENT}: {stat} correlation of activations over {T:,} positions ({len(ids)} "
+                  f"documents of {SEQ}, from position 1)",
+                  "layer  best  2nd   wrong layer  margin  null margin 99.9%  above  mutual  mutual+above  distinct"]
+        lines += [f"L{r['layer']:<4d} {r['best']:.2f}  {r['second']:.2f}  {r['null_best']:.2f}         {r['margin']:.3f}   "
+                  f"{r['null_margin999']:.3f}              {r['above_null']:.3f}  {r['mutual']:.3f}   {r['mutual_above']:.3f}         "
+                  f"{r['distinct']:.3f}" for r in rows[stat]]
+        lines.append("")
     return lines, {"layers": rows, "positions": T}, data
 
 
