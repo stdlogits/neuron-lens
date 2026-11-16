@@ -1,7 +1,7 @@
 # Findings
 
 What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17, §18), Gemma 4 12B
-(§13-§16, in text, images and sound) and the rest of the Qwen3 family to 14B (§19), and how far each way of reading them goes. Each section gives
+(§13-§16, in text, images and sound) and the rest of the Qwen3 family to 14B (§19, §20), and how far each way of reading them goes. Each section gives
 its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
 and the overview in the [README](../README.md).
 
@@ -39,6 +39,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
 | [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
 | [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
+| [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B's and 0.6B's heads are the 8B's and 1.7B's, their neurons match a parent each and are ranked by its activation: three lineages, not five sizes |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1488,7 +1489,9 @@ chat slice with its post-trained sibling's template): every table but `labels`. 
 own R-lens (`checks/causal_lens.py`: 32 random neurons a layer, 16 contexts of 64 tokens, 1× `act_top`); the reads are tested
 at the firings as in §7 (`checks/reads_at_firings.py`), as shares of the poles that fire (not near-silent) past the mismatched
 pairs' 99% point, net of theirs. Models are compared by quarter of relative depth. Depth and width grow together in this family:
-0.6B and 1.7B have 28 layers (1,024 and 2,048 wide), 4B and 8B 36 (2,560 and 4,096), 14B 40 (5,120).
+0.6B and 1.7B have 28 layers (1,024 and 2,048 wide), 4B and 8B 36 (2,560 and 4,096), 14B 40 (5,120). And the five are three
+lineages: the 0.6B and the 4B are pruned from the 1.7B and the 8B (§20), so a pair of equal depth sets a pruned model beside
+its parent, and a comparison between 28 and 36 layers crosses lineages too.
 
 Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
 
@@ -1504,7 +1507,8 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
   the 28-layer models' firing poles and 2-8% of the 36- and 40-layer models'. At 28 layers width changes little (0.6B and 1.7B
   within 0.07 of each other in every quarter); at 36 the wider 8B sits below the 4B (0.02-0.05 against 0.05-0.08); the 14B, 4
   layers deeper and 1,024 wider, matches the 8B. This suggests depth first, then a floor, but five sizes that grow in both
-  can't separate the two.
+  can't separate the two, and the step from 28 to 36 layers is also a step from the 1.7B's lineage to the 8B's (§20). The
+  14B, a lineage of its own, is the one independent check of it.
 - **The R-lens's input reads hold.** In the last quarter it names the drivers of 19-34% of firing poles at every size. The
   input side turns to it (the first layer where its read passes for as many firing poles as the S-lens's, on three-layer
   medians, and keeps doing so on half the layers after) at about a quarter of the depth: L7 of 28 (0.6B), L10 of 28 (1.7B),
@@ -1515,7 +1519,7 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
   0.49, 0.40, 0.36, 0.31 (second quarter 0.80, 0.73, 0.65, 0.66, 0.58), and the first layer from which it stays at 0.35 or
   more moves from L0 (both 28-layer models) to L3 (4B), L4 (8B) and L7 (14B).
 - **Near-silent poles appear at 36 layers** (§2): 1% or less of the 28-layer models' first-quarter poles, 14%, 19% and 20% of
-  the 4B's, 8B's and 14B's, none later at any size.
+  the 4B's, 8B's and 14B's, none later at any size. The 4B's are the 8B's, kept through its pruning (§20).
 - **Fewer one-token detectors.** Poles with a third of their top firings on one token, of the first quarter's firing poles:
   0.40, 0.35, 0.35, 0.33, 0.29. These are the poles the S-lens reads best, so their decline accounts for part of its drop.
 - **Heads read less with size** (uncorrected p ≤ 0.05, 5% by chance; §12). In the last quarter the OV read promotes what follows
@@ -1562,7 +1566,7 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
   promiscuous. The logit lens on read directions (the identity in place of the Jacobian) has the 8B's narrowest null (a 99%
   point of 0.85-1.13) but passes fewer poles against their own in both models (.16 / .31 / .34 / .55 in the 8B).
 
-**Limits.** One family, five sizes, and depth and width grow together; quarters average layers of different roles; the shares
+**Limits.** One family, five sizes in three lineages (§20), and depth and width grow together; quarters average layers of different roles; the shares
 are token-level (§7), not judgments of coherence; the post-trained models' labels are checked for firing only (§8), and the
 bases have none. Every lens was
 fitted on 1,000 documents whatever the model's size. At L1-L3, a few firings with near-zero gate or `up` dominate `sources`'
@@ -1573,6 +1577,86 @@ checked. The weight diff covers two sizes, reads the MLPs' writes and no heads, 
 signs and near-silent poles for its base. Compact outputs are
 `data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads,post_training}_<model>.*`.
 
+## §20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B
+
+**Setup** (`checks/lineage.py`: weights and the catalogs' `acts` and `reads` tables, on a CPU). Each pair has the same
+layers and heads: the 4B and the 8B 36 layers of 32 query and 8 key-value heads, the 0.6B and the 1.7B 28 layers of 16 and
+8, all of 128 dimensions. They differ in width: residuals of 2,560 against 4,096 and 1,024 against 2,048, MLPs of 9,728
+neurons against 12,288 and 3,072 against 6,144. A neuron's RMS activation comes from `acts` (its `std` and `mean` over the
+activation corpus); near-silent neurons have both poles' `act_top` under 0.05 (§2). To match neurons across a pair, a
+linear map from the parent's residual to the model's is fitted on the heads' q and k rows (times the input norm's gain),
+which read the normed residual and keep their head-internal basis. It is tested on held-out layers, then refitted on all
+of them. A neuron's score against a parent neuron of the same layer is the mean cosine of their gate rows and of their up
+rows (times the post-attention norm's gain), with the parent's rows taken through the map. Its match comes from a
+one-to-one assignment (Hungarian). The null is its best score against the parent's layer half the depth away.
+
+- **In the 4B and the 0.6B, neuron index tracks activation.** In a model trained from a random start, indices are
+  exchangeable: the 1.7B, 8B, 14B and Gemma 4 have Spearman ρ between a neuron's index and its RMS activation within ±0.03
+  on every layer. The 4B ranges from −0.76 to +0.21 by layer (|ρ| > 0.1 on 34 of 36 layers) and the 0.6B from −0.63 to
+  −0.09 (27 of 28); in both, the most active neurons come first. Other models' near-silent neurons sit at a mean position
+  of 0.49-0.50 in their layer (the 8B's L1-L4, the 14B's L0-L6, the 1.7B's L1). The 4B's fill the end of L1 (4,469 at a mean
+  position of 0.76, nearly all past n5,300) and of L3 (2,302 at 0.85, past n7,000), and spread over L2 (4,912 at 0.49), where
+  the order doesn't follow activation. Post-training keeps each neuron's index and direction (§19), so the bases share the
+  order. The site's map draws a layer's neurons in index order, and these blocks are the pale lower parts of the 4B's L1 and L3.
+- **The heads are the parent's, one for one.** By layer, the correlation over heads of their weight norms between the 4B
+  and the 8B has medians of 0.96 (q) and 0.98 (k, v, o); for the q_norm and k_norm gains over the head dimension it is 0.99,
+  and shuffling the parent's heads gives −0.00. Between the 0.6B and the 1.7B these are 0.93-0.97, 0.97-0.99 and −0.07.
+  Castin et al. (2026, KV-Lingo, their appendix G) report the same pairs' heads aligned one to one.
+- **The residual is a linear image of the parent's.** Most of the 0.6B's coordinates are the 1.7B's. Each of its
+  embedding's columns correlates with one of the 1.7B's at |r| 0.23 (median; 0.08 for the second best), and 1,008 of its
+  1,024 coordinates match distinct ones. The 4B's coordinates don't match (0.058 against 0.046), but a linear map holds.
+  Fitted on the even layers' q and k rows, it predicts the odd layers' rows at a median cosine of 0.55 (0.18-0.73 by layer),
+  and the next head's rows at 0.05. For the 0.6B these are 0.40 (0.05-0.51) and 0.02.
+- **Nearly every neuron of the 4B has a parent.** Its best score clears the null's 99% point for 99-100% of neurons at L1-L34,
+  90% at L0 and 95% at L35 (median best 0.13-0.59 by layer, null 0.07-0.12). The match is one to one: 92-100% of best matches
+  are distinct, except at L1-L3 (53-79%), where near-silent neurons look alike. Matched pairs keep their scale (ρ 0.85-0.95
+  between their RMS activations) and what they write. Each write is read through its own model's R-lens: a pair's reads
+  share 10-30% of their top 16 tokens, random pairs 0.0-0.8% from L5 (up to 10% at L0-L4). The 0.6B's matches are weaker,
+  like its map: the best score clears the null for 36-54% of neurons at L0-L5 and 73-98% from L6, with distinct matches at
+  81-99%. Its pairs' RMS activations correlate at ρ 0.61-0.87, and their write reads share 4-24% of their top 16 (random
+  0.0-0.6%).
+- **The order follows the parent's activation, and the cut took the least active neurons.** A neuron's index has no relation
+  to its parent's (ρ −0.04 to +0.03 in both models). It does follow the parent's RMS activation, more closely than the model's
+  own on 33 of the 4B's 36 layers and on all 28 of the 0.6B's. That ρ reaches −0.74 in the 4B and is −0.2 or below on 30
+  layers; the 0.6B ranges from −0.21 to −0.72. The parent neurons the assignment leaves out are the pruned ones, and they
+  were the least active. In the 4B:
+  - At L1-L3 they are almost all the 8B's near-silent neurons (93%, 89% and 96% of the 2,560). The rest of those stayed
+    near-silent: every near-silent neuron of the 4B at L1-L3 matches one of the 8B's (99-100%), against 1-5% of its firing
+    neurons.
+  - At L4 the cut took 973 of the 8B's 1,079 near-silent neurons, and the 4B has none left there.
+  - Later, the pruned neurons' median RMS activation is 0.70-1.02 of the kept ones'. It is lowest at L5-L7 and L34-L35, and
+    about equal at L8-L11 and L29-L31, where the order is weak too.
+  
+  In the 0.6B the ratio is 0.62-0.99 at every layer.
+- **What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
+  layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
+  - The heads stay in place.
+  - The residual narrows by channel (the 0.6B) or under enough retraining that only a linear map survives (the 4B).
+  - Each MLP's neurons are ranked by activation and cut, and the kept ones stay in rank order.
+  - Near-silent neurons go first.
+
+  Both sides trained a long way after the cut, so scores are 0.3-0.6 rather than 1, and the parent may have been an earlier
+  checkpoint of the 8B and 1.7B. Qwen's technical report describes one pre-training recipe for every dense size and
+  distillation from larger models in post-training. It doesn't mention pruning.
+- **What it confounds.**
+  - **The size comparison (§19).** The five post-trained sizes form three lineages: the 1.7B's (0.6B and 1.7B, 28 layers),
+    the 8B's (4B and 8B, 36 layers) and the 14B's (40 layers). The step in the S-lens's input reads from 28 to 36 layers is
+    also a step between lineages. The 14B is a lineage of its own and reads like the 8B, so it is the only check that the
+    step goes with depth.
+  - **Width within a lineage (§19).** The 0.6B against the 1.7B and the 4B against the 8B set a cut-down, distilled model
+    beside its parent, not two widths trained alike. The 4B's near-silent poles are the 8B's, inherited; the 14B has its own.
+  - **Index ranges.** In these two models a range of neuron indices is a slice by activation rank, not a random sample: a
+    layer's first neurons are its most active, and the 4B's last neurons at L1 and L3 are near-silent. The catalog's
+    statistics cover every neuron and its steering check samples them at random (`causal_lens.py`), so its tables and §19's
+    shares stand. A pilot, plot or test over an index range in these models doesn't.
+
+**Limits.** The parents are the released models, so the network at the cut is inferred; the scores are from weights alone,
+with no activations compared at the same inputs. The 0.6B's early layers match weakly, and its parent's 444 near-silent L1
+neurons were not clearly cut first (the assignment leaves out 52 of them). The key behind the 4B's order at L0, L2 and
+L8-L11 isn't recovered from the final weights. The assignment is forced one to one. Compact outputs are
+`data/summary/lineage_<model>.*` (the 4B and the 0.6B); the map and the correspondence are in `data/checks/lineage_<model>.pt`
+(local).
+
 ## Open questions
 
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
@@ -1581,7 +1665,10 @@ signs and near-silent poles for its base. Compact outputs are
 - Whether J++ filtering (Ayonrinde 2026) or a longer context improves early and mid-network reads.
 - Why a base's R-lens maps a few read directions onto frequent function words (§19), and whether a null per pole changes the
   other comparisons between lenses and models (§7, §19).
-- Whether depth or width sets the S-lens's input reads (§19): a family that varies one at a time, and Qwen3-32B (64 layers).
+- Whether depth, width or lineage sets the S-lens's input reads (§19, §20): a family that varies one at a time, and
+  Qwen3-32B (64 layers).
+- What ranked the 4B's neurons at L0, L2 and L8-L11, where the order doesn't follow the 8B's activations (§20), and whether
+  activations compared at the same inputs match neurons the weights match weakly (the 0.6B's L0-L5).
 - Whether the poles of larger models read as coherently to a rater as they pass token-level tests (§19 counts hits only).
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).
 - Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads

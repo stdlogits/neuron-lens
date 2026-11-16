@@ -559,6 +559,12 @@ Neuron descriptions:
   descriptions, combined with input-centric ones.
 - Paulo et al. 2024 ([arXiv:2410.13928](https://arxiv.org/abs/2410.13928)): detection scoring.
 
+Model lineage (findings §20):
+- Minitron (Muralidharan et al. 2024, [arXiv:2407.14679](https://arxiv.org/abs/2407.14679)): width pruning by
+  activation-based importance (neurons, heads, embedding channels), then distillation.
+- KV-Lingo (Castin et al. 2026, [arXiv:2609.32610](https://arxiv.org/abs/2609.32610)): KV-cache translators between
+  models; its appendix G finds the released Qwen3-0.6B/1.7B and 4B/8B heads aligned one to one.
+
 Unit classes measured here: prediction and suppression neurons (Gurnee et al. 2024,
 [arXiv:2401.12181](https://arxiv.org/abs/2401.12181)), entropy neurons (Stolfo et al. 2024,
 [arXiv:2406.16254](https://arxiv.org/abs/2406.16254)), the OV copying score (Elhage et al. 2021,

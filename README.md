@@ -170,7 +170,7 @@ for inputs through L13, and the R-lens for inputs and writes from L11;
 
 ## Findings
 
-Findings 1-12, 17 and 18 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 compares Qwen3's sizes. Numbers are medians or means over a layer's poles
+Findings 1-12, 17 and 18 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or means over a layer's poles
 unless stated. Each heading links to its findings section, with setup, controls and limits.
 
 ### 1. The lenses are stable, and their corpus changes tokens, not concepts
@@ -443,14 +443,26 @@ write through L20 is as often unrelated to the pole's read as the same concept, 
 Nine more Qwen3 models, 0.6B to 14B, post-trained and base, each with its own lenses and the same documents, show which
 reads depend on size. Late ones don't: at every size a late write's R-lens read predicts steering at r 0.98-0.99 and promotes
 what follows the firings for a quarter of poles, and the R-lens names the inputs of a fifth to a third. Early ones do. The
-S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers on, and early
-writes predict steering less at every step in size (first-quarter r 0.62 at 0.6B, 0.31 at 14B). Heads' reads fall a little
-with size too. The bases read like their siblings. Their R-lens input reads seem to trail at every size, but only against a
+S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers on (a step
+between lineages too: finding 20), and early writes predict steering less at every step in size (first-quarter r 0.62 at
+0.6B, 0.31 at 14B). Heads' reads fall a little with size too. The bases read like their siblings. Their R-lens input reads seem to trail at every size, but only against a
 null pooled over each layer: through a base's lens about 1% of poles read as frequent function words and match every pole's
 drivers, which raises the bar for all; held to its own null, a pole passes as often in the base (Qwen3-8B and 4B). Post-training
 moves every matrix by 5-13% and keeps each neuron's directions (cosines above 0.99); its clearest added directions read as
 questions, hedges and contrast (and `Wait` in the 4B), likely the style of the models' reasoning
 ([§19](docs/findings.md#19-the-qwen3-family-what-changes-with-size)).
+
+### 20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B
+
+In the 4B and the 0.6B a neuron's index tracks its activation (Spearman ρ to −0.76), where every other model's indices
+are exchangeable (±0.03). The 4B's near-silent neurons fill the end of its L1 and L3. Each pair shares its attention heads
+one for one (their weight norms correlate at 0.93-0.98 by layer). A linear map fitted on those heads takes the parent's
+residual to the model's, and through it 99-100% of the 4B's neurons from L1 to L34 match a parent neuron: matched pairs
+keep their activation scale (ρ 0.85-0.95) and promote the same tokens. The order follows the parent neuron's activation,
+and the neurons cut were the parent's least active: at L1-L3, its near-silent ones. This is what width pruning by
+activation leaves, as in Minitron. So finding 19's five sizes are three lineages, and its step from 28 to 36 layers is also a step
+between them. In these two models a range of neuron indices is a slice by activation rank, not a random sample
+([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
 
 ### Limits
 
