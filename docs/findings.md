@@ -1628,6 +1628,31 @@ one-to-one assignment (Hungarian). The null is its best score against the parent
     about equal at L8-L11 and L29-L31, where the order is weak too.
   
   In the 0.6B the ratio is 0.62-0.99 at every layer.
+- **Most neurons' parents are identified by signals that don't use the map.** Three signals name a parent without the
+  residual map:
+  - the correlation of a neuron's activations with each parent neuron's over the same documents (`coact`: Pearson and
+    Spearman, from position 1, where position 0's sink values are huge; 49k positions for the 4B and 196k for the 0.6B,
+    in bf16 on an RTX 4090);
+  - the tokens their writes' R-lens reads share (`write_R`'s 64 for both poles, each model through its own lens; at least
+    4 shared and a unique best).
+
+  A parent counts as identified when the weight match is also some signal's best. Against shuffled neurons that happens
+  for 0.0-0.2% of a layer. A second round fits each layer's own maps on the identified pairs, for the rows and for the
+  writes (down columns), cross-fitted so no pair is scored through a map it helped fit. Held out, those maps alone recover
+  96-100% of the 4B's pairs and 82-97% of the 0.6B's. The other neurons are then rescored against the parents no pair
+  holds. Where two identified neurons claim one parent (0.2% overall; 1.4% at most, at the 4B's L2), the better weight
+  score keeps it.
+
+  | model | identified | weight match in a signal's top 4 | weights alone | near-silent, as a class |
+  |---|---|---|---|---|
+  | 4B | 93.3% (93-100% by layer at L4-L33, 91% at L34, 68% at L35, 85% at L0) | 1.2% | 2.2% | 3.3% |
+  | 0.6B | 85.2% (66-94% by layer; under 80% at L0-L2 and L27) | 5.0% | 9.8% | none |
+
+  That is 96.5% of the 4B's firing neurons. Its near-silent neurons at L1-L3 match the 8B's near-silent neurons as a
+  class (above), but not one by one. Their weights have shrunk toward a shared direction: the best and second-best
+  scores differ by under 0.005, even with up to 64 shared components removed. Their activations are noise. Among the
+  signals, Pearson agrees with the weights most often (96.6-99.6% at the 4B's L8-L28); the write reads add the most at the last
+  layers, where the activations agree least. Four times as many positions raised the 0.6B by up to 4 points a layer.
 - **What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
   layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
   - The heads stay in place.
@@ -1650,11 +1675,14 @@ one-to-one assignment (Hungarian). The null is its best score against the parent
     statistics cover every neuron and its steering check samples them at random (`causal_lens.py`), so its tables and §19's
     shares stand. A pilot, plot or test over an index range in these models doesn't.
 
-**Limits.** The parents are the released models, so the network at the cut is inferred; the scores are from weights alone,
-with no activations compared at the same inputs. The 0.6B's early layers match weakly, and its parent's 444 near-silent L1
-neurons were not clearly cut first (the assignment leaves out 52 of them). The key behind the 4B's order at L0, L2 and
-L8-L11 isn't recovered from the final weights. The assignment is forced one to one. Compact outputs are
-`data/summary/lineage_<model>.*` (the 4B and the 0.6B); the map and the correspondence are in `data/checks/lineage_<model>.pt`
+**Limits.** The parents are the released models, so the network at the cut is inferred. The activations cover 49k-196k
+positions of three slices (DCLM, Chinese web text, code), not chat. "Identified" means two methods agree, each over a
+whole layer, and its error rate is estimated from shuffled neurons only. A wrong parent that both writes and fires
+like the true one, such as a redundant neuron of the parent's, would pass. Where the signals don't agree, the weight
+match is a best guess, forced one to one. The 0.6B's parent's 444 near-silent L1 neurons were not clearly cut first
+(the assignment leaves out 52 of them). The key behind the 4B's order at L0, L2 and L8-L11 isn't recovered from the
+final weights. Compact outputs are `data/summary/lineage_<model>.*` (the 4B and the 0.6B). The maps, the activation
+matches and each neuron's parent and status are in `data/checks/lineage_<model>.pt` and `lineage_coact_<model>.pt`
 (local).
 
 ## Open questions
@@ -1667,8 +1695,9 @@ L8-L11 isn't recovered from the final weights. The assignment is forced one to o
   other comparisons between lenses and models (§7, §19).
 - Whether depth, width or lineage sets the S-lens's input reads (§19, §20): a family that varies one at a time, and
   Qwen3-32B (64 layers).
-- What ranked the 4B's neurons at L0, L2 and L8-L11, where the order doesn't follow the 8B's activations (§20), and whether
-  activations compared at the same inputs match neurons the weights match weakly (the 0.6B's L0-L5).
+- What ranked the 4B's neurons at L0, L2 and L8-L11, where the order doesn't follow the 8B's activations (§20), and what
+  would identify the parents of the 0.6B's last 15% and the 4B's last layer (§20): chat documents, longer contexts, or
+  matching the heads' and neurons' joint wiring.
 - Whether the poles of larger models read as coherently to a rater as they pass token-level tests (§19 counts hits only).
 - Why Gemma 4's early writes barely move the output at their natural scale (§13).
 - Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads

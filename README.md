@@ -461,8 +461,11 @@ residual to the model's, and through it 99-100% of the 4B's neurons from L1 to L
 keep their activation scale (ρ 0.85-0.95) and promote the same tokens. The order follows the parent neuron's activation,
 and the neurons cut were the parent's least active: at L1-L3, its near-silent ones. This is what width pruning by
 activation leaves, as in Minitron. So finding 19's five sizes are three lineages, and its step from 28 to 36 layers is also a step
-between them. In these two models a range of neuron indices is a slice by activation rank, not a random sample
-([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
+between them. In these two models a range of neuron indices is a slice by activation rank, not a random sample. Each
+neuron's parent can be named. It is identified when the weight match is also what an independent signal picks: the
+correlation of the two neurons' activations over the same text, or the tokens their writes promote. That covers 93% of
+the 4B's neurons (96.5% of those that fire) and 85% of the 0.6B's, with chance agreement under 0.2% a layer. The 4B's
+near-silent neurons match only as a class ([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
 
 ### Limits
 
