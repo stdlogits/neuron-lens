@@ -1641,12 +1641,12 @@ one-to-one assignment (Hungarian). The null is its best score against the parent
   writes (down columns), cross-fitted so no pair is scored through a map it helped fit. Held out, those maps alone recover
   96-100% of the 4B's pairs and 82-97% of the 0.6B's. The other neurons are then rescored against the parents no pair
   holds. Where two identified neurons claim one parent (0.2% overall; 1.4% at most, at the 4B's L2), the better weight
-  score keeps it.
+  score keeps it, and every neuron ends with a parent of its own.
 
   | model | identified | weight match in a signal's top 4 | weights alone | near-silent, as a class |
   |---|---|---|---|---|
   | 4B | 93.3% (93-100% by layer at L4-L33, 91% at L34, 68% at L35, 85% at L0) | 1.2% | 2.2% | 3.3% |
-  | 0.6B | 85.2% (66-94% by layer; under 80% at L0-L2 and L27) | 5.0% | 9.8% | none |
+  | 0.6B | 85.3% (67-94% by layer; under 80% at L0-L2 and L27) | 5.0% | 9.7% | none |
 
   That is 96.5% of the 4B's firing neurons. Its near-silent neurons at L1-L3 match the 8B's near-silent neurons as a
   class (above), but not one by one. Their weights have shrunk toward a shared direction: the best and second-best

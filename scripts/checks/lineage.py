@@ -436,18 +436,17 @@ def refine() -> tuple[list[str], dict, dict]:
         same = torch.zeros(len(rest), dtype=torch.bool)
         chance = torch.zeros(len(rest), dtype=torch.bool)
         in4 = torch.zeros(len(rest), dtype=torch.bool)
-        for d in signals(layer, act).values():
+        for d in signals(layer, act).values():  # judged on the one-to-one assignment, which is what each neuron keeps
             ab = d["best"][rest]
-            same |= new == ab
-            chance |= new == ab[perm]
-            in4 |= (d["top4"][rest] == new[:, None]).any(1)
+            same |= one == ab
+            chance |= one == ab[perm]
+            in4 |= (d["top4"][rest] == one[:, None]).any(1)
         final = parent.clone()
-        final[rest] = one
+        final[rest] = one  # anchors hold distinct parents, the rest are assigned among the others: one child per parent
         status = torch.zeros(len(parent), dtype=torch.int8)  # 0 weights only, 1 identified (round 1), 2 identified (round 2), 3 supported
         status[anchor] = 1
         status[rest[same]] = 2
         status[rest[~same & in4]] = 3
-        final[rest[same]] = new[same]
         n = len(parent)
         row = {"layer": layer, "round1": len(anchor) / n, "shared_parent": float((c["identified"] & ~ident).sum()) / n,
                "held_out_recovered": float(held.float().mean()),
