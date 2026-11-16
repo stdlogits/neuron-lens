@@ -88,6 +88,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                       "edges": "every pole's strongest direct weight edges from earlier poles and to later ones",
                       "firings": "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
                       "sources": "what drives every pole when it fires, and the poles that fire with it",
+                      "lineage": "every pole's parent in the model it was pruned from, or its child in the model pruned from it",
                       "image": "every pole's image read and write, the images that drive it, and its cross-modal ranks",
                       "audio": "every pole's audio read and write, the sounds that drive it, and its cross-modal ranks"},
           "heads": {"acts": "every head's output statistics, top firings and attention patterns",
@@ -689,7 +690,7 @@ def ladder_catalog_text(ladder: dict) -> str:
         rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']} × {x['neurons']:,} | "
                     f"{2 * x['layers'] * x['neurons']:,} | {x['layers']} × {x['heads']} | {x['kept']:,} | L{edge} |")
     sides = {side: list(dict.fromkeys(c.removeprefix(f"{x['dir']}-{side}-") for x in ladder.values() for c, *_ in x["configs"]
-                                      if c.startswith(f"{x['dir']}-{side}-") and not c.endswith("-labels")))
+                                      if c.startswith(f"{x['dir']}-{side}-") and not c.endswith(("-labels", "-lineage"))))
              for side in ("neurons", "heads")}
     docs = " or ".join(sorted({f"{x['docs']:,} documents ({x['positions']:,} positions)" for x in ladder.values()}))
     return f"""
@@ -711,6 +712,18 @@ The last column is the first layer from which the R-lens read of a write predict
 (§3's protocol; 0.98-0.99 in every model's last quarter). Before it the S-lens reads both sides, as through Qwen3-8B's L3,
 and inputs turn to the R-lens at about a quarter of the depth (§19), later in the bases. The S-lens names firing tokens far
 more often at 28 layers than from 36 on, past the first quarter (16-26% of firing poles against 2-10%).
+
+Qwen3-4B and Qwen3-0.6B are pruned from Qwen3-8B and Qwen3-1.7B (§20): their heads are the parents' one for one, and each of
+their neurons comes from one of the parent's, the most active kept, in order of activation. The `lineage` table names each
+neuron's parent (`parent_layer`, `parent_neuron`, `parent_pole`), and in the 8B and the 1.7B each neuron's child, or none
+where it was cut (`child_*`); a base has its post-trained model's table, since post-training keeps the indices. A neuron
+with no such neuron has −1 and pole 0. `parent_status` says how sure the match is: `identified` when the weights' match is
+also the best of an independent signal (the correlation of the two neurons' activations over the same text, by Pearson or
+Spearman, or the tokens their writes' R-lens reads share; `parent_by` names those that agree), which happens by chance for
+under 0.2% of a layer; `supported` when it is in such a signal's top four; `provisional` on the weights alone; and
+`near-silent` for the 4B's near-silent neurons at L1-L3, which match the 8B's near-silent neurons as a class but not one by
+one. Of the 4B's neurons 93.3% are identified (96.5% of those that fire), 1.2% supported, 2.2% provisional and 3.3%
+near-silent; of the 0.6B's, 85.3%, 5.0%, 9.7% and none. `child_status` adds `cut`.
 """
 
 
@@ -778,6 +791,7 @@ Neurons and heads get the same tables, one row per pole or per head:
 | `firings` | what the residual holds, what the MLP layer writes and what the model predicts at the pole's top firings | |
 | `edges` | the earlier poles whose writes push it most, and the later poles it pushes most | |
 | `sources` | what drives the pole when it fires, and the poles that fire with it | |
+| `lineage` (Qwen3-4B, 0.6B, their parents and bases) | the pole's parent in the model it was pruned from, or its child in the model pruned from it | |
 | `image`, `audio` (Gemma 4) | the patch or sound it reads, its write in media contexts, the images or sounds that drive it, and whether its media label is its text concept too | how each head attends in those contexts, and which carry what an image or sound shows |
 
 | config | rows | what |

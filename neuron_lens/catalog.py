@@ -30,7 +30,7 @@ import torch
 from neuron_lens.paths import DATA
 
 MODEL = os.environ.get("NEURON_LENS_MODEL", "Qwen/Qwen3-8B")
-TABLES = ("acts", "drivers", "reads", "labels", "edges", "firings", "sources")
+TABLES = ("acts", "drivers", "reads", "labels", "edges", "firings", "sources", "lineage")
 TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top firings, edges, sources, media labels and documents (findings §7)
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3

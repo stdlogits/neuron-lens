@@ -37,8 +37,9 @@ base) and its parent (``PARENT``: the 8B or the 1.7B, the same kind), which have
   columns; ridge), cross-fitted in two folds so a held-out anchor tests the map; the other neurons are rescored against
   the parents no anchor holds (a one-to-one assignment) and checked against the three signals again. Every neuron ends
   with a parent and a status: identified (round 1 or 2), supported, or weights only.
+- ``table``: the catalog's ``lineage`` tables, for the model and its parent and both bases (``lineage_tables``).
 
-    NEURON_LENS_MODEL=Qwen/Qwen3-4B python scripts/checks/lineage.py [--parts order,heads,map,neurons,certainty]
+    NEURON_LENS_MODEL=Qwen/Qwen3-4B python scripts/checks/lineage.py [--parts order,heads,map,neurons,certainty,refine,table]
     NEURON_LENS_MODEL=Qwen/Qwen3-4B python scripts/checks/lineage.py --parts coact --device cuda
 
 Writes ``data/summary/lineage_<model>.{json,log}``, and ``B`` and the correspondence (per layer: the assignment, the best
@@ -467,6 +468,75 @@ def refine() -> tuple[list[str], dict, dict]:
     return lines, {"layers": rows}, out
 
 
+STATUS = ("identified", "supported", "provisional", "near-silent", "cut")
+
+
+def lineage_tables() -> tuple[list[str], dict]:
+    """The catalog's ``lineage`` tables (a row per pole, the + poles first), for the model and its base and for its parent
+    and the parent's base, which keep the same neuron indices (§19). Every model has the same columns: ``parent_layer``,
+    ``parent_neuron``, ``parent_pole``, ``parent_status``, ``parent_by`` and the same for ``child``; a model fills the side
+    it has and leaves the other at −1 (layer, neuron), 0 (pole) and empty. A neuron's status: ``identified`` (the weight
+    match is an independent signal's best: ``by`` names them), ``supported`` (it is in a signal's top 4), ``provisional``
+    (the weights alone), ``near-silent`` (a near-silent neuron, which matches the other model's near-silent neurons as a
+    class but not one by one: no single neuron named), and on the parent's side ``cut`` (no child). A pole maps to the
+    same pole: a pair's up rows never point clearly apart (a swap of the poles needs ``up`` and ``down`` to flip
+    together; the few negative cosines are within 0.2 of zero, against +0.2 to +0.4 for a typical pair)."""
+    from neuron_lens.catalog import neuron_keys, write
+    import pyarrow as pa
+    sv = torch.load(OUT)
+    act = torch.load(COACT)["layers"]
+    F, PF = CFG.intermediate_size, PCFG.intermediate_size
+    counts = {"child": dict.fromkeys(STATUS, 0), "parent": dict.fromkeys(STATUS, 0)}
+    for layer in range(L):
+        r = sv["refine"][layer]
+        st, par = r["status"].numpy(), r["parent"].numpy().astype(np.int64)
+        dead, pdead = acts(MODEL, layer)["dead"], acts(PARENT, layer)["dead"]
+        ident = (st == 1) | (st == 2)
+        status = np.where(ident, "identified", np.where(st == 3, "supported", "provisional")).astype(object)
+        near = dead & ~ident
+        status[near] = "near-silent"
+        parent = np.where(near, -1, par)
+        sig = signals(layer, act)
+        best = {k: d["best"].numpy() for k, d in sig.items()}
+        by = [[k for k in best if parent[i] >= 0 and best[k][i] == parent[i]] for i in range(F)]
+        child = np.full(PF, -1)
+        cstat = np.full(PF, "cut", object)
+        cby = [[] for _ in range(PF)]
+        traced = np.flatnonzero(parent >= 0)
+        child[parent[traced]] = traced
+        cstat[parent[traced]] = status[traced]
+        for i in traced:
+            cby[parent[i]] = by[i]
+        if near.any():  # its near-silent neurons not traced one by one were kept or cut as a class
+            cstat[(child < 0) & pdead] = "near-silent"
+        for k in STATUS:
+            counts["child"][k] += int((status == k).sum())
+            counts["parent"][k] += int((cstat == k).sum())
+
+        def ref(n, idx, stat, by_, own):
+            """A side's columns for ``n`` neurons, as two rows per neuron (+ poles, then − poles)."""
+            some = idx >= 0
+            lay = np.where(some, layer, -1)
+            pole = np.concatenate([np.where(some, 1, 0), np.where(some, -1, 0)])
+            return {f"{own}_layer": pa.array(np.tile(lay, 2), pa.int16()), f"{own}_neuron": pa.array(np.tile(idx, 2), pa.int16()),
+                    f"{own}_pole": pa.array(pole, pa.int8()), f"{own}_status": pa.array(list(stat) * 2, pa.string()),
+                    f"{own}_by": pa.array(list(by_) * 2, pa.list_(pa.string()))}
+
+        def empty(n, own):
+            return ref(n, np.full(n, -1), [""] * n, [[] for _ in range(n)], own)
+        kid = {**neuron_keys(layer, F), **ref(F, parent, status, by, "parent"), **empty(F, "child")}
+        mom = {**neuron_keys(layer, PF), **empty(PF, "parent"), **ref(PF, child, cstat, cby, "child")}
+        for model, cols in ((MODEL, kid), (MODEL + "-Base", kid), (PARENT, mom), (PARENT + "-Base", mom)):
+            write(cols, neuron_table("lineage", layer, model))
+        print(f"lineage L{layer:2d}: " + ", ".join(f"{k} {(status == k).sum()}" for k in STATUS[:4])
+              + f"; parent cut {(cstat == 'cut').sum()}, near-silent {(cstat == 'near-silent').sum()}", flush=True)
+    n, pn = L * F, L * PF
+    lines = [f"lineage tables, {MODEL} (and its base) and {PARENT} (and its base): " + ", ".join(
+        f"{k} {v:,} ({v / n:.1%})" for k, v in counts["child"].items() if k != "cut") + f"; of the parent's neurons "
+        + ", ".join(f"{k} {v:,} ({v / pn:.1%})" for k, v in counts["parent"].items())]
+    return lines, counts
+
+
 STATS = {"pearson": False, "spearman": True}
 
 
@@ -551,13 +621,15 @@ def main() -> None:
             lines, table[part], saved["certainty"] = certainty(saved["B"])
         elif part == "refine":
             lines, table[part], saved["refine"] = refine()
+        elif part == "table":
+            lines, table[part] = lineage_tables()
         else:
             lines, table[part] = {"order": order, "heads": heads}[part]()
         table[f"{part}_log"] = lines
         OUT.parent.mkdir(parents=True, exist_ok=True)
         torch.save(saved, OUT)
         path.write_text(json.dumps(table, ensure_ascii=False))
-        text = "\n\n".join("\n".join(table[f"{p}_log"]) for p in ("order", "heads", "map", "neurons", "certainty", "refine")
+        text = "\n\n".join("\n".join(table[f"{p}_log"]) for p in ("order", "heads", "map", "neurons", "certainty", "refine", "table")
                            if f"{p}_log" in table)
         (SUMMARY / f"lineage_{STEM}.log").write_text(text + "\n")
         print("\n".join(lines), flush=True)
