@@ -12,7 +12,8 @@ read from three sides: the weights through two lenses (a neuron's write and read
 OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
 heads get the same tables: `acts`, `drivers`, `reads`, `labels` and `sources` (what drives them when
 they fire; for a head, through its value, query and key); neurons also get `firings` (what the residual holds where
-they fire) and `edges` (direct weight edges between poles).
+they fire) and `edges` (direct weight edges between poles); the pruned Qwen3 pairs' neurons get `lineage` (each pole's
+parent in the model it was pruned from, or its child; findings §20).
 Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, per-neuron
 `image` and `audio` tables per neuron and per head. `NEURON_LENS_MODEL` selects the model for
 every stage (Qwen3-8B by default). The lenses and the catalog are released on the Hugging Face Hub
@@ -160,7 +161,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   pruned from the 8B and the 1.7B, and their neurons sit in order of the parent's activation, most active first
   (findings §20). In those two models a range of indices is a slice by activation rank, not a sample, so draw neurons at
   random. Qwen3's sizes to 14B are three lineages (the 1.7B's, the 8B's and the 14B's), not five independent points.
-  `checks/lineage.py` maps each neuron to its parent.
+  `checks/lineage.py` maps each neuron to its parent; its `table` part writes the catalog's `lineage` table.
 - **Gemma 4.** A neuron's write is what reaches the residual, `s · γ_post ⊙ W_down[:, n]` (the
   post-feedforward norm's scale held constant, `layer_scalar` `s`); its read rows are scaled by the
   pre-feedforward norm. Logits pass a softcap (`30 · tanh(x / 30)`), which R-lens probabilities

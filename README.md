@@ -465,7 +465,8 @@ between them. In these two models a range of neuron indices is a slice by activa
 neuron's parent can be named. It is identified when the weight match is also what an independent signal picks: the
 correlation of the two neurons' activations over the same text, or the tokens their writes promote. That covers 93% of
 the 4B's neurons (96.5% of those that fire) and 85% of the 0.6B's, with chance agreement under 0.2% a layer. The 4B's
-near-silent neurons match only as a class ([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
+near-silent neurons match only as a class. The catalog's `lineage` table holds each neuron's parent, or child, and
+neuron-lens.com links the two ([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
 
 ### Limits
 

@@ -67,6 +67,12 @@
    165888
   ],
   [
+   "qwen3-0.6b-neurons-lineage",
+   "qwen3-0.6b/neurons/lineage/*.parquet",
+   "every pole's parent in the model it was pruned from, or its child in the model pruned from it",
+   172032
+  ],
+  [
    "qwen3-0.6b-heads-acts",
    "qwen3-0.6b/heads/acts.parquet",
    "every head's output statistics, top firings and attention patterns",

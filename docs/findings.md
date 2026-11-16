@@ -1681,9 +1681,11 @@ whole layer, and its error rate is estimated from shuffled neurons only. A wrong
 like the true one, such as a redundant neuron of the parent's, would pass. Where the signals don't agree, the weight
 match is a best guess, forced one to one. The 0.6B's parent's 444 near-silent L1 neurons were not clearly cut first
 (the assignment leaves out 52 of them). The key behind the 4B's order at L0, L2 and L8-L11 isn't recovered from the
-final weights. Compact outputs are `data/summary/lineage_<model>.*` (the 4B and the 0.6B). The maps, the activation
-matches and each neuron's parent and status are in `data/checks/lineage_<model>.pt` and `lineage_coact_<model>.pt`
-(local).
+final weights. Compact outputs are `data/summary/lineage_<model>.*` (the 4B and the 0.6B). The maps and the activation
+matches are in `data/checks/lineage_<model>.pt` and `lineage_coact_<model>.pt` (local). Each neuron's parent and status
+are released as the catalog's `lineage` table (`lineage.py table`: the 4B, the 0.6B, the 8B and the 1.7B, each pruned
+model's neurons with their parent and each parent's with its child or `cut`; the bases the same), and neuron-lens.com
+links each neuron to its counterpart.
 
 ## Open questions
 

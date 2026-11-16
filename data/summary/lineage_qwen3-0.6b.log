@@ -171,3 +171,5 @@ L24   0.866    0.919                       0.021 (0.0000)   0.887       0.058   
 L25   0.871    0.914                       0.023 (0.0000)   0.895       0.053      0.052
 L26   0.874    0.931                       0.020 (0.0003)   0.894       0.047      0.060
 L27   0.673    0.927                       0.119 (0.0010)   0.792       0.059      0.149
+
+lineage tables, Qwen/Qwen3-0.6B (and its base) and Qwen/Qwen3-1.7B (and its base): identified 73,346 (85.3%), supported 4,311 (5.0%), provisional 8,359 (9.7%), near-silent 0 (0.0%); of the parent's neurons identified 73,346 (42.6%), supported 4,311 (2.5%), provisional 8,359 (4.9%), near-silent 0 (0.0%), cut 86,016 (50.0%)

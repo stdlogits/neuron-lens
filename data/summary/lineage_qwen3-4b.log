@@ -211,3 +211,5 @@ L32   0.969    1.000                       0.000 (0.0000)   0.969       0.022   
 L33   0.955    0.999                       0.001 (0.0000)   0.956       0.026      0.018
 L34   0.906    0.990                       0.007 (0.0000)   0.913       0.036      0.051
 L35   0.673    0.986                       0.010 (0.0000)   0.682       0.058      0.259
+
+lineage tables, Qwen/Qwen3-4B (and its base) and Qwen/Qwen3-8B (and its base): identified 326,893 (93.3%), supported 4,210 (1.2%), provisional 7,632 (2.2%), near-silent 11,473 (3.3%); of the parent's neurons identified 326,893 (73.9%), supported 4,210 (1.0%), provisional 7,632 (1.7%), near-silent 18,521 (4.2%), cut 85,112 (19.2%)
