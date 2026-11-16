@@ -28,9 +28,15 @@ base) and its parent (``PARENT``: the 8B or the 1.7B, the same kind), which have
   the other's best), each parent's best neuron, and a null (the best and the margin in a parent layer half a group of
   ``--group`` layers away). No catalog or residual map: it runs where the models are, and writes
   ``data/checks/lineage_coact_<model>.pt``.
-- ``certainty``: the weight match (``neurons``) against the activation match (``coact``), per neuron. A parent is
-  *identified* when the activation match is mutual, its margin clears the null margins' 99.9% point, and it is the
-  weight match too; *likely* when only the activations or only the weights say so.
+- ``certainty``: the weight match (``neurons``'s score) against three independent signals: the two activation
+  correlations (``coact``) and the overlap of the write reads (``write_R``'s 64 tokens of both poles, each model through
+  its own lens; a match needs 4 shared tokens and a unique best). A parent is *identified* when a signal's best is the
+  weight match (chance, against shuffled neurons, is reported beside it); *supported* when the weight match is in a
+  signal's top 4.
+- ``refine``: round 2. The identified pairs are anchors for maps of each layer's own (rows: gate and up; writes: down
+  columns; ridge), cross-fitted in two folds so a held-out anchor tests the map; the other neurons are rescored against
+  the parents no anchor holds (a one-to-one assignment) and checked against the three signals again. Every neuron ends
+  with a parent and a status: identified (round 1 or 2), supported, or weights only.
 
     NEURON_LENS_MODEL=Qwen/Qwen3-4B python scripts/checks/lineage.py [--parts order,heads,map,neurons,certainty]
     NEURON_LENS_MODEL=Qwen/Qwen3-4B python scripts/checks/lineage.py --parts coact --device cuda
@@ -60,7 +66,7 @@ STEM = arch.stem(MODEL)
 CFG, PCFG = arch.text_config(MODEL), arch.text_config(PARENT)
 L, H, K, HD = CFG.num_hidden_layers, CFG.num_attention_heads, CFG.num_key_value_heads, CFG.head_dim
 assert (L, H, K, HD) == (PCFG.num_hidden_layers, PCFG.num_attention_heads, PCFG.num_key_value_heads, PCFG.head_dim)
-SILENT, TOP, SEED, SEQ = 0.05, 16, 0, 256
+SILENT, TOP, SEED, SEQ, VOCAB, MIN_READS = 0.05, 16, 0, 256, 160_000, 4
 OUT = DATA / "checks" / f"lineage_{STEM}.pt"
 COACT = DATA / "checks" / f"lineage_coact_{STEM}.pt"
 
@@ -287,6 +293,171 @@ def zscores(x: torch.Tensor, dev: str, ranks: bool, chunk: int = 2048) -> torch.
     return out / out.std(0).clamp_min(1e-12)
 
 
+def read_overlap(layer: int) -> torch.Tensor:
+    """``[neurons, parent neurons]``: how many of the 64 ``write_R`` tokens their + poles share, plus their − poles'.
+    Each write is read through its own model's R-lens, so this needs no map between the models."""
+    from scipy.sparse import csr_matrix
+
+    def incidence(model):
+        ids = pq.read_table(neuron_table("reads", layer, model), columns=["write_R_ids"]).column(0).to_pylist()
+        n = len(ids) // 2
+        r, c = zip(*[(i % n, t + (VOCAB if i >= n else 0)) for i, row in enumerate(ids) for t in row if t >= 0])
+        return csr_matrix((np.ones(len(r), np.float32), (r, c)), shape=(n, 2 * VOCAB))
+    return torch.from_numpy((incidence(MODEL) @ incidence(PARENT).T).toarray())
+
+
+def signals(layer: int, act: dict) -> dict[str, dict]:
+    """Each independent signal's best parent per neuron (and top 4): the two activation correlations and the reads.
+    A reads match counts when it shares at least ``MIN_READS`` tokens and beats the second best."""
+    out = {stat: {"best": d[layer]["top"][:, 0].long(), "top4": d[layer]["top"].long(), "mutual": d[layer]["mutual"]}
+           for stat, d in act.items()}
+    R = read_overlap(layer)
+    top = R.topk(4, dim=1)
+    valid = (top.values[:, 0] >= MIN_READS) & (top.values[:, 0] > top.values[:, 1])
+    back = R.argmax(0)
+    out["reads"] = {"best": torch.where(valid, top.indices[:, 0], -1), "top4": torch.where(top.values > 0, top.indices, -1),
+                    "mutual": valid & (back[top.indices[:, 0]] == torch.arange(len(R)))}
+    return out
+
+
+def weight_scores(B: torch.Tensor, layer: int, parent_rows: dict | None = None) -> torch.Tensor:
+    """``[neurons, parent neurons]``: the mean cosine of gate and up rows, the parent's through ``B``."""
+    gate, up = (unit(x) for x in mlp_rows(MODEL, layer))
+    pg, pu = mlp_rows(PARENT, layer) if parent_rows is None else parent_rows
+    return (gate @ unit(pg @ B).T + up @ unit(pu @ B).T) / 2
+
+
+def certainty(B: torch.Tensor) -> tuple[list[str], dict, dict]:
+    act = torch.load(COACT)
+    rng = torch.Generator().manual_seed(SEED)
+    rows, out = [], {}
+    for layer in range(L):
+        S = weight_scores(B, layer)
+        wtop = S.topk(2, dim=1)
+        wbest = wtop.indices[:, 0]
+        n = len(S)
+        perm = torch.randperm(n, generator=rng)
+        row = {"layer": layer, "n": n}
+        per = {}
+        signals_cache = signals(layer, act["layers"])
+        for stat, a in signals_cache.items():
+            abest, top4 = a["best"], a["top4"]
+            same = wbest == abest
+            in4 = (top4 == wbest[:, None]).any(1)
+            row[stat] = {"agree": float(same.float().mean()), "in_top4": float(in4.float().mean()),
+                         "chance": float((wbest == abest[perm]).float().mean()),
+                         "chance_top4": float((top4[perm] == wbest[:, None]).any(1).float().mean()),
+                         "agree_if_mutual": float(same[a["mutual"]].float().mean()) if a["mutual"].any() else None,
+                         "mutual": float(a["mutual"].float().mean())}
+            per[stat] = {"same": same, "in4": in4}
+        # identified: a signal's best match is the weight match; supported: the weight match is in a signal's top 4
+        ident = per["pearson"]["same"] | per["spearman"]["same"] | per["reads"]["same"]
+        supp = ~ident & (per["pearson"]["in4"] | per["spearman"]["in4"] | per["reads"]["in4"])
+        chance = torch.zeros(n, dtype=torch.bool)
+        for a in signals_cache.values():
+            chance |= wbest == a["best"][perm]
+        row["chance_any"] = float(chance.float().mean())
+        row["identified"], row["supported"] = float(ident.float().mean()), float(supp.float().mean())
+        row["w_margin_identified"] = float((wtop.values[ident, 0] - wtop.values[ident, 1]).median()) if ident.any() else None
+        row["w_margin_rest"] = float((wtop.values[~ident, 0] - wtop.values[~ident, 1]).median()) if (~ident).any() else None
+        rows.append(row)
+        out[layer] = {"parent": wbest.int(), "identified": ident, "supported": supp,
+                      "w_score": wtop.values[:, 0].half(), "w_margin": (wtop.values[:, 0] - wtop.values[:, 1]).half()}
+        print(f"certainty L{layer:2d}: identified {row['identified']:.3f} (chance {row['chance_any']:.4f}), supported "
+              f"{row['supported']:.3f}; " + "; ".join(f"{k} agree {row[k]['agree']:.3f}" for k in signals_cache), flush=True)
+    lines = act["lines"] + [f"certainty, {MODEL} against {PARENT}: the weight match (neurons) against three independent "
+                            "signals, the activation correlations (coact: Pearson, Spearman) and the write reads' shared "
+                            "tokens; identified = a signal's best is the weight match, supported = the weight match is in a "
+                            "signal's top 4; chance = the same against shuffled neurons",
+                            "layer  identified (chance)  supported  agree: pearson  spearman  reads  (reads chance)  "
+                            "weight margin: identified, rest"]
+    for r in rows:
+        lines.append(f"L{r['layer']:<4d} {r['identified']:.3f} ({r['chance_any']:.4f})     {r['supported']:.3f}      "
+                     f"{r['pearson']['agree']:.3f}           {r['spearman']['agree']:.3f}     {r['reads']['agree']:.3f}  "
+                     f"({r['reads']['chance']:.4f})         {r['w_margin_identified'] or 0:.3f}, {r['w_margin_rest'] or 0:.3f}")
+    return lines, {"layers": rows, "coact": act["rows"]}, out
+
+
+def ridge(X: torch.Tensor, Y: torch.Tensor, lam: float = 0.05) -> torch.Tensor:
+    """``W`` minimizing ``|XW − Y|² + lam·mean(diag XᵀX)·|W|²``."""
+    G = X.T @ X
+    G.diagonal().add_(lam * G.diagonal().mean())
+    return torch.linalg.solve(G, X.T @ Y)
+
+
+def refine() -> tuple[list[str], dict, dict]:
+    """Round 2: the identified pairs (``certainty``) as anchors for a map of each layer's own (rows: gate and up; writes:
+    down columns), cross-fitted in two folds; the rest rescored against the parents no anchor holds, and checked against
+    the activations again."""
+    act = torch.load(COACT)["layers"]
+    cert = torch.load(OUT)["certainty"]
+    rng = torch.Generator().manual_seed(SEED)
+    rows, out = [], {}
+    for layer in range(L):
+        p = f"model.layers.{layer}."
+        g, u, dc = (unit(x) for x in (*mlp_rows(MODEL, layer), get(MODEL, [p + "mlp.down_proj.weight"])[0].T))
+        pg, pu = mlp_rows(PARENT, layer)
+        pd = get(PARENT, [p + "mlp.down_proj.weight"])[0].T
+        pg, pu, pd = unit(pg), unit(pu), unit(pd)
+        c = cert[layer]
+        parent = c["parent"].long()
+        anchor = torch.nonzero(c["identified"]).squeeze(1)
+        rest = torch.nonzero(~c["identified"]).squeeze(1)
+        fold = torch.randint(0, 2, (len(anchor),), generator=rng)
+
+        def fit(idx):
+            a, b = anchor[idx], parent[anchor[idx]]
+            return ridge(torch.cat([pg[b], pu[b]]), torch.cat([g[a], u[a]])), ridge(pd[b], dc[a])
+
+        def score(maps, kids):
+            Bl, Wl = maps
+            return (g[kids] @ unit(pg @ Bl).T + u[kids] @ unit(pu @ Bl).T + dc[kids] @ unit(pd @ Wl).T) / 3
+        held = []
+        for k in (0, 1):  # held-out anchors: does a map fitted without them put their parent first?
+            kids = anchor[fold == k]
+            held.append(score(fit(fold != k), kids).argmax(1) == parent[kids])
+        held = torch.cat(held)
+        S = score(fit(torch.ones(len(anchor), dtype=torch.bool)), rest)
+        S[:, parent[anchor]] = -2  # parents the anchors hold
+        top = S.topk(2, dim=1)
+        new = top.indices[:, 0]
+        ri, ci = linear_sum_assignment(-S.numpy())
+        one = torch.from_numpy(ci)[torch.argsort(torch.from_numpy(ri))]
+        perm = torch.randperm(len(rest), generator=rng)
+        same = torch.zeros(len(rest), dtype=torch.bool)
+        chance = torch.zeros(len(rest), dtype=torch.bool)
+        in4 = torch.zeros(len(rest), dtype=torch.bool)
+        for d in signals(layer, act).values():
+            ab = d["best"][rest]
+            same |= new == ab
+            chance |= new == ab[perm]
+            in4 |= (d["top4"][rest] == new[:, None]).any(1)
+        final = parent.clone()
+        final[rest] = one
+        status = torch.zeros(len(parent), dtype=torch.int8)  # 0 weights only, 1 identified (round 1), 2 identified (round 2), 3 supported
+        status[anchor] = 1
+        status[rest[same]] = 2
+        status[rest[~same & in4]] = 3
+        final[rest[same]] = new[same]
+        n = len(parent)
+        row = {"layer": layer, "round1": len(anchor) / n, "held_out_recovered": float(held.float().mean()),
+               "round2": float(same.sum()) / n, "round2_chance": float(chance.sum()) / n, "supported": float((~same & in4).sum()) / n,
+               "identified": float((status == 1).sum() + (status == 2).sum()) / n,
+               "margin_rest": float((top.values[:, 0] - top.values[:, 1]).median()) if len(rest) else None,
+               "one_to_one_agrees": float((one == new).float().mean()) if len(rest) else None}
+        rows.append(row)
+        out[layer] = {"parent": final.int(), "status": status}
+        print(f"refine L{layer:2d}: identified {row['round1']:.3f} → {row['identified']:.3f} (round 2 {row['round2']:.3f}, chance "
+              f"{row['round2_chance']:.4f}); supported {row['supported']:.3f}; held-out anchors recovered by weights alone "
+              f"{row['held_out_recovered']:.3f}", flush=True)
+    lines = [f"refine, {MODEL} against {PARENT}: round 2 with each layer's own maps fitted on the identified pairs",
+             "layer  round 1  held-out anchors recovered  round 2 (chance)  identified  supported  weights only"]
+    lines += [f"L{r['layer']:<4d} {r['round1']:.3f}    {r['held_out_recovered']:.3f}                       {r['round2']:.3f} "
+              f"({r['round2_chance']:.4f})   {r['identified']:.3f}       {r['supported']:.3f}      "
+              f"{1 - r['identified'] - r['supported']:.3f}" for r in rows]
+    return lines, {"layers": rows}, out
+
+
 STATS = {"pearson": False, "spearman": True}
 
 
@@ -367,13 +538,18 @@ def main() -> None:
             lines, table[part], saved["B"] = residual_map()
         elif part == "neurons":
             lines, table[part], saved["neurons"] = neurons(saved["B"])
+        elif part == "certainty":
+            lines, table[part], saved["certainty"] = certainty(saved["B"])
+        elif part == "refine":
+            lines, table[part], saved["refine"] = refine()
         else:
             lines, table[part] = {"order": order, "heads": heads}[part]()
         table[f"{part}_log"] = lines
         OUT.parent.mkdir(parents=True, exist_ok=True)
         torch.save(saved, OUT)
         path.write_text(json.dumps(table, ensure_ascii=False))
-        text = "\n\n".join("\n".join(table[f"{p}_log"]) for p in ("order", "heads", "map", "neurons") if f"{p}_log" in table)
+        text = "\n\n".join("\n".join(table[f"{p}_log"]) for p in ("order", "heads", "map", "neurons", "certainty", "refine")
+                           if f"{p}_log" in table)
         (SUMMARY / f"lineage_{STEM}.log").write_text(text + "\n")
         print("\n".join(lines), flush=True)
 
