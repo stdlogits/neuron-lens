@@ -103,7 +103,8 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
 OPTIMISED = {"image": "the patch that most raises each of the best-labelled poles",
              "audio": "the 40 ms of sound that most raises each of the best-labelled poles"}
 RULES = {"ln_rule": "decoder-layer norms' rsqrt held constant (a LayerNorm keeps its centring)", "identity_rule": "act(g) as (act(g)/g)·dg",
-         "half_rule": HALF_RULE_BETA, "qk_norms": "true derivative", "attention": "true derivative"}
+         "half_rule": HALF_RULE_BETA, "qk_norms": "true derivative", "attention": "true derivative",
+         "scores_norm": "without q/k norms, queries and keys read the input norm's true derivative, values the LN rule"}
 
 
 def provenance(meta: dict, acc: Accumulator, target: str, **extra) -> dict | None:

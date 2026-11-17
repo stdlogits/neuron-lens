@@ -64,7 +64,8 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
 - **RelP's rules** (Rezaei Jafari et al. 2025) instead of the true derivative: decoder RMSNorms hold
   their `rsqrt` constant (LN rule), `silu(g)` is linearized as `sigmoid(g)·dg` (identity rule), and
   `silu(g)·up` passes half of each factor's change (half rule, β = 0.5). Attention, the q/k norms and
-  RoPE keep their true derivative. RelP matched or beat the true derivative wherever they were
+  RoPE keep their true derivative; where attention has no q/k norms (Pythia), its queries and keys read their input
+  norm's true derivative (below). RelP matched or beat the true derivative wherever they were
   compared: the R-lens leads the J-lens at predicting steering from L4 to L23 (the J-lens leads at L0,
   they tie at L1-L3; §3), and on the input side RelP halves the S-lens's noise and fits footprints
   better from L1 (§1, §6).
@@ -544,6 +545,25 @@ the model.
   bias is a constant. The GELU takes the identity rule, `φ = Φ`, the normal CDF; with no gate,
   there is no half rule. Biases enter the primal only (a q or k bias still moves the attention
   pattern's derivative, through the queries and keys it shifts).
+- **The scores' input norm.** The queries and keys read the input LayerNorm's true derivative,
+  `γ r (P − x̂x̂ᵀ/d)`, and the values its LN rule. The LN rule holds a norm's scale so that a linear reader
+  decomposes the forward pass (`f(x) = A x`); the scores keep their true derivative (softmax attention's), and a
+  held scale makes them quadratic in the residual where the model's are scale-free. The true softmax derivative
+  then answers to a rescaling of the residual (its radial part, along `x̂`) as a change of temperature, which the
+  model's norm divides out. With q/k norms (Qwen3, Gemma 4, Qwen3.5) the scores are scale-free already and their
+  norms' true derivative removes the same part, so the rule changes nothing there and applies only where they are
+  absent. Under the plain LN rule it compounded: on Pythia-1.4B the R-lens gained 232× on one direction from L3
+  against the true Jacobian's 0.58× (the LN rule alone 5.4×, the identity rule alone 24×), the tangent growing
+  through the attention of L15-L22; that direction held 86-96% of the lens at L0-L4, and every write read alike
+  (frequent function words against rare-script pieces). With the rule, writes' transported directions meet the true
+  Jacobian's at cosine 0.38-0.73 from L3 and 0.71-0.88 from L9 (against about 0 and 0.05-0.27), in a brute-force
+  check on the real model (autograd under `relp_rules`, 8 documents). Fitted (400 documents), the top direction's
+  share of the lens falls from 0.45-0.74 to 0.02-0.07 at L7-L22, the steering check's r (`checks/causal_lens.py`,
+  1×) rises from 0.05-0.38 to 0.27-0.82 at L0-L11 and from 0.61 to 0.85 at L12, and `read_R` names the exact drivers
+  for 0.26 of L6-L11's poles and 0.45 of L12-L17's (0.00, 0.21 before). A smaller mode stays at L0-L5 (0.41-0.85 of
+  the lens, σ1 35-42 against 250-280), which the brute-force check puts on the identity rule (24× with the norms'
+  true derivative everywhere, against the true 0.58×); open. Pythia-160M's mode is another matter, at the output
+  (its final residual points one way at every position, which the final norm divides out), and the rule leaves it.
 - **Parallel blocks.** The MLP reads what the attention reads, so `mid`, the residual the MLP reads,
   is the layer's input: `mid[L]` is `out[L − 1]` for both lenses (the R-lens's `mid[0]` is its
   read of the embeddings, the S-lens's the identity). The fits keep both targets, so every

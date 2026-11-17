@@ -67,7 +67,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   locally until the release has a place for them. The catalog stages run on it through three facts in `arch.py`:
   `n_poles` (one pole per neuron: GELU's negative side is a dip, not a second direction), `parallel` (head writes
   read where the heads write, `arch.head_write_lens`: the layer's `out`) and `centred` (LayerNorms: read rows,
-  writes and the readout centred). Sources gain a `const_share` (the biases). Fits and passes run in fp16, its
+  writes and the readout centred). Its attention has no q/k norms, so the queries and keys read their input norm's
+  true derivative and the values its LN rule (`layers._scores_norm`; no change for models with q/k norms). Sources gain a `const_share` (the biases). Fits and passes run in fp16, its
   checkpoints' dtype (`arch.half_dtype`). Design.md's Pythia section has the rest.
 - `data/` is ignored except `data/summary/` (compact results and logs, tracked) and
   `data/corpus/*.provenance.json`. Locally it holds corpora, fits (`data/fits/`), Drowse homes
