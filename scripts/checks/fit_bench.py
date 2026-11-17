@@ -17,7 +17,9 @@ import argparse
 import time
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+
+from neuron_lens.arch import half_dtype
 
 from neuron_lens.corpus import lens_docs
 from neuron_lens.layers import CHUNK, offload
@@ -106,9 +108,11 @@ def main() -> None:
     ap.add_argument("--acc-device", default=None, help="where the sums live (default: the model's)")
     ap.add_argument("--offload", type=int, default=None, help="layers kept on the GPU; the rest stream from host memory")
     args = ap.parse_args()
-    dtype = torch.float32 if args.device == "cpu" else torch.bfloat16
-    print(f"device {args.device}, {dtype}", flush=True)
+    if args.device == "cuda":
+        torch.set_float32_matmul_precision("high")  # as 02_fit.py runs
     for model_id in args.models.split(","):
+        dtype = torch.float32 if args.device == "cpu" else half_dtype(AutoConfig.from_pretrained(model_id))
+        print(f"device {args.device}, {dtype}", flush=True)
         tok = AutoTokenizer.from_pretrained(model_id)
         row = lens_docs(CORPUS_DIR / "dclm.jsonl", tok, 1, args.seq_len, SKIP_FIRST + 2, full=True)[0]
         ids = torch.tensor(row)

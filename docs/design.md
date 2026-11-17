@@ -114,6 +114,18 @@ Fused projections and CUDA graphs gave nothing more.
 - **bf16 is accurate enough.** It is 0.72% (R) and 0.65% (S) from fp32 on 8B (median over layers),
   while two documents' estimates differ by 65%, so sampling error dominates: about 1.5% at 1,000
   documents.
+- **The primal runs in fp32, and keys and values are centred.** The forward pass that fixes each document's maps
+  runs at full fp32 (one pass, against `d` tangents through the maps), each layer's weights upcast while it runs;
+  the maps keep the model's half dtype. Keys and values enter the scores and the derivative centred over positions,
+  which changes nothing exactly (the softmax ignores a constant per query, and the derivative's rows sum to zero) but
+  keeps a component every position shares out of the rounding. Pythia, the first model here without q/k norms, has
+  key and value biases, and without both its bf16 attention flipped outright: on one Pythia-160M document the R-lens
+  was 500× and the S-lens 67× from fp32 at their far ends. TF32 in the primal alone moved Pythia-1.4B's R-lens by 20%.
+- **Each model runs in its checkpoint's half dtype** (`arch.half_dtype`): bf16 for Qwen3 and Gemma 4, fp16 for Pythia,
+  which was trained in it and ships fp16 weights. Its bf16-rounded weights move late layers' attention by up to 0.2 in
+  probability, and put Pythia-1.4B's R-lens 20% from fp32; in fp16 both lenses are within 0.2% of fp32 (1.4B, one
+  document). Each tangent enters a sublayer's map at unit maximum and leaves it rescaled (the maps are linear), so
+  fp16's range holds.
 - **FP8 is not.** Row-scaled FP8 products are 1.5× faster but put the estimate 3.8% (R) and 4.5% (S)
   from fp32, mostly as a bias from the rounded weights that does not average over documents (the
   mean of four keeps 3.6% of the 3.8%). At equal time it ends worse than bf16.

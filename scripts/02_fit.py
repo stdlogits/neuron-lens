@@ -49,6 +49,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from neuron_lens import metric
+from neuron_lens.arch import half_dtype
 from neuron_lens.corpus import lens_docs, rows_sha256
 from neuron_lens.layers import offload
 from neuron_lens.paths import CORPUS_DIR, FITS, LOGS, ROOT
@@ -79,13 +80,13 @@ def load_model(args):
     device = args.device
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = {"auto": torch.float32 if device == "cpu" else torch.bfloat16,
-             "fp32": torch.float32, "bf16": torch.bfloat16}[args.dtype]
-    if device == "cuda" and dtype == torch.bfloat16:
-        # fp32 products (DeltaNet's chunked ones) in TF32, which keeps more precision than the
-        # model's bf16 products every tangent passes through
-        torch.set_float32_matmul_precision("high")
     config = AutoConfig.from_pretrained(args.model, revision=args.revision)
+    dtype = {"auto": torch.float32 if device == "cpu" else half_dtype(config),
+             "fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[args.dtype]
+    if device == "cuda" and dtype != torch.float32:
+        # fp32 products in the sweeps (DeltaNet's chunked ones) in TF32, which keeps more precision than the
+        # model's half products every tangent passes through; the primal sets full fp32 for itself
+        torch.set_float32_matmul_precision("high")
     if args.layers is not None:  # only the first layers' weights load
         tc = config.get_text_config()
         tc.num_hidden_layers = args.layers
@@ -233,7 +234,8 @@ def main() -> None:
     ap.add_argument("--dim-batch", type=int, default=DIM_BATCH)
     ap.add_argument("--targets", default=None, help="targets (default: out,mid for R, mid,out for S)")
     ap.add_argument("--device", default="auto", help="auto (cuda, else cpu), cuda, mps, cpu")
-    ap.add_argument("--dtype", default="auto", choices=("auto", "fp32", "bf16"))
+    ap.add_argument("--dtype", default="auto", choices=("auto", "fp32", "bf16", "fp16"),
+                    help="auto: fp32 on the CPU, else the checkpoint's half dtype (bf16; Pythia's fp16)")
     ap.add_argument("--acc-device", default="auto", help="where the sums live (auto: the model's)")
     ap.add_argument("--offload", type=int, default=None,
                     help="keep the first N decoder layers on the GPU and stream the rest from host memory")

@@ -82,6 +82,14 @@ def chat_model(model_id: str) -> str:
     return model_id.removesuffix("-Base") if model_id.startswith("Qwen/Qwen3-") else model_id
 
 
+def half_dtype(config) -> torch.dtype:
+    """The half dtype a checkpoint is stored in, which GPU passes run it in: bf16 (Qwen3, Gemma 4), or fp16 (Pythia,
+    trained in fp16, whose bf16-rounded weights move late layers' attention by up to 0.2 in probability)."""
+    dt = getattr(config, "dtype", None)
+    dt = getattr(torch, dt) if isinstance(dt, str) else dt
+    return dt if dt in (torch.float16, torch.bfloat16) else torch.bfloat16
+
+
 def embed_scale(model_id: str) -> float:
     """What the embedding layer multiplies token embeddings by: ``√d`` for Gemma, else 1."""
     return text_config(model_id).hidden_size ** 0.5 if is_gemma4(model_id) else 1.0
@@ -160,12 +168,14 @@ def counts_path(model_id: str):
 
 
 def load_model(model_id: str, dev: str, eager: bool = True):
-    """``(lm, stack)``: the model in bf16 (eager attention, for its patterns) and its decoder stack."""
-    from transformers import AutoModelForCausalLM
+    """``(lm, stack)``: the model in its half dtype (``half_dtype``; eager attention, for its patterns) and its decoder
+    stack."""
+    from transformers import AutoConfig, AutoModelForCausalLM
 
     from neuron_lens.transport import decoder_stack
     kw = {"attn_implementation": "eager"} if eager else {}
-    lm = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, **kw).to(dev).eval().requires_grad_(False)
+    dt = half_dtype(AutoConfig.from_pretrained(model_id))
+    lm = AutoModelForCausalLM.from_pretrained(model_id, dtype=dt, **kw).to(dev).eval().requires_grad_(False)
     return lm, decoder_stack(lm)
 
 
