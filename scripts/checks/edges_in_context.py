@@ -71,6 +71,8 @@ from neuron_lens.stats import spearman
 from neuron_lens.transport import decoder_stack
 
 STEM = arch.stem(MODEL)
+SIGNS = arch.signs(MODEL)
+P = len(SIGNS)  # a neuron's poles
 PER_LAYER = 32  # §3's random picks
 BATCH = 16
 FIRE = 1 / 4  # of act_top: the acts tables' rate threshold
@@ -84,21 +86,21 @@ class Stop(Exception):
 
 
 def firings(layer: int, neurons: list[int]) -> tuple[torch.Tensor, ...]:
-    """``(doc, pos, val)``, each ``[n, 2, N_CONTEXTS]``: the neurons' first top firings per pole (``+``, ``−``)."""
+    """``(doc, pos, val)``, each ``[n, P, N_CONTEXTS]``: the neurons' first top firings per pole (``+``, ``−``)."""
     t = pq.read_table(neuron_table("acts", layer), columns=["top_doc", "top_pos", "top_val"])
-    rows = torch.tensor(neurons + [t.num_rows // 2 + n for n in neurons])
-    return tuple(column(t, k, N_CONTEXTS)[rows].view(2, len(neurons), -1).transpose(0, 1)
+    rows = torch.tensor([p * (t.num_rows // P) + n for p in range(P) for n in neurons])
+    return tuple(column(t, k, N_CONTEXTS)[rows].view(P, len(neurons), -1).transpose(0, 1)
                  for k in ("top_doc", "top_pos", "top_val"))
 
 
 def in_edges(layer: int, neurons: list[int]) -> torch.Tensor:
-    """``[n, 2, K]``: each pole's in-edges as global pole ids ``l · 2f + row`` (−1 where none)."""
+    """``[n, P, K]``: each pole's in-edges as global pole ids ``l · P·f + row`` (−1 where none)."""
     t = pq.read_table(neuron_table("edges", layer), columns=["in_layer", "in_neuron", "in_pole"])
-    f = t.num_rows // 2
-    rows = torch.tensor(neurons + [f + n for n in neurons])
+    f = t.num_rows // P
+    rows = torch.tensor([q * f + n for q in range(P) for n in neurons])
     l, n, p = (column(t, k)[rows].long() for k in ("in_layer", "in_neuron", "in_pole"))
-    ids = l * 2 * f + n + f * (p < 0)
-    return torch.where(l >= 0, ids, -1).view(2, len(neurons), -1).transpose(0, 1)
+    ids = l * P * f + n + f * (p < 0)
+    return torch.where(l >= 0, ids, -1).view(P, len(neurons), -1).transpose(0, 1)
 
 
 class Model:
@@ -131,7 +133,7 @@ class Model:
             ids[r, :len(s)], mask[r, :len(s)] = s, 1
         cap = {}
         lay = stack.layers[M]
-        hooks = self.flow.hooks(cap, lambda h: h[torch.arange(B, device=dev), t], upto=M)
+        hooks = self.flow.hooks(cap, lambda h: h[torch.arange(B, device=dev), t], upto=M)  # (a parallel block's MLP runs last)
 
         def stop(mod, a):
             raise Stop
@@ -146,29 +148,36 @@ class Model:
         got = self.flow.sources(cap, M, neuron, torch.arange(B, device=dev))
         emb, heads, neurons, g, a = got["emb"], got["heads"], got["neurons"], got["g"], got["a"]
         acts = torch.cat([cap["a", l] for l in range(M)], 1)  # [B, M·f]
-        sign = acts.sign()
-        pid = (torch.arange(M, device=dev)[:, None] * 2 * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
+        sign = acts.sign() if P == 2 else torch.ones_like(acts)  # the pole each upstream neuron is in
+        pid = (torch.arange(M, device=dev)[:, None] * P * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
         norm = arch.mid_norm(lay)
         s2 = metric.s2(MODEL, "mid", M, dev)
-        a_hat, b_hat = (r / metric.cov_norm(r, s2) for r in (lay.mlp.gate_proj.weight[neuron] * norm.weight,
-                                                             lay.mlp.up_proj.weight[neuron] * norm.weight))
-        lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
-        c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as neurons.read_rows
-        c_b = c_b / metric.cov_norm(c_b, s2)
+        def unit(r):  # a read row times the norm's weight, centred where it centres, at unit length in the metric
+            c = arch.centre(r * norm.weight, MODEL)
+            return c / metric.cov_norm(c, s2)
+        if P == 1:  # ungated: the input row
+            c_b = unit(lay.mlp.dense_h_to_4h.weight[neuron])
+        else:
+            a_hat, b_hat = unit(lay.mlp.gate_proj.weight[neuron]), unit(lay.mlp.up_proj.weight[neuron])
+            lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
+            c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as neurons.read_rows
+            c_b = c_b / metric.cov_norm(c_b, s2)
         norms = [metric.vec_norm(w.T, s2).squeeze(1) for w in self.flow.neurons[:M]]  # each write's length at M, [f]
         cos = torch.cat([c_b @ (w / n) for w, n in zip(self.flow.neurons[:M], norms)], 1) * sign
-        size = self.act_top[:M] * torch.stack(norms).repeat(1, 2)  # [M, 2f]
+        size = self.act_top[:M] * torch.stack(norms).repeat(1, P)  # [M, P·f]
         gain = torch.stack([self.mlp_scale[l] * self.flow.scalars[l:M].prod() for l in range(M)])  # [M], as 16_edges.py
-        push = cos * size.flatten()[pid] * gain[pid.div(2 * f, rounding_mode="floor")]
-        return {"emb": emb, "heads": heads, "neurons": neurons, "acts": acts, "pid": pid, "cos": cos, "push": push, "g": g, "a": a}
+        push = cos * size.flatten()[pid] * gain[pid.div(P * f, rounding_mode="floor")]
+        return {"emb": emb, "heads": heads, "neurons": neurons, "const": got["const"], "acts": acts, "pid": pid, "cos": cos,
+                "push": push, "g": g, "a": a}
 
     def fires(self, src: dict, r: int, q: torch.Tensor) -> torch.Tensor:
         """Whether each global pole id ``q`` is the pole its neuron is in at row ``r``'s firing, and
         whether it fires there; ``q`` as an index into the row's neurons."""
         f = self.f
-        n = (q // (2 * f)) * f + q % f
+        n = (q // (P * f)) * f + q % f
         in_pole = src["pid"][r, n] == q
-        return in_pole, in_pole & (src["acts"][r, n].abs() >= FIRE * self.act_top.flatten()[q]), n
+        size = src["acts"][r, n].abs() if P == 2 else src["acts"][r, n]  # (an ungated neuron's dip doesn't fire)
+        return in_pole, in_pole & (size >= FIRE * self.act_top.flatten()[q]), n
 
 
 def batches(rows: list, doc, pos, docs):
@@ -191,7 +200,7 @@ def measure(args) -> None:
         if out["meta"] != meta:
             raise SystemExit(f"{PATH} was measured with {out['meta']}, not {meta}: move it to start afresh")
     else:
-        out = {"meta": meta, "picks": picks, "done": []} | {k: torch.full((len(picks), 2, N_CONTEXTS), float("nan"))
+        out = {"meta": meta, "picks": picks, "done": []} | {k: torch.full((len(picks), P, N_CONTEXTS), float("nan"))
                                                               for k in PER_FIRING}
     gen = torch.Generator().manual_seed(0)
     layers = range(1, L) if args.layers is None else [int(x) for x in args.layers.split(",")]
@@ -203,11 +212,11 @@ def measure(args) -> None:
         neurons = [picks[i][1] for i in idx]
         doc, pos, val = firings(M, neurons)
         listed = in_edges(M, neurons).to(dev)
-        rows = [(j, p, k) for j in range(len(idx)) for p in (0, 1) for k in range(N_CONTEXTS) if val[j, p, k] > 0]
+        rows = [(j, p, k) for j in range(len(idx)) for p in range(P) for k in range(N_CONTEXTS) if val[j, p, k] > 0]
         for batch, seqs in batches(rows, doc, pos, docs):
-            pole = torch.tensor([1.0 - 2 * p for _, p, _ in batch], device=dev)
+            pole = torch.tensor([float(SIGNS[p]) for _, p, _ in batch], device=dev)
             src = model.sources(M, torch.tensor([neurons[j] for j, _, _ in batch], device=dev), pole, seqs)
-            rand = torch.randint(0, M * 2 * f, (len(batch), K), generator=gen).to(dev)
+            rand = torch.randint(0, M * P * f, (len(batch), K), generator=gen).to(dev)
             for r, (j, p, k) in enumerate(batch):
                 lst = listed[j, p][listed[j, p] >= 0]
                 ctrl = listed[(j + 1) % len(idx), p]
@@ -222,7 +231,7 @@ def measure(args) -> None:
                      "recall": torch.isin(src["pid"][r, big], lst).float().sum() / K,
                      "recall_ctrl": torch.isin(src["pid"][r, big], ctrl[ctrl >= 0]).float().sum() / K,
                      "rho": spearman(src["push"][r], c), "rho_cos": spearman(src["cos"][r], c), "gate_neg": src["g"][r] < 0,
-                     "err": (src["emb"][r] + src["heads"][r].sum() + c.sum() - 1).abs(),
+                     "err": (src["emb"][r] + src["const"][r] + src["heads"][r].sum() + c.sum() - 1).abs(),
                      "a_cat": pole[r] * src["a"][r] / val[j, p, k]}
                 for name, value in v.items():
                     out[name][idx[j], p, k] = float(value)
@@ -248,7 +257,7 @@ def score(args) -> None:
         r = {k: pole[k][sel].nanmedian().item() for k in cols} | {"poles": int(sel.sum())}
         r["gate_neg"] = saved["gate_neg"][sel].nanmean().item()
         return r | {"err": pole["err"][sel].max().item() if sel.any() else float("nan")}
-    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(L) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
+    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(L, MODEL) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
     table = {f"L{lo}-{hi}": row(in_layers(lo, hi)) for lo, hi in bands}
     layers = {layer: row(in_layers(layer, layer)) for layer in done}
     lines = [f"direct edges in context, {MODEL}: {saved['meta']}, layers {done}",
