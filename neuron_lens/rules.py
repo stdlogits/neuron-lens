@@ -21,6 +21,10 @@ softmax attention's, DeltaNet's mixing matrix (its q, k, β and decay), a router
 chosen experts and a shared expert's sigmoid gate; so do q/k norms (Drowse's
 ``include_qk_norms: false``), Gemma 4's weightless value norm and DeltaNet's L2 norms.
 
+The scores read their input norm's true derivative: where softmax attention has no q/k norms (GPT-NeoX), the queries
+and keys read the input norm's own output, true derivative and all, and the values the LN rule's
+(``_scores_norm``, ``neuron_lens.layers``' docstring has why). With q/k norms the two agree, so nothing is patched.
+
 Each rule is written as ``value.detach() + (lin - lin.detach())``: the value is the module's
 own output, unchanged, while the derivative is that of ``lin``. Both forward-mode tangents
 and reverse-mode gradients follow it, so the S-lens and the R-lens share one rule set, and
@@ -178,6 +182,27 @@ def _hf(module, name: str):
     return getattr(sys.modules[type(module).__module__], name)
 
 
+def _scores_norm(self, x: torch.Tensor) -> torch.Tensor:
+    """An attention's input norm whose scores have no norms of their own: the LN rule's output, for the values; the
+    queries and keys read ``_scores_in``, the norm's own output with its true derivative."""
+    self._scores_in = self._rules_orig_forward(x)
+    return _norm(self, x)
+
+
+def _qkv_scores(self, x: torch.Tensor) -> torch.Tensor:
+    """GPT-NeoX's fused projection (per head the query, key and value rows): the queries and keys from the true
+    derivative's input, the values from the LN rule's."""
+    q = torch.nn.functional.linear(self._scores_norm._scores_in, self.weight, self.bias)
+    v = self._rules_orig_forward(x)
+    shape = (*x.shape[:-1], self._heads, 3, -1)
+    return torch.cat((q.view(shape)[..., :2, :], v.view(shape)[..., 2:, :]), -2).view(v.shape)
+
+
+def _proj_scores(self, x: torch.Tensor) -> torch.Tensor:
+    """A query or key projection: from the true derivative's input."""
+    return self._rules_orig_forward(self._scores_norm._scores_in)
+
+
 def _gated_attn(self, hidden_states, position_embeddings, attention_mask, past_key_values=None, **kwargs):
     apply_rotary_pos_emb, eager_attention_forward = _hf(self, "apply_rotary_pos_emb"), _hf(self, "eager_attention_forward")
     shape = hidden_states.shape[:-1]
@@ -247,6 +272,15 @@ def relp_rules(model):
             patched.append((layer.linear_attn, _delta))
         elif is_gated(attention(layer)):
             patched.append((layer.self_attn, _gated_attn))
+        elif getattr(attention(layer), "q_norm", None) is None:  # the scores' input norm
+            at, n1 = attention(layer), layer.input_layernorm
+            patched = [(m, f) for m, f in patched if m is not n1] + [(n1, _scores_norm)]
+            fused = getattr(at, "query_key_value", None)
+            projs = [fused] if fused is not None else [at.q_proj, at.k_proj]
+            for proj in projs:
+                proj._scores_norm = n1
+                proj._heads = getattr(at.config, "num_attention_heads", None)
+                patched.append((proj, _qkv_scores if proj is fused else _proj_scores))
         if hasattr(layer.mlp, "experts"):
             patched.append((layer.mlp, _moe))
             if getattr(layer.mlp, "shared_expert", None) is not None:
@@ -265,3 +299,5 @@ def relp_rules(model):
         for module, _ in patched:
             del module.forward  # the instance attribute; the class's forward is back
             del module._rules_orig_forward
+            for name in ("_scores_norm", "_scores_in", "_heads"):
+                module.__dict__.pop(name, None)

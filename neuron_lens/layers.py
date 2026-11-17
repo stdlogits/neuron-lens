@@ -29,6 +29,14 @@ the tests' reference):
   derivative: softmax attention's, DeltaNet's ``A`` (through q, k, β and the decay), a router's
   weights over its chosen experts, a shared expert's sigmoid gate (a router for one expert); so do
   q/k norms, a value norm and DeltaNet's L2 norms.
+- **the scores' input norm:** the LN rule holds a norm's scale so that what reads it linearly decomposes the
+  forward pass (``f(x) = A x``); softmax attention's scores, which keep their true derivative, read the queries and
+  keys, and a held scale makes them quadratic in the residual where the model's are scale-free. Their true
+  derivative then answers to a rescaling the model ignores (its radial part), and through deep stacks that compounds
+  (Pythia-1.4B's R-lens gained 400× on one direction over the true Jacobian, its write reads all alike). So the
+  queries and keys read the input norm's true derivative, ``a (I − x̂x̂ᵀ/d)``, while the values keep the LN rule.
+  With q/k norms (Qwen3, Gemma 4, Qwen3.5) the scores are already scale-free, their norms' true derivative removes the
+  same radial part, and nothing changes; it applies where they are absent (GPT-NeoX): ``Attention.rx``.
 
 Mixers:
 
@@ -143,6 +151,9 @@ class Attention(NamedTuple):
     dsg: torch.Tensor | None
     scale: float
     s0: int
+    rx: torch.Tensor | None = None  # [N, d]: the input norm's (centred) input, where the scores have no q/k norms
+    qu: torch.Tensor | None = None  # [N, Hq, hd], [N, Hk, hd]: the projections of the input norm's radial direction
+    ku: torch.Tensor | None = None  # (a x̂ r, no bias); the queries' and keys' tangents lose it (the scores' norm)
 
 
 class DeltaNet(NamedTuple):
@@ -338,6 +349,24 @@ def _attention(at, x, cos, sin, mask, S: int, exact: bool):
                   o=None if sg is None else o[S:], sg=part(sg),
                   dsg=None if sg is None else sg[S:] * (1 - sg[S:]), scale=float(at.scaling), s0=S)
     return out, m
+
+
+def _scores_norm(m: Attention, norm, h: torch.Tensor, r: torch.Tensor, S: int) -> Attention:
+    """The scores' input norm (module docstring): its true derivative is the LN rule's map less a rank-one part per
+    position, ``u (x · dx) / d`` with ``u = a x r²`` (``x`` the centred input, ``a`` the scale times ``r``), so the queries'
+    and keys' tangents lose ``W_q u``, ``W_k u`` times ``x · dx / d``."""
+    w = norm_weight(norm)
+    x = h[S:].float()
+    if is_centred(norm):
+        x = x - x.mean(-1, keepdim=True)
+    rr = r[S:].float()
+    u = (1 if w is None else w.float()) * x * rr.pow(3)
+    N, hk, gn, hd = len(x), m.qr.shape[0], m.qr.shape[1], m.qr.shape[2]
+    if m.wqkv is not None:
+        qu, ku = F.linear(u, m.wqkv.float()).view(N, hk, 3, hd)[:, :, :2].unbind(2)
+    else:
+        qu, ku = F.linear(u, m.wq.float()).view(N, -1, hd), F.linear(u, m.wk.float()).view(N, hk, hd)
+    return m._replace(rx=x, qu=qu, ku=ku)
 
 
 def attention_map(model, i: int, x: torch.Tensor) -> Attention:
@@ -621,6 +650,8 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
                     mask = mask.masked_fill(both, 0.0)
                 mask = mask.masked_fill(s_idx <= t_idx - window, float("-inf"))
             a, mix = _attention(at, x, *tables[key], mask, S, exact)
+            if mix.wqn is None and not exact:
+                mix = _scores_norm(mix, n1, h, r1, S)
         a_in = a = a.float()
         if post1 is not None:
             a, rp1 = _normed(post1, a_in)
@@ -722,8 +753,12 @@ def resident(model, i: int) -> None:
 # ------------------------------------------------------------------------------- attention
 
 def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
-    """Tangents at the mixer's (normed) input to tangents at its output, ``[b, N, d]`` fp32."""
+    """Tangents at the mixer's (normed) input to tangents at its output, ``[b, N, d]`` fp32. Where the scores read the
+    input norm's true derivative (``m.rx``), ``xn`` carries one more channel, ``x · dx / d`` (``jvp``)."""
     dt = m.wo.dtype
+    c = None
+    if m.rx is not None:
+        xn, c = xn[..., :-1], xn[..., -1:, None].float()  # [b, N, 1, 1]
     b, N, _ = xn.shape
     hk, gn, hd = m.qr.shape
     g = gn // N
@@ -738,6 +773,8 @@ def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
             dq, dgate = qp[..., :hd].float(), qp[..., hd:].reshape(b, N, -1).float()
         dk = F.linear(xn, m.wk).view(b, N, hk, hd).float()
         dv = dk if m.wv is None else F.linear(xn, m.wv).view(b, N, hk, hd).float()
+    if c is not None:  # the scores' input norm's radial part (_scores_norm)
+        dq, dk = dq - c * m.qu, dk - c * m.ku
     if m.wqn is not None:
         dq = _norm_jvp(dq, m.q, m.rq, m.wqn)
     dq = _rope(dq, m.cos, m.sin).to(dt).view(b, N, hk, g, hd).permute(0, 2, 3, 1, 4).reshape(b, hk, gn, hd)
@@ -762,7 +799,8 @@ def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
 
 
 def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
-    """Cotangents at the mixer's output to cotangents at its (normed) input."""
+    """Cotangents at the mixer's output to cotangents at its (normed) input; where ``m.rx``, one more channel: the
+    cotangent of ``x · dx / d`` (``vjp`` turns it into the input's)."""
     dt = m.wo.dtype
     b, N, _ = G.shape
     hk, gn, hd = m.qr.shape
@@ -787,8 +825,10 @@ def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
         gk = _norm_vjp(gk, m.k, m.rk, m.wkn)
     if m.rv is not None:
         gv = _norm_vjp(gv, m.v, m.rv, 1.0)
+    e = None if m.rx is None else -((gq * m.qu).sum((-2, -1)) + (gk * m.ku).sum((-2, -1)))[..., None]  # [b, N, 1]
     if m.wqkv is not None:  # the fused projection's rows: per head the query, key, value
-        return (torch.stack((gq, gk, gv), 3).to(dt).reshape(b, N, -1) @ m.wqkv).float()
+        gx = (torch.stack((gq, gk, gv), 3).to(dt).reshape(b, N, -1) @ m.wqkv).float()
+        return gx if e is None else torch.cat((gx, e), -1)
     if m.sg is not None:
         gq = torch.cat((gq, ggate.view(b, N, hk * g, hd)), -1)
     gx = gq.to(dt).reshape(b, N, -1) @ m.wq
@@ -796,7 +836,7 @@ def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
         gx = gx + (gk + gv).to(dt).reshape(b, N, -1) @ m.wk
     else:
         gx = gx + gk.to(dt).reshape(b, N, -1) @ m.wk + gv.to(dt).reshape(b, N, -1) @ m.wv
-    return gx.float()
+    return gx.float() if e is None else torch.cat((gx.float(), e), -1)
 
 
 # --------------------------------------------------------------------------- Gated DeltaNet
@@ -1096,7 +1136,10 @@ def jvp(m: Layer, X: torch.Tensor):
     """Push tangents ``X`` (``[b, N, d]``, fp32) at a layer's input through its map; return
     them at its output and at the MLP's input (``mid``: the layer's input in a parallel block)."""
     dt = _dtype(m)
-    a = _scaled(lambda x: _attn_jvp(m.mix, x) if isinstance(m.mix, Attention) else _delta_jvp(m.mix, x), _nj(m.n1, X), dt)
+    xn = _nj(m.n1, X)
+    if isinstance(m.mix, Attention) and m.mix.rx is not None:  # x · dx / d for the scores' input norm, x centred
+        xn = torch.cat((xn, (m.mix.rx * X).mean(-1, keepdim=True)), -1)
+    a = _scaled(lambda x: _attn_jvp(m.mix, x) if isinstance(m.mix, Attention) else _delta_jvp(m.mix, x), xn, dt)
     a = a if m.post1 is None else _nj(m.post1, a)
     mid = X if m.parallel else X + a
     z = _scaled(lambda x: _moe_jvp(m.mlp, x) if isinstance(m.mlp, MoE) else _mlp_jvp(m.mlp, x), _nj(m.n2, mid), dt)
@@ -1112,8 +1155,13 @@ def vjp(m: Layer, G: torch.Tensor, mid_seed: torch.Tensor | None = None, row_w: 
     at the layer's input (weighted by ``row_w``, ``[N]`` summing to 1, if given). ``mid_seed``
     (``[b, N, d]``) joins the cotangents at the MLP's input (in a parallel block, the layer's input)."""
     mean = lambda t: t.mean(1) if row_w is None else (t * row_w[:, None]).sum(1)
-    attn = lambda g: _nt(m.n1, _scaled(lambda x: _attn_vjp(m.mix, x) if isinstance(m.mix, Attention) else
-                                       _delta_vjp(m.mix, x), g))
+    def attn(g):
+        if not isinstance(m.mix, Attention):
+            return _nt(m.n1, _scaled(lambda x: _delta_vjp(m.mix, x), g))
+        gx = _scaled(lambda x: _attn_vjp(m.mix, x), g)
+        if m.mix.rx is None:
+            return _nt(m.n1, gx)
+        return _nt(m.n1, gx[..., :-1]) + gx[..., -1:] * m.mix.rx / m.mix.rx.shape[-1]
     if m.s is not None:
         G = G * m.s
     gz = G if m.post2 is None else _nt(m.post2, G)
