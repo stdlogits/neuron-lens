@@ -5,6 +5,7 @@
 #   DOCS=1000 bash scripts/gpu_box.sh
 #   DOCS=1000 MODEL=google/gemma-4-12B bash scripts/gpu_box.sh   # Gemma 4 12B (gemma4_unified)
 #   DOCS=1000 MODEL=Qwen/Qwen3.5-35B-A3B SEQ_LEN=512 bash scripts/gpu_box.sh
+#   DOCS=1000 MODEL=EleutherAI/pythia-1.4b bash scripts/gpu_box.sh            # Pythia (GPT-NeoX)
 #
 # Qwen3.5 fits documents of exactly SEQ_LEN tokens (--full-length), so its DeltaNet memories
 # fill: about 63% of DCLM rows reach 512 of its tokens and 33% reach 1,024, so the corpus is
@@ -47,7 +48,7 @@ hf download "$MODEL" > /dev/null
 rows=$( [ -f data/corpus/dclm.jsonl ] && wc -l < data/corpus/dclm.jsonl || echo 0 )
 [ "$rows" -ge "$CORPUS_ROWS" ] || python scripts/01_lens_corpus.py --docs "$CORPUS_ROWS"
 
-python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py tests/test_kernels.py
+python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py tests/test_pythia.py tests/test_kernels.py
 if [ "$QWEN35" = 1 ]; then
     # Each component's time, then one document per lens; scripts/checks/perf_sweep.py's
     # docstring has the rest.

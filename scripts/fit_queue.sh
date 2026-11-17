@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The text lenses of a list of models on a machine with two GPUs, at the lenses of record's settings (the first DOCS
-# documents of data/corpus/dclm.jsonl, 128 tokens): per model the scale, then the R-lens, on GPU 0, and the S-lens on
-# GPU 1. Each model downloads when its turn comes and, past DROP_GB of weights, is deleted from the cache after its
+# The text lenses of a list of models on a machine with one or two GPUs, at the lenses of record's settings (the first
+# DOCS documents of data/corpus/dclm.jsonl, 128 tokens): per model the scale, then the R-lens, on GPU 0, and the S-lens
+# on GPU 1 (with one GPU, NGPU=1 or one found, all three in turn on GPU 0). Each model downloads when its turn comes and, past DROP_GB of weights, is deleted from the cache after its
 # fits (the catalog stages download it again). Fits save every 10 minutes and resume when rerun; a finished one leaves
 # logs/fit_<lens>_<model>.done and is skipped. A failed fit is logged, keeps its model, and the queue moves on.
 # UPLOAD=1 releases each model's lenses to the Hub as soon as its fits are done (12_release.py --parts lenses: a model
@@ -20,6 +20,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}" PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # large models fill the GPU
 DOCS="${DOCS:-1000}"
 DROP_GB="${DROP_GB:-10}"
+NGPU="${NGPU:-$(nvidia-smi -L | wc -l)}"
 UPLOAD="${UPLOAD:-0}"
 mkdir -p logs
 fit() {  # fit <gpu> <lens> <model> <stem> [02_fit.py flags]
@@ -69,12 +70,19 @@ for spec in "$@"; do
         failed=1
         continue
     fi
-    { fit 0 scale "$model" "$stem" --revision "$rev" && fit 0 R "$model" "$stem" --revision "$rev" "${flags[@]}"; } &
-    r=$!
-    fit 1 S "$model" "$stem" --revision "$rev" "${flags[@]}" &
-    s=$!
-    wait $r; ok_r=$?
-    wait $s; ok_s=$?
+    if [ "$NGPU" -ge 2 ]; then
+        { fit 0 scale "$model" "$stem" --revision "$rev" && fit 0 R "$model" "$stem" --revision "$rev" "${flags[@]}"; } &
+        r=$!
+        fit 1 S "$model" "$stem" --revision "$rev" "${flags[@]}" &
+        s=$!
+        wait $r; ok_r=$?
+        wait $s; ok_s=$?
+    else
+        fit 0 scale "$model" "$stem" --revision "$rev" && fit 0 R "$model" "$stem" --revision "$rev" "${flags[@]}"
+        ok_r=$?
+        fit 0 S "$model" "$stem" --revision "$rev" "${flags[@]}"
+        ok_s=$?
+    fi
     if [ $ok_r != 0 ] || [ $ok_s != 0 ]; then
         failed=1
         continue

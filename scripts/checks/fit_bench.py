@@ -22,6 +22,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from neuron_lens.corpus import lens_docs
 from neuron_lens.layers import CHUNK, offload
 from neuron_lens.paths import CORPUS_DIR
+from neuron_lens.rules import attention
 from neuron_lens.transport import (
     SKIP_FIRST,
     TARGETS,
@@ -57,16 +58,19 @@ def active(layer, T: int) -> int:
         mlp_n = k * (ex.gate_up_proj[0].numel() + ex.down_proj[0].numel()) + mlp.gate.weight.numel() \
             + sum(m.weight.numel() for m in (mlp.shared_expert.gate_proj, mlp.shared_expert.up_proj,
                                               mlp.shared_expert.down_proj, mlp.shared_expert_gate))
-    else:
-        mlp_n = sum(m.weight.numel() for m in (mlp.gate_proj, mlp.up_proj, mlp.down_proj))
+    else:  # gated, or GPT-NeoX's two projections
+        mlp_n = sum(getattr(mlp, n).weight.numel() for n in ("gate_proj", "up_proj", "down_proj", "dense_h_to_4h",
+                                                              "dense_4h_to_h") if hasattr(mlp, n))
     if hasattr(layer, "linear_attn"):
         la = layer.linear_attn
         mix = sum(m.weight.numel() for m in (la.in_proj_qkv, la.in_proj_z, la.in_proj_b, la.in_proj_a, la.out_proj))
         dk, dv = la.head_k_dim, la.head_v_dim
         return mlp_n + mix + la.num_v_heads * (4 * CHUNK * (dk + dv) + 6 * dk * dv)
-    at = layer.self_attn
-    proj = sum(m.weight.numel() for m in (at.q_proj, at.k_proj, at.v_proj, at.o_proj) if m is not None)
-    return mlp_n + proj + 4 * at.config.num_attention_heads * at.head_dim * (T - 1)
+    at = attention(layer)
+    proj = sum(getattr(at, n).weight.numel() for n in ("q_proj", "k_proj", "v_proj", "o_proj", "query_key_value", "dense")
+               if getattr(at, n, None) is not None)
+    hd = at.head_dim if hasattr(at, "head_dim") else at.head_size
+    return mlp_n + proj + 4 * at.config.num_attention_heads * hd * (T - 1)
 
 
 def flops(model, T: int, lens: str) -> float:
