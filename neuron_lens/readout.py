@@ -1,16 +1,19 @@
 """Weight-only lens readout of neuron write vectors.
 
 Neuron ``n`` at layer ``L`` adds ``a * W_down[:, n]`` to the residual, and ``a`` takes both
-signs (SwiGLU's ``up`` factor is linear), so each neuron has two poles, ``+w`` and ``-w``. A
-lens reads a pole as ``softmax(W_U norm(J_L w))`` (``J_L`` = identity for the logit lens),
-with no forward pass. RMSNorm makes the read independent of ``|w|``, so the probabilities
-describe a direction, not an effect size.
+signs (SwiGLU's ``up`` factor is linear), so each neuron has two poles, ``+w`` and ``-w`` (one for an
+ungated MLP, ``arch.n_poles``). A lens reads a pole as ``softmax(W_U norm(J_L w))`` (``J_L`` = identity for the
+logit lens), with no forward pass. The final norm makes the read independent of ``|w|``, so the probabilities
+describe a direction, not an effect size. ``centre``: the final norm is a LayerNorm (``arch.centred``), which
+centres each column first; its bias, the same for every column, is left out.
 """
 import torch
 
 
-def rms_norm_columns(t: torch.Tensor, gamma: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """The model's final RMSNorm applied to each column of ``t`` ``[d, n]``."""
+def rms_norm_columns(t: torch.Tensor, gamma: torch.Tensor, eps: float = 1e-6, centre: bool = False) -> torch.Tensor:
+    """The model's final norm applied to each column of ``t`` ``[d, n]``: an RMSNorm, or with ``centre`` a LayerNorm."""
+    if centre:
+        t = t - t.mean(0, keepdim=True)
     return t * torch.rsqrt(t.pow(2).mean(0, keepdim=True) + eps) * gamma[:, None]
 
 
@@ -28,13 +31,14 @@ def read(
     *,
     k: int = 10,
     chunk: int = 1024,
+    centre: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Top-``k`` lens probabilities and token ids per column of ``vectors`` ``[d, n]``.
 
     The unembedding matmul runs in ``unembed``'s dtype, chunked over columns so the
     ``[vocab, chunk]`` logits stay bounded. Returns CPU ``([n, k] probs, [n, k] ids)``.
     """
-    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32))
+    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
     probs, ids = [], []
     for s in range(0, t.shape[1], chunk):
         logits = (unembed @ t[:, s:s + chunk].to(unembed.dtype)).float()
@@ -51,10 +55,11 @@ def layer_logit_stats(
     jacobian: torch.Tensor | None = None,
     *,
     chunk: int = 1024,
+    centre: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-token mean and std of the lens logit across a layer's columns, for z-scored
     (layer-contrastive) reads that remove what every neuron of the layer writes."""
-    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32))
+    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
     total = torch.zeros(unembed.shape[0], device=unembed.device)
     sq = torch.zeros_like(total)
     for s in range(0, t.shape[1], chunk):
@@ -75,9 +80,10 @@ def read_z(
     std: torch.Tensor,
     *,
     k: int = 8,
+    centre: bool = False,
 ) -> torch.Tensor:
     """Top-``k`` token ids per column by lens logit z-scored against ``layer_logit_stats``."""
-    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32))
+    t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
     logits = (unembed @ t.to(unembed.dtype)).float()
     return ((logits - mean[:, None]) / std[:, None]).topk(k, dim=0).indices.T.cpu()
 
@@ -94,10 +100,12 @@ def layer_reads(
     chunk: int = 1024,
     softcap: float | None = None,
     renorm: bool = True,
+    centre: bool = False,
 ) -> dict:
     """Every column's read on each sign (pole), from one unembedding product kept whole.
     With ``softcap`` (Gemma), the logits are the model's: ``softcap · tanh(logits / softcap)``.
-    ``renorm=False`` keeps each column's size (columns already on the final norm's scale, before its weight).
+    ``renorm=False`` keeps each column's size (columns already on the final norm's scale, before its weight, and
+    centred where it centres).
 
     Per sign ``s``: the top-``k`` probabilities and ids of ``softmax(s · logits)`` and the
     top-``kz`` ids and values by layer-contrastive z (each token's logit z-scored across the
@@ -106,7 +114,8 @@ def layer_reads(
     times it). Returns CPU tensors ``{"ids": {s: [n, k]}, "probs", "zids", "z", "skew": [n], "kurt"}``.
     """
     gamma = gamma.to(vectors.device, torch.float32)
-    t = rms_norm_columns(transport(vectors, jacobian), gamma) if renorm else transport(vectors, jacobian) * gamma[:, None]
+    t = rms_norm_columns(transport(vectors, jacobian), gamma, centre=centre) if renorm else \
+        transport(vectors, jacobian) * gamma[:, None]
     logits = unembed @ t.to(unembed.dtype)
     n = logits.shape[1]
     if softcap:  # in place, a chunk of columns at a time (a whole fp32 copy is 7 GB for Gemma 4)

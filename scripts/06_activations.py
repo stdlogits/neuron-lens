@@ -56,8 +56,8 @@ from collections import Counter
 import numpy as np
 import pyarrow as pa
 import torch
-from transformers import AutoModelForCausalLM
 
+from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -78,11 +78,12 @@ from neuron_lens.catalog import (
     write,
 )
 from neuron_lens.corpus import ACT_SLICES, act_docs
-from neuron_lens import arch
+from neuron_lens.layers import _out_proj
 from neuron_lens.paths import LOGS, ROOT
 from neuron_lens.readout import rms_norm_columns
+from neuron_lens.rules import attention
 from neuron_lens.stats import modal_share
-from neuron_lens.transport import SKIP_FIRST, decoder_stack
+from neuron_lens.transport import SKIP_FIRST
 from neuron_lens.weights import tensors
 
 SEQ = 256
@@ -130,17 +131,18 @@ class Collector:
                       for k, (shape, integer, per) in self.spec.items()}
         self.seg = {k: torch.zeros(shape, dtype=torch.int32 if integer else torch.float32, device=device)
                     for k, (shape, integer, per) in self.spec.items()}
-        k = TOP
-        self.top = {"val": torch.full((L, 2, k, f), -torch.inf, device=device),
-                    "doc": torch.zeros((L, 2, k, f), dtype=torch.int32, device=device),
-                    "pos": torch.zeros((L, 2, k, f), dtype=torch.int16, device=device),
-                    "gate": torch.zeros((L, 2, k, f), dtype=torch.float16, device=device),
+        k, P = TOP, arch.n_poles(MODEL)
+        self.signs = arch.signs(MODEL)
+        self.top = {"val": torch.full((L, P, k, f), -torch.inf, device=device),
+                    "doc": torch.zeros((L, P, k, f), dtype=torch.int32, device=device),
+                    "pos": torch.zeros((L, P, k, f), dtype=torch.int16, device=device),
+                    "gate": torch.zeros((L, P, k, f), dtype=torch.float16, device=device),
                     "h_val": torch.full((L, H, k), -torch.inf, device=device),
                     "h_doc": torch.zeros((L, H, k), dtype=torch.int32, device=device),
                     "h_pos": torch.zeros((L, H, k), dtype=torch.int16, device=device),
                     "h_src": torch.zeros((L, H, k), dtype=torch.int16, device=device),
                     "h_out": torch.zeros((L, H, k, d), dtype=torch.float16, device=device)}
-        self.extra = {"first_val": torch.full((L, 2, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((L, 2, FIRST_K, f), dtype=torch.int32),
+        self.extra = {"first_val": torch.full((L, P, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((L, P, FIRST_K, f), dtype=torch.int32),
                       "first_chat": torch.zeros(L, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
         self.layers = model.layers
         self.wo = [arch.head_write(layer).view(d, H, g.head_dim) for layer, g in zip(model.layers, self.geo)]
@@ -165,14 +167,19 @@ class Collector:
             self.seg[k].zero_()
 
     def count(self, cnt: torch.Tensor, x: torch.Tensor) -> None:
-        """Add the grid counts of ``x`` ``[P, n]`` into ``cnt``: bf16 by sign and bin (``[2, NB, n]``, read off a table
-        of every bit pattern), anything else by bin (``[NB, n]``)."""
+        """Add the grid counts of ``x`` ``[P, n]`` into ``cnt``: by sign and bin (``[2, NB, n]``; bf16 read off a table of
+        every bit pattern), or by bin (``[NB, n]``)."""
         n = x.shape[1]
         cols = torch.arange(n, device=x.device, dtype=torch.int32)
         flat = cnt.view(-1)
         for s in range(0, len(x), CHUNK):
             xc = x[s:s + CHUNK]
-            b = self.bins[xc.view(torch.int16).int() & 0xFFFF] if xc.dtype == torch.bfloat16 else torch.bucketize(xc.abs(), self.edges, out_int32=True)
+            if xc.dtype == torch.bfloat16:
+                b = self.bins[xc.view(torch.int16).int() & 0xFFFF]
+            else:
+                b = torch.bucketize(xc.abs().float(), self.edges, out_int32=True)
+                if cnt.dim() == 3:  # signed (fp16 activations: Pythia)
+                    b = b + NB * (xc < 0).int()
             flat.index_add_(0, (b * n + cols).flatten(), torch.ones(xc.numel(), dtype=flat.dtype, device=x.device))
 
     def neuron(self, l: int, a: torch.Tensor) -> None:  # a: [B, T, f]
@@ -182,7 +189,7 @@ class Collector:
                 self.extra["first_chat"][l] = x[0].cpu()
                 return
             ids = self.ctx["ids"]
-            for p, sign in enumerate((1, -1)):
+            for p, sign in enumerate(self.signs):
                 v, i = torch.cat([self.extra["first_val"][l, p].to(x.device), sign * x]).topk(FIRST_K, 0)
                 cand = torch.cat([self.extra["first_tok"][l, p].to(x.device), ids[:, None].expand_as(x).int()])
                 self.extra["first_val"][l, p], self.extra["first_tok"][l, p] = v.cpu(), cand.gather(0, i).cpu()
@@ -196,9 +203,9 @@ class Collector:
             self.seg["sum"][l] += xc.sum(0)
             self.seg["sumsq"][l] += xc.pow(2).sum(0)
         self.count(self.seg["count"][l], xb)
-        gate = self.stash.pop(("gate", l))  # [B, T, f]: gate_proj's output
+        gate = self.stash.pop(("gate", l))  # [B, T, f]: the gate's pre-activation (GPT-NeoX: dense_h_to_4h's output)
         B = a.shape[0]
-        for p, sign in enumerate((1, -1)):
+        for p, sign in enumerate(self.signs):
             ext, pos = (a * sign).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, f]
             ext = ext.float()
             cols = (ext.amax(0) > self.top["val"][l, p, -1]).nonzero().squeeze(1)  # only a neuron with a new entry needs its list redone
@@ -214,7 +221,19 @@ class Collector:
 
     def input_norm(self, l: int, x: torch.Tensor, eps: float) -> None:
         if self.mode == "main":
-            self.ctx["inv_rho"] = torch.rsqrt(x.float().pow(2).mean(-1) + eps)  # [B, T]
+            x = x.float()
+            if arch.centred(MODEL):
+                x = x - x.mean(-1, keepdim=True)
+            self.ctx["inv_rho"] = torch.rsqrt(x.pow(2).mean(-1) + eps)  # [B, T]
+
+    def query(self, l: int, qkv: torch.Tensor) -> None:
+        """The mean query without q/k norms (GPT-NeoX's, from its fused projection: per head the query rows first,
+        bias included, before RoPE), as ``qk_norm`` takes it after the q norm."""
+        if self.mode != "main":
+            return
+        B, T = qkv.shape[:2]
+        q = qkv.view(B, T, self.H, 3, -1)[..., 0, :].float()
+        self.seg["q"][l, :, :q.shape[-1]] += (q * self.ctx["qv"][..., None, None]).sum((0, 1))
 
     def qk_norm(self, l: int, side: str, x: torch.Tensor, out: torch.Tensor, eps: float) -> None:
         if self.mode != "main":
@@ -279,15 +298,19 @@ class Collector:
     def hooks(self, model) -> list:
         hs = []
         for l, layer in enumerate(model.layers):
-            at = layer.self_attn
-            hs.append(layer.mlp.gate_proj.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)))
-            hs.append(layer.mlp.down_proj.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0])))
+            at, mlp = attention(layer), layer.mlp
+            gate, down = (mlp.gate_proj, mlp.down_proj) if hasattr(mlp, "gate_proj") else (mlp.dense_h_to_4h, mlp.dense_4h_to_h)
+            hs.append(gate.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)))
+            hs.append(down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0])))
             hs.append(layer.input_layernorm.register_forward_pre_hook(
                 lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
-            for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
-                hs.append(norm.register_forward_hook(
-                    lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
-            hs.append(at.o_proj.register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
+            if hasattr(at, "query_key_value"):  # no q/k norms
+                hs.append(at.query_key_value.register_forward_hook(lambda m, x, out, l=l: self.query(l, out)))
+            else:
+                for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
+                    hs.append(norm.register_forward_hook(
+                        lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
+            hs.append(_out_proj(at).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
             hs.append(at.register_forward_hook(lambda m, x, out, l=l: self.attention(l, out[1], out[0])))
         return hs
 
@@ -325,14 +348,13 @@ def plan_batches(slice_of: list[int], batch_docs: int) -> list[tuple[int, int]]:
 def collect(args, docs: list) -> dict:
     device = args.device
     tok = tokenizer()
-    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="eager").to(device).eval()
-    lm.requires_grad_(False)
-    model = decoder_stack(lm)  # the decoder stack: Qwen3's .model, Gemma 4's language model
+    lm, model = arch.load_model(MODEL, device)  # in its half dtype, eager attention; the decoder stack
     rows = [r for _, _, r in docs]
     slice_of = [s for s, _, _ in docs]
     meta = {"model": MODEL, "slices": list(ACT_SLICES), "docs": len(rows), "seq_len": SEQ,
             "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP,
-            "batch_docs": args.batch_docs, "dtype": "bfloat16", "attention": "eager"}
+            "batch_docs": args.batch_docs, "dtype": str(lm.dtype).removeprefix("torch."),
+            "attention": lm.config._attn_implementation}
     col = Collector(model, len(ACT_SLICES), device)
     plan = plan_batches(slice_of, args.batch_docs)
     next_batch, stage = 0, "main"
@@ -444,11 +466,12 @@ _SAVED = {}  # the collected state, shared with forked table workers
 
 
 def neuron_modes(saved: dict, layer: int) -> dict:
-    """``[2f]`` (+ poles, then −): the share of a pole's top firings (positive activation) on its most common
+    """``[P·f]`` (+ poles, then −): the share of a pole's top firings (positive activation) on its most common
     peak token (``cur_mode``), and followed by its most common next token (``next_mode``)."""
     top = saved["state"]["top"]
-    val = torch.cat([top["val"][layer, p].T for p in (0, 1)]).float()  # [2f, K]
-    doc, pos = (torch.cat([top[k][layer, p].T for p in (0, 1)]).long() for k in ("doc", "pos"))
+    P = top["val"].shape[1]
+    val = torch.cat([top["val"][layer, p].T for p in range(P)]).float()  # [P·f, K]
+    doc, pos = (torch.cat([top[k][layer, p].T for p in range(P)]).long() for k in ("doc", "pos"))
     fired = val > 0
     flat, start = saved["tokens"], saved["doc_start"]
     cur, nxt = firing_tokens(flat, start, doc, pos), firing_tokens(flat, start, doc, pos, 1)
@@ -500,7 +523,8 @@ def _neuron_layer(layer: int) -> None:
     cols = neuron_keys(layer, f)
     acc = {k: [] for k in ("act_top", "act_max", "pos_share", "rate", *[f"rate_{s}" for s in ACT_SLICES],
                            "q50", "q90", "q99", "q999", "mean", "std", "neg_lobe", "peak_tokens", "next_tokens", "contexts")}
-    for p in range(2):
+    P = top["val"].shape[1]  # the poles (arch.n_poles); count's sign axis stays two-wide (a pole's quantiles need both)
+    for p in range(P):
         val = top["val"][layer, p]  # [K, f]
         act_top = val[:TYPICAL].median(0).values.clamp_min(0).double()
         acc["act_top"].append(act_top)
@@ -531,12 +555,12 @@ def _neuron_layer(layer: int) -> None:
     for k, v in acc.items():
         cols[k] = pa.array(v) if isinstance(v[0], str) else pa.array(torch.cat(v).float().numpy())
     for k in ("doc", "pos", "val", "gate"):
-        cols[f"top_{k}"] = fixed(torch.cat([top[k][layer, 0].T, top[k][layer, 1].T]))
-    fv, ft = extra["first_val"][layer], extra["first_tok"][layer]  # [2, K, f]
+        cols[f"top_{k}"] = fixed(torch.cat([top[k][layer, p].T for p in range(P)]))
+    fv, ft = extra["first_val"][layer], extra["first_tok"][layer]  # [P, K, f]
     cols["first_max"] = pa.array(fv[:, 0].flatten().numpy())
     cols["first_tokens"] = pa.array([" | ".join(f"{dec(int(ft[p, j, nn]))!r} {fv[p, j, nn]:.3g}" for j in range(FIRST_K))
-                                     for p in range(2) for nn in range(f)])
-    cols["first_chat"] = pa.array(torch.cat([extra["first_chat"][layer], -extra["first_chat"][layer]]).numpy())
+                                     for p in range(P) for nn in range(f)])
+    cols["first_chat"] = pa.array(torch.cat([s * extra["first_chat"][layer] for s in arch.signs(MODEL)]).numpy())
     cols |= {k: pa.array(v.float().numpy()) for k, v in neuron_modes(saved, layer).items()}
     write(cols, neuron_table("acts", layer))
     print(f"{time.strftime('%H:%M:%S')} neurons/acts L{layer} in {time.perf_counter() - t0:.0f}s", flush=True)
@@ -579,18 +603,18 @@ def head_tables(saved: dict, device) -> None:
     cols["contexts"] = pa.array([" ‖ ".join(context(tok, flat[start[docs[l, h, j]]:start[docs[l, h, j] + 1]], int(pos[l, h, j]),
                                                     int(src[l, h, j])) for j in range(N_CONTEXTS))
                                  for l in range(L) for h in range(H)])
-    # The firings' outputs through the R-lens from the MLP input, each token's logit z-scored across the
-    # layer's firings, averaged over the head's.
+    # The firings' outputs through the R-lens from where heads write (the MLP input; a parallel block's output),
+    # each token's logit z-scored across the layer's firings, averaged over the head's.
     keep = kept()
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted({nm["unembed"], nm["norm"]}))
     unembed = head[nm["unembed"]][keep].to(device, torch.float16)
     gamma = head[nm["norm"]].to(device, torch.float32)
-    J = arch.lens(MODEL, "R_mid", R_FIT)
+    J = arch.head_write_lens(MODEL, "R", R_FIT)
     ids, vals = [], []
     for l in range(L):
         O = top["h_out"][l].reshape(H * K, -1).to(device, torch.float32).T  # [d, H·K]
-        lg = arch.cap(MODEL, unembed @ rms_norm_columns(J[l].to(device) @ O, gamma).half()).float()  # [V, H·K]
+        lg = arch.cap(MODEL, unembed @ rms_norm_columns(J[l].to(device) @ O, gamma, centre=arch.centred(MODEL)).half()).float()
         z = (lg - lg.mean(1, keepdim=True)) / lg.std(1, keepdim=True).clamp_min(1e-6)
         mz = z.view(-1, H, K).mean(-1).T  # [H, V]
         v, i = mz.topk(TOP, dim=1)

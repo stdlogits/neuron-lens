@@ -46,7 +46,7 @@ for m in "$@"; do
     run "edges_$s" "$m" python scripts/16_edges.py && up "edges_$s" "$m" edges
     run "edges_context_$s" "$m" python scripts/checks/edges_in_context.py measure
     run "causal_$s" "$m" python scripts/checks/causal_lens.py measure && up "files_$s" "$m" files &&
-        run "causal_score_$s" "$m" python scripts/checks/causal_lens.py score --lenses hub
+        run "causal_score_$s" "$m" python scripts/checks/causal_lens.py score --lenses record
     if [ "${MEDIA:-0}" = 1 ] && [ "$s" = gemma-4-12b ]; then
         run media_image "$m" python scripts/13_media_activations.py --device cuda --modalities image
         run media_audio "$m" python scripts/13_media_activations.py --device cuda --modalities audio

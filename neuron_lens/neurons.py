@@ -7,18 +7,23 @@ feeds the MLP (Qwen3: ``post_attention_layernorm``; Gemma 4: ``pre_feedforward_l
 writes column ``n`` of ``down_proj``. Gemma 4's MLP output then passes a post-feedforward RMSNorm,
 whose scale the LN rule holds constant, and the layer's residual is multiplied by its
 ``layer_scalar``: what reaches the residual is ``s · γ_post ⊙ W_down[:, n]``, the write the
-catalog reads. Qwen3's is ``W_down[:, n]`` itself.
+catalog reads. Qwen3's is ``W_down[:, n]`` itself. GPT-NeoX's MLP is ungated, ``W_out GELU(W_in x + b)``: its input
+row plays the gate's part (``gate``; no ``up``), each neuron has one pole (``arch.n_poles``), and its rows are
+``centre``d, as its LayerNorm reads the centred residual.
 """
 
 import torch
 
 from neuron_lens import metric
-from neuron_lens.arch import is_gemma4, layout
+from neuron_lens.arch import centre, is_gemma4, is_neox, layout
 from neuron_lens.weights import tensors
 
 
 def mlp_names(model_id: str, layer: int) -> dict:
     p = layout(model_id)[layer].prefix
+    if is_neox(model_id):
+        return {"gate": p + "mlp.dense_h_to_4h.weight", "down": p + "mlp.dense_4h_to_h.weight",
+                "norm": p + "post_attention_layernorm.weight"}
     names = {"gate": p + "mlp.gate_proj.weight", "up": p + "mlp.up_proj.weight", "down": p + "mlp.down_proj.weight"}
     if is_gemma4(model_id):
         return names | {"norm": p + "pre_feedforward_layernorm.weight", "post": p + "post_feedforward_layernorm.weight",
@@ -29,14 +34,15 @@ def mlp_names(model_id: str, layer: int) -> dict:
 def directions(model_id: str, layer: int, dev="cpu") -> dict:
     """``write`` ``[d, f]`` (the direction each neuron adds to the residual; for Gemma 4 its size at a
     position also scales with the post-feedforward norm there), and the
-    read rows ``gate``, ``up`` ``[f, d]`` times the MLP input norm's weight, in fp32."""
+    read rows ``gate``, ``up`` ``[f, d]`` times the MLP input norm's weight (``centre``d), in fp32; no ``up``
+    for an ungated MLP."""
     nm = mlp_names(model_id, layer)
     w = {k: v.float().to(dev) for k, v in tensors(model_id, sorted(nm.values())).items()}
     g = w[nm["norm"]]
     write = w[nm["down"]]
     if "post" in nm:
         write = w[nm["scalar"]].reshape(()) * w[nm["post"]][:, None] * write
-    return {"write": write, "gate": w[nm["gate"]] * g, "up": w[nm["up"]] * g}
+    return {"write": centre(write, model_id, 0), **{k: centre(w[nm[k]] * g, model_id) for k in ("gate", "up") if k in nm}}
 
 
 def softcap(model_id: str) -> float | None:
@@ -58,11 +64,12 @@ def poles(model_id: str, layer: int, lobe: torch.Tensor, dev="cpu") -> dict:
     ``[f, d]``, the gate and up rows times the MLP input norm (covectors) at unit length in the metric; ``cov`` ``[2f, d]``,
     the poles' read covectors (``read_rows``), what the S-lens pulls back and a write meets; ``vec`` ``[2f, d]``, each
     one's vector ``s² ⊙ cov`` at unit length, what the R-lens transports (``σ ⊙ (ŵ_gate ± ŵ_up)``, the raw rows times
-    the residual's scale); ``s2`` ``[d]``, the metric at the MLP input."""
+    the residual's scale); ``s2`` ``[d]``, the metric at the MLP input. An ungated MLP has no ``b``, and its poles' rows
+    are ``a`` (``[f, d]``: one pole a neuron)."""
     w = directions(model_id, layer, dev)
     s2 = metric.s2(model_id, "mid", layer, dev)
-    a, b = (w[k] / metric.cov_norm(w[k], s2) for k in ("gate", "up"))
-    cov = read_rows(a, b, lobe)
+    a, b = (w[k] / metric.cov_norm(w[k], s2) if k in w else None for k in ("gate", "up"))
+    cov = a if b is None else read_rows(a, b, lobe)
     vec = metric.vector(cov, s2)
     return {"write": w["write"], "a": a, "b": b, "cov": cov, "vec": vec / vec.norm(dim=1, keepdim=True), "s2": s2}
 
@@ -71,17 +78,24 @@ def write_cosines(write: torch.Tensor, a: torch.Tensor, b: torch.Tensor, lobe: t
                   s2: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """``(cos_gate, cos_up)``, ``[2f]`` each: the cosine, in the metric ``s2``, of each pole's write with the gate and up
     rows (``poles``' unit ``a``, ``b``), each on the side its firings sit (the gate below zero on the negative lobe, ``up``
-    opposite the pole there), positive where the pole writes toward them."""
+    opposite the pole there), positive where the pole writes toward them. Ungated (``b`` None): ``[f]`` with the input
+    row, and NaN for ``up``."""
     w = write.T / metric.vec_norm(write.T, s2)
-    x, y = (w * a).sum(1), (w * b).sum(1)
+    x = (w * a).sum(1)
+    if b is None:
+        return x, torch.full_like(x, float("nan"))
+    y = (w * b).sum(1)
     return torch.cat([x, -x]) * lobe.to(x), torch.cat([y, y]) * lobe.to(x)
 
 
 def orthogonal_write(write: torch.Tensor, a: torch.Tensor, b: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
     """``[d, f]``: each write minus its parts along its neuron's gate and up patterns (``s² ⊙ a``, ``s² ⊙ b``), so that
-    neither row reads it, what it adds beyond anything it reads (``a``, ``b`` unit in the metric ``s2``, as ``poles``)."""
-    pa, pb = metric.vector(a, s2), metric.vector(b, s2)
-    w = write.T
+    neither row reads it, what it adds beyond anything it reads (``a``, ``b`` unit in the metric ``s2``, as ``poles``;
+    ungated, ``b`` None: minus its part along ``s² ⊙ a`` alone)."""
+    pa, w = metric.vector(a, s2), write.T
+    if b is None:
+        return (w - (a * w).sum(1, keepdim=True) * pa).T
+    pb = metric.vector(b, s2)
     g = (a * pb).sum(1)
     ra, rb = (a * w).sum(1), (b * w).sum(1)
     det = (1 - g.pow(2)).clamp_min(1e-6)

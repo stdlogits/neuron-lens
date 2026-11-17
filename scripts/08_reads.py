@@ -106,8 +106,14 @@ TOKEN_Z = DATA / "heads" / f"{STEM}-token-z.pt"
 NULL_SHARE = 0.01  # the bottom 1% of W_U diag(γ)'s singular directions
 MIN_OCC = 10  # key occurrences for a token's in-context attention
 CHUNK = 2048
-BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers))  # Qwen3-8B's five, else quarters
+BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers, MODEL))  # Qwen3-8B's five, else quarters
 CAP = softcap(MODEL)
+SIGNS, CENTRE = arch.signs(MODEL), arch.centred(MODEL)  # the poles; a LayerNorm's centring (the final norm's too)
+
+
+def by_sign(x: dict) -> torch.Tensor:
+    """A per-sign read (``{sign: tensor}``) as the table's rows, poles in order."""
+    return torch.cat([x[s] for s in SIGNS])
 
 
 def neurons(layers: list[int], dev) -> None:
@@ -116,8 +122,9 @@ def neurons(layers: list[int], dev) -> None:
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
     gamma = head[nm["norm"]].to(dev, torch.float32)
-    # Euclidean, as the final norm's rms takes a write's size (an entropy neuron works through it)
-    wu = head[nm["unembed"]].float() * head[nm["norm"]].float()
+    # Euclidean, as the final norm's rms takes a write's size (an entropy neuron works through it); a LayerNorm's
+    # readout is W_U diag(γ) P, the constant direction in its null space
+    wu = arch.centre(head[nm["unembed"]].float() * head[nm["norm"]].float(), MODEL)
     null = torch.linalg.eigh(wu.T @ wu)[1][:, :max(1, int(NULL_SHARE * wu.shape[1]))].to(dev)  # ascending
     del wu
     emb = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)  # the residual's input (Gemma: × √d)
@@ -131,37 +138,41 @@ def neurons(layers: list[int], dev) -> None:
         wd, a, b, s2 = p["write"], p["a"], p["b"], p["s2"]
         f = wd.shape[1]
         cols = neuron_keys(layer, f)
-        w_norm, cos_gate_up = wd.norm(dim=0).cpu(), (a * metric.vector(b, s2)).sum(1).cpu()
+        P = len(SIGNS)
+        w_norm = wd.norm(dim=0).cpu()
+        cos_gate_up = torch.full((f,), float("nan")) if b is None else (a * metric.vector(b, s2)).sum(1).cpu()
         cos_gate, cos_up = (x.cpu() for x in write_cosines(wd, a, b, lobe.to(dev), s2))
-        cols["w_norm"] = pa.array(torch.cat([w_norm, w_norm]).numpy())
-        cols["cos_gate_up"] = pa.array(torch.cat([cos_gate_up, cos_gate_up]).numpy())
+        cols["w_norm"] = pa.array(torch.cat([w_norm] * P).numpy())
+        cols["cos_gate_up"] = pa.array(torch.cat([cos_gate_up] * P).numpy())
         cols["cos_write_gate"], cols["cos_write_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
-        cols["null_share"] = pa.array(torch.cat([((null.T @ wd).pow(2).sum(0) / wd.pow(2).sum(0)).cpu()] * 2).numpy())
-        logit = layer_reads(wd, unembed, gamma, None, signs=(1,), k=1, kz=1, softcap=CAP)
-        cols["vocab_skew"] = pa.array(torch.cat([logit["skew"], -logit["skew"]]).numpy())
-        cols["vocab_kurt"] = pa.array(torch.cat([logit["kurt"], logit["kurt"]]).numpy())
-        r = layer_reads(wd, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
-        put(cols, "write_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
-        put(cols, "write_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
+        cols["null_share"] = pa.array(torch.cat([((null.T @ wd).pow(2).sum(0) / wd.pow(2).sum(0)).cpu()] * P).numpy())
+        logit = layer_reads(wd, unembed, gamma, None, signs=(1,), k=1, kz=1, softcap=CAP, centre=CENTRE)
+        cols["vocab_skew"] = pa.array(torch.cat([s * logit["skew"] for s in SIGNS]).numpy())
+        cols["vocab_kurt"] = pa.array(torch.cat([logit["kurt"]] * P).numpy())
+        r = layer_reads(wd, unembed, gamma, J_out[layer] if layer < len(J_out) else None, signs=SIGNS, k=TOP, kz=TOP,
+                        softcap=CAP, centre=CENTRE)
+        put(cols, "write_R", keep[by_sign(r["ids"])], by_sign(r["probs"]))
+        put(cols, "write_R_z", keep[by_sign(r["zids"])], by_sign(r["z"]))
         K = K_out[layer].to(dev)
         PK = metric.polar(K) @ K  # [d, d_in]: the footprints' rotation, U (§13)
         sw = wd.T @ PK  # [f, d_in]: each write as a covector on the embeddings
-        s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
+        s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, SIGNS, TOP)
         for kind, name in (("raw", "write_S"), ("z", "write_S_z")):
-            put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
+            put(cols, name, keep[torch.cat([s[kind, x][0] for x in SIGNS])], torch.cat([s[kind, x][1] for x in SIGNS]))
         orth = orthogonal_write(wd, a, b, s2)
-        r = layer_reads(orth, unembed, gamma, J_out[layer] if layer < len(J_out) else None, k=TOP, kz=TOP, softcap=CAP)
-        put(cols, "write_orth_R", keep[torch.cat([r["ids"][1], r["ids"][-1]])], torch.cat([r["probs"][1], r["probs"][-1]]))
-        put(cols, "write_orth_R_z", keep[torch.cat([r["zids"][1], r["zids"][-1]])], torch.cat([r["z"][1], r["z"][-1]]))
+        r = layer_reads(orth, unembed, gamma, J_out[layer] if layer < len(J_out) else None, signs=SIGNS, k=TOP, kz=TOP,
+                        softcap=CAP, centre=CENTRE)
+        put(cols, "write_orth_R", keep[by_sign(r["ids"])], by_sign(r["probs"]))
+        put(cols, "write_orth_R_z", keep[by_sign(r["zids"])], by_sign(r["z"]))
         so = orth.T @ PK
-        s = s_tops(so / so.norm(dim=1, keepdim=True), emb, (1, -1), TOP)
+        s = s_tops(so / so.norm(dim=1, keepdim=True), emb, SIGNS, TOP)
         for kind, name in (("raw", "write_orth_S"), ("z", "write_orth_S_z")):
-            put(cols, name, keep[torch.cat([s[kind, 1][0], s[kind, -1][0]])], torch.cat([s[kind, 1][1], s[kind, -1][1]]))
+            put(cols, name, keep[torch.cat([s[kind, x][0] for x in SIGNS])], torch.cat([s[kind, x][1] for x in SIGNS]))
         del orth, so, K, PK
-        c, v = p["cov"], p["vec"]  # [2f, d]: the read covectors and their vectors, + poles then −
+        c, v = p["cov"], p["vec"]  # [P·f, d]: the read covectors and their vectors, + poles then −
         del p
-        reads = [layer_reads(v[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP)
-                 for i in (0, 1)]
+        reads = [layer_reads(v[i * f:(i + 1) * f].T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP, softcap=CAP,
+                             centre=CENTRE) for i in range(P)]
         put(cols, "read_R", keep[torch.cat([r["ids"][1] for r in reads])], torch.cat([r["probs"][1] for r in reads]))
         put(cols, "read_R_z", keep[torch.cat([r["zids"][1] for r in reads])], torch.cat([r["z"][1] for r in reads]))
         cs = c @ K_mid[layer].to(dev)
@@ -169,7 +180,7 @@ def neurons(layers: list[int], dev) -> None:
         for kind, name in (("raw", "read_S"), ("z", "read_S_z")):
             put(cols, name, keep[s[kind, 1][0]], s[kind, 1][1])
         write(cols, neuron_table("reads", layer))
-        print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: {2 * f} poles in {time.perf_counter() - t0:.0f}s", flush=True)
+        print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: {len(SIGNS) * f} poles in {time.perf_counter() - t0:.0f}s", flush=True)
 
 
 def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool = True, start: int = 0) -> None:
@@ -194,10 +205,10 @@ def heads(dev) -> None:
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     E = (E - E.mean(0)).to(dev)
-    Wu = (head[nm["unembed"]][keep].float() * head[nm["norm"]].float()).to(dev)
+    Wu = arch.centre(head[nm["unembed"]][keep].float() * head[nm["norm"]].float(), MODEL).to(dev)  # the readout, W_U diag(γ) (P)
     del head
-    K_out, K_mid = arch.lens(MODEL, "S_out", S_FIT), arch.lens(MODEL, "S_mid", S_FIT)
-    J_mid, J_out = arch.lens(MODEL, "R_mid", R_FIT), arch.lens(MODEL, "R_out", R_FIT)
+    K_out, J_out = arch.lens(MODEL, "S_out", S_FIT), arch.lens(MODEL, "R_out", R_FIT)
+    K_w, J_w = arch.head_write_lens(MODEL, "S", S_FIT), arch.head_write_lens(MODEL, "R", R_FIT)  # where the heads write
     saved = torch.load(ACTS, weights_only=False, map_location="cpu", mmap=True)
     st, extra = saved["state"]["total"], saved["state"]["extra"]
     z = {k: torch.zeros(L, H, V, dtype=torch.float16) for k in ("ov_R", "ov_S", "qk_S", "qk_self_S", "qk_self_R")}
@@ -207,9 +218,9 @@ def heads(dev) -> None:
         kvh, hd = geo[layer].kv_heads, geo[layer].head_dim
         g = H // kvh
         qk = arch.qk(MODEL, geo[layer], dev)
-        Wq, Wk = qk["Wq"], qk["Wk"]  # times the input norm's weight
+        Wq, Wk, bq = qk["Wq"], qk["Wk"], qk["bq"]  # times the input norm's weight; GPT-NeoX's query bias
         Wv, Wo = arch.ov(MODEL, geo[layer], dev)  # W_V (W_K where keys are values) × γ_in; [d, H·hd], × γ_post for Gemma
-        X = E @ K_out[layer - 1].to(dev).T if layer else E  # [V, d]: each token's footprint where the head reads
+        X = arch.centre(E @ K_out[layer - 1].to(dev).T if layer else E, MODEL)  # [V, d]: each token's footprint where the head reads
         # OV: M[u, v] = A_u · B_v, A the output lens's token rows through W_O^h, B each input through W_V
         # (and Gemma's v_norm's true derivative, averaged over positions).
         Bv = (X @ Wv.T).view(V, kvh, hd)
@@ -219,8 +230,8 @@ def heads(dev) -> None:
             Bv = torch.einsum("gij,vgj->vgi", Av, Bv)
         B = Bv.repeat_interleave(g, dim=1)
         del Bv
-        Km = K_mid[layer].to(dev)
-        for name, A in (("ov_R", Wu @ (J_mid[layer].to(dev) @ Wo)), ("ov_S", E @ (Km.T @ (metric.polar(Km) @ Wo)))):
+        Km = K_w[layer].to(dev)
+        for name, A in (("ov_R", Wu @ (J_w[layer].to(dev) @ Wo)), ("ov_S", E @ (Km.T @ (metric.polar(Km) @ Wo)))):
             A = A.view(V, H, hd)
             z[name][layer] = own_token_z(A, B).T.half().cpu()
             score[f"{name}_copy"][layer] = copy_score(A, B)
@@ -229,25 +240,32 @@ def heads(dev) -> None:
         # QK: logit q̃ᵀ R̄ k̃, footprints at unit length (a footprint's size would rank keys across tokens), Euclidean
         # as the input norm's rms takes it.
         Xu = X / X.norm(dim=1, keepdim=True)
-        # per-layer blocks of the statistics (padded to the largest head size and key-head count)
-        Aq = norm_derivative(qk["q_norm"], st["q_r"][layer].float().to(dev),
-                             st["q_m"][layer, :, :hd, :hd].float().to(dev), float(st["n_q"]))
-        Ak = norm_derivative(qk["k_norm"], st["k_r"][layer, :kvh].float().to(dev),
-                             st["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(st["n_k"]))
+        # per-layer blocks of the statistics (padded to the largest head size and key-head count); without q/k norms
+        # (GPT-NeoX), the identity, and a footprint's query at the input norm's unit rms, √d x̂, beside the query bias
+        # (the key bias adds one score to every key of a query, and cancels)
+        if qk["q_norm"] is None:
+            Aq, Ak = torch.eye(hd, device=dev).expand(H, hd, hd), torch.eye(hd, device=dev).expand(kvh, hd, hd)
+        else:
+            Aq = norm_derivative(qk["q_norm"], st["q_r"][layer].float().to(dev),
+                                 st["q_m"][layer, :, :hd, :hd].float().to(dev), float(st["n_q"]))
+            Ak = norm_derivative(qk["k_norm"], st["k_r"][layer, :kvh].float().to(dev),
+                                 st["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(st["n_k"]))
+        def query(x, Wq=Wq, bq=bq):
+            return x @ Wq.T if bq is None else x.shape[-1] ** 0.5 * x @ Wq.T + bq
         off = st["offset"][layer].float().to(dev)
-        Rbar = rope_mean(off / off.sum(-1, keepdim=True), arch.layer_inv_freq(extra["inv_freq"], MODEL, layer).to(dev))
+        Rbar = rope_mean(off / off.sum(-1, keepdim=True), arch.layer_inv_freq(extra["inv_freq"], MODEL, layer).to(dev), hd)
         Kv = torch.einsum("gij,vgj->vgi", Ak, (Xu @ Wk.T).view(V, kvh, hd)).repeat_interleave(g, dim=1)
         Kr = torch.einsum("hij,vhj->vhi", Rbar, Kv)  # [V, H, hd]: R̄ K
         del Kv
-        Qv = torch.einsum("hij,vhj->vhi", Aq, (Xu @ Wq.T).view(V, H, hd))
+        Qv = torch.einsum("hij,vhj->vhi", Aq, query(Xu).view(V, H, hd))
         a = torch.einsum("vhi,hi->vh", Kr, (st["q"][layer, :, :hd] / st["n_q"]).float().to(dev))
         z["qk_S"][layer] = ((a - a.mean(0)) / a.std(0)).T.half().cpu()
         z["qk_self_S"][layer] = own_token_z(Kr, Qv).T.half().cpu()
         del Qv
         if layer:  # the query the position's R-lens direction (what it says, a covector, as a vector), the key its footprint
-            Ru = metric.vector(Wu @ J_out[layer - 1].to(dev), metric.s2(MODEL, "in", layer, dev))
+            Ru = arch.centre(metric.vector(Wu @ J_out[layer - 1].to(dev), metric.s2(MODEL, "in", layer, dev)), MODEL)
             Ru = Ru / Ru.norm(dim=1, keepdim=True)
-            Qr = torch.einsum("hij,vhj->vhi", Aq, (Ru @ Wq.T).view(V, H, hd))
+            Qr = torch.einsum("hij,vhj->vhi", Aq, query(Ru).view(V, H, hd))
             z["qk_self_R"][layer] = own_token_z(Kr, Qr).T.half().cpu()
             del Ru, Qr
         del Kr, X, Xu

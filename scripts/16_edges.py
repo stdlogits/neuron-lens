@@ -53,6 +53,8 @@ from neuron_lens.neurons import directions, poles as layer_poles
 from neuron_lens.paths import SUMMARY
 
 STEM = arch.stem(MODEL)
+SIGNS = arch.signs(MODEL)
+P = len(SIGNS)  # a neuron's poles
 SIGMAS = 5.0
 RMS_DOCS = 64
 
@@ -73,7 +75,7 @@ def residual_stats(dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     hooks = []
     for i, lay in enumerate(stack.layers):
         hooks.append(arch.mid_norm(lay).register_forward_pre_hook(
-            lambda mod, a, i=i: seen[i].append(a[0][0, 1:].float().pow(2).mean(-1).sqrt().cpu())))
+            lambda mod, a, i=i: seen[i].append(arch.centre(a[0][0, 1:].float(), MODEL).pow(2).mean(-1).sqrt().cpu())))
         hooks.append(lay.mlp.register_forward_hook(lambda mod, a, o, i=i: keep_scale(mod, a, o, i)))
     docs = documents()
     for doc in docs[::len(docs) // RMS_DOCS][:RMS_DOCS]:
@@ -87,8 +89,8 @@ def residual_stats(dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
 
 def poles(layer: int, dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """A layer's writes ``[d, f]``, each pole's ``act_top`` (``[2f]``, ``+`` poles first), its read covectors at unit
-    length in the metric at its MLP input ``[2f, d]`` and that metric ``[d]``."""
+    """A layer's writes ``[d, f]``, each pole's ``act_top`` (``[P·f]``, ``+`` poles first), its read covectors at unit
+    length in the metric at its MLP input ``[P·f, d]`` and that metric ``[d]``."""
     p = layer_poles(MODEL, layer, lobe_signs(layer), dev)
     act = torch.from_numpy(pq.read_table(neuron_table("acts", layer), columns=["act_top"]).column(0).to_numpy().copy()).float()
     read = p["cov"] / metric.cov_norm(p["cov"], p["s2"])
@@ -103,9 +105,9 @@ def merge(best: tuple, new: tuple, k: int) -> tuple:
 
 
 def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Every layer's in- and out-lists, ``(score, id, push, cos)`` each ``[2f, k]``; ids are
-    ``layer · 2f + row`` (rows in table order), scores ``|push|`` or −1 below the floor. And the null,
-    ``[L, 2, 2f]``: each pole's largest |cos| with the layer before's writes, and with them rotated at random."""
+    """Every layer's in- and out-lists, ``(score, id, push, cos)`` each ``[P·f, k]``; ids are
+    ``layer · P·f + row`` (rows in table order), scores ``|push|`` or −1 below the floor. And the null,
+    ``[L, 2, P·f]``: each pole's largest |cos| with the layer before's writes, and with them rotated at random."""
     rms, mlp_scale, scalars = residual_stats(dev)
     L = len(rms)
     units = [poles(layer, dev) for layer in range(L)]
@@ -113,30 +115,30 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
     # writes in each target layer's metric: unit length there and their sizes, [d, f] and [2f]
     unit = lambda w, s2: (w / metric.vec_norm(w.T, s2).T, metric.vec_norm(w.T, s2).squeeze(1))
     floor = SIGMAS / d ** 0.5
-    empty = lambda: (torch.full((2 * f, k), -1.0, device=dev), torch.full((2 * f, k), -1, device=dev),
-                     torch.full((2 * f, k), float("nan"), device=dev), torch.full((2 * f, k), float("nan"), device=dev))
+    empty = lambda: (torch.full((P * f, k), -1.0, device=dev), torch.full((P * f, k), -1, device=dev),
+                     torch.full((P * f, k), float("nan"), device=dev), torch.full((P * f, k), float("nan"), device=dev))
     ins, outs = [empty() for _ in range(L)], [empty() for _ in range(L)]
     rot = torch.linalg.qr(torch.randn(d, d, generator=torch.Generator().manual_seed(0)))[0].to(dev)
-    prev = torch.full((L, 2, 2 * f), float("nan"))
+    prev = torch.full((L, 2, P * f), float("nan"))
     t0 = time.perf_counter()
     for m in range(1, L):
         read, s2 = units[m][2], units[m][3]
         s = s2.sqrt()
         for l in range(m):
             w, norm = unit(units[l][0], s2)
-            size = units[l][1] * torch.cat([norm, norm])
+            size = units[l][1] * torch.cat([norm] * P)
             c = read @ w
-            cos = torch.cat([c, -c], 1)  # [2f B poles, 2f A poles]
+            cos = torch.cat([x * c for x in SIGNS], 1)  # [P·f B poles, P·f A poles]
             del c
             if l == m - 1:  # the rotation in the metric's orthonormal coordinates
                 prev[m, 0], prev[m, 1] = cos.abs().amax(1).cpu(), ((read * s) @ (rot @ (w / s[:, None]))).abs().amax(1).cpu()
             push = cos * size * (mlp_scale[l] * scalars[l + 1:m].prod()).item() / rms[m].item()  # ``size`` holds A's own scalar
             score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
-            ids = l * 2 * f + torch.arange(2 * f, device=dev)
+            ids = l * P * f + torch.arange(P * f, device=dev)
             top = score.topk(k, dim=1).indices
             ins[m] = merge(ins[m], (score.gather(1, top), ids[top], push.gather(1, top), cos.gather(1, top)), k)
-            top = score.topk(k, dim=0).indices.T  # [2f A poles, k]
-            ids = m * 2 * f + top
+            top = score.topk(k, dim=0).indices.T  # [P·f A poles, k]
+            ids = m * P * f + top
             pick = lambda t: t.T.gather(1, top)
             outs[l] = merge(outs[l], (pick(score), ids, pick(push), pick(cos)), k)
             del cos, push, score
@@ -148,7 +150,7 @@ def columns(cols: dict, side: str, lists: tuple, f: int) -> None:
     score, ids, push, cos = lists
     ok = score >= 0
     ids = torch.where(ok, ids, -1)
-    layer, row = ids.div(2 * f, rounding_mode="floor"), ids % (2 * f)
+    layer, row = ids.div(P * f, rounding_mode="floor"), ids % (P * f)
     cols[f"{side}_layer"] = fixed(torch.where(ok, layer, -1).to(torch.int16))
     cols[f"{side}_neuron"] = fixed(torch.where(ok, row % f, -1).to(torch.int16))
     cols[f"{side}_pole"] = fixed(torch.where(ok, 1 - 2 * (row // f), 0).to(torch.int8))
@@ -157,7 +159,7 @@ def columns(cols: dict, side: str, lists: tuple, f: int) -> None:
 
 
 def summary(ins: list, outs: list, rms: torch.Tensor, mlp_scale: torch.Tensor, prev: torch.Tensor, k: int, d: int) -> None:
-    L, f = len(ins), ins[0][0].shape[0] // 2
+    L, f = len(ins), ins[0][0].shape[0] // P
     lines = [f"direct weight edges, {MODEL}: top {k} in and out per pole by |push| among |cos| >= {SIGMAS}/sqrt(d) "
              f"= {SIGMAS / d ** 0.5:.3f}; residual RMS at the MLP input "
              + ", ".join(f"L{i} {r:.1f}" for i, r in enumerate(rms.tolist()) if i % 4 == 0 or i == L - 1), "",
@@ -167,11 +169,11 @@ def summary(ins: list, outs: list, rms: torch.Tensor, mlp_scale: torch.Tensor, p
              "gap: median layer gap; pos: share of strongest in-edges that drive the pole; hubs: share of the band's "
              "in-list entries held by the 1% most-listed sources; out-: the same for out-lists)"]
     table = {}
-    for lo, hi in arch.bands(L) + [(0, L - 1)]:
+    for lo, hi in arch.bands(L, MODEL) + [(0, L - 1)]:
         cat = lambda lists, i, a=lo, b=hi: torch.cat([lists[m][i] for m in range(max(a, 0), b + 1)])
         s_in, id_in, p_in, c_in = (cat(ins, i) for i in range(4))
         s_out, id_out = cat(outs, 0), cat(outs, 1)
-        own = torch.cat([torch.full((2 * f,), m) for m in range(lo, hi + 1)])
+        own = torch.cat([torch.full((P * f,), m) for m in range(lo, hi + 1)])
         has, has_out = s_in[:, 0] >= 0, s_out[:, 0] >= 0
         listed = id_in[s_in >= 0]
         counts = torch.bincount(listed - listed.min()).sort(descending=True).values if len(listed) else torch.zeros(1)
@@ -181,13 +183,13 @@ def summary(ins: list, outs: list, rms: torch.Tensor, mlp_scale: torch.Tensor, p
                "top_cos": c_in[has, 0].abs().median().item() if has.any() else float("nan"),
                "top_push": p_in[has, 0].abs().median().item() if has.any() else float("nan"),
                "in_edges": (s_in >= 0).sum(1).float().median().item(),
-               "gap1": (own[has] - id_in[has, 0] // (2 * f) == 1).float().mean().item() if has.any() else float("nan"),
-               "gap": (own[has] - id_in[has, 0] // (2 * f)).float().median().item() if has.any() else float("nan"),
+               "gap1": (own[has] - id_in[has, 0] // (P * f) == 1).float().mean().item() if has.any() else float("nan"),
+               "gap": (own[has] - id_in[has, 0] // (P * f)).float().median().item() if has.any() else float("nan"),
                "pos": (p_in[has, 0] > 0).float().mean().item() if has.any() else float("nan"),
                "hubs": (counts[:n_hub].sum() / counts.sum()).item() if len(listed) else float("nan"),
                "out_edged": has_out.float().mean().item(),
                "out_edges": (s_out >= 0).sum(1).float().median().item(),
-               "out_gap": (id_out[has_out, 0] // (2 * f) - own[has_out]).float().median().item() if has_out.any() else float("nan")}
+               "out_gap": (id_out[has_out, 0] // (P * f) - own[has_out]).float().median().item() if has_out.any() else float("nan")}
         table[f"L{lo}-{hi}"] = row
         lines.append(f"L{lo}-{hi}".ljust(8) + f" {row['prev']:4.3f}  {row['rotated']:7.3f}  {row['edged']:5.2f}  {row['top_cos']:8.3f}  {row['top_push']:8.3f}  "
                      f"{row['in_edges']:8.0f}  {row['gap1']:4.2f}  {row['gap']:3.0f}  {row['pos']:4.2f}  {row['hubs']:4.2f} | "
@@ -204,7 +206,7 @@ def main() -> None:
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cuda")
     args = ap.parse_args()
     ins, outs, rms, mlp_scale, prev = compute(TOP, args.device)
-    f = ins[0][0].shape[0] // 2
+    f = ins[0][0].shape[0] // P
     for layer, (i, o) in enumerate(zip(ins, outs)):
         cols = neuron_keys(layer, f)
         columns(cols, "in", i, f)

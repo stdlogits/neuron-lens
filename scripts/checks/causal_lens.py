@@ -62,6 +62,7 @@ WINDOW = 8
 DOSES = (1.0, 4.0)
 PASS_Q = 0.99  # a read predicts its pole's effect past this quantile of the control's r
 CAUSAL = DATA / "causal"
+SIGNS = arch.signs(MODEL)  # the poles
 
 
 def random_neurons(n_layers: int, f: int, per_layer: int, seed: int = 0) -> list[tuple[int, int]]:
@@ -95,23 +96,28 @@ def lsm_chunks(lm_head, h: torch.Tensor, chunk: int = 1024):
 
 
 def catalog_top(layers, f: int, k: int) -> dict:
-    """Per layer: each pole's ``act_top`` ``[2, f]`` and its first ``k`` top firings (``top_doc``,
-    ``top_pos``, ``top_val``, ``[2, f, k]``), from the catalog's ``acts`` tables (``+`` poles first)."""
+    """Per layer: each pole's ``act_top`` ``[P, f]`` and its first ``k`` top firings (``top_doc``,
+    ``top_pos``, ``top_val``, ``[P, f, k]``), from the catalog's ``acts`` tables (``+`` poles first)."""
     out = {}
     for layer in layers:
         t = pq.read_table(neuron_table("acts", layer), columns=["act_top", "top_doc", "top_pos", "top_val"])
-        out[layer] = {"act_top": torch.from_numpy(t.column("act_top").to_numpy().copy()).view(2, f),
-                      **{c: column(t, c, k).view(2, f, k) for c in ("top_doc", "top_pos", "top_val")}}
+        out[layer] = {"act_top": torch.from_numpy(t.column("act_top").to_numpy().copy()).view(len(SIGNS), f),
+                      **{c: column(t, c, k).view(len(SIGNS), f, k) for c in ("top_doc", "top_pos", "top_val")}}
     return out
+
+
+def _down(mlp):
+    return mlp.down_proj if hasattr(mlp, "down_proj") else mlp.dense_4h_to_h
 
 
 def measure(args) -> None:
     device = args.device
     tok = AutoTokenizer.from_pretrained(args.model)
-    lm = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16).to(device).eval()
-    lm.requires_grad_(False)
+    lm = AutoModelForCausalLM.from_pretrained(args.model, dtype=arch.half_dtype(AutoConfig.from_pretrained(args.model)))
+    lm = lm.to(device).eval().requires_grad_(False)
     from neuron_lens.transport import decoder_stack
-    model, lm_head = decoder_stack(lm), lm.lm_head
+    model, lm_head = decoder_stack(lm), lm.get_output_embeddings()
+    NP = len(SIGNS)
     gemma = arch.is_gemma4(args.model)
     L, f = len(model.layers), model.config.intermediate_size
     picks = sample_neurons(L, f, args.per_layer)
@@ -137,14 +143,14 @@ def measure(args) -> None:
               flush=True)
     else:
         out = {"meta": meta, "picks": picks, "contexts": ctx.cpu(),
-               "alpha": torch.tensor([[top[l]["act_top"][p, n].clamp_min(0).item() for p in (0, 1)] for l, n in picks]),
-               "steer": torch.zeros(P, 2, len(DOSES), V, dtype=torch.float16),
-               "ablate_pos": torch.zeros(P, 2, V, dtype=torch.float16),
-               "ablate_win": torch.zeros(P, 2, V, dtype=torch.float16),
-               "dlogp_next": torch.full((P, 2, K), float("nan")),
-               "fired": torch.zeros(P, 2, K),
-               "top_doc": torch.full((P, 2, K), -1, dtype=torch.int32),
-               "top_pos": torch.full((P, 2, K), -1, dtype=torch.int16),
+               "alpha": torch.tensor([[top[l]["act_top"][p, n].clamp_min(0).item() for p in range(NP)] for l, n in picks]),
+               "steer": torch.zeros(P, NP, len(DOSES), V, dtype=torch.float16),
+               "ablate_pos": torch.zeros(P, NP, V, dtype=torch.float16),
+               "ablate_win": torch.zeros(P, NP, V, dtype=torch.float16),
+               "dlogp_next": torch.full((P, NP, K), float("nan")),
+               "fired": torch.zeros(P, NP, K),
+               "top_doc": torch.full((P, NP, K), -1, dtype=torch.int32),
+               "top_pos": torch.full((P, NP, K), -1, dtype=torch.int16),
                "done": {"steer": [], "ablate": []}}
     CAUSAL.mkdir(parents=True, exist_ok=True)
     saved = time.perf_counter()
@@ -161,18 +167,18 @@ def measure(args) -> None:
     t0 = time.perf_counter()
     for layer in range(L):
         conds = [(i, p, di) for i, (l, n) in enumerate(picks) if l == layer
-                 for p in (0, 1) for di in range(len(DOSES))]
+                 for p in range(NP) for di in range(len(DOSES))]
         if not conds or layer in out["done"]["steer"]:
             continue
         blk = model.layers[layer]
-        wd = blk.mlp.down_proj.weight  # [d, f]
+        wd = _down(blk.mlp).weight  # [d, f]
         if gemma:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
             wd = (blk.post_feedforward_layernorm.weight.float()[:, None] * wd.float()).to(wd.dtype)
         for s in range(0, len(conds), args.cond_batch):
             part = conds[s:s + args.cond_batch]
             # Row 0 is unsteered: the reference, at the same batch shape as the steered rows.
             delta = torch.stack([torch.zeros_like(wd[:, 0])] + [
-                (1 - 2 * p) * DOSES[di] * alpha[i, p].item() * wd[:, picks[i][1]]
+                SIGNS[p] * DOSES[di] * alpha[i, p].item() * wd[:, picks[i][1]]
                 for i, p, di in part])  # [1 + n_c, d]
             rows = delta.repeat_interleave(C, 0)[:, None, :]
             posmask = (torch.arange(T, device=device) >= SKIP_FIRST)[None, :, None].to(rows.dtype)
@@ -207,7 +213,7 @@ def measure(args) -> None:
         for i, (l, n) in enumerate(picks):
             if l != layer:
                 continue
-            for p in (0, 1):
+            for p in range(NP):
                 for j in range(K):
                     v = top[layer]["top_val"][p, n, j].item()
                     if v > 0:
@@ -232,7 +238,7 @@ def measure(args) -> None:
                 x = a[0].clone()
                 x[rows, pos_t, neu_t] = 0
                 return (x,)
-            hook = model.layers[layer].mlp.down_proj.register_forward_pre_hook(ablate)
+            hook = _down(model.layers[layer].mlp).register_forward_pre_hook(ablate)
             with torch.inference_mode():
                 hs = model(input_ids=ids.to(device), attention_mask=attn.to(device)).last_hidden_state
                 for r, (i, p, j, d, pos) in enumerate(part):
@@ -290,7 +296,7 @@ def score(args) -> None:
     named_r = {}  # (pole, target, lens) -> (r, top-10 overlap)
     targets = {"steer 1x": saved["steer"][:, :, 0], "steer 4x": saved["steer"][:, :, 1],
                "ablate pos": saved["ablate_pos"], "ablate win": saved["ablate_win"]}
-    fired = (saved["fired"] > 0).any(-1)  # [picks, 2]: the pole has top contexts
+    fired = (saved["fired"] > 0).any(-1)  # [picks, P]: the pole has top contexts
     layers = sorted({l for l, _ in picks})
     rows = []  # (layer, target, lens, matched r, control r, top-10 overlap), each over the layer's random poles
     for layer in layers:
@@ -303,20 +309,21 @@ def score(args) -> None:
         cols = wd[:, [picks[i][1] for i in idx]]
         for s in specs:
             jac = None if lenses[s] is None else lenses[s].get(layer)
-            lg = (unembed @ rms_norm_columns(transport(cols, jac), gamma)).T  # [n, V]
-            pred = torch.cat([lg, -lg])  # poles +, −
-            ctrl = torch.cat([lg[other], -lg[other]])
+            lg = (unembed @ rms_norm_columns(transport(cols, jac), gamma, centre=arch.centred(args.model))).T  # [n, V]
+            pred = torch.cat([sg * lg for sg in SIGNS])  # poles +, −
+            ctrl = torch.cat([sg * lg[other] for sg in SIGNS])
+            NP = len(SIGNS)
             for name, t in targets.items():
-                y = torch.cat([t[idx, 0, :nv], t[idx, 1, :nv]]).to(dev, torch.float32)
+                y = torch.cat([t[idx, p, :nv] for p in range(NP)]).to(dev, torch.float32)
                 keep = torch.ones(len(y), dtype=torch.bool) if name.startswith("steer") \
-                    else torch.cat([fired[idx, 0], fired[idx, 1]])
+                    else torch.cat([fired[idx, p] for p in range(NP)])
                 keep &= y.abs().sum(1).cpu() > 0
                 pv, cv, yv = pred[:, keep_vocab], ctrl[:, keep_vocab], y[:, keep_vocab]
                 r, rc, ov = pearson(pv, yv).cpu(), pearson(cv, yv).cpu(), overlap(pv, yv)
-                k = keep & torch.cat([is_rand, is_rand])  # the per-layer statistics: random picks only
+                k = keep & torch.cat([is_rand] * NP)  # the per-layer statistics: random picks only
                 if k.any():
                     rows.append((layer, name, s, r[k], rc[k], ov[k]))
-                for pi, sign in enumerate((1, -1)):
+                for pi, sign in enumerate(SIGNS):
                     for j, i in enumerate(idx):
                         pole = (layer, picks[i][1], sign)
                         if pole in named and keep[pi * len(idx) + j]:
@@ -380,7 +387,7 @@ def main() -> None:
     ap.add_argument("--cond-batch", type=int, default=16)
     ap.add_argument("--ctx-batch", type=int, default=64)
     ap.add_argument("--save-minutes", type=float, default=10)
-    ap.add_argument("--lenses", default="logit,J,R:dclm" if MODEL == arch.QWEN else "logit,hub")
+    ap.add_argument("--lenses", default="logit,J,R:dclm" if MODEL == arch.QWEN else "logit,record")
     ap.add_argument("--layers", default=None, help="measure only these layers (a,b,c)")
     ap.add_argument("--tag", default="", help="score: name the summary causal_lens_<tag>_<model>")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")

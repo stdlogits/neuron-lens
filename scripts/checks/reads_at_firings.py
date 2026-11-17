@@ -84,7 +84,8 @@ MIN_FIRINGS = 3
 FDR = 0.05
 NULL_Q = 0.99
 CHUNK = 2048
-BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers))  # Qwen3-8B's five, else quarters
+BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers, MODEL))
+SIGNS, CENTRE = arch.signs(MODEL), arch.centred(MODEL)  # the poles; a LayerNorm's centring  # Qwen3-8B's five, else quarters
 TESTS = ("read_R", "read_S", "write_R", "write_S", "write_orth_R", "write_orth_S")
 HEAD_TESTS = ("ov_R", "ov_copy", "ov_S", "qk_S")
 PATTERN = {"prev": 0.5, "self": 0.5, "induction": 0.3, "duplicate": 0.3}
@@ -143,9 +144,10 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     per, unit_q = [], {}
     for layer in range(L):
         t0 = time.perf_counter()
-        val = torch.cat([top["val"][layer, p].T for p in (0, 1)]).float()  # [2f, K]: + poles, then −
-        doc = torch.cat([top["doc"][layer, p].T for p in (0, 1)]).long()
-        pos = torch.cat([top["pos"][layer, p].T for p in (0, 1)]).long()
+        P = len(SIGNS)
+        val = torch.cat([top["val"][layer, p].T for p in range(P)]).float()  # [P·f, K]: + poles, then −
+        doc = torch.cat([top["doc"][layer, p].T for p in range(P)]).long()
+        pos = torch.cat([top["pos"][layer, p].T for p in range(P)]).long()
         fired = val > 0
         flat, start = saved["tokens"], saved["doc_start"]
         cur, nxt = firing_tokens(flat, start, doc, pos).long(), firing_tokens(flat, start, doc, pos, 1).long()
@@ -155,34 +157,35 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         drivers = column(pq.read_table(neuron_table("drivers", layer), columns=["drivers_ids"]), "drivers_ids").long()
         k_cur, k_nxt, k_drv = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (cur, nxt, drivers))
         ok_cur, ok_nxt = fired & (k_cur >= 0), fired & (k_nxt >= 0)
-        perm = torch.cat([torch.randperm(f, generator=g), f + torch.randperm(f, generator=g)])
+        perm = torch.cat([i * f + torch.randperm(f, generator=g) for i in range(P)])
         p = poles(MODEL, layer, lobe_signs(layer), dev)  # as 08_reads.py, in the residual's metric
         wd = p["write"]
-        r = rms_norm_columns(transport(wd, J_out[layer] if layer < len(J_out) else None), gamma).T  # [f, d]
+        r = rms_norm_columns(transport(wd, J_out[layer] if layer < len(J_out) else None), gamma, centre=CENTRE).T  # [f, d]
         K = K_out[layer].to(dev)
         PK = metric.polar(K) @ K  # as 08_reads.py: writes against the footprints' rotation
         sw = wd.T @ PK
         sw = sw / sw.norm(dim=1, keepdim=True)
         orth = orthogonal_write(wd, p["a"], p["b"], p["s2"])
-        ro = rms_norm_columns(transport(orth, J_out[layer] if layer < len(J_out) else None), gamma).T
+        ro = rms_norm_columns(transport(orth, J_out[layer] if layer < len(J_out) else None), gamma, centre=CENTRE).T
         so = orth.T @ PK
         so = so / so.norm(dim=1, keepdim=True)
         c = p["cov"]
-        rr = rms_norm_columns(transport(p["vec"].T, J_mid[layer]), gamma).T
+        rr = rms_norm_columns(transport(p["vec"].T, J_mid[layer]), gamma, centre=CENTRE).T
         cs = c @ K_mid[layer].to(dev)
         del p, K, PK
-        stats = {"write_R": mean_z(torch.cat([r, -r]).half(), unembed, k_nxt, ok_nxt, perm),
-                 "write_S": mean_z(torch.cat([sw, -sw]).half(), emb, k_cur, ok_cur, perm),
+        poled = lambda x: torch.cat([sg * x for sg in SIGNS]).half()  # a write's poles
+        stats = {"write_R": mean_z(poled(r), unembed, k_nxt, ok_nxt, perm),
+                 "write_S": mean_z(poled(sw), emb, k_cur, ok_cur, perm),
                  "read_R": mean_z(rr.half(), unembed, k_drv, k_drv >= 0, perm),
                  "read_S": mean_z((cs / cs.norm(dim=1, keepdim=True)).half(), emb, k_cur, ok_cur, perm),
-                 "write_orth_R": mean_z(torch.cat([ro, -ro]).half(), unembed, k_nxt, ok_nxt, perm),
-                 "write_orth_S": mean_z(torch.cat([so, -so]).half(), emb, k_cur, ok_cur, perm)}
+                 "write_orth_R": mean_z(poled(ro), unembed, k_nxt, ok_nxt, perm),
+                 "write_orth_S": mean_z(poled(so), emb, k_cur, ok_cur, perm)}
         row = {"layer": layer, "silent": silent.float().mean().item(),
                "token_detector": ((cur_mode >= PAST) & ~silent).float().mean().item(),
                "next_detector": ((next_mode >= PAST) & ~silent).float().mean().item()}
         for test, (m, n) in stats.items():
             ok = ~m.isnan() & ~silent
-            q = torch.ones(2 * f)
+            q = torch.ones(P * f)
             q[ok] = bh(null_p(m[ok], n))
             unit_q.setdefault(test, []).append(q)
             thr = n[~n.isnan()].quantile(NULL_Q).item()
@@ -192,7 +195,7 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: " + " ".join(f"{k} {row[k]:.2f}" for k in
               ("silent", *TESTS)) + f" in {time.perf_counter() - t0:.0f}s", flush=True)
     keys = ("silent", "token_detector", "next_detector", *TESTS)
-    lines = [(f"neurons, {MODEL}: {2 * f * L:,} poles; share of each band's poles (mean over layers) passing each test at "
+    lines = [(f"neurons, {MODEL}: {len(SIGNS) * f * L:,} poles; share of each band's poles (mean over layers) passing each test at "
               f"a {FDR:.0%} false discovery rate; in brackets, the share past the {NULL_Q:.0%} point of mismatched pairs net "
               "of theirs. Detectors: a third of top firings share a token."), "",
              "band     " + "  ".join(f"{k:>14s}" for k in keys)]
@@ -223,9 +226,9 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     E = (E - E.mean(0)).to(dev)
-    Wu = (head[nm["unembed"]][keep].float() * head[nm["norm"]].float()).to(dev)
+    Wu = arch.centre(head[nm["unembed"]][keep].float() * head[nm["norm"]].float(), MODEL).to(dev)
     del head
-    K_out, J_mid = arch.lens(MODEL, "S_out", S_FIT), arch.lens(MODEL, "R_mid", R_FIT)
+    K_out, J_w = arch.lens(MODEL, "S_out", S_FIT), arch.head_write_lens(MODEL, "R", R_FIT)  # J_w: where the heads write
     eye = torch.eye(H, dtype=torch.bool)
     stat, pval = {t: torch.full((L, H), torch.nan) for t in HEAD_TESTS}, {t: torch.ones(L, H) for t in HEAD_TESTS}
 
@@ -240,7 +243,7 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
         kvh, hd = geo[l].kv_heads, geo[l].head_dim
         grp = H // kvh
         Wv, Wo = arch.ov(MODEL, geo[l], dev)  # W_V (W_K where keys are values) × γ_in; W_O, × γ_post for Gemma
-        A = (Wu @ (J_mid[l].to(dev) @ Wo)).view(V, H, hd)
+        A = (Wu @ (J_w[l].to(dev) @ Wo)).view(V, H, hd)
         abar = A.mean(0)
         cov = torch.einsum("vhi,vhj->hij", A - abar, A - abar) / V
         X = (E[ka.flatten().to(dev)] @ K_out[l - 1].to(dev).T) if l else E[ka.flatten().to(dev)]  # [H·K, d]

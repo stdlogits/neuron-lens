@@ -25,8 +25,8 @@ import copy
 import time
 
 import torch
-from transformers import AutoModelForCausalLM
 
+from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
     TOP,
@@ -39,9 +39,9 @@ from neuron_lens.catalog import (
     tokenizer,
     write,
 )
-from neuron_lens import arch
 from neuron_lens.corpus import act_file, lens_docs
-from neuron_lens.transport import decoder_stack
+from neuron_lens.layers import _out_proj
+from neuron_lens.rules import attention
 
 SLICES = {"dclm": 4, "code": 2, "chat": 2}
 SEQ = 128  # the documents' length: full-length ones are typical text
@@ -77,17 +77,16 @@ def main() -> None:
     dev = args.device
     docs = documents(dev)
     D = len(docs)
-    lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="eager").to(dev).eval()
-    lm.requires_grad_(False)
-    model = decoder_stack(lm)
+    _, model = arch.load_model(MODEL, dev)  # in its half dtype, eager attention
     cfg = model.config
+    P, signs = arch.n_poles(MODEL), arch.signs(MODEL)
     L, f, H, d = cfg.num_hidden_layers, cfg.intermediate_size, cfg.num_attention_heads, cfg.hidden_size
     geo = arch.layout(MODEL)
     wo = [arch.head_write(m).view(d, H, g.head_dim) for m, g in zip(model.layers, geo)]  # as the residual sees it
     gram = [torch.einsum("dhi,dhj->hij", w, w) for w in wo]  # |W_O^h z|² = zᵀ G_h z
     del wo
     best = {k: torch.full(shape, -torch.inf, device=dev) for k, shape in
-            (("at", (L, 2, f, TOP)), ("sum", (L, 2, f, TOP)), ("h_out", (L, H, TOP)), ("h_key", (L, H, TOP)))}
+            (("at", (L, P, f, TOP)), ("sum", (L, P, f, TOP)), ("h_out", (L, H, TOP)), ("h_key", (L, H, TOP)))}
     best_ids = {k: torch.zeros(v.shape, dtype=torch.long, device=dev) for k, v in best.items()}
     cur, stash = {}, {}
 
@@ -100,11 +99,11 @@ def main() -> None:
         def hook(m, x):
             a = x[0].float().unflatten(0, (D, -1))  # [D, B, 1 + AFTER, f]
             for key, v in pole_drivers(a).items():
-                for p, sign in enumerate((1, -1)):
+                for p, sign in enumerate(signs):
                     merge(key, (l, p), sign * v.T, cur["ids"])
         return hook
 
-    def attention(l: int):
+    def attention_hook(l: int):
         def hook(m, x, out):
             z = stash.pop(l)[:, 0].float().view(-1, H, geo[l].head_dim)  # [D·B, H, hd]: the token as the query
             scale = arch.attn_scale(model.layers[l], out[0])  # Gemma 4: the post-attention norm's scale
@@ -120,9 +119,9 @@ def main() -> None:
     with torch.inference_mode():
         prefix = model(input_ids=docs[:, :AT], use_cache=True).past_key_values
         for l, m in enumerate(model.layers):  # from here on every pass starts at the token
-            m.mlp.down_proj.register_forward_pre_hook(neuron(l))
-            m.self_attn.o_proj.register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
-            m.self_attn.register_forward_hook(attention(l))
+            (m.mlp.down_proj if hasattr(m.mlp, "down_proj") else m.mlp.dense_4h_to_h).register_forward_pre_hook(neuron(l))
+            _out_proj(attention(m)).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
+            attention(m).register_forward_hook(attention_hook(l))
         for i in range(0, len(order), args.batch):
             ids = order[i:i + args.batch].to(dev)
             cur["ids"] = ids
@@ -138,8 +137,8 @@ def main() -> None:
     for l in range(L):
         cols = neuron_keys(l, f)
         for key, name in (("at", "drivers"), ("sum", "drivers_sum")):
-            put(cols, name, torch.cat([best_ids[key][l, 0], best_ids[key][l, 1]]).cpu(),
-                torch.cat([best[key][l, 0], best[key][l, 1]]).cpu())  # times the pole's sign, as top_val
+            put(cols, name, torch.cat([best_ids[key][l, p] for p in range(P)]).cpu(),
+                torch.cat([best[key][l, p] for p in range(P)]).cpu())  # times the pole's sign, as top_val
         write(cols, neuron_table("drivers", l))
     cols = head_keys(L, H, arch.groups(MODEL))
     for key, name in (("h_out", "drivers"), ("h_key", "keys")):

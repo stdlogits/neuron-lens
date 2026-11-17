@@ -1,5 +1,12 @@
-"""Model geometry across Qwen3 and Gemma 4: attention heads' sizes, weights and lenses, the
+"""Model geometry across Qwen3, Gemma 4 and GPT-NeoX (Pythia): attention heads' sizes, weights and lenses, the
 corpora and token counts, for the pipeline's Gemma path and the media checks.
+
+Three facts about a model's layers that the stages read instead of branching on the model: ``n_poles``, a
+neuron's poles (two for a gated MLP, whose ``up`` takes both signs; one for GPT-NeoX's ungated GELU, whose
+negative side is a dip to −0.17, not a second direction); ``parallel``, whether both sublayers read the layer's
+input (GPT-NeoX: the MLP reads the layer's input, so ``mid`` is the layer below's ``out``, and the heads write
+``out``); and ``centred``, whether the residual's norms are LayerNorms (a read row then acts on the centred
+residual, so its mean is subtracted).
 
 Per layer, ``layout(model_id)`` gives the query and key-value head counts and the head size (Gemma 4
 varies them by layer: sliding layers 8 KV heads of 256, full layers 1 of 512), whether the value
@@ -22,7 +29,7 @@ import torch
 from transformers import AutoConfig
 
 from neuron_lens.paths import DATA, FITS
-from neuron_lens.rules import norm_eps
+from neuron_lens.rules import attention, is_centred, norm_eps
 from neuron_lens.weights import tensors
 
 QWEN = "Qwen/Qwen3-8B"
@@ -53,11 +60,44 @@ def text_config(model_id: str):
 
 
 @functools.cache
+def is_neox(model_id: str) -> bool:
+    """GPT-NeoX (Pythia): its own weight names, a fused QKV projection, LayerNorms, an ungated MLP."""
+    return text_config(model_id).model_type == "gpt_neox"
+
+
+def n_poles(model_id: str) -> int:
+    return 1 if is_neox(model_id) else 2
+
+
+def signs(model_id: str) -> tuple[int, ...]:
+    """The poles' signs, in catalog order: ``(1, −1)``, or ``(1,)`` for an ungated MLP."""
+    return (1, -1)[:n_poles(model_id)]
+
+
+def parallel(model_id: str) -> bool:
+    return bool(getattr(text_config(model_id), "use_parallel_residual", False))
+
+
+def centred(model_id: str) -> bool:
+    return is_neox(model_id)
+
+
+def centre(x: torch.Tensor, model_id: str, dim: int = -1) -> torch.Tensor:
+    """Rows ``[n, d]`` (or columns, ``dim=0``) as the residual's readers see them: a LayerNorm reads the centred
+    residual, so a read row and the row minus its mean read it alike, and a write's mean reaches no reader."""
+    return x - x.mean(dim, keepdim=True) if centred(model_id) else x
+
+
+@functools.cache
 def layout(model_id: str) -> list[Layer]:
     return layout_of(text_config(model_id), is_gemma4(model_id))
 
 
 def layout_of(tc, gemma: bool) -> list[Layer]:
+    if tc.model_type == "gpt_neox":  # no grouping; the weights under gpt_neox.
+        hd = tc.hidden_size // tc.num_attention_heads
+        return [Layer(tc.num_attention_heads, tc.num_attention_heads, hd, False, "attention", f"gpt_neox.layers.{i}.")
+                for i in range(tc.num_hidden_layers)]
     if gemma:
         return [Layer(tc.num_attention_heads, c.num_key_value_heads, c.head_dim, bool(t == "full_attention" and tc.attention_k_eq_v),
                       t, f"model.language_model.layers.{i}.")
@@ -68,6 +108,8 @@ def layout_of(tc, gemma: bool) -> list[Layer]:
 
 def names(model_id: str) -> dict:
     """The embedding, unembedding and final norm weights' names."""
+    if is_neox(model_id):  # untied
+        return {"embed": "gpt_neox.embed_in.weight", "unembed": "embed_out.weight", "norm": "gpt_neox.final_layer_norm.weight"}
     if is_gemma4(model_id):
         e = "model.language_model.embed_tokens.weight"
         return {"embed": e, "unembed": e, "norm": "model.language_model.norm.weight"}  # tied
@@ -95,9 +137,23 @@ def embed_scale(model_id: str) -> float:
     return text_config(model_id).hidden_size ** 0.5 if is_gemma4(model_id) else 1.0
 
 
+def _qkv(model_id: str, lay: Layer, dev) -> dict:
+    """GPT-NeoX's fused projection as ``Wq``, ``Wk``, ``Wv`` ``[H·hd, d]`` and ``bq`` ``[H·hd]``, in fp32."""
+    p = lay.prefix + "attention.query_key_value."
+    w = tensors(model_id, [p + "weight", p + "bias"])
+    W = w[p + "weight"].float().to(dev).view(lay.q_heads, 3, lay.head_dim, -1)
+    return {"Wq": W[:, 0].reshape(-1, W.shape[-1]), "Wk": W[:, 1].reshape(-1, W.shape[-1]),
+            "Wv": W[:, 2].reshape(-1, W.shape[-1]),
+            "bq": w[p + "bias"].float().to(dev).view(lay.q_heads, 3, lay.head_dim)[:, 0].reshape(-1)}
+
+
 def ov(model_id: str, lay: Layer, dev="cpu") -> tuple[torch.Tensor, torch.Tensor]:
-    """``(W_V diag(γ_in) [kv·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32."""
+    """``(W_V diag(γ_in) [kv·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32 (the first ``centre``d)."""
     p = lay.prefix
+    if is_neox(model_id):
+        ln, wo = p + "input_layernorm.weight", p + "attention.dense.weight"
+        w = {k: v.float().to(dev) for k, v in tensors(model_id, [ln, wo]).items()}
+        return centre(_qkv(model_id, lay, dev)["Wv"] * w[ln], model_id), centre(w[wo], model_id, 0)
     wv = p + ("self_attn.k_proj.weight" if lay.k_eq_v else "self_attn.v_proj.weight")
     want = [wv, p + "self_attn.o_proj.weight", p + "input_layernorm.weight"]
     gemma = is_gemma4(model_id)
@@ -111,14 +167,21 @@ def ov(model_id: str, lay: Layer, dev="cpu") -> tuple[torch.Tensor, torch.Tensor
 
 
 def qk(model_id: str, lay: Layer, dev="cpu") -> dict:
-    """``Wq``, ``Wk`` (times ``γ_in``) and the q/k norm weights, in fp32."""
+    """``Wq``, ``Wk`` (times ``γ_in``, ``centre``d) and the q/k norm weights (``None`` without q/k norms), in fp32; GPT-NeoX's
+    query bias ``bq`` too (the key bias adds the same score to every key of a query, and cancels)."""
     p = lay.prefix
+    if is_neox(model_id):
+        ln = p + "input_layernorm.weight"
+        g1 = tensors(model_id, [ln])[ln].float().to(dev)
+        w = _qkv(model_id, lay, dev)
+        return {"Wq": centre(w["Wq"] * g1, model_id), "Wk": centre(w["Wk"] * g1, model_id), "q_norm": None,
+                "k_norm": None, "bq": w["bq"]}
     w = tensors(model_id, [p + f"self_attn.{n}" for n in ("q_proj.weight", "k_proj.weight", "q_norm.weight", "k_norm.weight")]
                 + [p + "input_layernorm.weight"])
     w = {k: v.float().to(dev) for k, v in w.items()}
     g1 = w[p + "input_layernorm.weight"]
     return {"Wq": w[p + "self_attn.q_proj.weight"] * g1, "Wk": w[p + "self_attn.k_proj.weight"] * g1,
-            "q_norm": w[p + "self_attn.q_norm.weight"], "k_norm": w[p + "self_attn.k_norm.weight"]}
+            "q_norm": w[p + "self_attn.q_norm.weight"], "k_norm": w[p + "self_attn.k_norm.weight"], "bq": None}
 
 
 def kv_of(lay: Layer, h: int) -> int:
@@ -167,28 +230,62 @@ def counts_path(model_id: str):
     return DATA / f"token_counts-{stem(model_id)}.pt"
 
 
+EAGER_FP32 = "eager_fp32"
+
+
+def _eager_fp32(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
+    """Eager attention with its scores and softmax in fp32, returning the weights: HF's eager attention forms q·k in
+    the model's dtype, which fp16 overflows on Pythia (its loss turns NaN)."""
+    g = query.shape[1] // key.shape[1]
+    if g > 1:
+        key, value = key.repeat_interleave(g, 1), value.repeat_interleave(g, 1)
+    w = torch.matmul(query.float(), key.float().transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        m = attention_mask[:, :, :, :key.shape[-2]]
+        w = w.masked_fill(~m, float("-inf")) if m.dtype == torch.bool else w + m.float()
+    w = torch.softmax(w, dim=-1)
+    return torch.matmul(w, value.float()).to(query.dtype).transpose(1, 2).contiguous(), w.to(query.dtype)
+
+
+@functools.cache
+def _register_eager_fp32() -> None:
+    from transformers import AttentionInterface
+    from transformers.masking_utils import AttentionMaskInterface, eager_mask
+    AttentionInterface.register(EAGER_FP32, _eager_fp32)
+    AttentionMaskInterface.register(EAGER_FP32, eager_mask)
+
+
+def attn_implementation(dtype: torch.dtype) -> str:
+    """Eager attention (for its patterns): HF's, or for fp16 its scores in fp32 (``_eager_fp32``)."""
+    if dtype != torch.float16:
+        return "eager"
+    _register_eager_fp32()
+    return EAGER_FP32
+
+
 def load_model(model_id: str, dev: str, eager: bool = True):
     """``(lm, stack)``: the model in its half dtype (``half_dtype``; eager attention, for its patterns) and its decoder
     stack."""
     from transformers import AutoConfig, AutoModelForCausalLM
 
     from neuron_lens.transport import decoder_stack
-    kw = {"attn_implementation": "eager"} if eager else {}
     dt = half_dtype(AutoConfig.from_pretrained(model_id))
+    kw = {"attn_implementation": attn_implementation(dt)} if eager else {}
     lm = AutoModelForCausalLM.from_pretrained(model_id, dtype=dt, **kw).to(dev).eval().requires_grad_(False)
     return lm, decoder_stack(lm)
 
 
 def logits(lm, hidden: torch.Tensor) -> torch.Tensor:
     """Final logits in fp32 from the stack's last (normed) hidden state, with Gemma's softcap."""
-    x = lm.lm_head(hidden).float()
+    x = lm.get_output_embeddings()(hidden).float()
     cap = getattr(lm.config.get_text_config(), "final_logit_softcapping", None)
     return torch.tanh(x / cap) * cap if cap else x
 
 
-def bands(n_layers: int) -> list[tuple[int, int]]:
-    """Layer bands for the summaries: Qwen3-8B's (36 layers), else quarters."""
-    if n_layers == 36:
+def bands(n_layers: int, model_id: str | None = None) -> list[tuple[int, int]]:
+    """Layer bands for the summaries: Qwen3-8B's (36 layers, which Qwen3-4B shares), else quarters (always for
+    GPT-NeoX: Pythia-12B has 36 layers too)."""
+    if n_layers == 36 and not (model_id and is_neox(model_id)):
         return [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
     q = n_layers // 4
     return [(i * q, (i + 1) * q - 1 if i < 3 else n_layers - 1) for i in range(4)]
@@ -224,10 +321,22 @@ def _scale(norm, x: torch.Tensor) -> torch.Tensor | None:
     return None if norm is None else torch.rsqrt(x.float().pow(2).mean(-1) + norm_eps(norm))
 
 
+def head_write_lens(model_id: str, side: str, fit: str | None) -> torch.Tensor:
+    """Per layer, the lens (``side`` ``R`` or ``S``) at the point the layer's heads write: its MLP input (``mid``), or in
+    a parallel block its output (``out``, the R-lens's last one the identity: the last layer's output is its target)."""
+    if not parallel(model_id):
+        return lens(model_id, f"{side}_mid", fit)
+    out = lens(model_id, f"{side}_out", fit)
+    return torch.cat([out, torch.eye(out.shape[-1])[None]]) if side == "R" else out
+
+
 def head_write(layer) -> torch.Tensor:
     """``[d, H·hd]``: a decoder layer's ``W_O`` as its heads' outputs reach the residual, in fp32:
     times the norm weight where a norm follows the attention (its scale per position: ``attn_scale``)."""
-    w = layer.self_attn.o_proj.weight.float()
+    from neuron_lens.layers import _out_proj
+    w = _out_proj(attention(layer)).weight.float()
+    if is_centred(layer.input_layernorm):  # a write's mean reaches no reader (``centre``)
+        w = w - w.mean(0)
     norm = attn_norm(layer)
     return w if norm is None else norm.weight.float()[:, None] * w
 
@@ -241,7 +350,9 @@ def attn_scale(layer, attn_out: torch.Tensor) -> torch.Tensor | None:
 def mlp_write(layer) -> torch.Tensor:
     """``[d, f]``: a decoder layer's ``W_down`` as its neurons' outputs reach the residual, in fp32:
     times the norm weight where a norm follows the MLP (its scale per position: ``mlp_scale``)."""
-    w = layer.mlp.down_proj.weight.float()
+    w = (layer.mlp.down_proj if hasattr(layer.mlp, "down_proj") else layer.mlp.dense_4h_to_h).weight.float()
+    if is_centred(layer.input_layernorm):
+        w = w - w.mean(0)
     norm = mlp_norm(layer)
     return w if norm is None else norm.weight.float()[:, None] * w
 

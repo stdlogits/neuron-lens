@@ -70,9 +70,14 @@ def load_lens(spec: str, model_id: str) -> dict | None:
     ``data/fits/<stem>.pt`` itself, both halves: its ``out`` target, from each layer's output, or
     with ``@mid`` from each layer's MLP input, keyed by that layer) or ``hub[@mid]`` (the released
     R-lens in ``stdlogits/rs-lenses``, ``12_release.py``: from each layer's output, the last
-    layer the identity, or from each MLP input). ``logit``, ``J``, ``fit:`` and ``hub`` need no Drowse."""
+    layer the identity, or from each MLP input) or ``record[@mid]`` (the R-lens of record, ``arch.fits``: the local fit
+    when it is here, else the release). ``logit``, ``J``, ``fit:``, ``hub`` and ``record`` need no Drowse."""
     if spec == "logit":
         return None
+    if spec.partition("@")[0] == "record":
+        from neuron_lens.arch import fits
+        r = fits(model_id)[0]
+        return load_lens(("hub" if r == "hub" else f"fit:{r}") + spec.removeprefix("record"), model_id)
     if spec.partition("@")[0] == "hub":
         from neuron_lens.arch import stem
         f = "r-lens/mid.pt" if spec.endswith("@mid") else "r-lens/lens.pt"

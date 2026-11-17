@@ -118,7 +118,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
     lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval().requires_grad_(False)
     stack = decoder_stack(lm).to(args.device)  # the unembedding stays on the CPU: the pass reads the stream, not logits
     cfg = stack.config
-    acc = Accumulator({l: layer_plan(l) for l in layers}, cfg.intermediate_size, cfg.hidden_size, args.device)
+    acc = Accumulator({l: layer_plan(l) for l in layers}, arch.n_poles(MODEL) * cfg.intermediate_size, cfg.hidden_size, args.device)
     src = Sources(stack, [l for l in layers if l > 0], args.device, sum(len(d) for d in docs))
     meta = {"model": MODEL, "layers": layers, "top": TOP, "docs": len(docs)}
     next_doc = 0
@@ -163,7 +163,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
 
 
 def widen(x: torch.Tensor, fired: torch.Tensor, pad) -> torch.Tensor:
-    """``[n, k]`` rows of the poles that fired as ``[2f, k]``, the others padded."""
+    """``[n, k]`` rows of the poles that fired as ``[P·f, k]``, the others padded."""
     out = torch.full((len(fired), x.shape[1]), pad, dtype=x.dtype)
     out[fired] = x.cpu()
     return out
@@ -184,13 +184,13 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
         t0 = time.perf_counter()
         fired = acc.count[l] > 0
         m = {k: v[fired].to(dev) for k, v in acc.means(l).items()}
-        cols = neuron_keys(l, len(fired) // 2)
+        cols = neuron_keys(l, len(fired) // arch.n_poles(MODEL))
         cols["n_firings"] = pa.array(acc.count[l].to(torch.int16).numpy())
         gains = acc.gains(l)
         cols["parallel"], cols["orthogonal"] = pa.array(gains[:, 0].numpy()), pa.array(gains[:, 1].numpy())
         add = lambda name, ids, val: put(cols, name, widen(keep[ids], fired, -1), widen(val, fired, float("nan")))
         for site, J, K in (("before", J_mid[l], K_mid[l]), ("mlp", J_out[l] if l < len(J_out) else None, K_out[l])):
-            r = layer_reads(m[site].T, unembed, gamma, J, signs=(1,), k=TOP, kz=TOP, softcap=CAP)
+            r = layer_reads(m[site].T, unembed, gamma, J, signs=(1,), k=TOP, kz=TOP, softcap=CAP, centre=arch.centred(MODEL))
             add(f"{site}_R", r["ids"][1], r["probs"][1])
             add(f"{site}_R_z", r["zids"][1], r["z"][1])
             K = K.to(dev)
@@ -211,7 +211,7 @@ def source_tables(src: Sources, smoke: bool) -> None:
         d = src.dense[M]
         n = d["n"].sum().clamp_min(1)
         summary[M] = {"firings": int(d["n"].sum()), "err": max(d["err"]) if d["err"] else float("nan"), "emb": float(d["emb"].sum() / n),
-                      "neurons": float(d["neurons"].sum() / n), "heads": float(d["heads"].sum() / n)}
+                      "neurons": float(d["neurons"].sum() / n), "heads": float(d["heads"].sum() / n), "const": float(d["const"].sum() / n)}
         print(f"L{M}: {summary[M]}", flush=True)
         if not smoke:
             write(src.table(M), neuron_table("sources", M))

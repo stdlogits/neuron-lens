@@ -1,7 +1,8 @@
 """Attention-head circuits as token maps (findings §11).
 
 A head ``h`` of layer ``L`` reads the normed residual at layer ``L − 1``'s output and writes into
-layer ``L``'s MLP input. Reading a token ``v`` there means its S-lens footprint
+layer ``L``'s MLP input (in a parallel block, GPT-NeoX's, into layer ``L``'s output: ``mid`` becomes ``out``
+below, ``arch.head_write_lens``). Reading a token ``v`` there means its S-lens footprint
 ``X_v = K^out_{L−1}(e_v − ē)`` (the centred embedding at L0); a token ``u`` in the write means the
 R-lens direction ``J^{mid⊤}_L γ_f u_u`` (``ov_R``) or the S-lens footprint ``K^mid_L(e_u − ē)``
 (``ov_S``). A token map ``M = A Bᵀ`` over the vocabulary is never built: its rows and columns are
@@ -31,13 +32,17 @@ def copy_score(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
     return (lam.real.sum(-1) / lam.abs().sum(-1)).float()
 
 
-def rope_mean(offsets: torch.Tensor, inv_freq: torch.Tensor) -> torch.Tensor:
+def rope_mean(offsets: torch.Tensor, inv_freq: torch.Tensor, hd: int | None = None) -> torch.Tensor:
     """``[H, hd, hd]``: RoPE's relative rotation averaged over each head's attention by offset
-    (``offsets`` ``[H, T]``, summing to 1 per head), so that a logit is ``q̃ᵀ R̄ k̃``."""
-    ang = torch.cat([inv_freq, inv_freq]).to(offsets)
+    (``offsets`` ``[H, T]``, summing to 1 per head), so that a logit is ``q̃ᵀ R̄ k̃``. RoPE on the first
+    ``2·len(inv_freq)`` dims of a head of ``hd`` (GPT-NeoX's quarter): the identity on the rest."""
+    rd = 2 * len(inv_freq)
+    hd = hd or rd
+    ang = torch.cat([inv_freq, inv_freq, torch.zeros(hd - rd)]).to(offsets)
     rot = torch.arange(offsets.shape[1], device=offsets.device)[:, None] * ang  # [T, hd]
     c, s = offsets @ rot.cos(), offsets @ rot.sin()
-    P = _rotate_half(torch.eye(len(ang), device=offsets.device)).T  # P x = rotate_half(x)
+    P = torch.zeros(hd, hd, device=offsets.device)
+    P[:rd, :rd] = _rotate_half(torch.eye(rd, device=offsets.device)).T  # P x = rotate_half(x) on the rotated dims
     return torch.diag_embed(c) - torch.diag_embed(s) @ P
 
 

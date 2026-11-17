@@ -165,10 +165,13 @@ def put(cols: dict, name: str, ids: torch.Tensor, val: torch.Tensor) -> None:
     cols[f"{name}_str"] = joined(ids)
 
 
-def neuron_keys(layer: int, f: int) -> dict:
-    """The key columns of a neuron table: ``+`` poles of neurons ``0..f-1``, then ``−`` poles."""
-    return {"layer": pa.array([layer] * 2 * f, pa.int16()), "neuron": pa.array(list(range(f)) * 2, pa.int16()),
-            "pole": pa.array([1] * f + [-1] * f, pa.int8())}
+def neuron_keys(layer: int, f: int, model: str = MODEL) -> dict:
+    """The key columns of a neuron table: ``+`` poles of neurons ``0..f-1``, then ``−`` poles (an ungated MLP's
+    neurons have the ``+`` pole only: ``arch.n_poles``)."""
+    from neuron_lens.arch import signs
+    s = signs(model)
+    return {"layer": pa.array([layer] * len(s) * f, pa.int16()), "neuron": pa.array(list(range(f)) * len(s), pa.int16()),
+            "pole": pa.array([x for x in s for _ in range(f)], pa.int8())}
 
 
 def head_keys(n_layers: int, n_heads: int, group) -> dict:
@@ -227,8 +230,9 @@ def load_heads(model: str = MODEL) -> pa.Table:
 
 
 def entry(layer: int, neuron: int, pole: int, model: str = MODEL) -> dict:
+    from neuron_lens.arch import n_poles
     t = load_layer(layer, model)
-    row = neuron if pole > 0 else len(t) // 2 + neuron
+    row = neuron if pole > 0 else len(t) // n_poles(model) + neuron
     return {k: v[0] for k, v in t.slice(row, 1).to_pydict().items()}
 
 
@@ -268,7 +272,8 @@ def main() -> None:
     args = ap.parse_args()
     if args.what == "show":
         layer, neuron = int(args.args[0]), int(args.args[1])
-        for pole in [1, -1] if len(args.args) < 3 else [1 if args.args[2] == "+" else -1]:
+        from neuron_lens.arch import signs
+        for pole in signs(MODEL) if len(args.args) < 3 else [1 if args.args[2] == "+" else -1]:
             print(f"\nL{layer} n{neuron} {'+' if pole > 0 else '−'}")
             show(entry(layer, neuron, pole))
     elif args.what == "head":
@@ -287,7 +292,8 @@ def main() -> None:
         hits = 0
         for layer in layers:
             col = load_layer(layer).column(args.column).to_pylist()
-            f = len(col) // 2
+            from neuron_lens.arch import n_poles
+            f = len(col) // n_poles(MODEL)
             for row, s in enumerate(col):
                 if s and pattern.search(s):
                     print(f"L{layer} n{row % f} {'+' if row < f else '−'}  {s}")
