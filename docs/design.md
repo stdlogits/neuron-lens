@@ -564,6 +564,11 @@ the model.
   the lens, σ1 35-42 against 250-280), which the brute-force check puts on the identity rule (24× with the norms'
   true derivative everywhere, against the true 0.58×); open. Pythia-160M's mode is another matter, at the output
   (its final residual points one way at every position, which the final norm divides out), and the rule leaves it.
+  The catalog's QK reads (`08_reads.py`) read the queries and keys the same way, through the input norm's true
+  derivative averaged over positions (`06_activations.py`'s `in_r`, `in_m`), as Qwen3's and Gemma 4's go through
+  their q/k norms'. On Pythia-1.4B this moves the late heads, where the rule mattered for the lens: `qk_ctx_rho` at
+  L12-L17 0.06 → 0.09 (heads past 0.2: 0.21 → 0.26), the median `qk_self_R` there 0.53 → 0.64; the early bands and
+  Pythia-160M barely move.
 - **Parallel blocks.** The MLP reads what the attention reads, so `mid`, the residual the MLP reads,
   is the layer's input: `mid[L]` is `out[L − 1]` for both lenses (the R-lens's `mid[0]` is its
   read of the embeddings, the S-lens's the identity). The fits keep both targets, so every
