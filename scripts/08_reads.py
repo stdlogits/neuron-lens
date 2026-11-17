@@ -44,8 +44,8 @@ MLP input (``neuron_lens.heads``).
   through its polar factor, as ``write_S``: whether the write makes the residual look as if ``v`` were there (the
   record through L8; §11, §13).
   ``ov_R_copy``, ``ov_S_copy``: Elhage et al.'s copying score Σλ/Σ|λ| of each map (§11);
-- ``qk_S``: the QK map, ``q̃ᵀ R̄ k̃`` with the q/k norms' true derivative averaged over positions
-  and RoPE averaged over the head's own attention offsets (``06_activations.py``'s statistics),
+- ``qk_S``: the QK map, ``q̃ᵀ R̄ k̃`` with the q/k norms' true derivative averaged over positions (without q/k
+  norms, GPT-NeoX: the input norm's, which the scores read as the lenses do) and RoPE averaged over the head's own attention offsets (``06_activations.py``'s statistics),
   footprints at unit length: each key token's z over the vocabulary under the head's mean query,
   what it attends to (``qk_S_neg``: avoids); ``qk_self_S``: each token's z in its own row, where it
   ranks among the keys it favours as a query whose position holds it (its S-lens footprint as the query too),
@@ -241,10 +241,16 @@ def heads(dev) -> None:
         # as the input norm's rms takes it.
         Xu = X / X.norm(dim=1, keepdim=True)
         # per-layer blocks of the statistics (padded to the largest head size and key-head count); without q/k norms
-        # (GPT-NeoX), the identity, and a footprint's query at the input norm's unit rms, √d x̂, beside the query bias
-        # (the key bias adds one score to every key of a query, and cancels)
+        # (GPT-NeoX), the identity, the queries and keys reading the input norm's own true derivative averaged over
+        # positions (as the lenses do, layers._scores_norm), at a footprint's unit rms: x̂ (I − E[r³ x xᵀ] / (d E[r])),
+        # and a footprint's query at the input norm's unit rms, √d x̂, beside the query bias (the key bias adds one
+        # score to every key of a query, and cancels)
+        An = None
         if qk["q_norm"] is None:
             Aq, Ak = torch.eye(hd, device=dev).expand(H, hd, hd), torch.eye(hd, device=dev).expand(kvh, hd, hd)
+            d = Xu.shape[1]
+            An = torch.eye(d, device=dev) - st["in_m"][layer].float().to(dev) / (d * float(st["in_r"][layer]))
+            Xu = Xu @ An  # symmetric
         else:
             Aq = norm_derivative(qk["q_norm"], st["q_r"][layer].float().to(dev),
                                  st["q_m"][layer, :, :hd, :hd].float().to(dev), float(st["n_q"]))
@@ -265,6 +271,8 @@ def heads(dev) -> None:
         if layer:  # the query the position's R-lens direction (what it says, a covector, as a vector), the key its footprint
             Ru = arch.centre(metric.vector(Wu @ J_out[layer - 1].to(dev), metric.s2(MODEL, "in", layer, dev)), MODEL)
             Ru = Ru / Ru.norm(dim=1, keepdim=True)
+            if An is not None:
+                Ru = Ru @ An
             Qr = torch.einsum("hij,vhj->vhi", Aq, query(Ru).view(V, H, hd))
             z["qk_self_R"][layer] = own_token_z(Kr, Qr).T.half().cpu()
             del Ru, Qr

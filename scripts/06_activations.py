@@ -17,7 +17,8 @@ One forward pass per batch of documents, eager attention in bf16, over every doc
   (``sink``), the position before (``prev``) and itself (``self``);
 - **QK statistics** for ``08_reads.py`` (findings §11): per head, the mean query after ``q_norm``;
   the sums giving the true derivative of the input norm's scaling and ``q_norm`` or ``k_norm``
-  (Gemma 4: and the weightless ``v_norm``, for the OV reads) averaged over positions; attention by offset; and the attention each key token receives (from
+  (Gemma 4: and the weightless ``v_norm``, for the OV reads; GPT-NeoX, without q/k norms: the input norm's own,
+  ``in_r`` and ``in_m``) averaged over positions; attention by offset; and the attention each key token receives (from
   queries at 16+, renormalized without the sink, times the number of keys: 1 is uniform). Rows are
   renormalized by their non-sink weights' sum: ``1 − a₀`` rounds to 0 in bf16 where the sink takes
   nearly everything. The released Qwen3-8B and Gemma 4 passes predate this and inflate sink heads' rows,
@@ -104,8 +105,9 @@ def bf16_bins() -> torch.Tensor:
     return ((v < 0).int() * NB + torch.bucketize(v.abs(), EDGES)).int()
 
 
-def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int) -> dict:
-    """Running sums: ``name: (shape, integer, per slice)``."""
+def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int) -> dict:
+    """Running sums: ``name: (shape, integer, per slice)``. ``dn``: the residual's width where the scores read the
+    input norm's own derivative (no q/k norms, GPT-NeoX), else 0."""
     return {"n": ((), True, True), "sum": ((L, f), False, True), "sumsq": ((L, f), False, True),
             "count": ((L, 2, NB, f), True, True),
             "h_n": ((), True, True), "h_sum": ((L, H), False, True), "h_sumsq": ((L, H), False, True),
@@ -115,6 +117,7 @@ def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int) -> dict:
             "q_r": ((L, H), False, False), "q_m": ((L, H, hd, hd), False, False), "k_r": ((L, kvh), False, False),
             "k_m": ((L, kvh, hd, hd), False, False), "offset": ((L, H, SEQ), False, False),
             "v_r": ((L, kvh), False, False), "v_m": ((L, kvh, hd, hd), False, False),  # Gemma 4's v_norm (else 0)
+            "in_r": ((L,), False, False), "in_m": ((L, dn, dn), False, False),  # the input norm, without q/k norms
             "recv": ((L, H, V), False, False), "pairs": ((V,), False, False), "occ": ((V,), False, False)}
 
 
@@ -126,7 +129,8 @@ class Collector:
         d, V = cfg.hidden_size, cfg.vocab_size
         self.geo = arch.layout(MODEL)
         self.L, self.f, self.H, self.hd, self.d, self.dev = L, f, H, hd, d, device
-        self.spec = buffers(L, f, H, kvh, hd, V)
+        self.dn = d if arch.is_neox(MODEL) else 0  # no q/k norms: the scores read the input norm's true derivative
+        self.spec = buffers(L, f, H, kvh, hd, V, self.dn)
         self.total = {k: torch.zeros(((n_slices,) if per else ()) + shape, dtype=torch.int64 if integer else torch.float64)
                       for k, (shape, integer, per) in self.spec.items()}
         self.seg = {k: torch.zeros(shape, dtype=torch.int32 if integer else torch.float32, device=device)
@@ -224,7 +228,12 @@ class Collector:
             x = x.float()
             if arch.centred(MODEL):
                 x = x - x.mean(-1, keepdim=True)
-            self.ctx["inv_rho"] = torch.rsqrt(x.pow(2).mean(-1) + eps)  # [B, T]
+            self.ctx["inv_rho"] = r = torch.rsqrt(x.pow(2).mean(-1) + eps)  # [B, T]
+            if self.dn:  # the sums of its true derivative r I − r³ x xᵀ / d, at the queries' positions
+                w = r * self.ctx["qv"]
+                self.seg["in_r"][l] += w.sum()
+                xf = x.flatten(0, 1)
+                self.seg["in_m"][l] += (xf * (r.pow(2) * w).flatten()[:, None]).T @ xf
 
     def query(self, l: int, qkv: torch.Tensor) -> None:
         """The mean query without q/k norms (GPT-NeoX's, from its fused projection: per head the query rows first,
