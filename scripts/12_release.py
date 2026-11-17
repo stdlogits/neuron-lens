@@ -37,7 +37,8 @@ whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-
 ``--from-branch`` releases the catalog a branch of the dataset holds instead of this machine's (a GPU box's, sent with
 ``--tables``): the model's whole folder is copied on the Hub, the card's numbers read from its parquet files' footers, and
 what the target has in that folder and the branch lacks is deleted. The Qwen3 family's other sizes (``LADDER``) get a
-section of each card:
+section of each card. The Pythia suite (``PYTHIA``) has none yet: its ``lenses`` and ``scale`` go up alone, the cards as they
+are, and its tables with ``--tables``.
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
@@ -72,6 +73,7 @@ MODELS = ("Qwen/Qwen3-8B", "google/gemma-4-12B")  # the released models, in the 
 QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwen3-1.7B-Base", "Qwen/Qwen3-4B",
          "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
 LADDER = tuple(m for m in QWEN3 if m not in MODELS)
+PYTHIA = tuple(f"EleutherAI/pythia-{s}" for s in ("14m", "70m", "160m", "410m", "1b", "1.4b", "2.8b", "6.9b", "12b"))
 PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
@@ -100,7 +102,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                     "audio": "every head in audio contexts"}}
 OPTIMISED = {"image": "the patch that most raises each of the best-labelled poles",
              "audio": "the 40 ms of sound that most raises each of the best-labelled poles"}
-RULES = {"ln_rule": "decoder-layer RMSNorm rsqrt held constant", "identity_rule": "act(g) as (act(g)/g)·dg",
+RULES = {"ln_rule": "decoder-layer norms' rsqrt held constant (a LayerNorm keeps its centring)", "identity_rule": "act(g) as (act(g)/g)·dg",
          "half_rule": HALF_RULE_BETA, "qk_norms": "true derivative", "attention": "true derivative"}
 
 
@@ -1241,8 +1243,10 @@ def main() -> None:
     parts = set(filter(None, args.parts.split(",")))
     if parts - set(PARTS):
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
-    if MODEL not in MODELS + LADDER:
-        raise ValueError(f"{MODEL} is in neither MODELS nor LADDER")
+    if MODEL not in MODELS + LADDER + PYTHIA:
+        raise ValueError(f"{MODEL} is in none of MODELS, LADDER and PYTHIA")
+    if MODEL in PYTHIA and parts - {"lenses", "scale"}:
+        raise ValueError("Pythia's catalog goes to a branch with --tables until the cards cover it")
     if args.from_branch and parts != {"neurons", "heads", "files"}:
         raise ValueError("--from-branch releases the model's whole catalog folder: --parts neurons,heads,files")
     stem = arch.stem(MODEL)
@@ -1259,6 +1263,14 @@ def main() -> None:
         facts["lenses"] = write_lenses(MODEL, lens_root / stem)
     if parts & {"lenses", "scale"}:
         facts["scale"] = write_scale(MODEL, lens_root / stem)
+    if MODEL in PYTHIA:  # its lens files alone, the cards as they are
+        facts_path.write_text(json.dumps(facts, indent=1) + "\n")
+        lens_files = [f"{stem}/**"] if "lenses" in parts else [f"{stem}/scale.pt"]
+        if not args.dry_run:
+            api.upload_folder(repo_id=REPO, folder_path=lens_root, revision=args.branch, allow_patterns=lens_files,
+                              delete_patterns=lens_files, commit_message=f"{stem}: {' and '.join(sorted(parts))}")
+            print(f"{time.strftime('%H:%M:%S')} {stem} on https://huggingface.co/{REPO}", flush=True)
+        return
     files = catalog_files(MODEL)
     if args.from_branch:
         facts |= catalog_facts(MODEL, f"datasets/{DATASET}@{args.from_branch}/{stem}", HfFileSystem())
