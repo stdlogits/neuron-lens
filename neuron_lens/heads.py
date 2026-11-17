@@ -38,7 +38,7 @@ def rope_mean(offsets: torch.Tensor, inv_freq: torch.Tensor, hd: int | None = No
     ``2·len(inv_freq)`` dims of a head of ``hd`` (GPT-NeoX's quarter): the identity on the rest."""
     rd = 2 * len(inv_freq)
     hd = hd or rd
-    ang = torch.cat([inv_freq, inv_freq, torch.zeros(hd - rd)]).to(offsets)
+    ang = torch.cat([inv_freq, inv_freq, inv_freq.new_zeros(hd - rd)]).to(offsets)
     rot = torch.arange(offsets.shape[1], device=offsets.device)[:, None] * ang  # [T, hd]
     c, s = offsets @ rot.cos(), offsets @ rot.sin()
     P = torch.zeros(hd, hd, device=offsets.device)
