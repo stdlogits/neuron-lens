@@ -1,6 +1,7 @@
 """The residual's metric: how a covector (what a unit reads) becomes a vector (what a lens transports), and back.
 
-Every layer reads the residual through an RMSNorm, ``y = γ ⊙ x / rms(x)``. Rescaling residual coordinate ``i`` by ``k``,
+Every layer reads the residual through an RMSNorm, ``y = γ ⊙ x / rms(x)`` (or a LayerNorm, which centres ``x``
+first: GPT-NeoX; the σ below are then of the centred residual). Rescaling residual coordinate ``i`` by ``k``,
 with every norm's ``γ_i`` divided by ``k`` and every write into the residual multiplied by it, leaves the model nearly
 unchanged (only the rms sees it), so the raw basis carries a unit per coordinate: Gemma 4's coordinate scales span
 80-1,600× (99th over 1st percentile), Qwen3-8B's 3-6×. A read that pairs a covector with a vector needs no metric
@@ -55,8 +56,10 @@ class Sums:
         self.n_docs = list(state["n_docs"])
         return self
 
-    def add(self, point: str, layer: int, x: torch.Tensor, half: int) -> None:
+    def add(self, point: str, layer: int, x: torch.Tensor, half: int, centre: bool = False) -> None:
         v = x.float()
+        if centre:  # a LayerNorm reads the centred residual
+            v = v - v.mean(-1, keepdim=True)
         v = v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(TINY))
         self.sums[point][half, layer] += v.sum(0)
         self.sums[point + "_sq"][half, layer] += v.pow(2).sum(0)
@@ -79,19 +82,20 @@ class Sums:
 def scale_doc(stack, ids: torch.Tensor, acc: Sums, half: int, first: int) -> None:
     """One text document's residual at every point into ``acc``, at positions ``[first, T − 1)``, where the
     lenses seed (``transport.SKIP_FIRST``)."""
-    dev = stack.embed_tokens.weight.device
+    from neuron_lens.rules import final_norm, is_centred
+    dev = stack.get_input_embeddings().weight.device
     hooks, n = [], len(stack.layers)
     keep = slice(first, len(ids) - 1)
 
     def at(point, layer):
         def f(module, args):
-            acc.add(point, layer, args[0][0, keep], half)
+            acc.add(point, layer, args[0][0, keep], half, is_centred(module))
         return f
 
     for layer, lay in enumerate(stack.layers):
         hooks.append(lay.input_layernorm.register_forward_pre_hook(at("in", layer)))
         hooks.append(arch.mid_norm(lay).register_forward_pre_hook(at("mid", layer)))
-    hooks.append(stack.norm.register_forward_pre_hook(at("in", n)))
+    hooks.append(final_norm(stack).register_forward_pre_hook(at("in", n)))
     try:
         stack(input_ids=ids[None].to(dev))
     finally:

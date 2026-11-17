@@ -5,7 +5,8 @@ a covector into a vector for the R-lens; text only, minutes per 1,000 documents)
 Both lenses sum over offsets and take RelP derivatives. Documents are the first ``--docs`` rows
 of a corpus JSONL in ``data/corpus/``, read as Drowse reads them. Document ``i`` goes to half
 ``i % 2``. The fit is saved every ``--save-minutes`` and at the end to
-``data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>].pt`` (``{"meta", "state", "next_doc"}``; ``-T<len>``
+``data/fits/<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>].pt`` (``{"meta", "state", "next_doc"}``;
+``-<revision>`` for a checkpoint, ``--revision`` other than ``main``, as Pythia's ``step1000``; ``-T<len>``
 for ``--full-length`` fits), and a rerun resumes from it, also with a larger ``--docs``. At the end it prints each layer's
 split-half difference, how differently the two halves of the corpus read. The sums live on the
 model's device unless ``--acc-device`` says otherwise (Qwen3-8B: 9.5 GB for the R-lens and 9.7 GB
@@ -32,6 +33,10 @@ layers there and streams the others from pinned host memory (``layers.offload``)
 80 GB H100 holds 62 GB of layers against about 50 GB of sums, tangents and contracted MLPs.
 
     python scripts/02_fit.py --lens R --model Qwen/Qwen3-32B --docs 1000 --offload 20 --device cuda --detach
+
+A training checkpoint is a ``--revision`` of the model's repo (Pythia's ``step0`` to ``step143000``; ``main`` is the last):
+
+    python scripts/02_fit.py --lens S --model EleutherAI/pythia-1.4b --revision step1000 --docs 1000 --device cuda --detach
 """
 import argparse
 import os
@@ -61,8 +66,8 @@ from neuron_lens.transport import (
 
 
 def out_path(args):
-    stem = "-".join([args.lens.lower(), args.model.split("/")[-1].lower(), f"L{args.n_layers}",
-                     args.corpus.removesuffix(".jsonl")])
+    model = args.model.split("/")[-1].lower() + ("" if args.revision == "main" else f"-{args.revision}")
+    stem = "-".join([args.lens.lower(), model, f"L{args.n_layers}", args.corpus.removesuffix(".jsonl")])
     if args.full_length:
         stem += f"-T{args.seq_len}"
     if args.n_shards > 1:
@@ -80,13 +85,14 @@ def load_model(args):
         # fp32 products (DeltaNet's chunked ones) in TF32, which keeps more precision than the
         # model's bf16 products every tangent passes through
         torch.set_float32_matmul_precision("high")
-    config = AutoConfig.from_pretrained(args.model)
+    config = AutoConfig.from_pretrained(args.model, revision=args.revision)
     if args.layers is not None:  # only the first layers' weights load
         tc = config.get_text_config()
         tc.num_hidden_layers = args.layers
         if getattr(tc, "layer_types", None):
             tc.layer_types = tc.layer_types[:args.layers]
-    lm = AutoModelForCausalLM.from_pretrained(args.model, config=config, dtype=dtype).eval().requires_grad_(False)
+    lm = AutoModelForCausalLM.from_pretrained(args.model, config=config, dtype=dtype,
+                                              revision=args.revision).eval().requires_grad_(False)
     if args.modality == "text":  # the decoder stack alone
         if args.offload is not None and args.lens != "scale":  # the scale's forward pass is the model's own
             return offload(decoder_stack(lm), device, args.offload), device, dtype
@@ -149,7 +155,7 @@ def fit(args, model, tok, device: str, dtype) -> None:
         if args.lens == "S":
             from neuron_lens.media import basis as media_basis
             basis = media_basis(args.lm, args.modality)
-    meta = {"lens": args.lens, "model": args.model, "layers": n,
+    meta = {"lens": args.lens, "model": args.model, "revision": args.revision, "layers": n,
             "model_layers": args.model_layers, "corpus": args.corpus, "modality": args.modality,
             "basis": None if basis is None else f"{args.modality}:{len(basis)}", "rules": args.rules,
             "corpus_spec": f"file:{args.corpus}" if args.modality == "text" else f"hf:{args.corpus}",
@@ -161,7 +167,8 @@ def fit(args, model, tok, device: str, dtype) -> None:
     if path.exists():
         saved = torch.load(path, weights_only=False, map_location="cpu")
         loose = ("docs", "rows_sha256", "dim_batch")  # dim_batch changes speed, not the estimate
-        older = {"modality": "text", "basis": None, "rules": "relp", "full_length": False}  # fits saved before these fields
+        older = {"modality": "text", "basis": None, "rules": "relp", "full_length": False,
+                 "revision": "main"}  # fits saved before these fields
         same = all(saved["meta"].get(k, older.get(k)) == v for k, v in meta.items() if k not in loose)
         if not same:
             raise SystemExit(f"{path} was fitted with {saved['meta']}, not {meta}")
@@ -210,6 +217,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--lens", choices=("R", "S", "scale"), required=True)
     ap.add_argument("--model", default="Qwen/Qwen3-0.6B")
+    ap.add_argument("--revision", default="main", help="the model repo's branch or commit: a training checkpoint")
     ap.add_argument("--layers", type=int, default=None, help="first N decoder layers (default all)")
     ap.add_argument("--corpus", default=None,
                     help="text: a JSONL in data/corpus/ (default dclm.jsonl); image: coco; audio: esc50 or mix")
@@ -259,13 +267,13 @@ def main() -> None:
         print(f"detached: pid {p.pid}, log {log}")
         return
     if args.modality == "text":
-        tok = AutoTokenizer.from_pretrained(args.model)
+        tok = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
     else:
         from transformers import AutoProcessor
-        tok = AutoProcessor.from_pretrained(args.model)
+        tok = AutoProcessor.from_pretrained(args.model, revision=args.revision)
     model, device, dtype = load_model(args)
     args.n_layers = len(model.layers)
-    args.model_layers = AutoConfig.from_pretrained(args.model).get_text_config().num_hidden_layers
+    args.model_layers = AutoConfig.from_pretrained(args.model, revision=args.revision).get_text_config().num_hidden_layers
     fit(args, model, tok, device, dtype)
 
 

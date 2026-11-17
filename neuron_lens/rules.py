@@ -4,12 +4,15 @@ autograd: ``relp_rules`` applies them to a decoder stack, and the tests use it a
 
 RelP (arXiv:2508.21258, as in the R-lens and Drowse's ``lens.relp``) replaces local derivatives by
 operation, wherever the operation sits:
-- **LN rule:** RMSNorms hold their ``rsqrt`` constant: the residual stream's (Qwen3: the input and
+- **LN rule:** norms hold their ``rsqrt`` constant: the residual stream's (Qwen3: the input and
   post-attention norms; Gemma 4: those and the pre- and post-feedforward norms, the post-attention
-  one normalizing the attention's output) and Qwen3.5 DeltaNet's per-head output norm;
+  one normalizing the attention's output; GPT-NeoX: the input and post-attention norms) and Qwen3.5
+  DeltaNet's per-head output norm. A LayerNorm (GPT-NeoX's) keeps its centring, which is linear:
+  ``γ ⊙ (x − mean x) · r`` with ``r`` held, its bias a constant;
 - **identity rule:** an activation ``act(g) = g·φ(g)`` is linearised as ``φ(g)·dg``: ``φ = sigmoid``
   for SiLU (in MLPs and experts, after DeltaNet's convolution, in its ``silu(z)``),
-  ``φ = (1 + tanh(√(2/π)(g + 0.044715 g³)))/2`` for tanh-GELU (Gemma 4);
+  ``φ = (1 + tanh(√(2/π)(g + 0.044715 g³)))/2`` for tanh-GELU (Gemma 4), ``φ = Φ``, the normal
+  CDF, for GELU (GPT-NeoX's ungated MLP);
 - **half rule:** an elementwise gate on a vector of features passes half of each factor's change
   (β = 0.5): ``act(g)·up``, DeltaNet's ``norm(o)·silu(z)``, gated attention's ``o·σ(gate)``.
 
@@ -39,6 +42,11 @@ RESIDUAL_NORMS = ("input_layernorm", "post_attention_layernorm",
                   "pre_feedforward_layernorm", "post_feedforward_layernorm")
 
 
+def is_centred(norm) -> bool:
+    """A LayerNorm (GPT-NeoX's), which subtracts the mean before it scales; the others are RMSNorms."""
+    return isinstance(norm, torch.nn.LayerNorm)
+
+
 def norm_eps(norm) -> float:
     return norm.variance_epsilon if hasattr(norm, "variance_epsilon") else norm.eps
 
@@ -60,6 +68,8 @@ def act_factor(act_fn, g: torch.Tensor) -> torch.Tensor:
         return torch.sigmoid(g)
     if name == "gelutanh":
         return 0.5 * (1 + torch.tanh(_GELU_C * (g + 0.044715 * g.pow(3))))
+    if name == "geluactivation":  # the erf GELU
+        return 0.5 * (1 + torch.erf(g * 0.5 ** 0.5))
     raise ValueError(f"RelP identity rule has no factor for {type(act_fn).__name__}")
 
 
@@ -67,13 +77,37 @@ def residual_norms(layer) -> list:
     return [getattr(layer, n) for n in RESIDUAL_NORMS if hasattr(layer, n)]
 
 
+def attention(layer):
+    """A decoder layer's softmax attention: ``self_attn`` (GPT-NeoX's ``attention``)."""
+    return layer.self_attn if hasattr(layer, "self_attn") else layer.attention
+
+
+def mlp_act(mlp):
+    """A dense MLP's activation: ``act_fn`` (GPT-NeoX's ``act``)."""
+    return mlp.act_fn if hasattr(mlp, "act_fn") else mlp.act
+
+
+def final_norm(stack):
+    """The norm after the last layer: ``norm`` (GPT-NeoX's ``final_layer_norm``)."""
+    return stack.norm if hasattr(stack, "norm") else stack.final_layer_norm
+
+
 def _norm(self, x: torch.Tensor) -> torch.Tensor:
     y = self._rules_orig_forward(x)
     xf = x.float()
+    if is_centred(self):
+        xf = xf - xf.mean(-1, keepdim=True)
     scale = torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + norm_eps(self)).detach()
     w = norm_weight(self)
     lin = ((1 if w is None else w.float()) * xf * scale).to(y.dtype)
     return y.detach() + (lin - lin.detach())
+
+
+def _dense(self, x: torch.Tensor) -> torch.Tensor:
+    """An ungated MLP (GPT-NeoX's), the identity rule for its activation."""
+    g = self.dense_h_to_4h(x)
+    lin = g * act_factor(self.act, g).detach()
+    return self.dense_4h_to_h(self.act(g).detach() + (lin - lin.detach()))
 
 
 def _mlp(self, x: torch.Tensor) -> torch.Tensor:
@@ -87,10 +121,14 @@ def _mlp(self, x: torch.Tensor) -> torch.Tensor:
 
 def is_gated(at) -> bool:
     """Gated attention (Qwen3.5): ``q_proj`` gives, per head, the query and an output gate."""
-    return at.q_proj.weight.shape[0] == 2 * at.config.num_attention_heads * at.head_dim
+    return hasattr(at, "q_proj") and at.q_proj.weight.shape[0] == 2 * at.config.num_attention_heads * at.head_dim
 
 
 def _check_norm(norm, p) -> None:
+    if is_centred(norm):
+        if len(norm.normalized_shape) != 1 or norm.weight is None:
+            raise ValueError("LayerNorms over the last dim, with a scale, are the ones the rules know")
+        return
     w = norm_weight(norm)
     dim = w.shape[0] if w is not None else 8
     x = torch.randn(2, dim, device=p.device, dtype=p.dtype)
@@ -106,7 +144,7 @@ def check_layer(layer) -> None:
     """Refuse a layer whose norms or activations are not the shapes the rules assume."""
     mlp = layer.mlp
     acts = [mlp.experts.act_fn] + ([mlp.shared_expert.act_fn] if getattr(mlp, "shared_expert", None) else []) \
-        if hasattr(mlp, "experts") else [mlp.act_fn]
+        if hasattr(mlp, "experts") else [mlp_act(mlp)]
     for act in acts:
         act_factor(act, torch.zeros(1))  # raises for an activation without a rule
     norms = residual_norms(layer)
@@ -114,7 +152,7 @@ def check_layer(layer) -> None:
         if layer.linear_attn.activation != "silu":
             raise ValueError(f"DeltaNet activation {layer.linear_attn.activation} has no rule")
     else:
-        at = layer.self_attn
+        at = attention(layer)
         norms += [getattr(at, n, None) for n in ("q_norm", "k_norm", "v_norm")]
     p = next(layer.parameters())
     for norm in filter(None, norms):
@@ -200,21 +238,21 @@ def _moe(self, hidden_states):
 @contextlib.contextmanager
 def relp_rules(model):
     """Apply the RelP rules to a decoder stack (``model.layers``) for the duration: patch each
-    residual norm, MLP or sparse MLP (and its shared expert), DeltaNet mixer and gated attention."""
+    residual norm, dense or sparse MLP (and its shared expert), DeltaNet mixer and gated attention."""
     patched = []
     for layer in model.layers:
         check_layer(layer)
         patched += [(norm, _norm) for norm in residual_norms(layer)]
         if hasattr(layer, "linear_attn"):
             patched.append((layer.linear_attn, _delta))
-        elif is_gated(layer.self_attn):
+        elif is_gated(attention(layer)):
             patched.append((layer.self_attn, _gated_attn))
         if hasattr(layer.mlp, "experts"):
             patched.append((layer.mlp, _moe))
             if getattr(layer.mlp, "shared_expert", None) is not None:
                 patched.append((layer.mlp.shared_expert, _mlp))
         else:
-            patched.append((layer.mlp, _mlp))
+            patched.append((layer.mlp, _mlp if hasattr(layer.mlp, "gate_proj") else _dense))
     for module, _ in patched:
         if "forward" in module.__dict__:
             raise ValueError(f"{type(module).__name__} already has an instance-level forward")

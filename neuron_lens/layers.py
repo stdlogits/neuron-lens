@@ -1,7 +1,7 @@
 """Decoder layers as linear maps for the lens estimators (``neuron_lens.transport``), one
 implementation per component, composed per layer from what the model's layer holds: a new
-architecture built from these parts needs no new map. Qwen3, Gemma 4 and Qwen3.5 (dense and MoE)
-are covered; ``check`` refuses what is not.
+architecture built from these parts needs no new map. Qwen3, Gemma 4, Qwen3.5 (dense and MoE) and
+GPT-NeoX (Pythia) are covered; ``check`` refuses what is not.
 
 A layer is read as
 
@@ -9,13 +9,20 @@ A layer is read as
     z = mlp(n2(h_mid));  h_out = (h_mid + post2(z)) · s
 
 with ``post1``, ``post2`` (norms on the sublayers' outputs) and the layer scalar ``s`` optional
-(Gemma 4 has them). On a document every part becomes a fixed linear map under RelP's rules, applied
-by operation wherever the operation sits (``neuron_lens.rules`` states them for autograd, the
-tests' reference):
+(Gemma 4 has them), or as a parallel block (GPT-NeoX's ``use_parallel_residual``), where both
+sublayers read the layer's input and write its output:
 
-- **norms** (RMSNorm; scale ``w``, ``1 + w`` for zero-centred norms, or none) take the LN rule,
-  their rsqrt held; ``rules="true"`` keeps their true derivative, and the dense MLP's (media fits);
-- **activations** ``x · g(x)`` (SiLU, GELU-tanh) take the identity rule, ``g(x) dx``;
+    h_out = h + mix(n1(h)) + mlp(n2(h))                                         (mid: h)
+
+so ``mid``, the residual the MLP reads, is the layer's input. Projections may carry biases, which
+enter the primal only. On a document every part becomes a fixed linear map under RelP's rules,
+applied by operation wherever the operation sits (``neuron_lens.rules`` states them for autograd,
+the tests' reference):
+
+- **norms** (RMSNorm, scale ``w``, ``1 + w`` for zero-centred norms, or none; LayerNorm, which
+  centres first and adds a bias) take the LN rule, their rsqrt held (a LayerNorm's centring is
+  linear and stays); ``rules="true"`` keeps their true derivative, and the dense MLP's (media fits);
+- **activations** ``x · g(x)`` (SiLU, GELU-tanh, GELU) take the identity rule, ``g(x) dx``;
 - **elementwise gates**, a vector of gates on a vector of features, take the half rule: SwiGLU's,
   DeltaNet's ``norm(o) · silu(z)``, gated attention's ``o · σ(gate)`` (σ's true derivative);
 - **scalar weights** that decide how much of a value or a module passes keep their true
@@ -27,7 +34,8 @@ Mixers:
 
 - **Softmax attention:** grouped query heads, q/k norms, a weightless value norm (Gemma 4), keys as
   values (Gemma 4's full layers), RoPE on all or the first part of each head (the model's own
-  tables), an output gate (Qwen3.5: ``q_proj`` gives per head the query, then the gate). Masks are
+  tables), an output gate (Qwen3.5: ``q_proj`` gives per head the query, then the gate), or one
+  fused projection (GPT-NeoX's ``query_key_value``: per head the query, key and value rows). Masks are
   causal, within a sliding window where the layer has one (key ``s`` seen from ``t`` if
   ``s > t − window``, as HF's), and both ways inside a ``block`` of positions in sliding layers
   (an image, as Gemma 4's vision mask). Masks enter the forward pass only: a masked key's weight is
@@ -50,7 +58,7 @@ Mixers:
   forward over the chunks and its transpose one pass back (``_delta_core_jvp``,
   ``_delta_core_vjp``; Triton kernels on CUDA, ``neuron_lens.kernels``).
 
-MLPs: **gated** (SwiGLU or GELU-tanh), or **sparse**: routed experts weighted by the router's softmax
+MLPs: **dense**, gated (SwiGLU or GELU-tanh) or not (GPT-NeoX's GELU), or **sparse**: routed experts weighted by the router's softmax
 renormalised over its top k (Qwen3.5's 256 experts, top 8), plus an optional shared expert behind an
 optional sigmoid gate.
 
@@ -69,7 +77,17 @@ from typing import NamedTuple
 import torch
 import torch.nn.functional as F
 
-from neuron_lens.rules import HALF_RULE_BETA, act_factor, check_layer, is_gated, norm_eps, norm_weight
+from neuron_lens.rules import (
+    HALF_RULE_BETA,
+    act_factor,
+    attention,
+    check_layer,
+    is_centred,
+    is_gated,
+    mlp_act,
+    norm_eps,
+    norm_weight,
+)
 
 try:
     from neuron_lens import kernels
@@ -80,18 +98,21 @@ CHUNK = 32  # DeltaNet's chunk length (positions) for the derivative's chunked p
 
 
 class Norm(NamedTuple):
-    """An RMSNorm's map at the valid rows: ``a`` ``[N, d]``, its scale times its rsqrt (the LN
-    rule); for the true derivative (``rules="true"``) also its input ``x`` and rsqrt ``r``."""
+    """A norm's map at the valid rows: ``a`` ``[N, d]``, its scale times its rsqrt (the LN rule),
+    after the centring where ``c`` (a LayerNorm); for the true derivative (``rules="true"``) also
+    its (centred) input ``x`` and rsqrt ``r``."""
     a: torch.Tensor
     x: torch.Tensor | None
     r: torch.Tensor | None
+    c: bool
 
 
 class Attention(NamedTuple):
     """A softmax-attention mixer's map. Optional parts are ``None`` where the layer lacks them."""
-    wq: torch.Tensor  # [Hq·hd, d]; [Hq·2hd, d] with an output gate (per head the query rows, then the gate's)
-    wk: torch.Tensor
+    wq: torch.Tensor | None  # [Hq·hd, d]; [Hq·2hd, d] with an output gate (per head the query rows, then the gate's)
+    wk: torch.Tensor | None
     wv: torch.Tensor | None  # None: the value is the raw key
+    wqkv: torch.Tensor | None  # [H·3hd, d]: one fused projection (per head the query, key, value rows); then wq, wk, wv are None
     wo: torch.Tensor
     q: torch.Tensor | None  # [N, Hq, hd], [N, Hq, 1], [hd]: queries before q_norm, its rsqrt and scale
     rq: torch.Tensor | None
@@ -170,16 +191,17 @@ class MoE(NamedTuple):
     so: torch.Tensor | None  # [N, d]: the shared expert's output before its gate
 
 
-class GatedMLP(NamedTuple):
+class DenseMLP(NamedTuple):
+    """A dense MLP's map: ``W_d (cg ⊙ W_g x + cu ⊙ W_u x)``, gated, or ``W_d (cg ⊙ W_g x)`` (``wu``, ``cu`` None)."""
     wg: torch.Tensor
-    wu: torch.Tensor
+    wu: torch.Tensor | None
     wd: torch.Tensor
-    cg: torch.Tensor  # [N, d_ff]: the gate's factor (identity, half rules; or act'(g)·up)
-    cu: torch.Tensor  # [N, d_ff]: the up projection's factor (β·act(g); or act(g))
+    cg: torch.Tensor  # [N, d_ff]: the gate's factor (identity, half rules; or act'(g)·up); ungated: φ(g) or act'(g)
+    cu: torch.Tensor | None  # [N, d_ff]: the up projection's factor (β·act(g); or act(g))
 
 
 class Contracted(NamedTuple):
-    """A gated MLP's map as one matrix per row, ``[N, d, d]`` (``contract``)."""
+    """A dense MLP's map as one matrix per row, ``[N, d, d]`` (``contract``)."""
     m: torch.Tensor
 
 
@@ -188,26 +210,35 @@ class Layer(NamedTuple):
     mix: Attention | DeltaNet
     post1: Norm | None
     n2: Norm
-    mlp: GatedMLP | MoE | Contracted
+    mlp: DenseMLP | MoE | Contracted
     post2: Norm | None
     s: torch.Tensor | None  # []: the layer scalar
+    parallel: bool  # both sublayers read the layer's input (GPT-NeoX)
 
 
 # ------------------------------------------------------------------------------------ primal
 
-def _rms(norm, x: torch.Tensor):
-    """An RMSNorm as HF runs it (fp32, scaled by ``norm_weight``, then the input's dtype), and its
-    rsqrt."""
-    r = torch.rsqrt(x.float().pow(2).mean(-1, keepdim=True) + norm_eps(norm))
-    w = norm_weight(norm)
-    y = x.float() * r
-    return (y if w is None else y * w.float()).to(x.dtype), r
+def _normed(norm, x: torch.Tensor):
+    """A norm as HF runs it (fp32, centred for a LayerNorm, scaled by ``norm_weight``, shifted by a
+    LayerNorm's bias, then the input's dtype), and its rsqrt."""
+    xf = x.float()
+    if is_centred(norm):
+        xf = xf - xf.mean(-1, keepdim=True)
+    r = torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + norm_eps(norm))
+    w, b = norm_weight(norm), getattr(norm, "bias", None)
+    y = xf * r
+    if w is not None:
+        y = y * w.float()
+    return (y if b is None else y + b.float()).to(x.dtype), r
 
 
 def _norm_map(norm, x, r, S: int, exact: bool) -> Norm:
-    w = norm_weight(norm)
+    w, c = norm_weight(norm), is_centred(norm)
     a = r[S:] if w is None else w.float() * r[S:]
-    return Norm(a, x[S:].float() if exact else None, r[S:] if exact else None)
+    xs = x[S:].float() if exact else None
+    if exact and c:
+        xs = xs - xs.mean(-1, keepdim=True)
+    return Norm(a, xs, r[S:] if exact else None, c)
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -234,38 +265,50 @@ def _norm_vjp(gy, x, r, w):
     return r * (a - x * r.square() * (x * a).mean(-1, keepdim=True))
 
 
+def _out_proj(at):
+    return at.o_proj if hasattr(at, "o_proj") else at.dense
+
+
 def _attention(at, x, cos, sin, mask, S: int, exact: bool):
     """A softmax-attention mixer over a document; its output ``[T, d]`` and map."""
     T, dt = x.shape[0], x.dtype
     tp = mask.shape[1]
-    hd, g = at.head_dim, at.num_key_value_groups
-    hk = at.k_proj.weight.shape[0] // hd
-    gated = is_gated(at)
-    if gated and exact:
-        raise ValueError("true derivatives are not written out for gated attention")
-    qp = F.linear(x, at.q_proj.weight)
-    if gated:
-        qp = qp.view(T, hk * g, 2 * hd)
-        q, gate = qp[..., :hd], qp[..., hd:].reshape(T, -1)
+    fused = getattr(at, "query_key_value", None)
+    gated, wv = is_gated(at), None
+    if fused is not None:  # GPT-NeoX: per head the query, key and value rows, no grouping
+        hd, g = at.head_size, 1
+        hk = fused.weight.shape[0] // (3 * hd)
+        q, k, v = F.linear(x, fused.weight, fused.bias).view(T, hk, 3, hd).unbind(2)
     else:
-        q = qp.view(T, hk * g, hd)
-    k = F.linear(x, at.k_proj.weight).view(T, hk, hd)
-    wv = getattr(at, "v_proj", None)
-    v = k if wv is None else F.linear(x, wv.weight).view(T, hk, hd)
+        hd, g = at.head_dim, at.num_key_value_groups
+        hk = at.k_proj.weight.shape[0] // hd
+        if gated and exact:
+            raise ValueError("true derivatives are not written out for gated attention")
+        qp = F.linear(x, at.q_proj.weight, at.q_proj.bias)
+        if gated:
+            qp = qp.view(T, hk * g, 2 * hd)
+            q, gate = qp[..., :hd], qp[..., hd:].reshape(T, -1)
+        else:
+            q = qp.view(T, hk * g, hd)
+        k = F.linear(x, at.k_proj.weight, at.k_proj.bias).view(T, hk, hd)
+        wv = getattr(at, "v_proj", None)
+        v = k if wv is None else F.linear(x, wv.weight, wv.bias).view(T, hk, hd)
     qn_, kn_, vn_ = (getattr(at, n, None) for n in ("q_norm", "k_norm", "v_norm"))
-    qn, rq = (q, None) if qn_ is None else _rms(qn_, q)
-    kn, rk = (k, None) if kn_ is None else _rms(kn_, k)
-    vn, rv = (v, None) if vn_ is None else _rms(vn_, v)
+    qn, rq = (q, None) if qn_ is None else _normed(qn_, q)
+    kn, rk = (k, None) if kn_ is None else _normed(kn_, k)
+    vn, rv = (v, None) if vn_ is None else _normed(vn_, v)
     qr = _rope(qn, cos, sin).transpose(0, 1).reshape(hk, g, T, hd)
     kr = F.pad(_rope(kn, cos, sin).transpose(0, 1), (0, 0, 0, tp - T))  # [Hk, Tp, hd]
     vp = F.pad(vn.transpose(0, 1), (0, 0, 0, tp - T))
     p = torch.softmax((qr @ kr[:, None].mT).float() * at.scaling + mask, -1).to(dt)
     o = (p @ vp[:, None]).reshape(hk * g, T, hd).transpose(0, 1).reshape(T, -1)
     sg = torch.sigmoid(gate.float()) if gated else None
-    out = F.linear(o if sg is None else (o.float() * sg).to(dt), at.o_proj.weight)
+    wo = _out_proj(at)
+    out = F.linear(o if sg is None else (o.float() * sg).to(dt), wo.weight, wo.bias)
     part = lambda t: None if t is None else t[S:]
-    m = Attention(wq=at.q_proj.weight, wk=at.k_proj.weight, wv=None if wv is None else wv.weight,
-                  wo=at.o_proj.weight,
+    m = Attention(wq=None if fused is not None else at.q_proj.weight, wk=None if fused is not None else at.k_proj.weight,
+                  wv=None if wv is None else wv.weight, wqkv=None if fused is None else fused.weight,
+                  wo=wo.weight,
                   q=None if rq is None else q[S:].float(), rq=part(rq),
                   wqn=None if qn_ is None else norm_weight(qn_).float(),
                   k=None if rk is None else k[S:].float(), rk=part(rk),
@@ -281,7 +324,7 @@ def _attention(at, x, cos, sin, mask, S: int, exact: bool):
 def attention_map(model, i: int, x: torch.Tensor) -> Attention:
     """Layer ``i``'s attention over a whole document, ``x`` ``[T, d]`` its normalized input, every position a
     query: for reading what a head did at one position (``sources.HeadSources``)."""
-    T, dev, at = x.shape[0], x.device, model.layers[i].self_attn
+    T, dev, at = x.shape[0], x.device, attention(model.layers[i])
     tp = -(-T // 8) * 8
     mask = torch.full((T, tp), float("-inf"), device=dev).triu(1)
     window = getattr(at, "sliding_window", None)
@@ -417,12 +460,12 @@ def _moe(mlp, x, S: int):
     sh, ws, sg1, dsg, so1 = None, None, None, None, None
     shared = getattr(mlp, "shared_expert", None)
     if shared is not None:
-        so, scg, scu = _swiglu(shared, x, S, False)
+        so, sm = _dense(shared, x, S, False)
         gate_s = getattr(mlp, "shared_expert_gate", None)
         sg = torch.ones(T, 1, device=x.device) if gate_s is None else \
             torch.sigmoid(F.linear(x, gate_s.weight).float())  # [T, 1]
         out = out + sg * so.float()
-        sh = (shared.gate_proj.weight, shared.up_proj.weight, shared.down_proj.weight, scg, scu)
+        sh = (sm.wg, sm.wu, sm.wd, sm.cg, sm.cu)
         ws, sg1, so1 = None if gate_s is None else gate_s.weight, sg[S:], so[S:].float()
         dsg = sg1 * (1 - sg1)
     # The valid rows' pairs, still in expert order.
@@ -441,21 +484,29 @@ def _moe(mlp, x, S: int):
     return out.to(dt), m
 
 
-def _swiglu(mlp, x, S: int, exact: bool):
-    """A gated MLP's output ``[T, d]`` and its factors at rows ``S:``: the identity and half rules'
-    (``β·φ(g)·up``, ``β·act(g)``), or the true derivative's (``act'(g)·up``, ``act(g)``)."""
-    dt = x.dtype
-    gate, up = F.linear(x, mlp.gate_proj.weight), F.linear(x, mlp.up_proj.weight)
-    out = F.linear(mlp.act_fn(gate) * up, mlp.down_proj.weight)
-    g, u = gate[S:].float(), up[S:].float()
+def _dense(mlp, x, S: int, exact: bool):
+    """A dense MLP's output ``[T, d]`` and map, its factors at rows ``S:``. Gated: the identity and
+    half rules' (``β·φ(g)·up``, ``β·act(g)``), or the true derivative's (``act'(g)·up``, ``act(g)``);
+    ungated (GPT-NeoX's ``dense_h_to_4h``, ``dense_4h_to_h``): ``φ(g)``, or ``act'(g)``."""
+    dt, act = x.dtype, mlp_act(mlp)
+    gated = hasattr(mlp, "gate_proj")
+    wg, wu, wd = (mlp.gate_proj, mlp.up_proj, mlp.down_proj) if gated else (mlp.dense_h_to_4h, None, mlp.dense_4h_to_h)
+    gate = F.linear(x, wg.weight, wg.bias)
+    up = None if wu is None else F.linear(x, wu.weight, wu.bias)
+    out = F.linear(act(gate) if up is None else act(gate) * up, wd.weight, wd.bias)
+    g = gate[S:].float()
+    u = None if up is None else up[S:].float()
     if exact:
         g = g.requires_grad_(True)
         with torch.enable_grad():
-            dact = torch.autograd.grad(mlp.act_fn(g).sum(), g)[0]
-        cg, cu = dact * u, mlp.act_fn(g.detach())
+            dact = torch.autograd.grad(act(g).sum(), g)[0]
+        cg, cu = (dact, None) if u is None else (dact * u, act(g.detach()))
+    elif u is None:
+        cg, cu = act_factor(act, g), None
     else:
-        cg, cu = HALF_RULE_BETA * act_factor(mlp.act_fn, g) * u, HALF_RULE_BETA * mlp.act_fn(g)
-    return out, cg.detach().to(dt), cu.detach().to(dt)
+        cg, cu = HALF_RULE_BETA * act_factor(act, g) * u, HALF_RULE_BETA * act(g)
+    return out, DenseMLP(wg.weight, None if wu is None else wu.weight, wd.weight, cg.detach().to(dt),
+                         None if cu is None else cu.detach().to(dt))
 
 
 _checked = set()
@@ -478,19 +529,11 @@ def check(model) -> None:
                 raise ValueError("fused DeltaNet projections (Qwen3-Next's) are not supported")
             if la.conv1d.bias is not None:
                 raise ValueError("convolution biases are not supported")
-        else:
-            at = layer.self_attn
-            projections = (at.q_proj, at.k_proj, getattr(at, "v_proj", None), at.o_proj)
-            if any(p is not None and p.bias is not None for p in projections):
-                raise ValueError("projection biases are not supported")
-            if not getattr(at, "is_causal", True):
-                raise ValueError("bidirectional text attention is not supported")
+        elif not getattr(attention(layer), "is_causal", True):
+            raise ValueError("bidirectional text attention is not supported")
         mlp = layer.mlp
-        if hasattr(mlp, "experts"):
-            if not getattr(mlp.gate, "norm_topk_prob", True):
-                raise ValueError("routers that do not renormalise over their top k are not supported")
-        elif any(p.bias is not None for p in (mlp.gate_proj, mlp.up_proj, mlp.down_proj)):
-            raise ValueError("projection biases are not supported")
+        if hasattr(mlp, "experts") and not getattr(mlp.gate, "norm_topk_prob", True):
+            raise ValueError("routers that do not renormalise over their top k are not supported")
     _checked.add(id(model))
 
 
@@ -512,7 +555,8 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
     exact = rules == "true"
     check(model)
     valid_positions(len(ids))
-    dev, dt = model.embed_tokens.weight.device, model.embed_tokens.weight.dtype
+    embed = model.get_input_embeddings()
+    dev, dt = embed.weight.device, embed.weight.dtype
     ids = ids[:-1].to(dev)
     T, S = len(ids), SKIP_FIRST if first is None else first
     if S < SKIP_FIRST or S >= T:
@@ -520,7 +564,7 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
     tp = -(-T // 8) * 8
     # Gemma scales text embeddings by √d in its embedding module; image and audio embeddings come
     # in unscaled, as the model scatters them.
-    h = model.embed_tokens(ids) if embeds is None else embeds[:-1].to(dev, dt)
+    h = embed(ids) if embeds is None else embeds[:-1].to(dev, dt)
     pos = torch.arange(T, device=dev)[None]
     types = getattr(model.config, "layer_types", None) or ["full_attention"] * len(model.layers)
     by_type = "layer_type" in inspect.signature(model.rotary_emb.forward).parameters  # Gemma 4: one table per type
@@ -538,13 +582,14 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
     for i, layer in enumerate(model.layers):
         resident(model, i)
         n1, post1, n2, post2 = _norms(layer)
-        x, r1 = _rms(n1, h)
+        parallel = bool(getattr(layer, "use_parallel_residual", False))
+        x, r1 = _normed(n1, h)
         if hasattr(layer, "linear_attn"):
             if exact:
                 raise ValueError("true derivatives are not written out for DeltaNet")
             a, mix = _delta_primal(layer.linear_attn, x, S)
         else:
-            at = layer.self_attn
+            at = attention(layer)
             key = types[i] if by_type else None
             if key not in tables:
                 c_, s_ = model.rotary_emb(h[None], pos, key) if by_type else model.rotary_emb(h[None], pos)
@@ -558,20 +603,21 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
             a, mix = _attention(at, x, *tables[key], mask, S, exact)
         a_in = a
         if post1 is not None:
-            a, rp1 = _rms(post1, a_in)
-        h_mid = h + a
-        x2, r2 = _rms(n2, h_mid)
+            a, rp1 = _normed(post1, a_in)
+        h_mid = h if parallel else h + a  # the residual the MLP reads
+        x2, r2 = _normed(n2, h_mid)
         if hasattr(layer.mlp, "experts"):
             if exact:
                 raise ValueError("true derivatives are not written out for sparse MLPs")
             z, mlp = _moe(layer.mlp, x2, S)
         else:
-            z, cg, cu = _swiglu(layer.mlp, x2, S, exact)
-            mlp = GatedMLP(layer.mlp.gate_proj.weight, layer.mlp.up_proj.weight, layer.mlp.down_proj.weight, cg, cu)
+            z, mlp = _dense(layer.mlp, x2, S, exact)
         z_in = z
         if post2 is not None:
-            z, rp2 = _rms(post2, z_in)
+            z, rp2 = _normed(post2, z_in)
         h_out = h_mid + z
+        if parallel:
+            h_out = h_out + a
         scalar = getattr(layer, "layer_scalar", None)
         if scalar is not None:
             h_out = h_out * scalar
@@ -580,7 +626,7 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
             post1=None if post1 is None else _norm_map(post1, a_in, rp1, S, exact),
             n2=_norm_map(n2, h_mid, r2, S, exact), mlp=mlp,
             post2=None if post2 is None else _norm_map(post2, z_in, rp2, S, exact),
-            s=None if scalar is None else scalar.float().reshape(())))
+            s=None if scalar is None else scalar.float().reshape(()), parallel=parallel))
         h = h_out
     return maps, h
 
@@ -652,21 +698,24 @@ def resident(model, i: int) -> None:
 
 def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
     """Tangents at the mixer's (normed) input to tangents at its output, ``[b, N, d]`` fp32."""
-    dt = m.wk.dtype
+    dt = m.wo.dtype
     b, N, _ = xn.shape
     hk, gn, hd = m.qr.shape
     g = gn // N
-    qp = F.linear(xn, m.wq)
-    if m.sg is None:
-        dq = qp.view(b, N, hk * g, hd).float()
+    if m.wqkv is not None:  # one fused projection, g = 1
+        dq, dk, dv = F.linear(xn, m.wqkv).view(b, N, hk, 3, hd).float().unbind(3)
     else:
-        qp = qp.view(b, N, hk * g, 2 * hd)
-        dq, dgate = qp[..., :hd].float(), qp[..., hd:].reshape(b, N, -1).float()
+        qp = F.linear(xn, m.wq)
+        if m.sg is None:
+            dq = qp.view(b, N, hk * g, hd).float()
+        else:
+            qp = qp.view(b, N, hk * g, 2 * hd)
+            dq, dgate = qp[..., :hd].float(), qp[..., hd:].reshape(b, N, -1).float()
+        dk = F.linear(xn, m.wk).view(b, N, hk, hd).float()
+        dv = dk if m.wv is None else F.linear(xn, m.wv).view(b, N, hk, hd).float()
     if m.wqn is not None:
         dq = _norm_jvp(dq, m.q, m.rq, m.wqn)
     dq = _rope(dq, m.cos, m.sin).to(dt).view(b, N, hk, g, hd).permute(0, 2, 3, 1, 4).reshape(b, hk, gn, hd)
-    dk = F.linear(xn, m.wk).view(b, N, hk, hd).float()
-    dv = dk if m.wv is None else F.linear(xn, m.wv).view(b, N, hk, hd).float()
     if m.wkn is not None:
         dk = _norm_jvp(dk, m.k, m.rk, m.wkn)
     dk = _rope(dk, m.cos, m.sin)
@@ -689,7 +738,7 @@ def _attn_jvp(m: Attention, xn: torch.Tensor) -> torch.Tensor:
 
 def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
     """Cotangents at the mixer's output to cotangents at its (normed) input."""
-    dt = m.wk.dtype
+    dt = m.wo.dtype
     b, N, _ = G.shape
     hk, gn, hd = m.qr.shape
     g = gn // N
@@ -713,6 +762,8 @@ def _attn_vjp(m: Attention, G: torch.Tensor) -> torch.Tensor:
         gk = _norm_vjp(gk, m.k, m.rk, m.wkn)
     if m.rv is not None:
         gv = _norm_vjp(gv, m.v, m.rv, 1.0)
+    if m.wqkv is not None:  # the fused projection's rows: per head the query, key, value
+        return (torch.stack((gq, gk, gv), 3).to(dt).reshape(b, N, -1) @ m.wqkv).float()
     if m.sg is not None:
         gq = torch.cat((gq, ggate.view(b, N, hk * g, hd)), -1)
     gx = gq.to(dt).reshape(b, N, -1) @ m.wq
@@ -872,38 +923,46 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
 # --------------------------------------------------------------------------------- the MLPs
 
 def contract(m: Layer, out: torch.Tensor | None = None, budget: int = 2**30) -> Layer:
-    """The layer with its gated MLP's map multiplied out, one ``[d, d]`` matrix per row:
-    ``W_d (diag(cg) W_g + diag(cu) W_u)``. Building them is one matrix product over the rows and
-    each tangent then costs one ``d × d`` product where the map costs three through ``d_ff``, so the
-    whole map costs ``N d² (2 d_ff + 2 d)`` for all ``d`` tangents against ``6 N d² d_ff``: it pays
-    from about ``3 d / 8`` tangents. Rows are built a few at a time, as many as keep each
+    """The layer with its dense MLP's map multiplied out, one ``[d, d]`` matrix per row:
+    ``W_d (diag(cg) W_g + diag(cu) W_u)`` (``W_d diag(cg) W_g`` ungated). Building them is one matrix
+    product over the rows and each tangent then costs one ``d × d`` product where a gated map costs
+    three through ``d_ff``, so the whole map costs ``N d² (2 d_ff + 2 d)`` for all ``d`` tangents
+    against ``6 N d² d_ff``: it pays from about ``3 d / 8`` tangents (ungated, two products through
+    ``d_ff`` against ``N d² (2 d_ff + 2 d)``, from about ``d / 2``). Rows are built a few at a time, as many as keep each
     ``[d_ff, n, d]`` product under ``budget`` bytes, into ``out`` (``[N, d, d]``) when it is given:
     a sweep reuses one buffer for all its layers (Qwen3-32B: 5.5 GiB a layer)."""
     g = m.mlp
-    if not isinstance(g, GatedMLP):
+    if not isinstance(g, DenseMLP):
         return m
     N, (f, d) = g.cg.shape[0], g.wg.shape
     chunk = max(1, budget // (f * d * g.wg.element_size()))
     if out is None:
         out = torch.empty(N, d, d, dtype=g.wd.dtype, device=g.wd.device)
     for s in range(0, N, chunk):
-        cg, cu = g.cg[s:s + chunk].T, g.cu[s:s + chunk].T  # [f, n]
-        rows = (cg[..., None] * g.wg[:, None] + cu[..., None] * g.wu[:, None]).flatten(1)  # [f, n·d]
+        cg = g.cg[s:s + chunk].T  # [f, n]
+        rows = cg[..., None] * g.wg[:, None]
+        if g.wu is not None:
+            rows = rows + g.cu[s:s + chunk].T[..., None] * g.wu[:, None]
+        rows = rows.flatten(1)  # [f, n·d]
         out[s:s + cg.shape[1]] = (g.wd @ rows).unflatten(1, (cg.shape[1], d)).transpose(0, 1)  # [n, d, d]
     return m._replace(mlp=Contracted(out))
 
 
-def _mlp_jvp(m: GatedMLP | Contracted, xn):
+def _mlp_jvp(m: DenseMLP | Contracted, xn):
     if isinstance(m, Contracted):
         return (xn.transpose(0, 1) @ m.m.mT).transpose(0, 1).float()
-    return F.linear(m.cg * F.linear(xn, m.wg) + m.cu * F.linear(xn, m.wu), m.wd).float()
+    h = m.cg * F.linear(xn, m.wg)
+    if m.wu is not None:
+        h = h + m.cu * F.linear(xn, m.wu)
+    return F.linear(h, m.wd).float()
 
 
-def _mlp_vjp(m: GatedMLP | Contracted, G):
+def _mlp_vjp(m: DenseMLP | Contracted, G):
     if isinstance(m, Contracted):
         return (G.to(m.m.dtype).transpose(0, 1) @ m.m).transpose(0, 1).float()
     gp = G.to(m.wd.dtype) @ m.wd
-    return ((m.cg * gp) @ m.wg + (m.cu * gp) @ m.wu).float()
+    gx = (m.cg * gp) @ m.wg
+    return (gx if m.wu is None else gx + (m.cu * gp) @ m.wu).float()
 
 
 def _experts_fwd(m: MoE, x: torch.Tensor) -> torch.Tensor:
@@ -977,34 +1036,41 @@ def _moe_vjp(m: MoE, G: torch.Tensor) -> torch.Tensor:
 # --------------------------------------------------------------------------------- the layer
 
 def _nj(n: Norm, dx: torch.Tensor) -> torch.Tensor:
-    """A norm's map: the LN rule's scaling, or the true derivative."""
+    """A norm's map: the LN rule's scaling, or the true derivative; after the centring ``P = I − 11ᵀ/d``
+    for a LayerNorm."""
+    if n.c:
+        dx = dx - dx.mean(-1, keepdim=True)
     if n.x is None:
         return dx * n.a
     return n.a * (dx - n.x * n.r.square() * (n.x * dx).mean(-1, keepdim=True))
 
 
 def _nt(n: Norm, gy: torch.Tensor) -> torch.Tensor:
-    """``_nj``'s transpose (the true derivative ``a·(I − x̂x̂ᵀ/d)·r`` is symmetric up to the scale's side)."""
+    """``_nj``'s transpose (the true derivative ``a·(I − x̂x̂ᵀ/d)·r`` is symmetric up to the scale's side;
+    ``P`` is symmetric and comes last)."""
     g = gy * n.a
-    if n.x is None:
-        return g
-    return g - n.x * n.r.square() * (n.x * g).mean(-1, keepdim=True)
+    if n.x is not None:
+        g = g - n.x * n.r.square() * (n.x * g).mean(-1, keepdim=True)
+    return g - g.mean(-1, keepdim=True) if n.c else g
 
 
 def _dtype(m: Layer) -> torch.dtype:
-    return (m.mix.wk if isinstance(m.mix, Attention) else m.mix.w_qkv).dtype
+    return (m.mix.wo if isinstance(m.mix, Attention) else m.mix.w_qkv).dtype
 
 
 def jvp(m: Layer, X: torch.Tensor):
     """Push tangents ``X`` (``[b, N, d]``, fp32) at a layer's input through its map; return
-    them at its output and at the MLP's input (``mid``)."""
+    them at its output and at the MLP's input (``mid``: the layer's input in a parallel block)."""
     dt = _dtype(m)
     xn = _nj(m.n1, X).to(dt)
     a = _attn_jvp(m.mix, xn) if isinstance(m.mix, Attention) else _delta_jvp(m.mix, xn)
-    mid = X + (a if m.post1 is None else _nj(m.post1, a))
+    a = a if m.post1 is None else _nj(m.post1, a)
+    mid = X if m.parallel else X + a
     xn = _nj(m.n2, mid).to(dt)
     z = _moe_jvp(m.mlp, xn) if isinstance(m.mlp, MoE) else _mlp_jvp(m.mlp, xn)
     out = mid + (z if m.post2 is None else _nj(m.post2, z))
+    if m.parallel:
+        out = out + a
     return (out if m.s is None else out * m.s), mid
 
 
@@ -1012,14 +1078,22 @@ def vjp(m: Layer, G: torch.Tensor, mid_seed: torch.Tensor | None = None, row_w: 
     """Pull cotangents ``G`` (``[b, N, d]``, fp32) at a layer's output back through its map;
     return them at its input, and their means over positions at the MLP's input (``mid``) and
     at the layer's input (weighted by ``row_w``, ``[N]`` summing to 1, if given). ``mid_seed``
-    (``[b, N, d]``) joins the cotangents at the MLP's input."""
+    (``[b, N, d]``) joins the cotangents at the MLP's input (in a parallel block, the layer's input)."""
+    mean = lambda t: t.mean(1) if row_w is None else (t * row_w[:, None]).sum(1)
+    attn = lambda g: _nt(m.n1, _attn_vjp(m.mix, g) if isinstance(m.mix, Attention) else _delta_vjp(m.mix, g))
     if m.s is not None:
         G = G * m.s
     gz = G if m.post2 is None else _nt(m.post2, G)
-    G = G + _nt(m.n2, _moe_vjp(m.mlp, gz) if isinstance(m.mlp, MoE) else _mlp_vjp(m.mlp, gz))
+    gm = _nt(m.n2, _moe_vjp(m.mlp, gz) if isinstance(m.mlp, MoE) else _mlp_vjp(m.mlp, gz))
+    if m.parallel:  # both sublayers read the layer's input, from the output's cotangents
+        G = G + gm + attn(G if m.post1 is None else _nt(m.post1, G))
+        if mid_seed is not None:
+            G = G + mid_seed
+        est = mean(G)
+        return G, est, est
+    G = G + gm
     if mid_seed is not None:
         G = G + mid_seed
-    mid = G.mean(1) if row_w is None else (G * row_w[:, None]).sum(1)
-    ga = G if m.post1 is None else _nt(m.post1, G)
-    G = G + _nt(m.n1, _attn_vjp(m.mix, ga) if isinstance(m.mix, Attention) else _delta_vjp(m.mix, ga))
-    return G, mid, G.mean(1) if row_w is None else (G * row_w[:, None]).sum(1)
+    mid = mean(G)
+    G = G + attn(G if m.post1 is None else _nt(m.post1, G))
+    return G, mid, mean(G)

@@ -11,18 +11,19 @@ in the J-lens, and read it with a token matrix:
   embeddings to each layer, read with ``W_E``: which tokens, here or earlier, made an
   activation. Its targets are ``mid`` and ``out`` too.
 
-``mid`` is the residual after the layer's mixer (the input of the MLP's norm); ``out`` is the
-layer's output.
+``mid`` is the residual after the layer's mixer (the input of the MLP's norm), or in a parallel
+block (GPT-NeoX's), where the MLP reads what the mixer reads, the layer's input (the layer below's
+``out``, or the embeddings); ``out`` is the layer's output.
 
 The derivative is RelP's (``neuron_lens.rules`` states the rules and applies them to the
 model for autograd, which the tests use as the reference). Under the rules each decoder layer
 is, on a given document, a fixed linear map of the residual; ``neuron_lens.layers`` writes those
-maps out by component (norms, softmax attention, Gated DeltaNet, gated and sparse MLPs), runs the
+maps out by component (norms, softmax attention, Gated DeltaNet, dense and sparse MLPs), runs the
 primal once per document and keeps each layer's constants. The S-lens pushes tangents up through
 the maps, the R-lens pulls cotangents down through their transposes, ``dim_batch`` basis
 directions at a time, so each layer is a few matrix products over ``dim_batch × positions`` rows,
 written out by hand (no autograd). On CUDA the layer steps are compiled, which fuses the
-elementwise work between the products. With every direction of ``d_model`` going through a gated
+elementwise work between the products. With every direction of ``d_model`` going through a dense
 MLP, each layer's map is multiplied out first (``layers.contract``), so the sweep runs a layer at a
 time, every block of directions through it, instead of a block at a time.
 
@@ -100,9 +101,10 @@ def _maps(model):
 
 
 def decoder_stack(model):
-    """The decoder stack (``.layers``, ``.embed_tokens``, ``.config``) of a loaded model: a
-    causal LM's ``.model``, or a multimodal one's ``.model.language_model``."""
-    inner = getattr(model, "model", model)
+    """The decoder stack (``.layers``, ``.config``, ``get_input_embeddings()``) of a loaded model: a
+    causal LM's base model (Qwen3's ``.model``, GPT-NeoX's ``.gpt_neox``), or a multimodal one's
+    ``.model.language_model``."""
+    inner = getattr(model, "base_model", model)
     return getattr(inner, "language_model", inner)
 
 
@@ -132,7 +134,7 @@ def _sweeps(model, maps: list, order, blocks: list[tuple[int, int]], contract: b
     from neuron_lens import layers
     if not contract:
         if getattr(model, "_offload", None) is not None:
-            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, gated MLPs)")
+            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, dense MLPs)")
         return ((layer, maps[layer], i) for i in range(len(blocks)) for layer in order)
     buf = None
 
@@ -148,7 +150,7 @@ def _sweeps(model, maps: list, order, blocks: list[tuple[int, int]], contract: b
 def _contracts(maps: list, tangents: int, d: int) -> bool:
     """Whether a sweep of ``tangents`` directions should multiply its MLPs out (``layers.contract``)."""
     from neuron_lens import layers
-    return tangents == d and all(isinstance(m.mlp, layers.GatedMLP) for m in maps)
+    return tangents == d and all(isinstance(m.mlp, layers.DenseMLP) for m in maps)
 
 
 def _seed(b: int, N: int, d: int, start: int, device) -> torch.Tensor:

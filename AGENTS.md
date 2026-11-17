@@ -23,8 +23,9 @@ by `scripts/12_release.py`, one card per repo covering both models.
 
 - `neuron_lens/`: the package. `transport.py` is the lens estimator; `layers.py` writes every
   model's decoder layers as RelP linear maps and their transposes, one implementation per component
-  (norms, softmax attention with sliding windows and gates, Gated DeltaNet, gated and sparse MLPs),
-  composed from what each layer holds; `kernels.py` runs its hot spots on CUDA as Triton kernels
+  (RMSNorms and LayerNorms, softmax attention with sliding windows, gates or a fused projection,
+  Gated DeltaNet, dense MLPs gated or not, sparse MLPs, sequential and parallel blocks), composed
+  from what each layer holds; `kernels.py` runs its hot spots on CUDA as Triton kernels
   (DeltaNet's derivative, the sparse MLP's experts), with `layers.py`'s torch passes as their
   reference; `rules.py` states the same rules as autograd patches, by operation, and is the test
   reference; `arch.py` holds each model's geometry (head layouts, weight
@@ -48,7 +49,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   `catalog.documents` (the activations file, else rebuilt from the corpus), so most run from the
   release and the model.
 - `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models
-  (`test_transport.py` Qwen3, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5), and
+  (`test_transport.py` Qwen3, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5,
+  `test_pythia.py` GPT-NeoX), and
   `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA). Anything that fails loudly or
   reads wrong in the output gets fixed when it comes up; don't add tests for it.
 - **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
@@ -58,6 +60,14 @@ by `scripts/12_release.py`, one card per repo covering both models.
   differs from the published R-lens. Fits use 512-token
   documents (`--seq-len 512 --full-length`) so the DeltaNet memories fill. Not yet in the catalog
   pipeline (`arch.py`, `neurons.py`, the tables).
+- **Pythia (in progress):** `layers.py` covers GPT-NeoX (LayerNorms, which keep their centring under
+  the LN rule; the fused QKV with biases; RoPE on a quarter of each head; the ungated GELU MLP,
+  identity rule; parallel blocks, where `mid` is the layer's input, so `mid[L]` = `out[L − 1]`).
+  Checkpoints are revisions (`02_fit.py --revision step<N>`, `fit_queue.sh model@step<N>`), fitted
+  locally until the release has a place for them. Not yet in the catalog pipeline. When it is:
+  one pole per neuron (GELU's negative side is a dip, not a second direction), and
+  head writes read at the R-lens's `out` (both sublayers write the layer's output). Design.md's
+  Pythia section has the rest.
 - `data/` is ignored except `data/summary/` (compact results and logs, tracked) and
   `data/corpus/*.provenance.json`. Locally it holds corpora, fits (`data/fits/`), Drowse homes
   (`data/lenses/<name>/`), catalog shards (`data/catalog/<model>/`), activation stores, the
@@ -103,7 +113,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   unit's top documents past the first `N_CONTEXTS`. Nothing on an evidence card may summarize them: no
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §8 records why.
-- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py` and `tests/test_qwen35.py` to pass
+- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py`, `tests/test_qwen35.py` and
+  `tests/test_pythia.py` to pass
   (and `tests/test_kernels.py` on a CUDA machine when the kernels change; CI runs the rest on CPU
   for pushes to main, pull requests and weekly, `.github/workflows/tests.yml`, as a signal, not a
   gate): both
@@ -115,8 +126,8 @@ by `scripts/12_release.py`, one card per repo covering both models.
   options. More generally, keep one current code path: delete superseded options and formats
   rather than keeping compatibility.
 - **Fit files** in `data/fits/` are the authoritative lens format:
-  `<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt` (`-T<len>`: documents of exactly
-  that many tokens, `--full-length`), holding even- and odd-document sums per
+  `<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt` (`-<revision>`: a training checkpoint,
+  `--revision`; `-T<len>`: documents of exactly that many tokens, `--full-length`), holding even- and odd-document sums per
   target. `scale-<model>-L<layers>-dclm.pt` (`02_fit.py --lens scale`, forward passes over the text lens's corpus,
   minutes) holds the residual's per-coordinate sums at every norm's input, the metric's σ; the release ships it as
   `<model>/scale.pt`. Both lenses have an `out` target (layer outputs) and a `mid` target (each layer's MLP

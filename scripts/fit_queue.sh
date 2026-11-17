@@ -10,7 +10,9 @@
 #
 #   UPLOAD=1 setsid nohup bash scripts/fit_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-0.6B-Base ... > logs/fit_queue.log 2>&1 &
 #
-# A model may carry flags for its R and S fits after a colon, as one argument: "Qwen/Qwen3-32B:--offload 20".
+# A model may carry flags for its R and S fits after a colon, as one argument: "Qwen/Qwen3-32B:--offload 20". A training
+# checkpoint is the model at a revision, "EleutherAI/pythia-1.4b@step1000": all three fits take it, and its stem
+# (pythia-1.4b-step1000) names its fits and logs. Checkpoints are not uploaded (the release has no place for them yet).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
@@ -49,23 +51,27 @@ upload() {  # upload <model> <stem>: in the background, after any upload still r
 }
 failed=0
 for spec in "$@"; do
-    model="${spec%%:*}"
+    head="${spec%%:*}"
     flags=()
-    [ "$spec" != "$model" ] && read -ra flags <<< "${spec#*:}"
+    [ "$spec" != "$head" ] && read -ra flags <<< "${spec#*:}"
+    model="${head%%@*}"
+    rev=main
+    [ "$head" != "$model" ] && rev="${head#*@}"
     stem="$(tr '[:upper:]' '[:lower:]' <<< "${model##*/}")"
-    echo "$(date '+%F %T') model $model ${flags[*]}"
+    [ "$rev" != main ] && stem="$stem-$rev"
+    echo "$(date '+%F %T') model $model at $rev ${flags[*]}"
     if [ -e "logs/fit_scale_$stem.done" ] && [ -e "logs/fit_r_$stem.done" ] && [ -e "logs/fit_s_$stem.done" ]; then
-        upload "$model" "$stem"
+        [ "$rev" = main ] && upload "$model" "$stem"
         continue
     fi
-    if ! hf download "$model" > /dev/null; then
-        echo "$(date '+%F %T') FAILED download $model"
+    if ! hf download "$model" --revision "$rev" > /dev/null; then
+        echo "$(date '+%F %T') FAILED download $model at $rev"
         failed=1
         continue
     fi
-    { fit 0 scale "$model" "$stem" && fit 0 R "$model" "$stem" "${flags[@]}"; } &
+    { fit 0 scale "$model" "$stem" --revision "$rev" && fit 0 R "$model" "$stem" --revision "$rev" "${flags[@]}"; } &
     r=$!
-    fit 1 S "$model" "$stem" "${flags[@]}" &
+    fit 1 S "$model" "$stem" --revision "$rev" "${flags[@]}" &
     s=$!
     wait $r; ok_r=$?
     wait $s; ok_s=$?
@@ -73,7 +79,7 @@ for spec in "$@"; do
         failed=1
         continue
     fi
-    upload "$model" "$stem"
+    [ "$rev" = main ] && upload "$model" "$stem"
     gb=$(python - "$model" <<'EOF'
 import sys
 from huggingface_hub import scan_cache_dir

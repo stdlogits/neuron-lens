@@ -71,23 +71,25 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
 - **Hand-written layer maps, by component.** Under the rules each decoder layer is, for a given
   document, a fixed linear map: the norms scale each position, the MLP scales its gate and up
   projections per position and neuron, and attention keeps its true derivative.
-  `neuron_lens/layers.py` writes each component once (RMSNorms, softmax attention with grouped
-  heads, q/k and value norms, partial RoPE, sliding-window and bidirectional masks and an output
-  gate, Gated DeltaNet, gated and sparse MLPs) and composes every model's layers from what they hold,
-  so Qwen3, Gemma 4 and Qwen3.5 share one implementation. `linearize` runs the model once per
+  `neuron_lens/layers.py` writes each component once (RMSNorms and LayerNorms, softmax attention with
+  grouped heads or one fused projection, projection biases, q/k and value norms, partial RoPE,
+  sliding-window and bidirectional masks and an output gate, Gated DeltaNet, dense MLPs gated or not,
+  sparse MLPs, sequential and parallel blocks) and composes every model's layers from what they hold,
+  so Qwen3, Gemma 4, Qwen3.5 and GPT-NeoX share one implementation. `linearize` runs the model once per
   document and keeps those constants; `jvp` applies a layer's map to a block of tangents and `vjp` its
   transpose to cotangents, as a few matrix products. The R-lens's map is exactly the transpose of the
   S-lens's. `neuron_lens/rules.py` applies the same rules to the model as autograd patches, by
   operation, the tests' reference; `layers.check` refuses what the components don't cover
-  (projection biases, other norms or activations, Qwen3-Next's fused DeltaNet projections).
+  (other norms or activations, Qwen3-Next's fused DeltaNet projections, convolution biases).
   Supporting another architecture means composing it from these components, adding one where a part
   is new.
 - **Tests** (`tests/test_transport.py`, on a tiny Qwen3 model with grouped-query attention): both
   lenses and both targets match brute-force Jacobians of the patched model (1e-4). `tests/test_gemma4.py` does the
-  same for small random Gemma 4 models, the media fits' mode included, and `tests/test_qwen35.py` for small Qwen3.5
-  models, MoE and dense, through HF's own delta-rule kernel. Estimator changes must pass them.
-- **Fit files** (`data/fits/<lens>-<model>-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`) hold even- and odd-half
-  sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
+  same for small random Gemma 4 models, the media fits' mode included, `tests/test_qwen35.py` for small Qwen3.5
+  models, MoE and dense, through HF's own delta-rule kernel, and `tests/test_pythia.py` for small GPT-NeoX models,
+  parallel and sequential. Estimator changes must pass them.
+- **Fit files** (`data/fits/<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`, a revision for a
+  training checkpoint) hold even- and odd-half sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
   corpus), and shard across GPUs (`--shard i/n`); `lenses.load_fits` adds shards and halves.
   `04_export_rlens.py` writes an R-lens to its own Drowse home under `data/lenses/<name>/`, both
   targets with their split-half differences.
@@ -509,6 +511,36 @@ stages are not ported yet.
   512-token document's maps take about 7 GiB and a layer step 1.5-2 GiB at a dim batch of 32, so
   both lenses fit with their sums on the GPU. A larger dim batch gains nothing: a step at 64 takes
   twice as long.
+
+## Pythia (in progress)
+
+The Pythia suite (EleutherAI's GPT-NeoX models, 14M to 12B) trains every size on the same data in the
+same order, and keeps 154 checkpoints of each run (steps 0, 1, 2, 4, …, 512, then every 1,000 to
+143,000; each a branch of the model's repo, `main` the last). It is the size ladder without
+Qwen3's confounds (findings §20): one data order, sizes trained from scratch, and checkpoints that
+compare sizes at equal tokens. The estimator covers its architecture; the catalog stages are not
+ported yet.
+
+- **Architecture.** LayerNorms with biases; attention through one fused `query_key_value`
+  projection (per head the query, key and value rows) with biases, RoPE on the first quarter of
+  each head, no grouping; an ungated MLP, `W_out GELU(W_in x + b_in) + b_out` (the erf GELU); and
+  parallel blocks, `h + attn(ln₁(h)) + mlp(ln₂(h))`, both sublayers reading the layer's input.
+  The unembedding is untied.
+- **Rules.** A LayerNorm takes the LN rule with its centring kept: `γ ⊙ (x − mean x) · r` with
+  `r` held. The centring is linear, so only the rsqrt is a choice, the one made for RMSNorms; the
+  bias is a constant. The GELU takes the identity rule, `φ = Φ`, the normal CDF; with no gate,
+  there is no half rule. Biases enter the primal only (a q or k bias still moves the attention
+  pattern's derivative, through the queries and keys it shifts).
+- **Parallel blocks.** The MLP reads what the attention reads, so `mid`, the residual the MLP reads,
+  is the layer's input: `mid[L]` is `out[L − 1]` for both lenses (the R-lens's `mid[0]` is its
+  read of the embeddings, the S-lens's the identity). The fits keep both targets, so every
+  stage reads Pythia's lenses as it reads the others'. Both sublayers write `out`, so a read of a
+  head's write that takes the R-lens's `mid` on the other models takes its `out` here.
+- **Checkpoints.** `02_fit.py --revision step<N>` fits a checkpoint, written as
+  `<lens>-pythia-<size>-step<N>-L<layers>-dclm.pt`; `fit_queue.sh` takes `model@step<N>`.
+  The release has no place for checkpoints yet, so the queue keeps them local.
+- **Neurons.** One pole each (the catalog port): GELU's negative side is a dip to −0.17, not a
+  second direction as SwiGLU's negative `up` is, so a neuron is read from its positive side only.
 
 ## Related work
 
