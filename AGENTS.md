@@ -64,10 +64,11 @@ by `scripts/12_release.py`, one card per repo covering both models.
   the LN rule; the fused QKV with biases; RoPE on a quarter of each head; the ungated GELU MLP,
   identity rule; parallel blocks, where `mid` is the layer's input, so `mid[L]` = `out[L − 1]`).
   Checkpoints are revisions (`02_fit.py --revision step<N>`, `fit_queue.sh model@step<N>`), fitted
-  locally until the release has a place for them. Not yet in the catalog pipeline. When it is:
-  one pole per neuron (GELU's negative side is a dip, not a second direction), and
-  head writes read at the R-lens's `out` (both sublayers write the layer's output). Design.md's
-  Pythia section has the rest.
+  locally until the release has a place for them. The catalog stages run on it through three facts in `arch.py`:
+  `n_poles` (one pole per neuron: GELU's negative side is a dip, not a second direction), `parallel` (head writes
+  read where the heads write, `arch.head_write_lens`: the layer's `out`) and `centred` (LayerNorms: read rows,
+  writes and the readout centred). Sources gain a `const_share` (the biases). Fits and passes run in fp16, its
+  checkpoints' dtype (`arch.half_dtype`). Design.md's Pythia section has the rest.
 - `data/` is ignored except `data/summary/` (compact results and logs, tracked) and
   `data/corpus/*.provenance.json`. Locally it holds corpora, fits (`data/fits/`), Drowse homes
   (`data/lenses/<name>/`), catalog shards (`data/catalog/<model>/`), activation stores, the

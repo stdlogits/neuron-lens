@@ -530,8 +530,9 @@ The Pythia suite (EleutherAI's GPT-NeoX models, 14M to 12B) trains every size on
 same order, and keeps 154 checkpoints of each run (steps 0, 1, 2, 4, …, 512, then every 1,000 to
 143,000; each a branch of the model's repo, `main` the last). It is the size ladder without
 Qwen3's confounds (findings §20): one data order, sizes trained from scratch, and checkpoints that
-compare sizes at equal tokens. The estimator covers its architecture; the catalog stages are not
-ported yet.
+compare sizes at equal tokens. The estimator and the catalog stages cover its architecture; three facts in
+`arch.py` (`n_poles`, `parallel`, `centred`) carry the differences, which the stages read instead of branching on
+the model.
 
 - **Architecture.** LayerNorms with biases; attention through one fused `query_key_value`
   projection (per head the query, key and value rows) with biases, RoPE on the first quarter of
@@ -551,8 +552,24 @@ ported yet.
 - **Checkpoints.** `02_fit.py --revision step<N>` fits a checkpoint, written as
   `<lens>-pythia-<size>-step<N>-L<layers>-dclm.pt`; `fit_queue.sh` takes `model@step<N>`.
   The release has no place for checkpoints yet, so the queue keeps them local.
-- **Neurons.** One pole each (the catalog port): GELU's negative side is a dip to −0.17, not a
-  second direction as SwiGLU's negative `up` is, so a neuron is read from its positive side only.
+- **Neurons.** One pole each: GELU's negative side is a dip to −0.17, not a second direction as
+  SwiGLU's negative `up` is, so a neuron is read from its positive side only, and a table has `f` rows a layer
+  (`pole` always +1). The input row plays the gate's part; columns that need an up row (`cos_write_up`,
+  `cos_gate_up`) stay, as NaN. A firing is an activation past a quarter of `act_top` on the positive side (the
+  dip is no firing), while `06_activations.py`'s counts keep both signs, which the quantiles need.
+- **LayerNorm in the reads.** A LayerNorm reads the centred residual, so read rows (a neuron's input row, a head's
+  `W_Q`, `W_K`, `W_V` times `γ`) have their means subtracted, writes too (their mean reaches no reader), and the
+  final readout centres each column before its norm (`readout`'s `centre`; the final norm's bias, the same for
+  every column, is left out). A footprint's query is `√d W_Q x̂ + b_Q` beside the query bias (the key bias adds
+  one score to every key of a query, and cancels).
+- **Sources.** An ungated activation `φ(g) g` splits as its pre-activation `g` does (the identity rule, no half
+  rule), over the embedding, the earlier heads and neurons, and a constant: the residual's bias writes and the
+  read's own `W β + b`. The `sources` and `heads/sources` tables carry its share (`const_share`, zero for a model
+  without biases), so the shares still sum to 1 exactly. In a parallel block a layer's MLP reads its input, so its
+  head sources are the earlier layers'.
+- **Running it.** Each GPU pass loads the model in fp16 (`arch.half_dtype`); HF's eager attention forms `q·k` in
+  fp16, which overflows on Pythia (NaN loss), so the passes that need attention weights score them in fp32
+  (`arch.attn_implementation`). 17 runs in fp32 as for every model.
 
 ## Related work
 
