@@ -677,8 +677,12 @@ same excerpts: the lean label, the label it replaced, and another firing pole of
   random ones at AUROC 0.61 and correlate at 0.09: a label written from top contexts describes the top regime (§4).
 - **The lean labels simulate as well as the earlier ones** (+0.01 [−0.02, 0.05]), as they detect.
 - **Spread:** median 0.17, 30% of poles at 0.3 or more, 9% at 0.5 or more; highest at L0-L8 (0.30, against 0.16-0.22
-  after). Confidence ranks weakly (0.25 for the 9 labels at 0.7 or more, 0.17 for the 57 under 0.4), and the two tests rank
-  poles only loosely (Spearman 0.20 with the detection AUROC).
+  after), where detection is lowest (§8's quarters: 0.79 against 0.84-0.87). Confidence ranks weakly (0.25 for the 9
+  labels at 0.7 or more, 0.17 for the 57 under 0.4).
+- **The two tests agree on whether a label recognises a pole's firings, less on the token.** Per pole, the detection AUROC
+  ranks with the simulation's excerpt-level scores at Spearman 0.42-0.44 (labels that fail detection leave half their top
+  excerpts predicted silent, those at 1.0 a quarter), with the token-level score at 0.20. Detection's 8 contexts a pole,
+  half its poles at 1.0, cap how well either can rank.
 - Scores are correlations, on another scale from the detection AUROCs, from one simulator. A label that names the token a
   pole fires on beside its concept would likely close part of the token-level gap (untested).
   `data/summary/label_simulation_qwen3-8b.json`.

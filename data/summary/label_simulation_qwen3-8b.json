@@ -203,7 +203,12 @@
     0.29309886047550265
    ]
   },
-  "spearman_with_detection": 0.19573440561538044,
+  "spearman_with_detection": {
+   "all": 0.19573440561538044,
+   "excerpt": 0.4192877110742353,
+   "finds_top": 0.4447647029540993,
+   "peak": 0.2563938370210366
+  },
   "cost_usd": 4.639496,
   "usage": {
    "input_tokens": 4282916,

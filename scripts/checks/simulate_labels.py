@@ -348,8 +348,11 @@ def run(args) -> None:
     quarter = lambda layer: min(4 * layer // labels.LAYERS, 3)
     summary["own_all_by_quarter"] = {q: stat(xs) for q in range(4) if (xs := [v["own"]["all"] for v in per.values()
                                                                                 if "own" in v and quarter(v["layer"]) == q])}
-    paired = [(v["own"]["all"], v["detection"]) for v in per.values() if "own" in v and v["detection"] is not None]
-    summary["spearman_with_detection"] = spearman(*map(list, zip(*paired))) if len(paired) > 2 else None
+    summary["spearman_with_detection"] = {}
+    for k in ("all", "excerpt", "finds_top", "peak"):
+        paired = [(v["own"][k], v["detection"]) for v in per.values()
+                  if "own" in v and v["detection"] is not None and not math.isnan(v["own"].get(k, math.nan))]
+        summary["spearman_with_detection"][k] = spearman(*map(list, zip(*paired))) if len(paired) > 2 else None
     summary["cost_usd"], summary["usage"], summary["failed"], summary["unread"] = cost, usage, failed, unread
     path = SUMMARY / f"label_simulation_{NAME}.json"
     path.write_text(json.dumps({"model": MODEL, "batch": batch_id, "simulator": labels.SCORER, "window": WIN,
