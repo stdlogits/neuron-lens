@@ -251,9 +251,18 @@ def score(pred: list[list[float]], ex: list[dict], a_top: float) -> dict:
         hot = [max(pred[i]) for i, e in enumerate(ex) if e["kind"] == k]
         if hot and quiet:
             out[f"finds_{k}"] = labels.auroc(hot + quiet, [1] * len(hot) + [0] * len(quiet))
-    peaks = [abs(max(range(WIN), key=pred[i].__getitem__) - max(range(WIN), key=true[i].__getitem__)) <= 1
-             for i, e in enumerate(ex) if e["kind"] == "top" and max(pred[i]) > 0]
-    out["peak"] = sum(peaks) / len([e for e in ex if e["kind"] == "top"]) if ex else math.nan
+    lands = {"hit": 0, "near_before": 0, "near_after": 0, "far": 0, "silent": 0}  # top excerpts' predicted peak
+    for i, e in enumerate(ex):
+        if e["kind"] != "top":
+            continue
+        if max(pred[i]) == 0:
+            lands["silent"] += 1
+            continue
+        d = max(range(WIN), key=pred[i].__getitem__) - max(range(WIN), key=true[i].__getitem__)
+        lands["hit" if abs(d) <= 1 else "far" if abs(d) > 5 else "near_after" if d > 0 else "near_before"] += 1
+    n_top = sum(lands.values())
+    out["peak"] = lands["hit"] / n_top if n_top else math.nan
+    out["lands"] = lands
     return out
 
 
@@ -328,6 +337,10 @@ def run(args) -> None:
     hi = [v["own"]["all"] for v in per.values() if "own" in v and v["conf"] >= 0.7]
     lo = [v["own"]["all"] for v in per.values() if "own" in v and v["conf"] < 0.4]
     summary["own_all_by_conf"] = {"0.7+": stat(hi), "under 0.4": stat(lo)}
+    lands = [v["own"]["lands"] for v in per.values() if "own" in v]
+    total = sum(sum(x.values()) for x in lands)
+    summary["own_top_peak_lands"] = {k: sum(x[k] for x in lands) / total for k in lands[0]}
+    summary["own_poles_by_top_hits"] = {h: sum(x["hit"] == h for x in lands) for h in range(PER_KIND + 1)}
     quarter = lambda layer: min(4 * layer // labels.LAYERS, 3)
     summary["own_all_by_quarter"] = {q: stat(xs) for q in range(4) if (xs := [v["own"]["all"] for v in per.values()
                                                                                 if "own" in v and quarter(v["layer"]) == q])}
