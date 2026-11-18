@@ -1,6 +1,6 @@
 # Findings
 
-What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17, §18), Gemma 4 12B
+What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17, §18, §21), Gemma 4 12B
 (§13-§16, in text, images and sound) and the rest of the Qwen3 family to 14B (§19, §20), and how far each way of reading them goes. Each section gives
 its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
 and the overview in the [README](../README.md).
@@ -40,6 +40,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
 | [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
 | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B's and 0.6B's heads are the 8B's and 1.7B's, their neurons match a parent each and are ranked by its activation: three lineages, not five sizes |
+| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1729,8 +1730,100 @@ are released as the catalog's `lineage` table (`lineage.py table`: the 4B, the 0
 model's neurons with their parent and each parent's with its child or `cut`; the bases the same), and neuron-lens.com
 links each neuron to its counterpart.
 
+## §21. The dark sector: what the R-lens barely reads
+
+**Setup** (`checks/dark_sector.py`: Qwen3-8B in bf16 on an RTX 4090, statistics in fp32; the released R-lens). At each
+layer's output, the R-lens readout in the residual's metric, `W̄_U diag(γ_f) J_L diag(s)` (`W̄_U`: the kept unembedding,
+centred over tokens), has eigenvectors ordered by gain. A layer's *bright sector* is the fewest of them that carry 90% of
+the lens energy of the layer's writes; its *dark sector* is the rest, orthogonal in the metric. To *ablate* a sector of
+an MLP output is to replace that part with its mean over 64 held-out DCLM documents, at every position but the first.
+The controls remove random subspaces of the dark and the bright dimension, or the whole MLP output. Single layers are
+scored on 64 other DCLM documents of 128 tokens (positions 16-126), bands of layers on 32 documents of each activation
+slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three in the chat template without thinking).
+
+- **The bright sector grows with depth.** It has 60-192 directions at L0-L3, 610 at L9, 1,114 at L15, 1,920 at L21,
+  2,688 at L27 and 3,367 at L35, of 4,096. In context the residual is 87-95% dark at L0-L3, 71-81% at L4-L15 and
+  34-50% from L24 (energy in the metric). An MLP output is about as dark as a vector with its energy per coordinate
+  (L9: 0.91 against 0.93): its darkness comes from which coordinates it uses, not from avoiding the lens's directions.
+- **Early dark directions stay dark; later ones are cancelled.** How loud a layer's dark sector is to each later layer's
+  lens, against a random direction (1 = as loud): L1's and L3's are at most 0.06 to every lens through L15, and 0.13-0.19
+  to the unembedding itself. L9's are at most 0.02 within three layers but up to 0.63 later, and L12's 0.14 and up to 0.65:
+  later lenses would read those directions, so what keeps them dark at L9-L12 is what the layers in between do to them.
+- **The lens misses what the dark sector does.** Ablating one layer's dark sector moves the output by a KL of 0.03-0.10
+  at L1-L15, 300-5,700 times what the lens predicts (`W_U (γ_f ⊙ J_L Δm) / rms`, the lens's LN rule). It raises loss
+  by 0.03-0.04 nats at L2-L9, 2-5 times the bright sector's cost, though per unit of energy removed it matters less than
+  the bright sector or a random subspace of its size (KL per unit at L9: 4.4, 6.3 and 6.1 × 10⁻⁴). From L22 the bright
+  sector costs more, and one late layer's dark sector costs little alone (≤ 0.006 nats at L27-L33). At L35, where the lens
+  is the unembedding, it predicts the dark ablation's KL (0.076 against 0.106).
+- **What the dark sector feeds.** It supplies 60-93% of what drives the top 1% of activations through L21, less than a
+  random subspace of its size would (79-99%), so neurons read the bright sector more than its share. A dark perturbation
+  stays dark: after L9's dark sector is removed, the bright share of the change over the next four layers is 0.08-0.17,
+  under the bright sector's share of directions there (0.17-0.24); after its bright sector is removed, the change is half
+  dark one layer on. Later MLPs carry the perturbation forward, adding 4-7 times what attention adds. The later neurons
+  that move most when it is removed are formatting and token units (code separators, punctuation and line-break runs,
+  word fragments, identifiers, prepositions). Removing the bright sector moves later neurons about half as much, and
+  more topical ones among them (education against commerce, slang). L16's MLP stands apart: its output carries ten times
+  its neighbours' energy, 91% of it dark, and dark perturbations from L9 and L12-L15 grow 8-12 fold there (L10's
+  4.5 fold, L11's not at all).
+- **Removing a sector over a band of layers.** Loss added, in nats per token:
+
+  | band | dark removed: DCLM / code / Chinese / chat | bright removed |
+  |---|---|---|
+  | L0 | +1.05 / +2.15 / +2.31 / +0.60 | +0.07-0.19 |
+  | L1-L8 | +1.41 / +1.76 / +1.12 / +1.02 | +0.35-0.67 |
+  | L9-L20 | +0.51 / +0.80 / +0.46 / +0.38 | +0.35 / +0.76 / +1.11 / +0.19 |
+  | L21-L35 | +0.77 / +0.91 / +1.02 / +0.45 | +4.16 / +6.81 / +9.54 / +4.51 |
+  | L1-L35 | +3.70 / +8.33 / +4.13 / +3.73 | +5.59 / +9.79 / +11.49 / +5.99 |
+
+  The whole MLP output removed at L9-L20 adds 1.11-3.52, and at L1-L35 6.16-12.76. One late layer's dark sector costs
+  little alone (above), but L21-L35's together cost 0.45-1.02: they cover for each other.
+- **Who did it.** Each item asks who did the action in one sentence (forced choice between the two nouns, both orders).
+  There are seven types sharing their nouns and verbs: reversible active, subject relative, passive and object relative,
+  and non-reversible (an inanimate patient) active, passive and object relative. A sector is removed on the sentence's
+  tokens only, at the answer only, or everywhere. The clean model gets 94-100% of items of every type.
+  - **Early damage to the sentence fails the sentences only syntax decides.** Reversible passives and object relatives
+    fail, and actives, subject relatives and every non-reversible type survive, the pattern Caramazza & Zurif (1976)
+    report for agrammatic patients. Removing L0's dark sector everywhere leaves object relatives at 0.52 and the rest at
+    0.90-1.00. Removing the whole MLP output or a random subspace of the dark dimension at L1-L8, on the sentence alone,
+    reverses passives (0.21-0.38): the model reads the first noun as the doer. The pattern isn't specific to the dark
+    sector, which at L1-L8 on the sentence alone costs less (object relatives 0.94).
+  - **The middle dark sector's failure is broad and specific to it.** Removed everywhere, it leaves at most 9% of the
+    clean margin on any type, non-reversible ones included, and object relatives fall below chance (0.23); a random
+    subspace of its dimension keeps 6-22%. On the sentence alone or at the answer alone it keeps 66-98%: what fails is
+    answering from the sentence, not reading it.
+  - **Late damage keeps comprehension.** Removing L21-L35's dark or bright sector keeps 92-100% of items and 40-52% of the
+    margin on every type.
+- **Three depths, three kinds of damage** (from the generations and the tests above):
+  - **Early (L0, L1-L8): form and frame.** The text stays fluent. L0's ablation writes "rome", "madrid" and
+    "Alibabaibaba", and its Chinese collapses into a loop ("是首长，首长是首长"). L1-L8's drifts in genre and fact: "The
+    mitochondria is not the powerhouse of the cell"; the capital list names The Hague for the Netherlands; chat replies
+    turn into reasoning traces ("Okay, so I need to explain…").
+  - **Middle (L9-L20): facts and use of context.** The text loops and is wrong: "The capital of France is a city in the
+    south of France, and the capital of the south is the city of Marseille"; code becomes a column of
+    `# print(fibonacci(n))`. Asked who it is, the model answers "I am an AI assistant", without its name.
+  - **Late (L21-L35): pieces of words.** The content stays right and pieces go missing: "I am Q, a large language model",
+    "due Ray scattering", "passes through Earth atmosphere", "syll counts"; the model drifts into question-and-answer or
+    step-by-step style. Removing the late bright sector instead reduces every prompt to "the, the, the", with
+    comprehension kept.
+- **What this suggests.** The dark sector likely holds what conditions the next token without naming it: early, a token's
+  form and segmentation, its script and the kind of document; in the middle, the facts and bindings that let the model use
+  its context; late, what finishes a word and its spacing. The bright sector carries what is about to be said. Gurnee et
+  al. (2026) find the features outside the J-space mostly low-level syntax and bookkeeping, in line with this. Some of
+  the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely enough to
+  name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
+  [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
+
+**Limits.** One model and one lens. The sectors come from the R-lens averaged over contexts, so part of what it misses
+may be its averaging rather than a separate channel. The means come from DCLM, which is off the distribution of code
+and chat. The single-layer runs score 7,104 positions, the bands 3,552 a slice; each prompt has one greedy rollout; the
+comprehension test is one template with 48 items a type, at ceiling when clean, so its margins say more than its
+accuracies. The bands are chosen by hand. The neurons and tokens named are top lists. Compact outputs are
+`data/summary/dark_sector_{trace,bands,comprehend}_qwen3-8b.*`.
+
 ## Open questions
 
+- What the dark sector carries, variable by variable (script, kind of document, position in a word, who did what), and
+  whether Gemma 4's has the same three depths (§21); what L16's large dark write does (§21).
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
   flat from L4 to L17 (§6).
 - What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§11).

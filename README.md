@@ -170,7 +170,7 @@ for inputs through L13, and the R-lens for inputs and writes from L11;
 
 ## Findings
 
-Findings 1-12, 17 and 18 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or means over a layer's poles
+Findings 1-12, 17, 18 and 21 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or means over a layer's poles
 unless stated. Each heading links to its findings section, with setup, controls and limits.
 
 ### 1. The lenses are stable, and their corpus changes tokens, not concepts
@@ -470,6 +470,19 @@ correlation of the two neurons' activations over the same text, or the tokens th
 the 4B's neurons (96.5% of those that fire) and 85% of the 0.6B's, with chance agreement under 0.2% a layer. The 4B's
 near-silent neurons match only as a class. The catalog's `lineage` table holds each neuron's parent, or child, and
 neuron-lens.com links the two ([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
+
+### 21. The dark sector: what the lens barely reads
+
+At each layer of Qwen3-8B a few directions carry 90% of what the R-lens reads from the layer's neurons: 60-200 of 4,096
+at L0-L3, about 1,900 at L21. The rest, the dark sector, holds 87-95% of the residual early and 71-81% at L4-L15.
+Removing one layer's dark sector from its MLP output moves the model's predictions 300-5,700 times more than the lens
+predicts, and early and in the middle it costs more than removing the bright sector. Removed over a band of layers, it
+breaks something different at each depth. Early, word forms, the kind of document, and the sentences only syntax decides
+("rome", "The mitochondria is not the powerhouse of the cell", object relatives at chance). In the middle, facts and the use
+of context ("the capital of the south is the city of Marseille", comprehension lost on every kind of sentence). Late, the
+pieces that finish a word ("I am Q, a large language model"), with comprehension kept; removing the late bright sector
+instead leaves "the, the, the". The dark sector likely holds what conditions the next token without naming it
+([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits
 
