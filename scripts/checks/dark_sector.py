@@ -42,13 +42,20 @@ Parts:
   the mass on word-continuing pieces), against random subspaces of each sector's dimension. Frames: the same content in
   two settings that differ in what comes next, patched at the tokens they share or the last position: a question
   plainly or in the chat template (does the assistant's turn open a ``<think>``?), the assistant's turn with thinking on
-  or off (does it open with "Okay"?), a sentence opening a document or as a string in Python's ``print("`` (does a
-  quote follow?), a sentence cut before a word as written or in capitals (is the next piece in capitals?), a shopping list
+  or off (does it open with "Okay"?), a sentence cut before a word as written or in capitals (is the next piece in capitals?), a shopping list
   after commas or bulleted (does a comma or a new line follow the last item?); scored by the log-odds of that mass.
   Every task also gets the KL from the clean target to the patched run, at the next token and over the target's greedy
   continuation of ``FOLLOW`` tokens (teacher-forced), and how far the patch moves both toward the source
   (``1 − KL(source ‖ patched) / KL(source ‖ target)``, the source given the same continuation); the sectors' shares of the
   source-target difference; and greedy generations.
+- ``middle``: the layers where neither lens's bright sector holds what the pairs differ in. For the countries (at the
+  subject's tokens), the answer's language, the next word piece and thinking mode, the pairs are split in two halves
+  that share no country or document; at each of ``MIDDLE_LAYERS`` and ``K`` in ``MIDDLE_K``, the part of the
+  source-target difference in a ``K``-dim subspace is patched on the second half: the R-lens's top directions, the
+  S-lens's, those of their average (the two whitened Grams at unit trace), points a quarter, half and three quarters of
+  the way along the shortest rotation from the S-lens's to the R-lens's (``geodesic``), the top directions of the first
+  half's differences and of the gradients of its targets' score (an exact R-lens of each context), and a random
+  subspace; scored as ``patch`` is, with the share of the second half's difference energy each subspace holds.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -56,6 +63,7 @@ Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
     python scripts/checks/dark_sector.py bands
     python scripts/checks/dark_sector.py comprehend
     python scripts/checks/dark_sector.py patch
+    python scripts/checks/dark_sector.py middle
 """
 import argparse
 import json
@@ -94,11 +102,13 @@ def save(part: str, res: dict) -> None:
     (SUMMARY / f"dark_sector_{part}_{STEM}.log").write_text("\n".join(LOG) + "\n")
 
 
-def sectors(mid: bool = False, s_lens: bool = False) -> dict:
+def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
     """``s`` (the metric's √s² per layer), ``V`` (bright bases, whitened, fp16), ``K``, ``R`` (random ``K``-dim bases) at
     each layer's output; with ``mid`` the same at the MLP input (``s_mid``, ``V_mid``, ``K_mid``, ``R_mid``), plus the raw
     readout Grams ``GM`` at each output (for ``trace``'s loudness table), and ``J_out`` (CPU); with ``s_lens`` the
-    S-lens's bright sector at each output (``VS``, ``KS``, ``RS``)."""
+    S-lens's bright sector at each output (``VS``, ``KS``, ``RS``); with ``keep`` (and ``s_lens``) each output's top
+    ``keep`` directions of the R-lens (``VRt``), the S-lens (``VSt``) and their average (``VMt``: the mean of the two
+    whitened Grams, each scaled to unit trace), and a random ``keep``-dim basis (``Rt``)."""
     nm = arch.names(MODEL)
     n = arch.text_config(MODEL).num_hidden_layers
     head = tensors(MODEL, [nm["unembed"], nm["norm"]])
@@ -123,14 +133,15 @@ def sectors(mid: bool = False, s_lens: bool = False) -> dict:
         parts += ("K_out",)
     lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=parts)
     gen = torch.Generator(device=DEV).manual_seed(0)
-    out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM", "VS", "KS", "RS", "overlap")}
+    out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM", "VS", "KS", "RS", "overlap",
+                           "VRt", "VSt", "VMt", "Rt")}
 
     def top(Gr, s, X):
         gain, V = torch.linalg.eigh(s[:, None] * Gr * s[None, :])
         gain, V = gain.flip(0).clamp_min(0), V.flip(1)
         e = (X @ V).pow(2) * gain
         k = int(((e.cumsum(1) / e.sum(1, keepdim=True)).mean(0) < SHARE).sum()) + 1
-        return k, V[:, :k].half().contiguous(), torch.linalg.qr(torch.randn(d, k, device=DEV, generator=gen))[0].half()
+        return k, V[:, :k].half().contiguous(), torch.linalg.qr(torch.randn(d, k, device=DEV, generator=gen))[0].half(), V
 
     for L in range(n):
         p = arch.layout(MODEL)[L].prefix
@@ -140,15 +151,23 @@ def sectors(mid: bool = False, s_lens: bool = False) -> dict:
         Gr = J.T @ G @ J
         s = metric.s2(MODEL, "out", L, DEV).sqrt()
         X = w[p + "mlp.down_proj.weight"].to(DEV).float().T / s
-        k, V, R = top(Gr, s, X / X.norm(dim=1, keepdim=True))
+        k, V, R, VR = top(Gr, s, X / X.norm(dim=1, keepdim=True))
         out["s"].append(s), out["K"].append(k), out["V"].append(V), out["R"].append(R)
         if s_lens:  # the token footprints K ē at this output, as whitened vectors: their Gram, and its top directions
             Kl = lm["K_out"][L].to(DEV).float()
             s2_ = s.pow(2)
-            k, VS, RS = top(Kl @ GE @ Kl.T / s2_[:, None] / s2_[None, :], s, X / X.norm(dim=1, keepdim=True))
+            GS = Kl @ GE @ Kl.T / s2_[:, None] / s2_[None, :]
+            k, VS, RS, VSf = top(GS, s, X / X.norm(dim=1, keepdim=True))
             out["KS"].append(k), out["VS"].append(VS), out["RS"].append(RS)
             out["overlap"].append((V.float().T @ VS.float()).pow(2).sum().item() / k)  # S-bright's share in R-bright
-            del Kl
+            if keep:
+                wr, ws = s[:, None] * Gr * s[None, :], s[:, None] * GS * s[None, :]
+                VM = torch.linalg.eigh(wr / wr.trace() + ws / ws.trace())[1].flip(1)
+                out["VRt"].append(VR[:, :keep].half().contiguous()), out["VSt"].append(VSf[:, :keep].half().contiguous())
+                out["VMt"].append(VM[:, :keep].half().contiguous())
+                out["Rt"].append(torch.linalg.qr(torch.randn(d, keep, device=DEV, generator=gen))[0].half())
+                del wr, ws, VM
+            del Kl, GS
         if mid:
             out["GM"].append(Gr)
             s = metric.s2(MODEL, "mid", L, DEV).sqrt()
@@ -156,7 +175,7 @@ def sectors(mid: bool = False, s_lens: bool = False) -> dict:
             g = w[p + "post_attention_layernorm.weight"].to(DEV).float()
             rows = torch.cat([w[p + "mlp.gate_proj.weight"].to(DEV).float(), w[p + "mlp.up_proj.weight"].to(DEV).float()])
             Xm = rows * g * s  # covector rows c as whitened vectors s ⊙ c
-            k, V, R = top(Jm.T @ G @ Jm, s, Xm / Xm.norm(dim=1, keepdim=True))
+            k, V, R, _ = top(Jm.T @ G @ Jm, s, Xm / Xm.norm(dim=1, keepdim=True))
             out["s_mid"].append(s), out["K_mid"].append(k), out["V_mid"].append(V), out["R_mid"].append(R)
             del Jm, Xm, rows
         del w, J, X
@@ -642,6 +661,10 @@ ABBR = {"dark": "dk", "bright": "br", "rand_d": "rd", "rand_b": "rb", "s_dark": 
         "rand_sb": "rSb", "full": "fu"}
 SHOW = (2, 6, 12, 18, 24, 30)  # layers of the residual patches in the generations
 TOPK = 1024  # a reference distribution's kept tokens in the KLs (the rest pooled into one)
+MIDDLE_K = (8, 32, 128, 512)  # subspace dimensions of the middle part
+MIDDLE_LAYERS = (0, 1, 2, 4, 6, 8, 10, 12, 16, 20)
+MIDDLE_TASKS = ("fact_subject", "lang_zh_from_en", "word_ident", "frame_think_last")
+GEO = (0.25, 0.5, 0.75)  # points on the shortest rotation from the S-lens's top directions to the R-lens's
 FOLLOW = 20  # tokens of the target's greedy continuation, scored teacher-forced
 ITEMS = [  # one token each after a space
     "apple", "banana", "cherry", "grape", "lemon", "orange", "peach", "pear", "plum", "mango", "onion", "garlic",
@@ -652,8 +675,18 @@ ITEMS = [  # one token each after a space
 ]
 
 
-def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
-    sec = sectors(s_lens=True)
+def geodesic(U1: torch.Tensor, U2: torch.Tensor, t: float) -> torch.Tensor:
+    """The subspace a share ``t`` of the way along the shortest rotation (the Grassmann geodesic) from the span of
+    orthonormal ``U1`` to that of ``U2`` (``[d, K]`` each), as an orthonormal basis."""
+    A, cos, Bt = torch.linalg.svd(U1.T @ U2)
+    theta = torch.arccos(cos.clamp(-1, 1))
+    X, Y = U1 @ A, U2 @ Bt.T  # principal vectors: x_i · y_j = δ_ij cos θ_i
+    Q = (Y - X * cos) / torch.sin(theta).clamp_min(1e-6)
+    return torch.linalg.qr(X * torch.cos(t * theta) + Q * torch.sin(t * theta))[0]
+
+
+def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False) -> None:
+    sec = sectors(s_lens=True, keep=max(MIDDLE_K) if middle else 0)
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
@@ -671,7 +704,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
     nl, comma = mask(lambda x: x.startswith("\n")), mask(lambda x: x.startswith(","))
     think = mask(lambda x: x == "<think>")
     rng = random.Random(0)
-    S = {"mode": None}
+    S = {"mode": None, "basis": None}
     cap = {"h": [None] * nL, "m": [None] * nL}
 
     def hook(M, kind):
@@ -687,7 +720,9 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
                 return None
             x = x.clone()
             t = x[b, p]
-            x[b, p] = (t.float() + part(S["src"][kind][M].float() - t.float(), M, S["sector"], sec)).to(x.dtype)
+            dt = S["src"][kind][M].float() - t.float()
+            add = project(dt, sec["s"][M], S["basis"]) if S["basis"] is not None else part(dt, M, S["sector"], sec)
+            x[b, p] = (t.float() + add).to(x.dtype)
             return (x, *out[1:]) if isinstance(out, tuple) else x
         return h
 
@@ -718,8 +753,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
             att = torch.zeros_like(ids)
             for i, r in enumerate(rs):
                 ids[i, :len(r)], att[i, :len(r)] = torch.tensor(r), 1
-            S.update(mode=mode, T=n, b=torch.tensor([i for i, q in enumerate(ps) for _ in q], dtype=torch.long, device=DEV),
-                     p=torch.tensor([j for q in ps for j in q], dtype=torch.long, device=DEV), **kw)
+            S.update({"mode": mode, "T": n, "basis": None, "p": torch.tensor([j for q in ps for j in q], dtype=torch.long, device=DEV),
+                      "b": torch.tensor([i for i, q in enumerate(ps) for _ in q], dtype=torch.long, device=DEV), **kw})
             if src is not None:
                 S["src"] = {k: v[:, off[b0]:off[b0 + len(rs)]] for k, v in src.items()}
             hs = model.model(input_ids=ids.to(DEV), attention_mask=att.to(DEV), use_cache=False).last_hidden_state
@@ -752,8 +787,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         return rows
 
     def generate(row, pos, mode=None, src=None, **kw):
-        S.update(mode=mode, T=len(row), b=torch.zeros(len(pos), dtype=torch.long, device=DEV),
-                 p=torch.tensor(pos, dtype=torch.long, device=DEV), src=src, **kw)
+        S.update({"mode": mode, "T": len(row), "b": torch.zeros(len(pos), dtype=torch.long, device=DEV), "basis": None,
+                  "p": torch.tensor(pos, dtype=torch.long, device=DEV), "src": src, **kw})
         with torch.inference_mode():
             out = model.generate(torch.tensor([row], device=DEV), max_new_tokens=new, do_sample=False,
                                  pad_token_id=tok.eos_token_id)
@@ -888,15 +923,105 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
             for p in kept_:
                 p["tp"], p["sp"] = ((p["tshare"], p["sshare"]) if scope == "shared"
                                     else ([len(p["t"]) - 1], [len(p["s"]) - 1]))
-            task(f"frame_{name}_{scope}", kept_, m_mass(a, b), ("form",), shows=shows if scope == scopes[0] else 0)
+            do(f"frame_{name}_{scope}", kept_, m_mass(a, b), ("form",), shows=shows if scope == scopes[0] else 0)
+
+    def gradients(pairs, metric, key):
+        """Each layer's output gradient of the clean target's ``key`` at each pair's patched positions, as raw covectors:
+        ``[nL]`` of ``[P, d]``."""
+        store, out = {}, [[] for _ in range(nL)]
+
+        def grab(M):
+            def h(mod, args, o):
+                x = o[0] if isinstance(o, tuple) else o
+                x.retain_grad()
+                store[M] = x
+            return h
+
+        model.requires_grad_(False)
+        hs_ = [lay.register_forward_hook(grab(M)) for M, lay in enumerate(layers)]
+        with torch.inference_mode(False), torch.enable_grad():
+            for b0 in range(0, len(pairs), 8):
+                bp = pairs[b0:b0 + 8]
+                n = max(len(q["t"]) for q in bp)
+                ids = torch.full((len(bp), n), tok.pad_token_id)
+                att = torch.zeros_like(ids)
+                for i, q in enumerate(bp):
+                    ids[i, :len(q["t"])], att[i, :len(q["t"])] = torch.tensor(q["t"]), 1
+                emb = model.model.embed_tokens(ids.to(DEV)).detach().requires_grad_(True)
+                hs = model.model(inputs_embeds=emb, attention_mask=att.to(DEV), use_cache=False).last_hidden_state
+                last = torch.tensor([len(q["t"]) - 1 for q in bp], device=DEV)
+                lp = model.lm_head(hs[torch.arange(len(bp), device=DEV), last]).float().log_softmax(-1)
+                metric(lp, bp)[key].sum().backward()
+                for M in range(nL):
+                    g = store[M].grad
+                    out[M].append(torch.cat([g[i, q["tp"]] for i, q in enumerate(bp)]).float())
+                store.clear()
+        for h in hs_:
+            h.remove()
+        return [torch.cat(g) for g in out]
+
+    SWITCH = {"fact_subject": "flip", "lang_zh_from_en": "top_ts", "word_ident": "flip", "frame_think_last": "top_a"}
+
+    def middle_task(name, pairs, metric, primary, shows=0):
+        """At each of ``MIDDLE_LAYERS``, ``K``-dim subspaces of each family patched (their part of the source-target
+        difference) on the pairs of half 1: the R-lens's and the S-lens's top directions, their average, points on the
+        rotation from the S-lens's to the R-lens's, the top directions of half 0's differences and of the gradients of
+        its targets' score, and a random subspace. Scored by the share of the primary score's gap, how often the top
+        token switches, the KL to the clean target, and the share of half 1's difference energy each subspace holds."""
+        if name not in MIDDLE_TASKS:
+            return
+        fit, test = [p for p in pairs if p["half"] == 0], [p for p in pairs if p["half"] == 1]
+        cap_ = lambda ps, k: run([p[k] for p in ps], [p[k + "p"] for p in ps], "cap")
+        sf, tf, ss, ts = cap_(fit, "s"), cap_(fit, "t"), cap_(test, "s"), cap_(test, "t")
+        rows_t, pos_t = [p["t"] for p in test], [p["tp"] for p in test]
+        ref = run(rows_t, keep=True)["top"]
+        clean_t, clean_s = summ(metric(ts["lp"], test)), summ(metric(ss["lp"], test))
+        grads = gradients(fit, metric, primary[0])
+        out = {"n_fit": len(fit), "n_test": len(test), "clean_t": clean_t, "clean_s": clean_s, "layers": {}}
+        k0, sw = primary[0], SWITCH[name]
+        log(f"[{name}] fit {len(fit)} pairs ({len(grads[0])} positions), test {len(test)}; clean target {k0} "
+            f"{clean_t[k0]:.2f} {sw} {clean_t[sw]:.2f} | source {clean_s[k0]:.2f} {clean_s[sw]:.2f}")
+        for L in MIDDLE_LAYERS:
+            s_ = sec["s"][L]
+            dfit = (sf["cap"]["h"][L].float() - tf["cap"]["h"][L].float()) / s_
+            dtest = (ss["cap"]["h"][L].float() - ts["cap"]["h"][L].float()) / s_
+            fam = {"R": sec["VRt"][L].float(), "S": sec["VSt"][L].float(), "mix": sec["VMt"][L].float(),
+                   "diff": torch.linalg.svd(dfit, full_matrices=False).Vh.T,
+                   "grad": torch.linalg.svd(grads[L] * s_, full_matrices=False).Vh.T, "rand": sec["Rt"][L].float()}
+            row = {}
+            for K in MIDDLE_K:
+                bases = {f: B[:, :K] for f, B in fam.items()}
+                bases |= {f"geo{t}": geodesic(bases["S"], bases["R"], t) for t in GEO}
+                for f, B in bases.items():
+                    o = run(rows_t, pos_t, "h", src=ss["cap"], layers={L}, basis=B.half().contiguous(), refs=(ref,))
+                    r = summ(metric(o["lp"], test))
+                    cell = {"dim": B.shape[1], "kl": o["kl"].mean().item(), "switch": r[sw],
+                            "energy": (dtest @ B).pow(2).sum().item() / dtest.pow(2).sum().item()}
+                    for k in primary:
+                        cell["frac_" + k] = (r[k] - clean_t[k]) / (clean_s[k] - clean_t[k])
+                    if f in ("diff", "grad"):
+                        cell |= {f"in_{g}": (B.T @ bases[g]).pow(2).sum().item() / B.shape[1] for g in ("R", "S")}
+                    row[f"{f}@{K}"] = cell
+                log(f"  L{L:<2d} K {K:3d} " + " ".join(
+                    f"{f} {row[f'{f}@{K}']['frac_' + k0]:+.2f}/{row[f'{f}@{K}']['switch']:.2f}" for f in bases))
+            log(f"  L{L:<2d} energy@128 " + " ".join(f"{f} {row[f'{f}@128']['energy']:.2f}" for f in bases)
+                + " | diff in R/S " + "/".join(f"{row['diff@128'][f'in_{g}']:.2f}" for g in ("R", "S"))
+                + ", grad in R/S " + "/".join(f"{row['grad@128'][f'in_{g}']:.2f}" for g in ("R", "S"))
+                + f" (random {128 / d:.2f})")
+            out["layers"][L] = row
+        res.setdefault("middle", {})[name] = out
+        save("middle", res)
+
+    do = middle_task if middle else task
+    halves = (0, 1) if middle else (None,)
 
     with torch.inference_mode():
         # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
         rows = []
-        for en, _, capital, _, lang in COUNTRIES:
+        for ci, (en, _, capital, _, lang) in enumerate(COUNTRIES):
             for rel, text, ans in (("capital", f"The capital of {en} is", capital),
                                    ("language", f"The official language of {en} is", lang)):
-                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0]})
+                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0], "half": ci % 2})
         lp = run([r["ids"] for r in rows])["lp"]
         rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
         groups = {}
@@ -905,10 +1030,13 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         pairs = []
         for g in groups.values():
             g.sort(key=lambda r: (r["en"] not in ("France", "Italy"), rng.random()))
-            for i, r in enumerate(g):
-                o = next((g[(i + k) % len(g)] for k in range(1, len(g)) if g[(i + k) % len(g)]["a"] != r["a"]), None)
-                if o is not None:
-                    pairs.append({"t": r["ids"], "s": o["ids"], "at": r["a"], "as": o["a"], "rel": r["rel"]})
+            for h_ in halves:  # the middle part pairs countries within halves, fitting on one and scoring on the other
+                gh = [r for r in g if h_ in (None, r["half"])]
+                for i, r in enumerate(gh):
+                    o = next((gh[(i + k) % len(gh)] for k in range(1, len(gh)) if gh[(i + k) % len(gh)]["a"] != r["a"]),
+                             None)
+                    if o is not None:
+                        pairs.append({"t": r["ids"], "s": o["ids"], "at": r["a"], "as": o["a"], "rel": r["rel"], "half": h_})
         pairs.sort(key=lambda p: p["rel"] != "capital")
         log(f"facts: {len(rows)} of {2 * len(COUNTRIES)} prompts answered right, {len(pairs)} pairs")
         for scope in ("all", "subject", "last"):
@@ -916,12 +1044,12 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
                 n = len(p["t"])
                 p["tp"] = p["sp"] = {"all": list(range(1, n)), "last": [n - 1],
                                      "subject": [k for k in range(n) if p["t"][k] != p["s"][k]]}[scope]
-            task(f"fact_{scope}", pairs, m_fact, ("ld",), shows=1 if scope == "all" else 0)
+            do(f"fact_{scope}", pairs, m_fact, ("ld",), shows=1 if scope == "all" else 0)
 
         # language: the last position of a capital prompt in one language, from one about another country in the other
         ok = []
-        for en, zh, capital, capital_zh, _ in COUNTRIES:
-            c = {"en": enc(f"The capital of {en} is"), "zh": enc(f"{zh}的首都是"),
+        for ci, (en, zh, capital, capital_zh, _) in enumerate(COUNTRIES):
+            c = {"en": enc(f"The capital of {en} is"), "zh": enc(f"{zh}的首都是"), "half": ci % 2,
                  "a_en": first([" " + capital, capital]), "a_zh": first([capital_zh, " " + capital_zh]), "name": en}
             ok.append(c)
         lp = run([c[k] for c in ok for k in ("en", "zh")])["lp"].argmax(-1).tolist()
@@ -930,17 +1058,19 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         log(f"language: {len(ok)} of {len(COUNTRIES)} countries answered right in both languages")
         for tl, sl in (("zh", "en"), ("en", "zh")):
             pairs = []
-            for i, x in enumerate(ok):
-                for k in range(1, len(ok)):
-                    y = ok[(i + k) % len(ok)]
-                    sets = [x["a_" + tl], x["a_" + sl], y["a_" + tl], y["a_" + sl]]
-                    if len({t for s_ in sets for t in s_}) == sum(map(len, sets)):
-                        break
-                else:
-                    continue
-                pairs.append({"t": x[tl], "s": y[sl], "tp": [len(x[tl]) - 1], "sp": [len(y[sl]) - 1],
-                              "cells": {"tt": x["a_" + tl], "ts": x["a_" + sl], "st": y["a_" + tl], "ss": y["a_" + sl]}})
-            task(f"lang_{tl}_from_{sl}", pairs, m_lang, ("lang", "content"), shows=1)
+            for h_ in halves:
+                okh = [c for c in ok if h_ in (None, c["half"])]
+                for i, x in enumerate(okh):
+                    for k in range(1, len(okh)):
+                        y = okh[(i + k) % len(okh)]
+                        sets = [x["a_" + tl], x["a_" + sl], y["a_" + tl], y["a_" + sl]]
+                        if len({t for s_ in sets for t in s_}) == sum(map(len, sets)):
+                            break
+                    else:
+                        continue
+                    pairs.append({"t": x[tl], "s": y[sl], "tp": [len(x[tl]) - 1], "sp": [len(y[sl]) - 1], "half": h_,
+                                  "cells": {"tt": x["a_" + tl], "ts": x["a_" + sl], "st": y["a_" + tl], "ss": y["a_" + sl]}})
+            do(f"lang_{tl}_from_{sl}", pairs, m_lang, ("lang", "content"), shows=1)
 
         # word pieces: DCLM prefixes ending inside a two-piece word, or after a whole word
         docs = lens_docs(act_file("dclm"), tok, 600, T, T, full=True)
@@ -964,14 +1094,18 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         log(f"words: {len(mid)} mid-word and {len(bound)} word-final prefixes kept")
         last = lambda r: [len(r["ids"]) - 1]
         ident = []
-        for i, r in enumerate(mid):
-            o = next((mid[(i + k) % len(mid)] for k in range(1, len(mid)) if mid[(i + k) % len(mid)]["next"] != r["next"]), None)
-            ident.append({"t": r["ids"], "s": o["ids"], "tp": last(r), "sp": last(o), "tn": r["next"], "sn": o["next"]})
-        task("word_ident", ident, m_word, ("ld",), shows=2)
+        for h_ in halves:
+            mh = [r for j, r in enumerate(mid) if h_ in (None, j % 2)]
+            for i, r in enumerate(mh):
+                o = next((mh[(i + k) % len(mh)] for k in range(1, len(mh)) if mh[(i + k) % len(mh)]["next"] != r["next"]),
+                         None)
+                ident.append({"t": r["ids"], "s": o["ids"], "tp": last(r), "sp": last(o), "tn": r["next"], "sn": o["next"],
+                              "half": h_})
+        do("word_ident", ident, m_word, ("ld",), shows=2)
         k = min(len(mid), len(bound))
-        task("word_end", [{"t": mid[i]["ids"], "s": bound[i]["ids"], "tp": last(mid[i]), "sp": last(bound[i])}
+        do("word_end", [{"t": mid[i]["ids"], "s": bound[i]["ids"], "tp": last(mid[i]), "sp": last(bound[i])}
                           for i in range(k)], m_word, ("cont",), shows=2)
-        task("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
+        do("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
                             for i in range(k)], m_word, ("cont",), shows=1)
 
         # frames: the same content in two settings, which differ in what comes next
@@ -980,12 +1114,13 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         rng.shuffle(qs)
         user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n")
         chat, mode_ = [], []
-        for q in qs:  # a plain question and answer against the chat template: does the assistant's turn open a thought?
+        for qi, q in enumerate(qs):  # a plain question and answer against the chat template: does the turn open a thought?
             Q, pre = enc(q), enc("Question:\n")
             chat.append({"t": pre + Q + enc("\nAnswer:"), "s": user + Q + turn,
                          "tshare": list(range(len(pre), len(pre) + len(Q))),
                          "sshare": list(range(len(user), len(user) + len(Q)))})
-            mode_.append({"t": user + Q + turn + enc("<think>\n\n</think>\n\n"), "s": user + Q + turn + enc("<think>\n")})
+            mode_.append({"t": user + Q + turn + enc("<think>\n\n</think>\n\n"), "s": user + Q + turn + enc("<think>\n"),
+                          "half": qi % 2})
         frame("chat", chat, think)
         frame("think", mode_, mask(lambda x: x in ("Okay", "Alright", "Hmm", "Well")), scopes=("last",))
         sents = []  # one sentence of each document, 9-30 tokens, on one line
@@ -996,17 +1131,13 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
                     if j is not None and not any("\n" in strs[x] for x in doc[i:j + 1]):
                         sents.append(tok.decode(doc[i:j + 1]).strip())
                         break
-        code, upper = [], []
-        pre = enc('print("')
-        for s_ in sents:  # prose opening a document against a string printed in Python: does a quote follow?
+        upper = []
+        for s_ in sents:
             t = enc(s_)
-            code.append({"t": t, "s": pre + t, "tshare": list(range(1, len(t))),
-                         "sshare": list(range(len(pre) + 1, len(pre) + len(t)))})
             cut = [k for k in range(5, len(t)) if re.fullmatch(r" [a-z]{3,}", strs[t[k]])]
             if cut:  # a sentence cut before a lowercase word, as written and in capitals
                 text = tok.decode(t[:cut[len(cut) // 2]])
                 upper.append({"t": enc(text), "s": enc(text.upper())})
-        frame("code", code, mask(lambda x: x.startswith('"')))
         frame("caps", upper, caps, lower, scopes=("last",))
         lists = []
         for _ in range(4 * n_frame):  # a list after commas against a bulleted list: what follows the last item?
@@ -1026,7 +1157,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle"))
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
@@ -1042,7 +1173,7 @@ def main() -> None:
     elif a.part == "comprehend":
         comprehend(a.items, 64)
     else:
-        patch(a.words, a.frames, 32, 20)
+        patch(a.words, a.frames, 32, 20, middle=a.part == "middle")
 
 
 if __name__ == "__main__":
