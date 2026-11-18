@@ -40,7 +40,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
 | [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
 | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B's and 0.6B's heads are the 8B's and 1.7B's, their neurons match a parent each and are ranked by its activation: three lineages, not five sizes |
-| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words |
+| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words; what two prompts differ in turns bright by L4-L10, and the dark rest of their difference is inert |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1740,6 +1740,7 @@ an MLP output is to replace that part with its mean over 64 held-out DCLM docume
 The controls remove random subspaces of the dark and the bright dimension, or the whole MLP output. Single layers are
 scored on 64 other DCLM documents of 128 tokens (positions 16-126), bands of layers on 32 documents of each activation
 slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three in the chat template without thinking).
+The swaps between prompts (`patch`, `middle`) ran on an H100.
 
 - **The bright sector grows with depth.** It has 60-192 directions at L0-L3, 610 at L9, 1,114 at L15, 1,920 at L21,
   2,688 at L27 and 3,367 at L35, of 4,096. In context the residual is 87-95% dark at L0-L3, 71-81% at L4-L15 and
@@ -1805,25 +1806,91 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
     "due Ray scattering", "passes through Earth atmosphere", "syll counts"; the model drifts into question-and-answer or
     step-by-step style. Removing the late bright sector instead reduces every prompt to "the, the, the", with
     comprehension kept.
-- **What this suggests.** The dark sector likely holds what conditions the next token without naming it: early, a token's
-  form and segmentation, its script and the kind of document; in the middle, the facts and bindings that let the model use
-  its context; late, what finishes a word and its spacing. The bright sector carries what is about to be said. Gurnee et
-  al. (2026) find the features outside the J-space mostly low-level syntax and bookkeeping, in line with this. Some of
-  the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely enough to
-  name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
+- **Swapping a sector between two prompts** (`patch`). A sector of one layer's residual, at chosen positions, takes its
+  value from another prompt's run (the source), and the target's output is scored by how far it moves toward the
+  source's: the share of the gap in the two answers' log-prob difference, and how often the top token switches. The
+  share is in log-probability, so a probability can rise from 10⁻⁸ to 10⁻³ and score well while the output stays put.
+  Controls: random subspaces of each sector's dimension, and the whole residual.
+  - **What two prompts differ in turns bright by L4-L10.** In 99 pairs like "The capital of Italy is" and "The capital
+    of France is", patched at every position, the country moves with the dark sector at L0-L8 (0.67-0.99 of the gap;
+    65-97% of answers switch), no more than a random subspace of its size (0.95-1.00), and with the bright sector from
+    L10 (0.92-0.99; 90-100% switch), when the dark sector moves 0.01-0.08 and switches none. The dark sector still holds
+    78% of the dimensions there, and a random subspace that large moves 0.64-0.98 through L20. The handoff is at L8-L10
+    (dark 0.67, 0.42, 0.08; bright 0.34, 0.61, 0.92). Which piece finishes a word, and whether the word goes on, move
+    with the dark sector at L0-L2 (0.22-0.76) and with the bright sector from L3 (0.60-1.00). Patched at the last
+    position of "中国的首都是" from an English prompt about another country, the bright sector at L6-L16 makes every pair
+    answer its own capital in English ("Beijing"). The dark sector moves the answer's language at most 0.15 at any layer,
+    either way round, and which capital follows moves only from L24.
+  - **The rest of the difference changes nothing.** At L4-L16, 64-83% of the energy of the two prompts' difference is
+    dark. Patched from L10, the dark sector moves the next token's distribution by a KL of 0.02-0.12 (the whole residual:
+    7.7) and the next 20 tokens' (teacher-forced on the target's own continuation) by at most 0.05 (the whole residual:
+    0.29-0.44); for the answer's language and the word pieces, under 0.32 at L4-L20 (3.7-16). Of 65 greedy continuations
+    with the dark sector patched at L6 or later, 39 match the clean ones word for word; with the bright sector, 9.
+  - **Settings are read from the tokens that set them.** Four kinds of pairs, 64 each, keep the content and change the
+    setting: a question asked plainly or in the chat template (does the reply open with `<think>`?), the assistant's turn
+    with thinking on or off (does it open with "Okay"?), a sentence cut before a word as written or in capitals, and a
+    shopping list after commas or bulleted (a comma or a new line after the last item?). Patching the tokens the two
+    prompts share switches nothing before L20, even with the whole residual (around the chat template, nothing at any
+    layer): later layers read the setting again from its own tokens. At the last position the whole residual switches
+    thinking from L11-L12, capitals from L22, the list from L24 and `<think>` from L28. The bright sector follows
+    (thinking at L20-L21, 88-100% of pairs: "Okay, the user is asking for the capital of Spain") and the dark sector
+    never does, with one exception: over the last layers the list's comma or new line moves into the dark sector (31% of
+    pairs at L32, 86% at L33, all at L34-L35, where the bright sector switches 5-20% and a random subspace of the dark
+    sector's size none).
+- **The S-lens's sector.** The same rule on the token footprints at each output, `K_L ē` (the S-lens's map from the
+  embedding, over the kept tokens), gives 908 directions at L0, 761 at L9, 539 at L19 and 59 at L35. It overlaps the
+  R-lens's bright sector no more than chance at L0-L3 and 1.2-1.6 times chance at L4-L20. It carries the country at L0
+  (0.43 of the gap; a random subspace of its size 0.01), no more than chance at L2-L10 (0.03-0.06), and at most 0.20
+  of the answer's language or a setting through L20; its share of the word pieces rises from L10 to 0.56 at L18, where it
+  overlaps the R-lens's more.
+- **The middle layers** (`middle`), where neither bright sector carries the difference. The pairs are split in two halves
+  (the countries into capital and official-language prompts, since one country's direction can't carry another's), and
+  subspaces of 8-512 directions are patched on the second half: each lens's top directions, their average, points along
+  the shortest rotation from the S-lens's to the R-lens's, the union of both, the top directions of the first half's
+  differences, and those of the gradients of its answers (an exact readout of each context).
+  - **Not a blend of the two lenses.** Points along the rotation hold about as much of the difference's energy as its
+    ends. Their apparent gains at L0-L4 (up to 0.51 of the gap from 8-128 directions, where either end carries none)
+    vanish in the union of the two lenses' directions, which contains them (0.00-0.17): projecting at a slant moves the
+    S-lens part of the difference into the R-lens's directions. The average of the two lenses carries less than the
+    R-lens alone, and the union of their top 512 directions no more than the R-lens's top 1,024.
+  - **The country sits just past the bright sector's cut.** At L4-L8 the R-lens's top 1,024 directions carry 0.53-0.74
+    of it (49-71% switch), its top 512 0.14-0.31, the S-lens's top 1,024 0.09-0.16 and a random 1,024 0.03-0.12; the
+    bright sector there has 328-521 directions. The country is compact at every layer: 32 directions fitted on the
+    capital prompts carry 0.63-0.86 of it on the official-language ones (51-80% switch).
+  - **Some variables sit outside both lenses.** At L12, 8 directions fitted on other questions switch thinking mode in
+    every pair (0.80 of the gap), while either lens's top 1,024 carries at most 0.18 and switches none; such directions
+    overlap the lenses' top 128 at chance or below. At L0-L2, 13 directions fitted on other countries carry 0.41-0.63 of
+    the answer's language, and the R-lens's top 1,024 0.03-0.50.
+  - **What the answer reads is R-like, and the content isn't there yet.** The top 32 directions of the gradients overlap
+    the R-lens's top 32 at 4-97 times chance (0.03-0.76 against 0.008), yet carry at most 0.37 of the gap.
+- **What this suggests.** What two prompts differ in turns bright by L4-L10, and the dark part of their difference is
+  inert, so the dark sector's ablations likely remove what such pairs share rather than what they differ in. Early the
+  dark sector is nearly the whole residual and carries everything; later it may hold the kind of document, position, or
+  the residual's scale, which the R-lens's LN rule holds fixed (untested). The one variable found in it by swapping is late
+  formatting (the list's comma or new line at L32-L35), in line with the late ablations dropping pieces of words and with
+  Gurnee et al. (2026), who find the features outside the J-space mostly low-level syntax and bookkeeping. The 90% cut
+  is a hard line on a graded spectrum: in the middle layers the country sits in the R-lens's next few hundred directions,
+  and some variables (thinking mode at L12, the answer's language at L0-L2) in compact directions neither lens weights.
+  Some of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely
+  enough to name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
   [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
 
 **Limits.** One model and one lens. The sectors come from the R-lens averaged over contexts, so part of what it misses
 may be its averaging rather than a separate channel. The means come from DCLM, which is off the distribution of code
 and chat. The single-layer runs score 7,104 positions, the bands 3,552 a slice; each prompt has one greedy rollout; the
 comprehension test is one template with 48 items a type, at ceiling when clean, so its margins say more than its
-accuracies. The bands are chosen by hand. The neurons and tokens named are top lists. Compact outputs are
-`data/summary/dark_sector_{trace,bands,comprehend}_qwen3-8b.*`.
+accuracies. The bands are chosen by hand. The neurons and tokens named are top lists. A swap changes one layer, so a
+setting the model reads again from its own tokens can't move before late layers, and a pair shows only what it varies;
+a sentence as prose or as code (in a comment or a string) found no clean next-token contrast. The middle part's fitted
+directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The S-lens's sector uses
+the footprints with the lens's stretch, not its polar factor. Compact outputs are
+`data/summary/dark_sector_{trace,bands,comprehend,patch,middle}_qwen3-8b.*`.
 
 ## Open questions
 
-- What the dark sector carries, variable by variable (script, kind of document, position in a word, who did what), and
-  whether Gemma 4's has the same three depths (§21); what L16's large dark write does (§21).
+- What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
+  residual's scale), and whether Gemma 4's has the same three depths; what L16's large dark write does; a lens for the
+  middle layers' variables that neither lens weights, such as thinking mode at L12 (§21).
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
   flat from L4 to L17 (§6).
 - What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§11).
