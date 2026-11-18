@@ -42,8 +42,8 @@ Parts:
   the mass on word-continuing pieces), against random subspaces of each sector's dimension. Frames: the same content in
   two settings that differ in what comes next, patched at the tokens they share or the last position: a question
   plainly or in the chat template (does the assistant's turn open a ``<think>``?), the assistant's turn with thinking on
-  or off (does it open with "Okay"?), a sentence opening a document or as a comment opening a Python file (does a new
-  line follow?), a sentence cut before a word as written or in capitals (is the next piece in capitals?), a shopping list
+  or off (does it open with "Okay"?), a sentence opening a document or as a string in Python's ``print("`` (does a
+  quote follow?), a sentence cut before a word as written or in capitals (is the next piece in capitals?), a shopping list
   after commas or bulleted (does a comma or a new line follow the last item?); scored by the log-odds of that mass.
   Every task also gets the KL from the clean target to the patched run, at the next token and over the target's greedy
   continuation of ``FOLLOW`` tokens (teacher-forced), and how far the patch moves both toward the source
@@ -997,17 +997,16 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
                         sents.append(tok.decode(doc[i:j + 1]).strip())
                         break
         code, upper = [], []
-        pre = enc("```python\n#")
-        for s_ in sents:  # prose opening a document against a comment opening a Python file: does a new line follow?
-            t, body = enc(s_), enc(" " + s_)
-            if t[1:] == body[1:]:
-                code.append({"t": t, "s": pre + body, "tshare": list(range(1, len(t))),
-                             "sshare": list(range(len(pre) + 1, len(pre) + len(t)))})
+        pre = enc('print("')
+        for s_ in sents:  # prose opening a document against a string printed in Python: does a quote follow?
+            t = enc(s_)
+            code.append({"t": t, "s": pre + t, "tshare": list(range(1, len(t))),
+                         "sshare": list(range(len(pre) + 1, len(pre) + len(t)))})
             cut = [k for k in range(5, len(t)) if re.fullmatch(r" [a-z]{3,}", strs[t[k]])]
             if cut:  # a sentence cut before a lowercase word, as written and in capitals
                 text = tok.decode(t[:cut[len(cut) // 2]])
                 upper.append({"t": enc(text), "s": enc(text.upper())})
-        frame("code", code, nl)
+        frame("code", code, mask(lambda x: x.startswith('"')))
         frame("caps", upper, caps, lower, scopes=("last",))
         lists = []
         for _ in range(4 * n_frame):  # a list after commas against a bulleted list: what follows the last item?
