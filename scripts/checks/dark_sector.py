@@ -29,16 +29,27 @@ Parts:
   active, subject relative, passive, object relative; non-reversible: active, passive, object relative), forced choice
   A/B in both orders, scored by the log-prob margin of the agent's letter. A band's sector is ablated on the sentence's
   tokens only (``encode``), at the answer only (``answer``) or everywhere (``all``).
+- ``patch``: one sector of one layer's residual (``h``), or of a band's MLP outputs (``m``), at chosen positions, taken
+  from a source prompt's clean run: facts (prompts "The capital of X is" and "The official language of X is" of one
+  length that differ in the country, patched at every position, the country's or the last), language (a capital
+  prompt's last position from one about another country in the other language, Chinese ↔ English, with four outcomes:
+  either country's capital in either language) and word pieces (DCLM prefixes ending inside a two-piece word or after a
+  whole word: which piece comes next, and whether the word goes on). Scored by the share of the clean target-to-source
+  gap the patch moves (the two answers' log-prob difference; the source language's and the source country's log-odds;
+  the mass on word-continuing pieces), against random subspaces of each sector's dimension; also the sectors' shares of
+  the source-target difference, and greedy generations.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
     python scripts/checks/dark_sector.py trace
     python scripts/checks/dark_sector.py bands
     python scripts/checks/dark_sector.py comprehend
+    python scripts/checks/dark_sector.py patch
 """
 import argparse
 import json
 import random
+import re
 import time
 
 import numpy as np
@@ -158,19 +169,24 @@ def model_and_means(sec: dict, extra_hooks=None):
     return tok, model, [m / count[0] for m in sums]
 
 
+def part(x: torch.Tensor, M: int, sector: str, sec: dict) -> torch.Tensor:
+    """The part of raw vectors ``x`` at layer ``M``'s output in ``sector`` (``mlp``, ``full``: all of it)."""
+    if sector in ("mlp", "full"):
+        return x.float()
+    p = project(x, sec["s"][M], sec["V" if sector in ("dark", "bright") else "R"][M])
+    return p if sector in ("bright", "rand_b") else x.float() - p
+
+
 def ablated(out: torch.Tensor, M: int, sector: str, sec: dict, mean: torch.Tensor, mask=None) -> torch.Tensor:
     """``out`` (an MLP output ``[B, T, d]``) with its part in ``sector`` replaced by that part of ``mean``: at positions
     ≥ 1 (with ``mask`` ``[B, T]``, where it is set)."""
     dev = out.float() - mean
     if mask is None and out.shape[1] > 1:
         dev[:, 0] = 0
-    s = sec["s"][M]
-    part = {"mlp": lambda: dev, "dark": lambda: dev - project(dev, s, sec["V"][M]),
-            "bright": lambda: project(dev, s, sec["V"][M]), "rand_d": lambda: dev - project(dev, s, sec["R"][M]),
-            "rand_b": lambda: project(dev, s, sec["R"][M])}[sector]()
+    p = part(dev, M, sector, sec)
     if mask is not None:
-        part = part * mask[..., None]
-    return (out.float() - part).to(out.dtype)
+        p = p * mask[..., None]
+    return (out.float() - p).to(out.dtype)
 
 
 # ------------------------------------------------------------------------------------------------------- trace
@@ -552,21 +568,302 @@ def comprehend(n_items: int, batch: int) -> None:
     log("COMPREHEND DONE")
 
 
+# ------------------------------------------------------------------------------------------------------- patch
+
+COUNTRIES = [  # (country, in Chinese, capital, in Chinese, official language)
+    ("France", "法国", "Paris", "巴黎", "French"), ("Italy", "意大利", "Rome", "罗马", "Italian"),
+    ("China", "中国", "Beijing", "北京", "Chinese"), ("Germany", "德国", "Berlin", "柏林", "German"),
+    ("Spain", "西班牙", "Madrid", "马德里", "Spanish"), ("Japan", "日本", "Tokyo", "东京", "Japanese"),
+    ("Russia", "俄罗斯", "Moscow", "莫斯科", "Russian"), ("Egypt", "埃及", "Cairo", "开罗", "Arabic"),
+    ("Greece", "希腊", "Athens", "雅典", "Greek"), ("Poland", "波兰", "Warsaw", "华沙", "Polish"),
+    ("Austria", "奥地利", "Vienna", "维也纳", "German"), ("Canada", "加拿大", "Ottawa", "渥太华", "English"),
+    ("South Korea", "韩国", "Seoul", "首尔", "Korean"), ("Thailand", "泰国", "Bangkok", "曼谷", "Thai"),
+    ("Vietnam", "越南", "Hanoi", "河内", "Vietnamese"), ("Portugal", "葡萄牙", "Lisbon", "里斯本", "Portuguese"),
+    ("Norway", "挪威", "Oslo", "奥斯陆", "Norwegian"), ("Sweden", "瑞典", "Stockholm", "斯德哥尔摩", "Swedish"),
+    ("Ireland", "爱尔兰", "Dublin", "都柏林", "Irish"), ("Turkey", "土耳其", "Ankara", "安卡拉", "Turkish"),
+    ("Iran", "伊朗", "Tehran", "德黑兰", "Persian"), ("India", "印度", "New Delhi", "新德里", "Hindi"),
+    ("Australia", "澳大利亚", "Canberra", "堪培拉", "English"), ("Argentina", "阿根廷", "Buenos Aires", "布宜诺斯艾利斯", "Spanish"),
+    ("Cuba", "古巴", "Havana", "哈瓦那", "Spanish"), ("Peru", "秘鲁", "Lima", "利马", "Spanish"),
+    ("Kenya", "肯尼亚", "Nairobi", "内罗毕", "Swahili"), ("the Netherlands", "荷兰", "Amsterdam", "阿姆斯特丹", "Dutch"),
+    ("Belgium", "比利时", "Brussels", "布鲁塞尔", "Dutch"), ("Denmark", "丹麦", "Copenhagen", "哥本哈根", "Danish"),
+    ("Finland", "芬兰", "Helsinki", "赫尔辛基", "Finnish"), ("Hungary", "匈牙利", "Budapest", "布达佩斯", "Hungarian"),
+    ("the Czech Republic", "捷克", "Prague", "布拉格", "Czech"), ("the Philippines", "菲律宾", "Manila", "马尼拉", "Filipino"),
+    ("Indonesia", "印度尼西亚", "Jakarta", "雅加达", "Indonesian"), ("Saudi Arabia", "沙特阿拉伯", "Riyadh", "利雅得", "Arabic"),
+    ("New Zealand", "新西兰", "Wellington", "惠灵顿", "English"), ("Chile", "智利", "Santiago", "圣地亚哥", "Spanish"),
+    ("Colombia", "哥伦比亚", "Bogotá", "波哥大", "Spanish"), ("Nigeria", "尼日利亚", "Abuja", "阿布贾", "English"),
+    ("Morocco", "摩洛哥", "Rabat", "拉巴特", "Arabic"), ("Ukraine", "乌克兰", "Kyiv", "基辅", "Ukrainian"),
+    ("Pakistan", "巴基斯坦", "Islamabad", "伊斯兰堡", "Urdu"), ("Bangladesh", "孟加拉国", "Dhaka", "达卡", "Bengali"),
+    ("Malaysia", "马来西亚", "Kuala Lumpur", "吉隆坡", "Malay"), ("Romania", "罗马尼亚", "Bucharest", "布加勒斯特", "Romanian"),
+    ("Mongolia", "蒙古", "Ulaanbaatar", "乌兰巴托", "Mongolian"), ("Nepal", "尼泊尔", "Kathmandu", "加德满都", "Nepali"),
+    ("Ethiopia", "埃塞俄比亚", "Addis Ababa", "亚的斯亚贝巴", "Amharic"), ("Venezuela", "委内瑞拉", "Caracas", "加拉加斯", "Spanish"),
+    ("Iraq", "伊拉克", "Baghdad", "巴格达", "Arabic"), ("Syria", "叙利亚", "Damascus", "大马士革", "Arabic"),
+    ("Afghanistan", "阿富汗", "Kabul", "喀布尔", "Pashto"), ("Cambodia", "柬埔寨", "Phnom Penh", "金边", "Khmer"),
+    ("Ghana", "加纳", "Accra", "阿克拉", "English")]
+PATCH = ("dark", "bright", "rand_d", "rand_b", "full")
+SHOW = (2, 6, 12, 18, 24, 30)  # layers of the residual patches in the generations
+
+
+def patch(n_words: int, batch: int, new: int) -> None:
+    sec = sectors()
+    from transformers import AutoModelForCausalLM
+    tok = tokenizer()
+    model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
+    layers = model.model.layers
+    nL, d = len(layers), sec["s"][0].shape[0]
+    n_vocab = model.lm_head.weight.shape[0]
+    strs = tok.batch_decode([[i] for i in range(len(tok))]) + [""] * (n_vocab - len(tok))
+    cont = torch.tensor([bool(re.fullmatch(r"[a-z]+", x)) for x in strs], device=DEV)  # pieces that continue a word
+    cjk = torch.tensor([bool(re.search(r"[一-鿿]", x)) for x in strs], device=DEV)
+    rng = random.Random(0)
+    S = {"mode": None}
+    cap = {"h": [None] * nL, "m": [None] * nL}
+
+    def hook(M, kind):
+        def h(mod, args, out):
+            x = out[0] if isinstance(out, tuple) else out
+            if S["mode"] is None or x.shape[1] != S["T"]:  # decode steps of a generation are left alone
+                return None
+            b, p = S["b"], S["p"]
+            if S["mode"] == "cap":
+                cap[kind][M] = x[b, p].clone()
+                return None
+            if S["mode"] != kind or M not in S["layers"]:
+                return None
+            x = x.clone()
+            t = x[b, p]
+            x[b, p] = (t.float() + part(S["src"][kind][M].float() - t.float(), M, S["sector"], sec)).to(x.dtype)
+            return (x, *out[1:]) if isinstance(out, tuple) else x
+        return h
+
+    hooks = [h for M, lay in enumerate(layers)
+             for h in (lay.register_forward_hook(hook(M, "h")), lay.mlp.register_forward_hook(hook(M, "m")))]
+
+    def run(rows, pos, mode=None, src=None, **kw):
+        """Log-probs of the next token after each row; ``pos``: each row's positions, captured (``cap``) or patched
+        (``h``: the layer's output, ``m``: its MLP output) from ``src`` (``[nL, P, d]``, rows' positions in order)."""
+        off = np.cumsum([0] + [len(q) for q in pos])
+        lps, caps = [], {"h": [], "m": []}
+        for b0 in range(0, len(rows), batch):
+            rs, ps = rows[b0:b0 + batch], pos[b0:b0 + batch]
+            n = max(map(len, rs))
+            ids = torch.full((len(rs), n), tok.pad_token_id)
+            att = torch.zeros_like(ids)
+            for i, r in enumerate(rs):
+                ids[i, :len(r)], att[i, :len(r)] = torch.tensor(r), 1
+            S.update(mode=mode, T=n, b=torch.tensor([i for i, q in enumerate(ps) for _ in q], dtype=torch.long, device=DEV),
+                     p=torch.tensor([j for q in ps for j in q], dtype=torch.long, device=DEV), **kw)
+            if src is not None:
+                S["src"] = {k: v[:, off[b0]:off[b0 + len(rs)]] for k, v in src.items()}
+            hs = model.model(input_ids=ids.to(DEV), attention_mask=att.to(DEV), use_cache=False).last_hidden_state
+            last = torch.tensor([len(r) - 1 for r in rs], device=DEV)
+            lps.append(model.lm_head(hs[torch.arange(len(rs), device=DEV), last]).float().log_softmax(-1))
+            if mode == "cap":
+                for k, v in caps.items():
+                    v.append(torch.stack(cap[k]))
+        S["mode"] = None
+        lp = torch.cat(lps)
+        return (lp, {k: torch.cat(v, 1) for k, v in caps.items()}) if mode == "cap" else lp
+
+    def generate(row, pos, mode=None, src=None, **kw):
+        S.update(mode=mode, T=len(row), b=torch.zeros(len(pos), dtype=torch.long, device=DEV),
+                 p=torch.tensor(pos, dtype=torch.long, device=DEV), src=src, **kw)
+        with torch.inference_mode():
+            out = model.generate(torch.tensor([row], device=DEV), max_new_tokens=new, do_sample=False,
+                                 pad_token_id=tok.eos_token_id)
+        S["mode"] = None
+        return tok.decode(out[0, len(row):])
+
+    def first(words):
+        """First tokens of each spelling, leaving out bare whitespace."""
+        return sorted({i for w in words for i in tok(w).input_ids[:1] if strs[i].strip()})
+
+    # metrics, per pair, of the next-token log-probs
+    def m_fact(lp, pairs):
+        i = torch.arange(len(pairs), device=DEV)
+        at, as_ = (torch.tensor([p[k] for p in pairs], device=DEV) for k in ("at", "as"))
+        top = lp.argmax(-1)
+        return {"ld": lp[i, at] - lp[i, as_], "flip": (top == as_).float(), "keep": (top == at).float()}
+
+    def m_lang(lp, pairs):
+        pr, top = lp.exp(), lp.argmax(-1).tolist()
+        cells = {c: torch.stack([pr[i, p["cells"][c]].sum() for i, p in enumerate(pairs)]) for c in ("tt", "ts", "st", "ss")}
+        lg = lambda *cs: (sum(cells[c] for c in cs) + 1e-9).log()
+        which = [next((c for c in cells if top[i] in p["cells"][c]), "other") for i, p in enumerate(pairs)]
+        out = {"lang": lg("ts", "ss") - lg("tt", "st"), "content": lg("st", "ss") - lg("tt", "ts"), "cjk": (pr * cjk).sum(-1)}
+        out |= {f"p_{c}": v for c, v in cells.items()}
+        return out | {f"top_{c}": torch.tensor([w == c for w in which], dtype=torch.float) for c in (*cells, "other")}
+
+    def m_word(lp, pairs):
+        top = lp.argmax(-1)
+        out = {"cont": (lp.exp() * cont).sum(-1), "top_cont": cont[top].float()}
+        if "tn" in pairs[0]:
+            i = torch.arange(len(pairs), device=DEV)
+            tn, sn = (torch.tensor([p[k] for p in pairs], device=DEV) for k in ("tn", "sn"))
+            out |= {"ld": lp[i, tn] - lp[i, sn], "flip": (top == sn).float(), "keep": (top == tn).float()}
+        return out
+
+    summ = lambda m: {k: v.float().mean().item() for k, v in m.items()}
+    res = {"K_out": sec["K"], "tasks": {}}
+
+    def task(name, pairs, metric, primary, shows=1):
+        tr, sr = [p["t"] for p in pairs], [p["s"] for p in pairs]
+        tp, sp = [p["tp"] for p in pairs], [p["sp"] for p in pairs]
+        lp_s, src = run(sr, sp, "cap")
+        lp_t, tgt = run(tr, tp, "cap")
+        out = {"n": len(pairs), "clean_t": summ(metric(lp_t, pairs)), "clean_s": summ(metric(lp_s, pairs)),
+               "examples": [[tok.decode(p["t"]), tok.decode(p["s"])] for p in pairs[:4]], "share": {}, "resid": {}, "mlp": {}}
+        for k in ("h", "m"):  # where the source-target difference sits, by sector
+            sh = {"bright": [], "rand_b": [], "dims": [K / d for K in sec["K"]]}
+            for L in range(nL):
+                dw = (src[k][L].float() - tgt[k][L].float()) / sec["s"][L]
+                tot = dw.pow(2).sum().item()
+                for name_, B in (("bright", sec["V"][L]), ("rand_b", sec["R"][L])):
+                    sh[name_].append((dw.half() @ B).float().pow(2).sum().item() / max(tot, 1e-12))
+            out["share"][k] = sh
+
+        def cond(**kw):
+            r = summ(metric(run(tr, tp, src=src, **kw), pairs))
+            for k in primary:
+                r["frac_" + k] = (r[k] - out["clean_t"][k]) / (out["clean_s"][k] - out["clean_t"][k])
+            return r
+
+        for sector in PATCH:
+            rows = [cond(mode="h", layers={L}, sector=sector) for L in range(nL)]
+            out["resid"][sector] = {k: [r[k] for r in rows] for k in rows[0]}
+        for band, lay in BANDS.items():
+            out["mlp"][band] = {sector: cond(mode="m", layers=set(lay), sector=sector) for sector in PATCH}
+        off = np.cumsum([0] + [len(q) for q in tp])
+        out["gen"] = []
+        for j in range(shows):
+            sj = {k: v[:, off[j]:off[j + 1]] for k, v in src.items()}
+            g = {"target": tok.decode(tr[j]), "source": tok.decode(sr[j]), "clean": generate(tr[j], tp[j]),
+                 "clean_source": generate(sr[j], sp[j]), "resid": {}, "mlp": {}}
+            for L in SHOW:
+                g["resid"][L] = {s_: generate(tr[j], tp[j], "h", sj, layers={L}, sector=s_) for s_ in ("dark", "bright", "full")}
+            for band in ("L0", "L1-8", "L9-20", "L21-35"):
+                g["mlp"][band] = {s_: generate(tr[j], tp[j], "m", sj, layers=set(BANDS[band]), sector=s_)
+                                  for s_ in ("dark", "bright", "full")}
+            out["gen"].append(g)
+        res["tasks"][name] = out
+        show = (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 35)
+        log(f"[{name}] n={len(pairs)} clean target " + " ".join(f"{k} {out['clean_t'][k]:.2f}" for k in primary)
+            + " | source " + " ".join(f"{k} {out['clean_s'][k]:.2f}" for k in primary))
+        log("  layer        " + " ".join(f"{L:5d}" for L in show))
+        for k in primary:
+            for sector in PATCH:
+                log(f"  {k[:5]:5s} {sector:6s} " + " ".join(f"{out['resid'][sector]['frac_' + k][L]:+5.2f}" for L in show))
+            log(f"  {k[:5]:5s} MLP bands " + " | ".join(
+                f"{b} " + " ".join(f"{s_[:2]} {out['mlp'][b][s_]['frac_' + k]:+.2f}" for s_ in PATCH) for b in BANDS))
+        log("  bright share of the difference (h) " + " ".join(f"{out['share']['h']['bright'][L]:.2f}" for L in show))
+        log("  random K-dim share             " + " ".join(f"{out['share']['h']['rand_b'][L]:.2f}" for L in show))
+        save("patch", res)
+
+    with torch.inference_mode():
+        # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
+        rows = []
+        for en, _, capital, _, lang in COUNTRIES:
+            for rel, text, ans in (("capital", f"The capital of {en} is", capital),
+                                   ("language", f"The official language of {en} is", lang)):
+                rows.append({"rel": rel, "en": en, "ids": tok(text).input_ids, "a": tok(" " + ans).input_ids[0]})
+        lp = run([r["ids"] for r in rows], [[] for _ in rows])
+        rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
+        groups = {}
+        for r in rows:
+            groups.setdefault((r["rel"], len(r["ids"])), []).append(r)
+        pairs = []
+        for g in groups.values():
+            g.sort(key=lambda r: (r["en"] not in ("France", "Italy"), rng.random()))
+            for i, r in enumerate(g):
+                o = next((g[(i + k) % len(g)] for k in range(1, len(g)) if g[(i + k) % len(g)]["a"] != r["a"]), None)
+                if o is not None:
+                    pairs.append({"t": r["ids"], "s": o["ids"], "at": r["a"], "as": o["a"], "rel": r["rel"]})
+        pairs.sort(key=lambda p: p["rel"] != "capital")
+        log(f"facts: {len(rows)} of {2 * len(COUNTRIES)} prompts answered right, {len(pairs)} pairs")
+        for scope in ("all", "subject", "last"):
+            for p in pairs:
+                n = len(p["t"])
+                p["tp"] = p["sp"] = {"all": list(range(1, n)), "last": [n - 1],
+                                     "subject": [k for k in range(n) if p["t"][k] != p["s"][k]]}[scope]
+            task(f"fact_{scope}", pairs, m_fact, ("ld",), shows=1 if scope == "all" else 0)
+
+        # language: the last position of a capital prompt in one language, from one about another country in the other
+        ok = []
+        for en, zh, capital, capital_zh, _ in COUNTRIES:
+            c = {"en": tok(f"The capital of {en} is").input_ids, "zh": tok(f"{zh}的首都是").input_ids,
+                 "a_en": first([" " + capital, capital]), "a_zh": first([capital_zh, " " + capital_zh]), "name": en}
+            ok.append(c)
+        lp = run([c[k] for c in ok for k in ("en", "zh")], [[] for _ in range(2 * len(ok))]).argmax(-1).tolist()
+        ok = [c for i, c in enumerate(ok) if lp[2 * i] in c["a_en"] and lp[2 * i + 1] in c["a_zh"]]
+        ok.sort(key=lambda c: (c["name"] not in ("China", "France"), c["name"] != "China", rng.random()))
+        log(f"language: {len(ok)} of {len(COUNTRIES)} countries answered right in both languages")
+        for tl, sl in (("zh", "en"), ("en", "zh")):
+            pairs = []
+            for i, x in enumerate(ok):
+                for k in range(1, len(ok)):
+                    y = ok[(i + k) % len(ok)]
+                    sets = [x["a_" + tl], x["a_" + sl], y["a_" + tl], y["a_" + sl]]
+                    if len({t for s_ in sets for t in s_}) == sum(map(len, sets)):
+                        break
+                else:
+                    continue
+                pairs.append({"t": x[tl], "s": y[sl], "tp": [len(x[tl]) - 1], "sp": [len(y[sl]) - 1],
+                              "cells": {"tt": x["a_" + tl], "ts": x["a_" + sl], "st": y["a_" + tl], "ss": y["a_" + sl]}})
+            task(f"lang_{tl}_from_{sl}", pairs, m_lang, ("lang", "content"), shows=1)
+
+        # word pieces: DCLM prefixes ending inside a two-piece word, or after a whole word
+        docs = lens_docs(act_file("dclm"), tok, 600, T, T, full=True)
+        mid, bound = [], []
+        for doc in docs:
+            m_, b_ = [], []
+            for i in range(24, T - 2):
+                a, b, c = strs[doc[i]], strs[doc[i + 1]], strs[doc[i + 2]]
+                if re.fullmatch(r" [A-Za-z]+", a) and re.fullmatch(r"[a-z]{2,}", b) and c[:1] and not c[:1].isalpha():
+                    m_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
+                elif re.fullmatch(r" [a-z]{3,}", a) and re.fullmatch(r" [A-Za-z]+", b):
+                    b_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
+            mid += rng.sample(m_, min(2, len(m_)))
+            bound += rng.sample(b_, min(1, len(b_)))
+        mid, bound = mid[:4 * n_words], bound[:4 * n_words]
+        lp = run([r["ids"] for r in mid + bound], [[] for _ in mid + bound])
+        top, p_top, pc = lp.argmax(-1).tolist(), lp.max(-1).values.exp().tolist(), (lp.exp() * cont).sum(-1).tolist()
+        n_mid = len(mid)
+        mid = [r for i, r in enumerate(mid) if top[i] == r["next"] and p_top[i] >= 0.5][:n_words]
+        bound = [r for j, r in enumerate(bound) if pc[n_mid + j] < 0.05][:n_words]
+        log(f"words: {len(mid)} mid-word and {len(bound)} word-final prefixes kept")
+        last = lambda r: [len(r["ids"]) - 1]
+        ident = []
+        for i, r in enumerate(mid):
+            o = next((mid[(i + k) % len(mid)] for k in range(1, len(mid)) if mid[(i + k) % len(mid)]["next"] != r["next"]), None)
+            ident.append({"t": r["ids"], "s": o["ids"], "tp": last(r), "sp": last(o), "tn": r["next"], "sn": o["next"]})
+        task("word_ident", ident, m_word, ("ld",), shows=2)
+        k = min(len(mid), len(bound))
+        task("word_end", [{"t": mid[i]["ids"], "s": bound[i]["ids"], "tp": last(mid[i]), "sp": last(bound[i])}
+                          for i in range(k)], m_word, ("cont",), shows=2)
+        task("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
+                            for i in range(k)], m_word, ("cont",), shows=1)
+    for h in hooks:
+        h.remove()
+    log("PATCH DONE")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch"))
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
     ap.add_argument("--items", type=int, default=48, help="comprehend: items per sentence type")
+    ap.add_argument("--words", type=int, default=64, help="patch: word-piece prefixes of each kind")
     ap.add_argument("--batch", type=int, default=4)
     a = ap.parse_args()
     if a.part == "trace":
         trace(a.docs, a.batch)
     elif a.part == "bands":
         bands(a.eval_docs, a.new_tokens, a.batch)
-    else:
+    elif a.part == "comprehend":
         comprehend(a.items, 64)
+    else:
+        patch(a.words, 32, 20)
 
 
 if __name__ == "__main__":
