@@ -6,7 +6,10 @@ to the model, early, in the middle and late (findings §21). Qwen3-8B, CUDA, the
 shared by every token), has eigenvectors ``V`` ordered by gain. The **bright** sector is the top ``K_L`` of them, the
 fewest that carry 90% of the lens energy (``Σ gain · (v·x)²``) of the layer's neuron writes, as a mean over the unit
 writes (at the MLP input: over the gate and up rows as vectors, ``s ⊙ c``). The **dark** sector is the rest, orthogonal in
-the metric. A sector of a vector is its part in the sector, mapped back to raw coordinates.
+the metric. A sector of a vector is its part in the sector, mapped back to raw coordinates. The S-lens's sectors
+(``patch``: ``s_bright``, ``s_dark``) take the same rule to the input side: the Gram of the token footprints at each
+output, ``K_L ē`` (the S-lens's map from the embedding, on the kept tokens' embeddings, centred), as whitened vectors, in
+place of the readout's.
 
 **Ablation.** One sector of the MLP output, over a band of layers, at positions ≥ 1, replaced by its mean over the
 positions of held-out DCLM documents (the first position, the sink, keeps its output). Controls: random subspaces of the
@@ -91,10 +94,11 @@ def save(part: str, res: dict) -> None:
     (SUMMARY / f"dark_sector_{part}_{STEM}.log").write_text("\n".join(LOG) + "\n")
 
 
-def sectors(mid: bool = False) -> dict:
+def sectors(mid: bool = False, s_lens: bool = False) -> dict:
     """``s`` (the metric's √s² per layer), ``V`` (bright bases, whitened, fp16), ``K``, ``R`` (random ``K``-dim bases) at
     each layer's output; with ``mid`` the same at the MLP input (``s_mid``, ``V_mid``, ``K_mid``, ``R_mid``), plus the raw
-    readout Grams ``GM`` at each output (for ``trace``'s loudness table), and ``J_out`` (CPU)."""
+    readout Grams ``GM`` at each output (for ``trace``'s loudness table), and ``J_out`` (CPU); with ``s_lens`` the
+    S-lens's bright sector at each output (``VS``, ``KS``, ``RS``)."""
     nm = arch.names(MODEL)
     n = arch.text_config(MODEL).num_hidden_layers
     head = tensors(MODEL, [nm["unembed"], nm["norm"]])
@@ -108,9 +112,18 @@ def sectors(mid: bool = False) -> dict:
         G += c.T @ c
     del wk, head
     parts = ("J_out", "J_mid") if mid else ("J_out",)
+    if s_lens:  # the token embeddings' Gram, centred over the kept tokens
+        we = tensors(MODEL, [nm["embed"]])[nm["embed"]][kept()]
+        mu_e = we.float().mean(0).to(DEV)
+        GE = torch.zeros(d, d, device=DEV)
+        for i in range(0, len(we), 16384):
+            c = we[i:i + 16384].to(DEV).float() - mu_e
+            GE += c.T @ c
+        del we
+        parts += ("K_out",)
     lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=parts)
     gen = torch.Generator(device=DEV).manual_seed(0)
-    out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM")}
+    out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM", "VS", "KS", "RS", "overlap")}
 
     def top(Gr, s, X):
         gain, V = torch.linalg.eigh(s[:, None] * Gr * s[None, :])
@@ -129,6 +142,13 @@ def sectors(mid: bool = False) -> dict:
         X = w[p + "mlp.down_proj.weight"].to(DEV).float().T / s
         k, V, R = top(Gr, s, X / X.norm(dim=1, keepdim=True))
         out["s"].append(s), out["K"].append(k), out["V"].append(V), out["R"].append(R)
+        if s_lens:  # the token footprints K ē at this output, as whitened vectors: their Gram, and its top directions
+            Kl = lm["K_out"][L].to(DEV).float()
+            s2_ = s.pow(2)
+            k, VS, RS = top(Kl @ GE @ Kl.T / s2_[:, None] / s2_[None, :], s, X / X.norm(dim=1, keepdim=True))
+            out["KS"].append(k), out["VS"].append(VS), out["RS"].append(RS)
+            out["overlap"].append((V.float().T @ VS.float()).pow(2).sum().item() / k)  # S-bright's share in R-bright
+            del Kl
         if mid:
             out["GM"].append(Gr)
             s = metric.s2(MODEL, "mid", L, DEV).sqrt()
@@ -142,6 +162,10 @@ def sectors(mid: bool = False) -> dict:
         del w, J, X
     out["J_out"] = lm["J_out"]
     log("sectors: K_out " + " ".join(map(str, out["K"])) + (" | K_mid " + " ".join(map(str, out["K_mid"])) if mid else ""))
+    if s_lens:
+        log("S-lens sectors: K " + " ".join(map(str, out["KS"])))
+        log("  their share in the R-lens's bright sector " + " ".join(f"{x:.2f}" for x in out["overlap"])
+            + " (random: " + " ".join(f"{k / d:.2f}" for k in out["K"]) + ")")
     return out
 
 
@@ -177,12 +201,18 @@ def model_and_means(sec: dict, extra_hooks=None):
     return tok, model, [m / count[0] for m in sums]
 
 
+SPLIT = {"bright": ("V", True), "dark": ("V", False), "rand_b": ("R", True), "rand_d": ("R", False),
+         "s_bright": ("VS", True), "s_dark": ("VS", False), "rand_sb": ("RS", True), "rand_sd": ("RS", False)}
+
+
 def part(x: torch.Tensor, M: int, sector: str, sec: dict) -> torch.Tensor:
-    """The part of raw vectors ``x`` at layer ``M``'s output in ``sector`` (``mlp``, ``full``: all of it)."""
+    """The part of raw vectors ``x`` at layer ``M``'s output in ``sector`` (``mlp``, ``full``: all of it; the ``s_``
+    sectors and their random controls are the S-lens's)."""
     if sector in ("mlp", "full"):
         return x.float()
-    p = project(x, sec["s"][M], sec["V" if sector in ("dark", "bright") else "R"][M])
-    return p if sector in ("bright", "rand_b") else x.float() - p
+    basis, inside = SPLIT[sector]
+    p = project(x, sec["s"][M], sec[basis][M])
+    return p if inside else x.float() - p
 
 
 def ablated(out: torch.Tensor, M: int, sector: str, sec: dict, mean: torch.Tensor, mask=None) -> torch.Tensor:
@@ -607,8 +637,9 @@ COUNTRIES = [  # (country, in Chinese, capital, in Chinese, official language)
     ("Iraq", "伊拉克", "Baghdad", "巴格达", "Arabic"), ("Syria", "叙利亚", "Damascus", "大马士革", "Arabic"),
     ("Afghanistan", "阿富汗", "Kabul", "喀布尔", "Pashto"), ("Cambodia", "柬埔寨", "Phnom Penh", "金边", "Khmer"),
     ("Ghana", "加纳", "Accra", "阿克拉", "English")]
-PATCH = ("dark", "bright", "rand_d", "rand_b", "full")
-ABBR = {"dark": "dk", "bright": "br", "rand_d": "rd", "rand_b": "rb", "full": "fu"}
+PATCH = ("dark", "bright", "rand_d", "rand_b", "s_dark", "s_bright", "rand_sd", "rand_sb", "full")
+ABBR = {"dark": "dk", "bright": "br", "rand_d": "rd", "rand_b": "rb", "s_dark": "Sd", "s_bright": "Sb", "rand_sd": "rSd",
+        "rand_sb": "rSb", "full": "fu"}
 SHOW = (2, 6, 12, 18, 24, 30)  # layers of the residual patches in the generations
 TOPK = 1024  # a reference distribution's kept tokens in the KLs (the rest pooled into one)
 FOLLOW = 20  # tokens of the target's greedy continuation, scored teacher-forced
@@ -622,7 +653,7 @@ ITEMS = [  # one token each after a space
 
 
 def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
-    sec = sectors()
+    sec = sectors(s_lens=True)
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
@@ -768,7 +799,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
         return m
 
     summ = lambda m: {k: v.float().mean().item() for k, v in m.items()}
-    res = {"K_out": sec["K"], "tasks": {}}
+    res = {"K_out": sec["K"], "K_S": sec["KS"], "S_in_R": sec["overlap"], "tasks": {}}
 
     def task(name, pairs, metric, primary, shows=1):
         tr, sr = [p["t"] for p in pairs], [p["s"] for p in pairs]
@@ -788,11 +819,13 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
                "examples": [[tok.decode(p["t"]), tok.decode(p["s"]), tok.decode(c)] for p, c in zip(pairs[:4], cont_)],
                "share": {}, "resid": {}, "mlp": {}}
         for k in ("h", "m"):  # where the source-target difference sits, by sector
-            sh = {"bright": [], "rand_b": [], "dims": [K / d for K in sec["K"]]}
+            sh = {"bright": [], "rand_b": [], "s_bright": [], "rand_sb": [], "dims": [K / d for K in sec["K"]],
+                  "s_dims": [K / d for K in sec["KS"]]}
             for L in range(nL):
                 dw = (src[k][L].float() - tgt[k][L].float()) / sec["s"][L]
                 tot = dw.pow(2).sum().item()
-                for name_, B in (("bright", sec["V"][L]), ("rand_b", sec["R"][L])):
+                for name_, B in (("bright", sec["V"][L]), ("rand_b", sec["R"][L]), ("s_bright", sec["VS"][L]),
+                                 ("rand_sb", sec["RS"][L])):
                     sh[name_].append((dw.half() @ B).float().pow(2).sum().item() / max(tot, 1e-12))
             out["share"][k] = sh
 
@@ -819,7 +852,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
             g = {"target": tok.decode(tr[j]), "source": tok.decode(sr[j]), "clean": generate(tr[j], tp[j]),
                  "clean_source": generate(sr[j], sp[j]), "resid": {}, "mlp": {}}
             for L in SHOW:
-                g["resid"][L] = {s_: generate(tr[j], tp[j], "h", sj, layers={L}, sector=s_) for s_ in ("dark", "bright", "full")}
+                g["resid"][L] = {s_: generate(tr[j], tp[j], "h", sj, layers={L}, sector=s_)
+                                 for s_ in ("dark", "bright", "s_bright", "full")}
             for band in ("L0", "L1-8", "L9-20", "L21-35"):
                 g["mlp"][band] = {s_: generate(tr[j], tp[j], "m", sj, layers=set(BANDS[band]), sector=s_)
                                   for s_ in ("dark", "bright", "full")}
@@ -831,14 +865,16 @@ def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
             + " | source " + " ".join(f"{k} {out['clean_s'][k]:.2f}" for k in primary)
             + f" | KL t→s next {kq['t_s_next']:.2f} follow {kq['t_s_follow']:.2f}, s→t next {kq['s_t_next']:.2f}"
             f" follow {kq['s_t_follow']:.2f} (floor {kq['floor']:.1e})")
-        log("  layer          " + " ".join(f"{L:5d}" for L in show))
+        log("  layer" + " " * 12 + " ".join(f"{L:5d}" for L in show))
         for k in (*("frac_" + k for k in primary), "frac_next", "frac_follow", "kl_next", "kl_follow"):
             for sector in PATCH:
-                log(f"  {k[:12]:12s} {ABBR[sector]} " + " ".join(f"{out['resid'][sector][k][L]:+5.2f}" for L in show))
+                log(f"  {k[:12]:12s} {ABBR[sector]:3s} " + " ".join(f"{out['resid'][sector][k][L]:+5.2f}" for L in show))
             log(f"  {k[:12]:12s} MLP bands " + " | ".join(
                 f"{b} " + " ".join(f"{ABBR[s_]} {out['mlp'][b][s_][k]:+.2f}" for s_ in PATCH) for b in BANDS))
         log("  bright share of the difference (h) " + " ".join(f"{out['share']['h']['bright'][L]:.2f}" for L in show))
         log("  random K-dim share             " + " ".join(f"{out['share']['h']['rand_b'][L]:.2f}" for L in show))
+        log("  S-bright share                 " + " ".join(f"{out['share']['h']['s_bright'][L]:.2f}" for L in show))
+        log("  random K_S-dim share           " + " ".join(f"{out['share']['h']['rand_sb'][L]:.2f}" for L in show))
         save("patch", res)
 
     def frame(name, pairs, a, b=None, scopes=("shared", "last"), shows=1):
