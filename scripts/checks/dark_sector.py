@@ -36,8 +36,16 @@ Parts:
   either country's capital in either language) and word pieces (DCLM prefixes ending inside a two-piece word or after a
   whole word: which piece comes next, and whether the word goes on). Scored by the share of the clean target-to-source
   gap the patch moves (the two answers' log-prob difference; the source language's and the source country's log-odds;
-  the mass on word-continuing pieces), against random subspaces of each sector's dimension; also the sectors' shares of
-  the source-target difference, and greedy generations.
+  the mass on word-continuing pieces), against random subspaces of each sector's dimension. Frames: the same content in
+  two settings that differ in what comes next, patched at the tokens they share or the last position: a question
+  plainly or in the chat template (does the assistant's turn open a ``<think>``?), the assistant's turn with thinking on
+  or off (does it open with "Okay"?), a sentence opening a document or as a comment opening a Python file (does a new
+  line follow?), a sentence cut before a word as written or in capitals (is the next piece in capitals?), a shopping list
+  after commas or bulleted (does a comma or a new line follow the last item?); scored by the log-odds of that mass.
+  Every task also gets the KL from the clean target to the patched run, at the next token and over the target's greedy
+  continuation of ``FOLLOW`` tokens (teacher-forced), and how far the patch moves both toward the source
+  (``1 − KL(source ‖ patched) / KL(source ‖ target)``, the source given the same continuation); the sectors' shares of the
+  source-target difference; and greedy generations.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -600,10 +608,20 @@ COUNTRIES = [  # (country, in Chinese, capital, in Chinese, official language)
     ("Afghanistan", "阿富汗", "Kabul", "喀布尔", "Pashto"), ("Cambodia", "柬埔寨", "Phnom Penh", "金边", "Khmer"),
     ("Ghana", "加纳", "Accra", "阿克拉", "English")]
 PATCH = ("dark", "bright", "rand_d", "rand_b", "full")
+ABBR = {"dark": "dk", "bright": "br", "rand_d": "rd", "rand_b": "rb", "full": "fu"}
 SHOW = (2, 6, 12, 18, 24, 30)  # layers of the residual patches in the generations
+TOPK = 1024  # a reference distribution's kept tokens in the KLs (the rest pooled into one)
+FOLLOW = 20  # tokens of the target's greedy continuation, scored teacher-forced
+ITEMS = [  # one token each after a space
+    "apple", "banana", "cherry", "grape", "lemon", "orange", "peach", "pear", "plum", "mango", "onion", "garlic",
+    "carrot", "potato", "tomato", "pepper", "rice", "bread", "cheese", "butter", "milk", "sugar", "salt", "flour",
+    "eggs", "chicken", "beef", "pork", "fish", "salmon", "tuna", "beans", "corn", "peas", "lettuce", "spinach",
+    "cabbage", "soap", "paper", "pens", "tape", "glue", "string", "nails", "screws", "towels", "candles",
+    "coffee", "tea", "juice", "water", "soda", "cereal", "pasta", "noodles", "yogurt", "honey", "jam", "nuts"
+]
 
 
-def patch(n_words: int, batch: int, new: int) -> None:
+def patch(n_words: int, n_frame: int, batch: int, new: int) -> None:
     sec = sectors()
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
@@ -612,8 +630,15 @@ def patch(n_words: int, batch: int, new: int) -> None:
     nL, d = len(layers), sec["s"][0].shape[0]
     n_vocab = model.lm_head.weight.shape[0]
     strs = tok.batch_decode([[i] for i in range(len(tok))]) + [""] * (n_vocab - len(tok))
-    cont = torch.tensor([bool(re.fullmatch(r"[a-z]+", x)) for x in strs], device=DEV)  # pieces that continue a word
-    cjk = torch.tensor([bool(re.search(r"[一-鿿]", x)) for x in strs], device=DEV)
+    enc = lambda text: tok(text).input_ids
+    mask = lambda f: torch.tensor([bool(f(x)) for x in strs], device=DEV)
+    letters = lambda x: re.sub(r"[^A-Za-z]", "", x)
+    cont = mask(lambda x: re.fullmatch(r"[a-z]+", x))  # pieces that continue a word
+    cjk = mask(lambda x: re.search(r"[一-鿿]", x))
+    caps = mask(lambda x: letters(x).isupper())
+    lower = mask(lambda x: re.search(r"[a-z]", x))
+    nl, comma = mask(lambda x: x.startswith("\n")), mask(lambda x: x.startswith(","))
+    think = mask(lambda x: x == "<think>")
     rng = random.Random(0)
     S = {"mode": None}
     cap = {"h": [None] * nL, "m": [None] * nL}
@@ -637,14 +662,26 @@ def patch(n_words: int, batch: int, new: int) -> None:
 
     hooks = [h for M, lay in enumerate(layers)
              for h in (lay.register_forward_hook(hook(M, "h")), lay.mlp.register_forward_hook(hook(M, "m")))]
+    tail = lambda v: (1 - v.exp().sum(-1)).clamp_min(1e-9).log()
 
-    def run(rows, pos, mode=None, src=None, **kw):
-        """Log-probs of the next token after each row; ``pos``: each row's positions, captured (``cap``) or patched
-        (``h``: the layer's output, ``m``: its MLP output) from ``src`` (``[nL, P, d]``, rows' positions in order)."""
+    def kl(lp, i, v, t):
+        """KL from a reference (log-probs ``v`` of its top tokens ``i``, ``t`` of the rest pooled) to ``lp``."""
+        q = lp.gather(-1, i)
+        return (v.exp() * (v - q)).sum(-1) + t.exp() * (t - tail(q))
+
+    def run(rows, pos=None, mode=None, src=None, start=None, n_pos=1, refs=(), keep=False, **kw):
+        """Log-probs after each row's prompt (row i's ends at ``start[i]``, by default its last token); the next
+        token's in ``lp``. ``pos``: each row's positions, captured (``cap``) or patched (``h``: the layer's output,
+        ``m``: its MLP output) from ``src`` (``[nL, P, d]``, the rows' positions in order). Over ``n_pos`` positions from
+        the prompt's end (the next token, then a continuation's): ``kl``, the KL from each reference to this run
+        (``[R, refs, n_pos]``), and with ``keep``, this run's top tokens there as a reference (``top``)."""
+        pos = pos or [[] for _ in rows]
+        start = start or [len(r) - 1 for r in rows]
         off = np.cumsum([0] + [len(q) for q in pos])
-        lps, caps = [], {"h": [], "m": []}
+        acc = {"lp": [], "kl": [], "top": [], "h": [], "m": []}
         for b0 in range(0, len(rows), batch):
-            rs, ps = rows[b0:b0 + batch], pos[b0:b0 + batch]
+            sl = slice(b0, b0 + batch)
+            rs, ps = rows[sl], pos[sl]
             n = max(map(len, rs))
             ids = torch.full((len(rs), n), tok.pad_token_id)
             att = torch.zeros_like(ids)
@@ -655,14 +692,33 @@ def patch(n_words: int, batch: int, new: int) -> None:
             if src is not None:
                 S["src"] = {k: v[:, off[b0]:off[b0 + len(rs)]] for k, v in src.items()}
             hs = model.model(input_ids=ids.to(DEV), attention_mask=att.to(DEV), use_cache=False).last_hidden_state
-            last = torch.tensor([len(r) - 1 for r in rs], device=DEV)
-            lps.append(model.lm_head(hs[torch.arange(len(rs), device=DEV), last]).float().log_softmax(-1))
+            at = torch.tensor(start[sl], device=DEV)[:, None] + torch.arange(n_pos, device=DEV)
+            lp = model.lm_head(hs[torch.arange(len(rs), device=DEV)[:, None], at]).float().log_softmax(-1)
+            acc["lp"].append(lp[:, 0])
+            if keep:
+                v, i = lp.topk(TOPK, -1)
+                acc["top"].append((i, v, tail(v)))
+            if refs:
+                acc["kl"].append(torch.stack([kl(lp, *(x[sl] for x in ref)) for ref in refs], 1))
             if mode == "cap":
-                for k, v in caps.items():
-                    v.append(torch.stack(cap[k]))
+                for k in ("h", "m"):
+                    acc[k].append(torch.stack(cap[k]))
         S["mode"] = None
-        lp = torch.cat(lps)
-        return (lp, {k: torch.cat(v, 1) for k, v in caps.items()}) if mode == "cap" else lp
+        out = {"lp": torch.cat(acc["lp"])}
+        if keep:
+            out["top"] = tuple(torch.cat(x) for x in zip(*acc["top"]))
+        if refs:
+            out["kl"] = torch.cat(acc["kl"])
+        if mode == "cap":
+            out["cap"] = {k: torch.cat(acc[k], 1) for k in ("h", "m")}
+        return out
+
+    def greedy(rows, n):
+        rows = [list(r) for r in rows]
+        for _ in range(n):
+            for r, t in zip(rows, run(rows)["lp"].argmax(-1).tolist()):
+                r.append(t)
+        return rows
 
     def generate(row, pos, mode=None, src=None, **kw):
         S.update(mode=mode, T=len(row), b=torch.zeros(len(pos), dtype=torch.long, device=DEV),
@@ -675,7 +731,7 @@ def patch(n_words: int, batch: int, new: int) -> None:
 
     def first(words):
         """First tokens of each spelling, leaving out bare whitespace."""
-        return sorted({i for w in words for i in tok(w).input_ids[:1] if strs[i].strip()})
+        return sorted({i for w in words for i in enc(w)[:1] if strs[i].strip()})
 
     # metrics, per pair, of the next-token log-probs
     def m_fact(lp, pairs):
@@ -702,16 +758,35 @@ def patch(n_words: int, batch: int, new: int) -> None:
             out |= {"ld": lp[i, tn] - lp[i, sn], "flip": (top == sn).float(), "keep": (top == tn).float()}
         return out
 
+    def m_mass(a, b=None):
+        """The log-odds of the next token's mass on vocabulary mask ``a`` against ``b`` (by default the rest)."""
+        def m(lp, pairs):
+            pr = lp.exp()
+            pa = (pr * a).sum(-1)
+            pb = (pr * b).sum(-1) if b is not None else 1 - pa
+            return {"form": (pa + 1e-9).log() - (pb.clamp_min(0) + 1e-9).log(), "top_a": a[lp.argmax(-1)].float()}
+        return m
+
     summ = lambda m: {k: v.float().mean().item() for k, v in m.items()}
     res = {"K_out": sec["K"], "tasks": {}}
 
     def task(name, pairs, metric, primary, shows=1):
         tr, sr = [p["t"] for p in pairs], [p["s"] for p in pairs]
         tp, sp = [p["tp"] for p in pairs], [p["sp"] for p in pairs]
-        lp_s, src = run(sr, sp, "cap")
-        lp_t, tgt = run(tr, tp, "cap")
-        out = {"n": len(pairs), "clean_t": summ(metric(lp_t, pairs)), "clean_s": summ(metric(lp_s, pairs)),
-               "examples": [[tok.decode(p["t"]), tok.decode(p["s"])] for p in pairs[:4]], "share": {}, "resid": {}, "mlp": {}}
+        # the target's greedy continuation, after the target's prompt and after the source's
+        cont_ = [r[len(t):] for r, t in zip(greedy(tr, FOLLOW), tr)]
+        tc, sc = [t + c for t, c in zip(tr, cont_)], [s + c for s, c in zip(sr, cont_)]
+        at_t, at_s = [len(t) - 1 for t in tr], [len(s) - 1 for s in sr]
+        ct = run(tc, tp, "cap", start=at_t, n_pos=FOLLOW, keep=True)
+        cs = run(sc, sp, "cap", start=at_s, n_pos=FOLLOW, keep=True, refs=(ct["top"],))
+        src, tgt, refs = cs["cap"], ct["cap"], (ct["top"], cs["top"])
+        base = run(tc, start=at_t, n_pos=FOLLOW, refs=refs)["kl"]
+        mean = lambda x: x.mean().item()
+        out = {"n": len(pairs), "clean_t": summ(metric(ct["lp"], pairs)), "clean_s": summ(metric(cs["lp"], pairs)),
+               "kl": {"t_s_next": mean(cs["kl"][:, 0, 0]), "t_s_follow": mean(cs["kl"][:, 0, 1:]),
+                      "s_t_next": mean(base[:, 1, 0]), "s_t_follow": mean(base[:, 1, 1:]), "floor": mean(base[:, 0])},
+               "examples": [[tok.decode(p["t"]), tok.decode(p["s"]), tok.decode(c)] for p, c in zip(pairs[:4], cont_)],
+               "share": {}, "resid": {}, "mlp": {}}
         for k in ("h", "m"):  # where the source-target difference sits, by sector
             sh = {"bright": [], "rand_b": [], "dims": [K / d for K in sec["K"]]}
             for L in range(nL):
@@ -722,7 +797,12 @@ def patch(n_words: int, batch: int, new: int) -> None:
             out["share"][k] = sh
 
         def cond(**kw):
-            r = summ(metric(run(tr, tp, src=src, **kw), pairs))
+            o = run(tc, tp, src=src, start=at_t, n_pos=FOLLOW, refs=refs, **kw)
+            r = summ(metric(o["lp"], pairs))
+            kl_ = o["kl"]
+            r |= {"kl_next": mean(kl_[:, 0, 0]), "kl_follow": mean(kl_[:, 0, 1:]),
+                  "frac_next": 1 - mean(kl_[:, 1, 0]) / out["kl"]["s_t_next"],
+                  "frac_follow": 1 - mean(kl_[:, 1, 1:]) / out["kl"]["s_t_follow"]}
             for k in primary:
                 r["frac_" + k] = (r[k] - out["clean_t"][k]) / (out["clean_s"][k] - out["clean_t"][k])
             return r
@@ -746,17 +826,33 @@ def patch(n_words: int, batch: int, new: int) -> None:
             out["gen"].append(g)
         res["tasks"][name] = out
         show = (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 35)
+        kq = out["kl"]
         log(f"[{name}] n={len(pairs)} clean target " + " ".join(f"{k} {out['clean_t'][k]:.2f}" for k in primary)
-            + " | source " + " ".join(f"{k} {out['clean_s'][k]:.2f}" for k in primary))
-        log("  layer        " + " ".join(f"{L:5d}" for L in show))
-        for k in primary:
+            + " | source " + " ".join(f"{k} {out['clean_s'][k]:.2f}" for k in primary)
+            + f" | KL t→s next {kq['t_s_next']:.2f} follow {kq['t_s_follow']:.2f}, s→t next {kq['s_t_next']:.2f}"
+            f" follow {kq['s_t_follow']:.2f} (floor {kq['floor']:.1e})")
+        log("  layer          " + " ".join(f"{L:5d}" for L in show))
+        for k in (*("frac_" + k for k in primary), "frac_next", "frac_follow", "kl_next", "kl_follow"):
             for sector in PATCH:
-                log(f"  {k[:5]:5s} {sector:6s} " + " ".join(f"{out['resid'][sector]['frac_' + k][L]:+5.2f}" for L in show))
-            log(f"  {k[:5]:5s} MLP bands " + " | ".join(
-                f"{b} " + " ".join(f"{s_[:2]} {out['mlp'][b][s_]['frac_' + k]:+.2f}" for s_ in PATCH) for b in BANDS))
+                log(f"  {k[:12]:12s} {ABBR[sector]} " + " ".join(f"{out['resid'][sector][k][L]:+5.2f}" for L in show))
+            log(f"  {k[:12]:12s} MLP bands " + " | ".join(
+                f"{b} " + " ".join(f"{ABBR[s_]} {out['mlp'][b][s_][k]:+.2f}" for s_ in PATCH) for b in BANDS))
         log("  bright share of the difference (h) " + " ".join(f"{out['share']['h']['bright'][L]:.2f}" for L in show))
         log("  random K-dim share             " + " ".join(f"{out['share']['h']['rand_b'][L]:.2f}" for L in show))
         save("patch", res)
+
+    def frame(name, pairs, a, b=None, scopes=("shared", "last"), shows=1):
+        """Pairs that differ in frame around the same content, kept where the clean source's next token is in ``a`` and
+        the target's isn't; patched at the shared tokens (``tshare``, ``sshare``) or the last position."""
+        top_t = run([p["t"] for p in pairs])["lp"].argmax(-1).tolist()
+        top_s = run([p["s"] for p in pairs])["lp"].argmax(-1).tolist()
+        kept_ = [p for p, x, y in zip(pairs, top_t, top_s) if a[y] and not a[x]][:n_frame]
+        log(f"frame {name}: {len(kept_)} of {len(pairs)} pairs kept")
+        for scope in scopes:
+            for p in kept_:
+                p["tp"], p["sp"] = ((p["tshare"], p["sshare"]) if scope == "shared"
+                                    else ([len(p["t"]) - 1], [len(p["s"]) - 1]))
+            task(f"frame_{name}_{scope}", kept_, m_mass(a, b), ("form",), shows=shows if scope == scopes[0] else 0)
 
     with torch.inference_mode():
         # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
@@ -764,8 +860,8 @@ def patch(n_words: int, batch: int, new: int) -> None:
         for en, _, capital, _, lang in COUNTRIES:
             for rel, text, ans in (("capital", f"The capital of {en} is", capital),
                                    ("language", f"The official language of {en} is", lang)):
-                rows.append({"rel": rel, "en": en, "ids": tok(text).input_ids, "a": tok(" " + ans).input_ids[0]})
-        lp = run([r["ids"] for r in rows], [[] for _ in rows])
+                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0]})
+        lp = run([r["ids"] for r in rows])["lp"]
         rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
         groups = {}
         for r in rows:
@@ -789,10 +885,10 @@ def patch(n_words: int, batch: int, new: int) -> None:
         # language: the last position of a capital prompt in one language, from one about another country in the other
         ok = []
         for en, zh, capital, capital_zh, _ in COUNTRIES:
-            c = {"en": tok(f"The capital of {en} is").input_ids, "zh": tok(f"{zh}的首都是").input_ids,
+            c = {"en": enc(f"The capital of {en} is"), "zh": enc(f"{zh}的首都是"),
                  "a_en": first([" " + capital, capital]), "a_zh": first([capital_zh, " " + capital_zh]), "name": en}
             ok.append(c)
-        lp = run([c[k] for c in ok for k in ("en", "zh")], [[] for _ in range(2 * len(ok))]).argmax(-1).tolist()
+        lp = run([c[k] for c in ok for k in ("en", "zh")])["lp"].argmax(-1).tolist()
         ok = [c for i, c in enumerate(ok) if lp[2 * i] in c["a_en"] and lp[2 * i + 1] in c["a_zh"]]
         ok.sort(key=lambda c: (c["name"] not in ("China", "France"), c["name"] != "China", rng.random()))
         log(f"language: {len(ok)} of {len(COUNTRIES)} countries answered right in both languages")
@@ -824,7 +920,7 @@ def patch(n_words: int, batch: int, new: int) -> None:
             mid += rng.sample(m_, min(2, len(m_)))
             bound += rng.sample(b_, min(1, len(b_)))
         mid, bound = mid[:4 * n_words], bound[:4 * n_words]
-        lp = run([r["ids"] for r in mid + bound], [[] for _ in mid + bound])
+        lp = run([r["ids"] for r in mid + bound])["lp"]
         top, p_top, pc = lp.argmax(-1).tolist(), lp.max(-1).values.exp().tolist(), (lp.exp() * cont).sum(-1).tolist()
         n_mid = len(mid)
         mid = [r for i, r in enumerate(mid) if top[i] == r["next"] and p_top[i] >= 0.5][:n_words]
@@ -841,6 +937,53 @@ def patch(n_words: int, batch: int, new: int) -> None:
                           for i in range(k)], m_word, ("cont",), shows=2)
         task("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
                             for i in range(k)], m_word, ("cont",), shows=1)
+
+        # frames: the same content in two settings, which differ in what comes next
+        qs = [f"What is the capital of {en}?" for en, *_ in COUNTRIES] + [
+            f"What is the official language of {en}?" for en, *_ in COUNTRIES]
+        rng.shuffle(qs)
+        user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n")
+        chat, mode_ = [], []
+        for q in qs:  # a plain question and answer against the chat template: does the assistant's turn open a thought?
+            Q, pre = enc(q), enc("Question:\n")
+            chat.append({"t": pre + Q + enc("\nAnswer:"), "s": user + Q + turn,
+                         "tshare": list(range(len(pre), len(pre) + len(Q))),
+                         "sshare": list(range(len(user), len(user) + len(Q)))})
+            mode_.append({"t": user + Q + turn + enc("<think>\n\n</think>\n\n"), "s": user + Q + turn + enc("<think>\n")})
+        frame("chat", chat, think)
+        frame("think", mode_, mask(lambda x: x in ("Okay", "Alright", "Hmm", "Well")), scopes=("last",))
+        sents = []  # one sentence of each document, 9-30 tokens, on one line
+        for doc in docs:
+            for i in range(1, T - 32):
+                if strs[doc[i - 1]].endswith(".") and re.fullmatch(r" [A-Z][a-z]+", strs[doc[i]]):
+                    j = next((j for j in range(i + 8, i + 30) if strs[doc[j]] == "."), None)
+                    if j is not None and not any("\n" in strs[x] for x in doc[i:j + 1]):
+                        sents.append(tok.decode(doc[i:j + 1]).strip())
+                        break
+        code, upper = [], []
+        pre = enc("```python\n#")
+        for s_ in sents:  # prose opening a document against a comment opening a Python file: does a new line follow?
+            t, body = enc(s_), enc(" " + s_)
+            if t[1:] == body[1:]:
+                code.append({"t": t, "s": pre + body, "tshare": list(range(1, len(t))),
+                             "sshare": list(range(len(pre) + 1, len(pre) + len(t)))})
+            cut = [k for k in range(5, len(t)) if re.fullmatch(r" [a-z]{3,}", strs[t[k]])]
+            if cut:  # a sentence cut before a lowercase word, as written and in capitals
+                text = tok.decode(t[:cut[len(cut) // 2]])
+                upper.append({"t": enc(text), "s": enc(text.upper())})
+        frame("code", code, nl)
+        frame("caps", upper, caps, lower, scopes=("last",))
+        lists = []
+        for _ in range(4 * n_frame):  # a list after commas against a bulleted list: what follows the last item?
+            t, s_, tsh, ssh = enc("Shopping list:"), enc("Shopping list:\n-"), [], []
+            for k, w in enumerate(rng.sample(ITEMS, rng.randint(4, 7))):
+                if k:
+                    t, s_ = t + enc(","), s_ + enc("\n-")
+                tsh.append(len(t))
+                ssh.append(len(s_))
+                t, s_ = t + enc(" " + w), s_ + enc(" " + w)
+            lists.append({"t": t, "s": s_, "tshare": tsh, "sshare": ssh})
+        frame("list", lists, nl, comma)
     for h in hooks:
         h.remove()
     log("PATCH DONE")
@@ -854,6 +997,7 @@ def main() -> None:
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
     ap.add_argument("--items", type=int, default=48, help="comprehend: items per sentence type")
     ap.add_argument("--words", type=int, default=64, help="patch: word-piece prefixes of each kind")
+    ap.add_argument("--frames", type=int, default=64, help="patch: pairs of each frame")
     ap.add_argument("--batch", type=int, default=4)
     a = ap.parse_args()
     if a.part == "trace":
@@ -863,7 +1007,7 @@ def main() -> None:
     elif a.part == "comprehend":
         comprehend(a.items, 64)
     else:
-        patch(a.words, 32, 20)
+        patch(a.words, a.frames, 32, 20)
 
 
 if __name__ == "__main__":
