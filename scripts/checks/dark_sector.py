@@ -50,12 +50,14 @@ Parts:
   source-target difference; and greedy generations.
 - ``middle``: the layers where neither lens's bright sector holds what the pairs differ in. For the countries (at the
   subject's tokens), the answer's language, the next word piece and thinking mode, the pairs are split in two halves
-  that share no country or document; at each of ``MIDDLE_LAYERS`` and ``K`` in ``MIDDLE_K``, the part of the
+  (the countries: the capital prompts and the official-language ones, since one country's direction can't carry
+  another's; the rest share no country, document or question); at each of ``MIDDLE_LAYERS`` and ``K`` in ``MIDDLE_K``, the part of the
   source-target difference in a ``K``-dim subspace is patched on the second half: the R-lens's top directions, the
   S-lens's, those of their average (the two whitened Grams at unit trace), points a quarter, half and three quarters of
   the way along the shortest rotation from the S-lens's to the R-lens's (``geodesic``), the top directions of the first
-  half's differences and of the gradients of its targets' score (an exact R-lens of each context), and a random
-  subspace; scored as ``patch`` is, with the share of the second half's difference energy each subspace holds.
+  half's differences and of the gradients of its targets' score (an exact R-lens of each context), the union of the two
+  lenses' top directions (``2K`` dims), and random subspaces of ``K`` and ``2K`` dims; scored as ``patch`` is, with the
+  share of the second half's difference energy each subspace holds.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -686,7 +688,7 @@ def geodesic(U1: torch.Tensor, U2: torch.Tensor, t: float) -> torch.Tensor:
 
 
 def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False) -> None:
-    sec = sectors(s_lens=True, keep=max(MIDDLE_K) if middle else 0)
+    sec = sectors(s_lens=True, keep=2 * max(MIDDLE_K) if middle else 0)
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
@@ -828,8 +830,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
         """The log-odds of the next token's mass on vocabulary mask ``a`` against ``b`` (by default the rest)."""
         def m(lp, pairs):
             pr = lp.exp()
-            pa = (pr * a).sum(-1)
-            pb = (pr * b).sum(-1) if b is not None else 1 - pa
+            pa = (pr * a.float()).sum(-1)
+            pb = (pr * b.float()).sum(-1) if b is not None else 1 - pa
             return {"form": (pa + 1e-9).log() - (pb.clamp_min(0) + 1e-9).log(), "top_a": a[lp.argmax(-1)].float()}
         return m
 
@@ -992,6 +994,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
             for K in MIDDLE_K:
                 bases = {f: B[:, :K] for f, B in fam.items()}
                 bases |= {f"geo{t}": geodesic(bases["S"], bases["R"], t) for t in GEO}
+                bases["union"] = torch.linalg.qr(torch.cat([bases["S"], bases["R"]], 1))[0]  # 2K dims
+                bases["rand2"] = fam["rand"][:, :2 * K]
                 for f, B in bases.items():
                     o = run(rows_t, pos_t, "h", src=ss["cap"], layers={L}, basis=B.half().contiguous(), refs=(ref,))
                     r = summ(metric(o["lp"], test))
@@ -1018,10 +1022,10 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
     with torch.inference_mode():
         # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
         rows = []
-        for ci, (en, _, capital, _, lang) in enumerate(COUNTRIES):
+        for en, _, capital, _, lang in COUNTRIES:
             for rel, text, ans in (("capital", f"The capital of {en} is", capital),
                                    ("language", f"The official language of {en} is", lang)):
-                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0], "half": ci % 2})
+                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0], "half": int(rel == "language")})
         lp = run([r["ids"] for r in rows])["lp"]
         rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
         groups = {}
@@ -1030,7 +1034,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
         pairs = []
         for g in groups.values():
             g.sort(key=lambda r: (r["en"] not in ("France", "Italy"), rng.random()))
-            for h_ in halves:  # the middle part pairs countries within halves, fitting on one and scoring on the other
+            for h_ in halves:  # the middle part fits on the capital prompts and scores on the official-language ones
                 gh = [r for r in g if h_ in (None, r["half"])]
                 for i, r in enumerate(gh):
                     o = next((gh[(i + k) % len(gh)] for k in range(1, len(gh)) if gh[(i + k) % len(gh)]["a"] != r["a"]),
