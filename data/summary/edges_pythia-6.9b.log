@@ -1,0 +1,9 @@
+direct weight edges, EleutherAI/pythia-6.9b: top 64 in and out per pole by |push| among |cos| >= 5.0/sqrt(d) = 0.078; residual RMS at the MLP input L0 0.0, L4 1.1, L8 1.6, L12 2.1, L16 3.1, L20 4.8, L24 6.2, L28 6.5, L31 6.3
+
+band     prev  rotated  edged  top|cos|  top push  in-edges  gap1  gap  pos   hubs | out-edged  out-edges  out gap
+  (prev, rotated: median of each pole's largest |cos| with the layer before's writes, and with them rotated at random; edged: share of poles with an in-edge; top |cos|, top push: medians of the strongest in-edge's; in-edges: median count above the floor, of k; gap1: share of strongest in-edges from the layer before; gap: median layer gap; pos: share of strongest in-edges that drive the pole; hubs: share of the band's in-list entries held by the 1% most-listed sources; out-: the same for out-lists)
+L0-7     0.088    0.064   0.78     0.086     0.444         3  0.62    1  0.66  0.54 |      0.77          2        1
+L8-15    0.092    0.064   0.97     0.089     0.474        11  0.36    2  0.69  0.23 |      0.93          6        2
+L16-23   0.089    0.064   0.99     0.089     0.349        12  0.27    3  0.76  0.26 |      0.71          2        2
+L24-31   0.070    0.064   0.90     0.086     0.236         4  0.11    6  0.74  0.37 |      0.27          0        2
+L0-31    0.085    0.064   0.91     0.087     0.369         6  0.33    2  0.71  0.30 |      0.67          2        2

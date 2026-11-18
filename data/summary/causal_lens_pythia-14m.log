@@ -1,0 +1,58 @@
+causal check of lens reads, EleutherAI/pythia-14m: {'model': 'EleutherAI/pythia-14m', 'contexts_from': 'catalog', 'docs': 63992, 'per_layer': 32, 'contexts': 16, 'ctx_len': 64, 'doses': [1.0, 4.0], 'window': 8, 'top_contexts': 8}
+median Pearson r over the vocabulary (matched / control: next sampled neuron's read), mean top-10 overlap; random picks only (named poles listed after)
+
+steer 1x
+layer                 record
+L0      0.88 /-0.04 ov 0.32
+L1      0.87 / 0.01 ov 0.30
+L2      0.91 /-0.06 ov 0.40
+L3      0.92 /-0.02 ov 0.43
+L4      0.97 /-0.01 ov 0.65
+L5      1.00 / 0.01 ov 0.92
+
+steer 4x
+layer                 record
+L0      0.74 /-0.03 ov 0.15
+L1      0.70 / 0.02 ov 0.11
+L2      0.76 /-0.04 ov 0.18
+L3      0.79 /-0.01 ov 0.24
+L4      0.90 /-0.01 ov 0.42
+L5      0.98 / 0.00 ov 0.82
+
+ablate pos
+layer                 record
+L0      0.33 /-0.00 ov 0.01
+L1      0.39 / 0.01 ov 0.01
+L2      0.39 /-0.05 ov 0.03
+L3      0.60 / 0.00 ov 0.11
+L4      0.79 /-0.01 ov 0.24
+L5      1.00 / 0.03 ov 0.86
+
+ablate win
+layer                 record
+L0      0.53 /-0.02 ov 0.07
+L1      0.53 /-0.00 ov 0.03
+L2      0.48 /-0.03 ov 0.03
+L3      0.61 /-0.01 ov 0.10
+L4      0.83 /-0.03 ov 0.30
+L5      1.00 / 0.03 ov 0.86
+
+steer 1x: share of poles whose read predicts it (r past the control's 99% point, pooled over layers: record 0.33; control pairs in brackets)
+layer         record
+L0      1.00 [0.00]
+L1      0.97 [0.03]
+L2      1.00 [0.00]
+L3      1.00 [0.03]
+L4      1.00 [0.00]
+L5      1.00 [0.00]
+
+steer 4x: share of poles whose read predicts it (r past the control's 99% point, pooled over layers: record 0.34; control pairs in brackets)
+layer         record
+L0      0.97 [0.00]
+L1      0.97 [0.03]
+L2      1.00 [0.00]
+L3      1.00 [0.03]
+L4      1.00 [0.00]
+L5      1.00 [0.00]
+
+named poles: Pearson r (top-10 overlap) per lens, steer 4x | ablate win

@@ -1,0 +1,26 @@
+{
+ "model": "EleutherAI/pythia-2.8b",
+ "dir": "pythia-2.8b",
+ "layers": 32,
+ "d_model": 2560,
+ "neurons": 10240,
+ "heads": 32,
+ "lenses": {
+  "text": {
+   "R_docs": 1000,
+   "S_docs": 1000,
+   "R": "0.00-0.48",
+   "R_mid": "0.00-0.53",
+   "S_mid": "0.00-0.53",
+   "S_out": "0.00-0.53",
+   "corpus": "HuggingFaceFW/dclm_100BT-shuffled",
+   "revision": "2fa015e4044ec442a0734e89658cdcc538d10dd4",
+   "rows_sha": "cc0bb52eb9c0df23",
+   "t_max": 128
+  }
+ },
+ "scale": {
+  "docs": 1000,
+  "split": "0.01-0.01"
+ }
+}

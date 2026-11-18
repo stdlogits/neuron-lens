@@ -1,0 +1,10 @@
+head reads, EleutherAI/pythia-410m: 24 × 16 heads, 48041 tokens; QK statistics over 63992 documents, 40170 tokens seen 10+ times as keys
+
+qk_self_S against duplicate-token heads (duplicate > 0.3, 7 heads): AUROC 0.99, Spearman with the duplicate score +0.47; qk_self_R 0.96 (from L1)
+
+by band: qk_ctx_rho mean (own / control head), share past +0.2 (own / control); qk_ov_rho mean (own / control), share past +0.2 and under −0.2 (own / control); ov_R_copy and ov_S_copy medians; qk_self_S and qk_self_R medians
+  L0-5: ctx +0.28/+0.11 (0.60/0.28)  align +0.012/-0.005 (+ 0.03/0.01, − 0.02/0.03)  copy R +0.13 S +0.79  self S +0.54 R +0.26
+  L6-11: ctx +0.21/+0.17 (0.53/0.47)  align +0.006/+0.011 (+ 0.01/0.00, − 0.01/0.00)  copy R +0.08 S +0.40  self S +1.13 R +0.39
+  L12-17: ctx +0.31/+0.18 (0.84/0.53)  align +0.091/+0.012 (+ 0.11/0.02, − 0.00/0.02)  copy R +0.37 S +0.58  self S +0.68 R +0.51
+  L18-23: ctx +0.29/+0.05 (0.66/0.18)  align +0.138/-0.045 (+ 0.33/0.03, − 0.02/0.16)  copy R +0.64 S +0.58  self S +1.43 R +0.77
+  L0-23: ctx +0.27/+0.13 (0.66/0.36)  align +0.062/-0.007 (+ 0.12/0.02, − 0.01/0.05)  copy R +0.26 S +0.58  self S +0.91 R +0.50

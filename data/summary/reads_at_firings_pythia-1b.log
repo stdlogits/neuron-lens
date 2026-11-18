@@ -1,0 +1,17 @@
+neurons, EleutherAI/pythia-1b: 131,072 poles; share of each band's poles (mean over layers) passing each test at a 5% false discovery rate; in brackets, the share past the 99% point of mismatched pairs net of theirs. Detectors: a third of top firings share a token.
+
+band             silent  token_detector   next_detector          read_R          read_S         write_R         write_S    write_orth_R    write_orth_S
+L0-3               0.00            0.54            0.10     0.41 [0.28]     0.81 [0.65]     0.00 [0.01]     0.39 [0.38]     0.00 [0.01]     0.38 [0.38]
+L4-7               0.00            0.32            0.10     0.46 [0.33]     0.06 [0.11]     0.00 [0.01]     0.03 [0.06]     0.00 [0.01]     0.01 [0.06]
+L8-11              0.00            0.30            0.12     0.60 [0.44]     0.13 [0.14]     0.06 [0.08]     0.08 [0.10]     0.05 [0.07]     0.07 [0.10]
+L12-15             0.00            0.15            0.09     0.32 [0.27]     0.01 [0.05]     0.09 [0.12]     0.00 [0.02]     0.10 [0.13]     0.00 [0.02]
+L0-15              0.00            0.33            0.10     0.45 [0.33]     0.25 [0.24]     0.04 [0.05]     0.13 [0.14]     0.04 [0.06]     0.12 [0.14]
+
+heads, EleutherAI/pythia-1b: 16 × 8 heads; share of each band's heads passing each test at a 5% false discovery rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: prev > 0.5, self > 0.5, induction > 0.3, duplicate > 0.3
+
+band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det       mode    pattern   ov_R_p05  ov_copy_p05   ov_S_p05   qk_S_p05
+L0-3          0.00       0.00       0.00       0.00       0.56       0.69       0.72       0.06       0.16       0.16       0.25       0.03
+L4-7          0.00       0.00       0.00       0.00       0.16       0.38       0.41       0.28       0.12       0.12       0.06       0.06
+L8-11         0.00       0.00       0.00       0.00       0.16       0.25       0.31       0.12       0.16       0.25       0.22       0.12
+L12-15        0.00       0.00       0.00       0.00       0.25       0.28       0.34       0.03       0.31       0.28       0.12       0.06
+L0-15         0.00       0.00       0.00       0.00       0.28       0.40       0.45       0.12       0.19       0.20       0.16       0.07
