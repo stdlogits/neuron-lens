@@ -287,7 +287,9 @@ random poles, with a card that keeps only the reads that carry signal at each la
 it matches Sonnet (0.82 against 0.83). The labels in the catalog now come from a leaner card, one input and one write
 read a pole chosen for its depth, for Qwen3-0.6B to 14B and Gemma 4: their firing labels pick a pole's held-out firings out from
 another pole's at 0.82-0.88 (another pole's label: 0.44-0.54), as well as the earlier labels on the same poles, at half the
-cost ([§8](docs/findings.md#8-describing-neurons)).
+cost. Asked to predict activations token by token (*simulation*), the same labels correlate at 0.21 on Qwen3-8B (another
+pole's label: 0.00): they name which contexts a pole fires in (0.44 by each excerpt's peak) more often than the token, and
+rarely its weak firings ([§8](docs/findings.md#8-describing-neurons)).
 
 ![Blind test](docs/figures/14_lens_blind.png)
 

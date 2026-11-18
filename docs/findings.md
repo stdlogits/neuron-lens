@@ -645,8 +645,43 @@ itself. Checked blind by Claude Sonnet 5.5 on 150 random firing poles a model, a
   contrast is another firing pole of the layer, harder than the quiet positions of the 100-pole test. 150 poles is about ±4
   points a model, a quarter about ±8. `data/summary/label_check_<model>.json`.
 
-**Limits.** Positives come from the high-activation regime (top documents only), and quiet positions
-are an easier contrast than near misses. 32 poles a band is about ±15 points (100 poles for the Haiku
+**Simulation** (2026-11-17; `checks/simulate_labels.py`). Bills et al. (2023)'s test on the same 150 Qwen3-8B poles: Claude
+Sonnet 5.5 (Batch API, default thinking) sees only a firing label and predicts the pole's activation, 0 to 10, at every token
+of 15 excerpts of 64 tokens, shuffled: 5 around held-out top firings (ranks 6-24), 5 around weak firings (a peak at a quarter
+to a half of `act_top`, under the regime detection draws from) and 5 at random, the last two from 2,000 random activation
+documents outside the pole's top 64. True activations come from a bf16 forward pass over each excerpt's document (Apple
+silicon; the top firings within 4% of the catalog's values), the pole's sign applied and clipped at zero. The score is the
+correlation of simulated and true activations over all 960 tokens (Bills's top-and-random score). Three labels run on the
+same excerpts: the lean label, the label it replaced, and another firing pole of the layer's. The run cost $4.64.
+
+| | lean label | earlier label | another pole's label |
+|---|---|---|---|
+| correlation, all tokens | 0.21 [0.18, 0.25] | 0.20 [0.16, 0.24] | −0.00 |
+| within top / weak excerpts | 0.23 / 0.09 | 0.21 / 0.10 | 0.00 / 0.00 |
+| correlation of excerpt peaks | 0.44 [0.38, 0.49] | 0.39 [0.33, 0.45] | −0.04 |
+| top / weak excerpts found among random ones (AUROC) | 0.75 / 0.61 | 0.73 / 0.61 | 0.49 / 0.50 |
+| top excerpts' predicted peak within a token of the true one | 25% | 24% | 0.5% |
+
+- **The labels say where a pole fires more often than on which token.** Scored by each excerpt's peak (which excerpts fire,
+  and how strongly) a label reaches 0.44; token by token 0.21, and a top excerpt's predicted peak lands within a token of the
+  true one a quarter of the time. Two shapes recur among the misses, and detection sees neither, since its contexts end at
+  the firing token: the label names the word about to come rather than the one the pole fires on (L31 n9635 −, "academic
+  disciplines and fields of study", fires on " degree" and " career" before a field is named, a detector of what comes next
+  as the pilot found many), or the construction around the token (L4 n8221 −, "Python import statements", fires on the module
+  name after `from`; L5 n1493 +, "view and visit counts", on the field name " Votes", not the count). Where a label names
+  the token, the simulation is close to exact: L0 n6001 − ("no need", 0.92), L31 n94 + ("al" starting chemical names, 0.89).
+- **Weak firings are mostly outside the labels.** Excerpts that peak at a quarter to a half of `act_top` are found among
+  random ones at AUROC 0.61 and correlate at 0.09: a label written from top contexts describes the top regime (§4).
+- **The lean labels simulate as well as the earlier ones** (+0.01 [−0.02, 0.05]), as they detect.
+- **Spread:** median 0.17, 30% of poles at 0.3 or more, 9% at 0.5 or more; highest at L0-L8 (0.30, against 0.16-0.22
+  after). Confidence ranks weakly (0.25 for the 9 labels at 0.7 or more, 0.17 for the 57 under 0.4), and the two tests rank
+  poles only loosely (Spearman 0.20 with the detection AUROC).
+- Scores are correlations, on another scale from the detection AUROCs, from one simulator. A label that names the token a
+  pole fires on beside its concept would likely close part of the token-level gap (untested).
+  `data/summary/label_simulation_qwen3-8b.json`.
+
+**Limits.** Positives come from the high-activation regime (top documents only; the simulation above adds weak firings),
+and quiet positions are an easier contrast than near misses. 32 poles a band is about ±15 points (100 poles for the Haiku
 test, ±20). Steering is amplified past natural firing (5-18× in the blind test, 7-29× in the Haiku
 test), in bf16. Explainers, scorers and judges are all Claude models, in separate instances, and the
 explainers' prompt carried the depth priors.
