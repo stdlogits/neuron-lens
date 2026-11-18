@@ -56,7 +56,7 @@ Parts:
   S-lens's, those of their average (the two whitened Grams at unit trace), points a quarter, half and three quarters of
   the way along the shortest rotation from the S-lens's to the R-lens's (``geodesic``), the top directions of the first
   half's differences and of the gradients of its targets' score (an exact R-lens of each context), the union of the two
-  lenses' top directions (``2K`` dims), and random subspaces of ``K`` and ``2K`` dims; scored as ``patch`` is, with the
+  lenses' top directions (``2K`` dims) against each lens's top ``2K``, and random subspaces of ``K`` and ``2K`` dims; scored as ``patch`` is, with the
   share of the second half's difference energy each subspace holds.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
@@ -995,7 +995,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
                 bases = {f: B[:, :K] for f, B in fam.items()}
                 bases |= {f"geo{t}": geodesic(bases["S"], bases["R"], t) for t in GEO}
                 bases["union"] = torch.linalg.qr(torch.cat([bases["S"], bases["R"]], 1))[0]  # 2K dims
-                bases["rand2"] = fam["rand"][:, :2 * K]
+                bases |= {"R2": fam["R"][:, :2 * K], "S2": fam["S"][:, :2 * K], "rand2": fam["rand"][:, :2 * K]}
                 for f, B in bases.items():
                     o = run(rows_t, pos_t, "h", src=ss["cap"], layers={L}, basis=B.half().contiguous(), refs=(ref,))
                     r = summ(metric(o["lp"], test))
