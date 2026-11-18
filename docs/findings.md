@@ -664,9 +664,10 @@ same excerpts: the lean label, the label it replaced, and another firing pole of
 
 - **The labels name the context a pole fires in more often than the token.** Scored by each excerpt's peak (which excerpts
   fire, and how strongly) a label reaches 0.44; token by token 0.21. Of the 750 held-out top excerpts, the predicted peak
-  lands within a token of the true one in 25%, 2-5 tokens off in 8% (as often before as after), further off in the excerpt
-  in 31%, and 35% are predicted silent: the label doesn't cover that firing at all. 29 of the 150 labels hit three or more
-  of their five, 62 none. Detection sees none of this, since its contexts end at the firing token. Misses read by hand
+  lands on the true token in 16%, one or two tokens after it in 9% and before it in 4% (near misses lean to the token
+  after), 3-5 tokens off in 5%, further off in the excerpt in 31% (before and after as the room allows), and 35% are
+  predicted silent: the label doesn't cover that firing at all. 29 of the 150 labels land within a token on three or more of
+  their five, 62 on none. Detection sees none of this, since its contexts end at the firing token. Misses read by hand
   include a label naming the word about to come (L31 n9635 −, "academic disciplines and fields of study", fires on " degree"
   and " career" before a field is named) and one naming the construction around the token (L4 n8221 −, "Python import
   statements", fires on the module name after `from`; L5 n1493 +, "view and visit counts", on the field name " Votes", not

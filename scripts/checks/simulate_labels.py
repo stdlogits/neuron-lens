@@ -251,7 +251,8 @@ def score(pred: list[list[float]], ex: list[dict], a_top: float) -> dict:
         hot = [max(pred[i]) for i, e in enumerate(ex) if e["kind"] == k]
         if hot and quiet:
             out[f"finds_{k}"] = labels.auroc(hot + quiet, [1] * len(hot) + [0] * len(quiet))
-    lands = {"hit": 0, "near_before": 0, "near_after": 0, "far": 0, "silent": 0}  # top excerpts' predicted peak
+    lands = {"on": 0, "after_1_2": 0, "before_1_2": 0, "off_3_5": 0, "far": 0, "silent": 0}  # top excerpts' predicted peak
+    hit = 0
     for i, e in enumerate(ex):
         if e["kind"] != "top":
             continue
@@ -259,9 +260,10 @@ def score(pred: list[list[float]], ex: list[dict], a_top: float) -> dict:
             lands["silent"] += 1
             continue
         d = max(range(WIN), key=pred[i].__getitem__) - max(range(WIN), key=true[i].__getitem__)
-        lands["hit" if abs(d) <= 1 else "far" if abs(d) > 5 else "near_after" if d > 0 else "near_before"] += 1
+        lands["on" if d == 0 else "after_1_2" if 0 < d <= 2 else "before_1_2" if -2 <= d < 0 else "off_3_5" if abs(d) <= 5 else "far"] += 1
+        hit += abs(d) <= 1
     n_top = sum(lands.values())
-    out["peak"] = lands["hit"] / n_top if n_top else math.nan
+    out["peak"] = hit / n_top if n_top else math.nan
     out["lands"] = lands
     return out
 
@@ -340,7 +342,9 @@ def run(args) -> None:
     lands = [v["own"]["lands"] for v in per.values() if "own" in v]
     total = sum(sum(x.values()) for x in lands)
     summary["own_top_peak_lands"] = {k: sum(x[k] for x in lands) / total for k in lands[0]}
-    summary["own_poles_by_top_hits"] = {h: sum(x["hit"] == h for x in lands) for h in range(PER_KIND + 1)}
+    summary["own_poles_by_top_exact"] = {h: sum(x["on"] == h for x in lands) for h in range(PER_KIND + 1)}
+    near = [round(v["own"]["peak"] * PER_KIND) for v in per.values() if "own" in v]
+    summary["own_poles_by_top_within_1"] = {h: near.count(h) for h in range(PER_KIND + 1)}
     quarter = lambda layer: min(4 * layer // labels.LAYERS, 3)
     summary["own_all_by_quarter"] = {q: stat(xs) for q in range(4) if (xs := [v["own"]["all"] for v in per.values()
                                                                                 if "own" in v and quarter(v["layer"]) == q])}
