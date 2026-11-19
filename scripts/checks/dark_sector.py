@@ -661,7 +661,12 @@ def span() -> None:
     """Do the lenses' readouts span the residual? In fp64, per layer: the R-lens readout's gains at each output and
     each MLP input, the S-lens footprints' Gram at each output, their numerical ranks (directions above ``10^-e`` of the
     loudest gain, and above ``10^-6`` of the second, the loudest being the fixed offset), and which factor sets the
-    bottom: the unembedding's Gram (centred, scaled by the final norm ``γ``), ``γ``, the lens's Jacobian or the metric."""
+    bottom: the unembedding's Gram (centred, scaled by the final norm ``γ``), ``γ``, the lens's Jacobian or the metric.
+    Then whether the two lenses together read every direction: at each output and MLP input, the S-lens footprints' Gram
+    there and the R-lens readout's, each scaled by its second-loudest gain, summed; the sum's eigenvalues bound
+    ``max(R, S)`` along every direction within a factor of 2, so directions under ``10^-6`` are read by neither lens within
+    a factor of 1,000 (in singular value) of its second loudest. Also how the S-lens reads the R-lens's quiet directions
+    (under ``10^-6``), and where the directions dark to both sit in raw coordinates."""
     f64 = torch.float64
     nm = arch.names(MODEL)
     n = arch.text_config(MODEL).num_hidden_layers
@@ -676,7 +681,7 @@ def span() -> None:
     GE = we.T @ we
     del C, wk, we
     d = G.shape[0]
-    lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=("J_out", "J_mid", "K_out"))
+    lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=("J_out", "J_mid", "K_out", "K_mid"))
     spec = lambda A: torch.linalg.eigvalsh(A).flip(0).clamp_min(0)
 
     def ranks(g):
@@ -690,19 +695,42 @@ def span() -> None:
            "gamma_median": gamma.abs().median().item(), "layers": []}
     log(f"unembedding Gram ranks {res['unembed']['ranks']}; smallest |γ| {res['gamma_smallest']} (median "
         f"{res['gamma_median']:.2f})")
+    def joint(AR, gR, VR, AS, s_):
+        """Both lenses' readouts, each over its second-loudest gain, summed: how many directions either reads, and
+        how the S-lens reads the R-lens's quiet ones."""
+        gS = spec(AS)
+        Rn, Sn = AR / gR[1], AS / gS[1]
+        e, U = torch.linalg.eigh(Rn + Sn)
+        quiet = VR[:, gR / gR[1] < 1e-6]
+        qs = (quiet * (Sn @ quiet)).sum(0)
+        dark = U[:, e < 1e-6] * s_[:, None]
+        conc = (dark / dark.norm(dim=0)).pow(2)
+        top = conc.sum(1).topk(8)
+        return {"S_ranks": ranks(gS), "joint_1e-6": int((e >= 1e-6).sum()), "joint_1e-9": int((e >= 1e-9).sum()),
+                "joint_min": e[0].item(), "R_quiet": quiet.shape[1],
+                "R_quiet_read_by_S": (qs >= 1e-6).float().mean().item() if quiet.shape[1] else None,
+                "R_quiet_S_median": qs.median().item() if quiet.shape[1] else None,
+                "dark_both": dark.shape[1], "dark_both_raw_top8": top.indices.tolist(),
+                "dark_both_raw_top8_share": (top.values.sum() / max(dark.shape[1], 1)).item()}
+
     for L in range(n):
         row = {"L": L}
         for point, J in (("out", lm["J_out"][L] if L < n - 1 else None), ("mid", lm["J_mid"][L])):
             s_ = metric.s2(MODEL, point, L, DEV).to(f64).sqrt()
             J = torch.eye(d, device=DEV, dtype=f64) if J is None else J.to(DEV, f64)
             sv = torch.linalg.svdvals(J)
-            g, V = torch.linalg.eigh(s_[:, None] * (J.T @ G @ J) * s_[None, :])
+            AR = s_[:, None] * (J.T @ G @ J) * s_[None, :]
+            g, V = torch.linalg.eigh(AR)
             g, V = g.flip(0).clamp_min(0), V.flip(1)
+            Ks = lm["K_" + point][L].to(DEV, f64)
+            AS = (Ks @ GE @ Ks.T) / s_.pow(2)[:, None] / s_.pow(2)[None, :]  # the S-lens footprints, whitened
             low = V[:, -32:] * s_[:, None]  # the readout's 32 quietest directions, raw
             y = J @ low
             row[point] = {"ranks": ranks(g), "J_ranks": ranks(sv.pow(2)), "J_sv_min_over_max": (sv[-1] / sv[0]).item(),
                           "low_through_J": (y.norm(dim=0) / low.norm(dim=0)).median().item() / sv.median().item(),
-                          "low_read_by_unembed": ((y * (G @ y)).sum(0) / y.pow(2).sum(0)).median().item() / gG.median().item()}
+                          "low_read_by_unembed": ((y * (G @ y)).sum(0) / y.pow(2).sum(0)).median().item() / gG.median().item(),
+                          "joint": joint(AR, g, V, AS, s_)}
+            del AR, AS, Ks
         s_ = metric.s2(MODEL, "out", L, DEV).to(f64).sqrt()
         K = lm["K_out"][L].to(DEV, f64)
         row["S_out"] = {"ranks": ranks(spec((K @ GE @ K.T) / s_.pow(2)[:, None] / s_.pow(2)[None, :])),
@@ -714,6 +742,12 @@ def span() -> None:
             f"{o['ranks']['1e-12']} | J σ min/max {o['J_sv_min_over_max']:.1e}, J within 1e-3 of its second "
             f"{o['J_ranks']['no_top_1e-6']} | quietest readout directions: {o['low_through_J']:.2f} of J's median gain, "
             f"{o['low_read_by_unembed']:.1e} of the unembedding's median")
+        for pt in ("out", "mid"):
+            j = row[pt]["joint"]
+            log(f"    {pt:3s} R {row[pt]['ranks']['no_top_1e-6']} S {j['S_ranks']['no_top_1e-6']} | either "
+                f"{j['joint_1e-6']} (1e-9: {j['joint_1e-9']}), min {j['joint_min']:.1e} | R's {j['R_quiet']} quiet "
+                f"directions: S reads {j['R_quiet_read_by_S'] or 0:.2f} of them, median {j['R_quiet_S_median'] or 0:.1e} | "
+                f"dark to both {j['dark_both']}, raw top8 {j['dark_both_raw_top8'][:4]} share {j['dark_both_raw_top8_share']:.2f}")
     save("span", res)
 
 
