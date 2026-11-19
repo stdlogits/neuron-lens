@@ -1922,9 +1922,11 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
   Both factors of the R-lens set its bottom. The readout's 32 quietest directions are shrunk by the lens's Jacobian to
   5-9% of its median gain in length at L0-L12, and land where the unembedding reads 0.1-0.3% of its median; the
   Jacobian's singular values spread over a factor of 10⁶-10⁸ at L0-L12 and 10³ by L24. So early on the R-lens barely
-  reads about half the residual, and the S-lens covers it. What two prompts differ in sits inside the R-lens's span
-  there: the rank ladder puts at most 0.02 of the gap past rank 2,048 at L0-L8. The factor of 1,000 is a convention;
-  the spectra are continuous.
+  reads about half the residual; the S-lens's footprints span all but 30-70 directions there, which by dimension alone
+  puts most of what the R-lens misses inside the S-lens's span, but whether every such direction is read by one lens
+  or the other (the bottom of the two Grams summed) is untested. What two prompts differ in sits inside the R-lens's
+  span there: the rank ladder puts at most 0.02 of the gap past rank 2,048 at L0-L8. The factor of 1,000 is a
+  convention; the spectra are continuous.
 - **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
   inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
   ablations likely remove what prompts share rather than what they differ in. Early the
