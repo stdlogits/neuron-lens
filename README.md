@@ -485,7 +485,9 @@ instead leaves "the, the, the". Swapping a sector between two prompts shows wher
 the answer's language, the next word piece, and even whether the reply is a story or small talk move with the bright
 sector from L4-L12, and the dark part of the difference, most of its energy, changes nothing. In between, the country
 needs the R-lens's top directions and more of the difference besides, and thinking mode at L12 sits in a few directions
-neither lens weights. So the dark sector likely holds what prompts share rather than what they differ in
+neither lens weights. Ranked by gain without a cut (its loudest direction, the residual's massive-activation offset,
+left out), the R-lens puts what prompts differ in well above chance at every layer: the early dark sector is the lens's
+middle ranks. So the dark sector likely holds what prompts share rather than what they differ in
 ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits

@@ -1732,7 +1732,8 @@ links each neuron to its counterpart.
 
 ## §21. The dark sector: what the R-lens barely reads
 
-**Setup** (`checks/dark_sector.py`: Qwen3-8B in bf16 on an RTX 4090, statistics in fp32; the released R-lens). At each
+**Setup** (`checks/dark_sector.py`: Qwen3-8B in bf16 on an RTX 4090, `trace` and the swaps on an H100, statistics in
+fp32; the released R-lens). At each
 layer's output, the R-lens readout in the residual's metric, `W̄_U diag(γ_f) J_L diag(s)` (`W̄_U`: the kept unembedding,
 centred over tokens), has eigenvectors ordered by gain. A layer's *bright sector* is the fewest of them that carry 90% of
 the lens energy of the layer's writes; its *dark sector* is the rest, orthogonal in the metric. To *ablate* a sector of
@@ -1740,22 +1741,36 @@ an MLP output is to replace that part with its mean over 64 held-out DCLM docume
 The controls remove random subspaces of the dark and the bright dimension, or the whole MLP output. Single layers are
 scored on 64 other DCLM documents of 128 tokens (positions 16-126), bands of layers on 32 documents of each activation
 slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three in the chat template without thinking).
-The swaps between prompts (`patch`, `middle`) ran on an H100.
 
 - **The bright sector grows with depth.** It has 60-192 directions at L0-L3, 610 at L9, 1,114 at L15, 1,920 at L21,
   2,688 at L27 and 3,367 at L35, of 4,096. In context the residual is 87-95% dark at L0-L3, 71-81% at L4-L15 and
   34-50% from L24 (energy in the metric). An MLP output is about as dark as a vector with its energy per coordinate
   (L9: 0.91 against 0.93): its darkness comes from which coordinates it uses, not from avoiding the lens's directions.
+- **The readout's loudest direction is the residual's massive-activation offset** (`soft`). At every layer one direction
+  reads far louder than the rest: 2,060-3,830 times a random direction at L0-L9 (1.9-131 times the next), 430-730 at
+  L10-L20 and 50-430 later, holding 50-93% of the readout's gain at L0-L9. At L0-L9 98-100% of its weight sits on eight
+  raw coordinates; from L11 to L34 coordinate 4081 leads (29-84% on eight). Along it the residual barely varies at
+  ordinary positions (at L0-L9 a spread of 0.0-0.2 around a mean of 0.1-1.0, in the metric), and from L6 it is 7-115
+  times larger at the first position. Setting it to its mean costs 0.01-0.15 nats a token; setting it to zero costs
+  8.8-11.8 at L0-L8, where the lens predicts a KL of 0.06-0.15 for a measured 9-13. That is the signature of the massive
+  activations Sun et al. (2024, [arXiv:2402.17762](https://arxiv.org/abs/2402.17762)) describe: few, huge, fixed, and
+  needed as they are. From L10 removing it costs 0.09-0.21 nats and sharpens predictions (entropy −0.08 to −0.32), and
+  doubling it flattens them (+0.08 to +0.28) and lowers the loss by 0.02-0.05. Through the lens it reads as a frequency
+  axis: its push on the kept tokens follows their log frequency (|ρ| 0.36-0.46; 0.65 at L35, where it is the
+  unembedding's top direction), with function words (" the", " and", " in") at one end and rare Chinese and code pieces
+  at the other. A fixed offset carries nothing two prompts differ in, but it holds half the writes' lens energy at
+  L0-L2 and inflates any comparison with a random direction early; the loudness below and the soft weights leave it out.
 - **Early dark directions stay dark; later ones are cancelled.** How loud a layer's dark sector is to each later layer's
-  lens, against a random direction (1 = as loud): L1's and L3's are at most 0.06 to every lens through L15, and 0.13-0.19
-  to the unembedding itself. L9's are at most 0.02 within three layers but up to 0.63 later, and L12's 0.14 and up to 0.65:
-  later lenses would read those directions, so what keeps them dark at L9-L12 is what the layers in between do to them.
+  lens, against a random direction (1 = as loud; each lens's loudest direction left out): L1's and L3's are at most
+  0.11 to every lens through L15, and 0.17-0.39 to the unembedding itself. L9's are at most 0.15 within three layers but
+  up to 0.76 later, and L12's 0.14 and up to 0.66: later lenses would read those directions, so what keeps them dark at
+  L9-L12 is what the layers in between do to them.
 - **The lens misses what the dark sector does.** Ablating one layer's dark sector moves the output by a KL of 0.03-0.10
   at L1-L15, 300-5,700 times what the lens predicts (`W_U (γ_f ⊙ J_L Δm) / rms`, the lens's LN rule). It raises loss
   by 0.03-0.04 nats at L2-L9, 2-5 times the bright sector's cost, though per unit of energy removed it matters less than
-  the bright sector or a random subspace of its size (KL per unit at L9: 4.4, 6.3 and 6.1 × 10⁻⁴). From L22 the bright
+  the bright sector or a random subspace of its size (KL per unit at L9: 4.4, 6.4 and 5.7 × 10⁻⁴). From L22 the bright
   sector costs more, and one late layer's dark sector costs little alone (≤ 0.006 nats at L27-L33). At L35, where the lens
-  is the unembedding, it predicts the dark ablation's KL (0.076 against 0.106).
+  is the unembedding, it predicts the dark ablation's KL (0.076 against 0.107).
 - **What the dark sector feeds.** It supplies 60-93% of what drives the top 1% of activations through L21, less than a
   random subspace of its size would (79-99%), so neurons read the bright sector more than its share. A dark perturbation
   stays dark: after L9's dark sector is removed, the bright share of the change over the next four layers is 0.08-0.17,
@@ -1878,6 +1893,18 @@ The swaps between prompts (`patch`, `middle`) ran on an H100.
     the answer's language, and the R-lens's top 1,024 0.03-0.50.
   - **What the answer reads is R-like, and the content isn't there yet.** The top 32 directions of the gradients overlap
     the R-lens's top 32 at 4-97 times chance (0.03-0.76 against 0.008), yet carry at most 0.37 of the gap.
+- **Brightness without a cut** (`soft`). Weighting each direction by `g / (g + ḡ)`, its gain against a random
+  direction's (`ḡ` without the offset), gives a soft bright sector of 115-650 directions at L0-L12, 720-960 at L16-L20
+  and 1,360-1,920 later. It hands over where the hard one does: the country 0.01-0.14 at L0-L8, 0.67 at L10 and
+  0.83-0.88 at L12-L20; the answer's language from L6 (0.82, every pair); word pieces from L4 (0.51-0.69); story against
+  small talk from L16 (0.32-0.74 at L16-L24). The ranks say more. Patching a pair's difference along the lens's
+  directions in order of gain, half of a swap's effect takes 400-880 directions for the country at L0-L8 and 160-290 at
+  L10-L20, 480-580 for story against small talk through L12, 105-150 for the next word piece through L16 and 140-340 for
+  the answer's language, where random subspaces take about 1,300-2,900: the lens ranks what prompts differ in 2.5-20
+  times above chance at every layer, the early ones included, where the 90% cut (60-520 directions there) left it in
+  the dark sector. Thinking mode is the exception: at L6-L16 it takes 2,100-2,700 directions, as random ones do, and
+  750-890 at L20-L24. MLP outputs and neuron writes read quieter than a random direction to their own layer's lens
+  through L24 (0.2-0.8 times).
 - **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
   inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
   ablations likely remove what prompts share rather than what they differ in. Early the
@@ -1885,9 +1912,9 @@ The swaps between prompts (`patch`, `middle`) ran on an H100.
   the residual's scale, which the R-lens's LN rule holds fixed (untested). The one variable found in it by swapping is late
   formatting (the list's comma or new line at L32-L35), in line with the late ablations dropping pieces of words and with
   Gurnee et al. (2026), who find the features outside the J-space mostly low-level syntax and bookkeeping. The 90% cut
-  is a hard line on a graded spectrum: in the middle layers the country needs the R-lens's top directions and more of
-  the difference besides, and some variables (thinking mode at L12, the answer's language at L0-L2) sit in compact
-  directions neither lens weights.
+  is a hard line on a graded spectrum: ranked by gain, the lens puts what prompts differ in well above chance at every
+  layer, so the early dark sector is the lens's middle ranks more than directions it can't see. Some variables (thinking
+  mode at L6-L16, the answer's language at L0-L2) sit in compact directions it doesn't rank.
   Some of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely
   enough to name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
   [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
@@ -1901,7 +1928,8 @@ setting the model reads again from its own tokens can't move before late layers,
 a sentence as prose or as code (in a comment or a string) found no clean next-token contrast. The middle part's fitted
 directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The far pairs come from
 16 story requests and 16 small-talk messages. The S-lens's sector uses the footprints with the lens's stretch, not its
-polar factor. Compact outputs are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far}_qwen3-8b.*`.
+polar factor. The soft weight `g / (g + ḡ)` is one choice; the ranks are by gain averaged over contexts. Compact outputs
+are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft}_qwen3-8b.*`.
 
 ## Open questions
 
