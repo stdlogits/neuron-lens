@@ -1904,7 +1904,7 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
   times above chance at every layer, the early ones included, where the 90% cut (60-520 directions there) left it in
   the dark sector. Thinking mode is the exception: at L6-L16 it takes 2,100-2,700 directions, as random ones do, and
   750-890 at L20-L24. MLP outputs and neuron writes read quieter than a random direction to their own layer's lens
-  through L24 (0.2-0.8 times).
+  at L2-L24 (0.2-0.8 times).
 - **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
   inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
   ablations likely remove what prompts share rather than what they differ in. Early the
