@@ -57,7 +57,12 @@ Parts:
   the way along the shortest rotation from the S-lens's to the R-lens's (``geodesic``), the top directions of the first
   half's differences and of the gradients of its targets' score (an exact R-lens of each context), the union of the two
   lenses' top directions (``2K`` dims) against each lens's top ``2K``, and random subspaces of ``K`` and ``2K`` dims; scored as ``patch`` is, with the
-  share of the second half's difference energy each subspace holds.
+  share of the second half's difference energy each subspace holds. The R-lens's top ``K`` with ``K`` random directions,
+  and its next ``K`` alone, tell what the S-lens's top ``K`` adds to the R-lens's from what any further directions would.
+- ``far``: two prompts with nothing in common but the chat template (thinking off): a story asked for, and small talk.
+  Each sector is swapped at every position (aligned from the end, the first left out) or at the template's tail after the
+  message, both ways round, scored as ``patch`` is (the two replies' first tokens; the KL toward the source over the
+  target's own reply), with greedy generations.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -66,6 +71,7 @@ Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
     python scripts/checks/dark_sector.py comprehend
     python scripts/checks/dark_sector.py patch
     python scripts/checks/dark_sector.py middle
+    python scripts/checks/dark_sector.py far
 """
 import argparse
 import json
@@ -668,6 +674,42 @@ MIDDLE_LAYERS = (0, 1, 2, 4, 6, 8, 10, 12, 16, 20)
 MIDDLE_TASKS = ("fact_subject", "lang_zh_from_en", "word_ident", "frame_think_last")
 GEO = (0.25, 0.5, 0.75)  # points on the shortest rotation from the S-lens's top directions to the R-lens's
 FOLLOW = 20  # tokens of the target's greedy continuation, scored teacher-forced
+STORIES = [
+    "Write a short story about a dragon who learns to bake bread.",
+    "Tell me a story about a lighthouse keeper who finds a message in a bottle.",
+    "Write a bedtime story about a fox and an owl who become friends.",
+    "Write a story about a robot exploring an abandoned city.",
+    "Tell me a short story about a girl who can talk to trees.",
+    "Write a story about a sailor lost at sea during a storm.",
+    "Write a fairy tale about a king who loses his crown.",
+    "Tell me a story about a detective solving a mystery on a night train.",
+    "Write a short story about a cat who becomes the mayor of a small town.",
+    "Write a story about two astronauts stranded on the moon.",
+    "Tell me a story about a boy who finds a key that opens any door.",
+    "Write a short story about an old man and the garden he planted for his wife.",
+    "Write a story about a village that wakes up with no memories.",
+    "Tell me a story about a violinist who plays for the stars.",
+    "Write a short story about a ghost who is afraid of people.",
+    "Write a story about a baker whose cakes grant wishes.",
+]
+CHATS = [
+    "Hey! How was your weekend? Mine was pretty relaxing.",
+    "Hi there, I just got back from the gym and I'm exhausted.",
+    "Good morning! Did you sleep well last night?",
+    "Ugh, my coffee machine broke this morning. How's your day going?",
+    "Hey, what are you up to tonight? I'm thinking of ordering pizza.",
+    "Hi! I just finished a really long meeting. How are you?",
+    "Hey, long time no talk! What have you been doing lately?",
+    "Hello! It's raining here again. Is the weather nice where you are?",
+    "Hi, I'm bored at work. Want to chat for a bit?",
+    "Hey! I just adopted a puppy and I'm so excited.",
+    "Morning! I can't decide what to have for breakfast.",
+    "Hi there! My sister is visiting this weekend. Any plans for yours?",
+    "Hey, I finally finished that book you recommended. Loved it.",
+    "Hi! Just wanted to say hello and see how you're doing.",
+    "Ugh, Mondays. How was your commute today?",
+    "Hey! I'm learning to cook. Last night I made pasta from scratch.",
+]
 ITEMS = [  # one token each after a space
     "apple", "banana", "cherry", "grape", "lemon", "orange", "peach", "pear", "plum", "mango", "onion", "garlic",
     "carrot", "potato", "tomato", "pepper", "rice", "bread", "cheese", "butter", "milk", "sugar", "salt", "flour",
@@ -687,7 +729,8 @@ def geodesic(U1: torch.Tensor, U2: torch.Tensor, t: float) -> torch.Tensor:
     return torch.linalg.qr(X * torch.cos(t * theta) + Q * torch.sin(t * theta))[0]
 
 
-def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False) -> None:
+def patch(n_words: int, n_frame: int, batch: int, new: int, part: str = "patch") -> None:
+    middle = part == "middle"
     sec = sectors(s_lens=True, keep=2 * max(MIDDLE_K) if middle else 0)
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
@@ -912,7 +955,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
         log("  random K-dim share             " + " ".join(f"{out['share']['h']['rand_b'][L]:.2f}" for L in show))
         log("  S-bright share                 " + " ".join(f"{out['share']['h']['s_bright'][L]:.2f}" for L in show))
         log("  random K_S-dim share           " + " ".join(f"{out['share']['h']['rand_sb'][L]:.2f}" for L in show))
-        save("patch", res)
+        save(part, res)
 
     def frame(name, pairs, a, b=None, scopes=("shared", "last"), shows=1):
         """Pairs that differ in frame around the same content, kept where the clean source's next token is in ``a`` and
@@ -995,7 +1038,9 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
                 bases = {f: B[:, :K] for f, B in fam.items()}
                 bases |= {f"geo{t}": geodesic(bases["S"], bases["R"], t) for t in GEO}
                 bases["union"] = torch.linalg.qr(torch.cat([bases["S"], bases["R"]], 1))[0]  # 2K dims
-                bases |= {"R2": fam["R"][:, :2 * K], "S2": fam["S"][:, :2 * K], "rand2": fam["rand"][:, :2 * K]}
+                bases |= {"R2": fam["R"][:, :2 * K], "S2": fam["S"][:, :2 * K], "rand2": fam["rand"][:, :2 * K],
+                          "Rnext": fam["R"][:, K:2 * K],  # the R-lens's next K directions alone, and its top K with K random
+                          "R+rand": torch.linalg.qr(torch.cat([bases["R"], fam["rand"][:, K:2 * K]], 1))[0]}
                 for f, B in bases.items():
                     o = run(rows_t, pos_t, "h", src=ss["cap"], layers={L}, basis=B.half().contiguous(), refs=(ref,))
                     r = summ(metric(o["lp"], test))
@@ -1020,140 +1065,155 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
     halves = (0, 1) if middle else (None,)
 
     with torch.inference_mode():
-        # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
-        rows = []
-        for en, _, capital, _, lang in COUNTRIES:
-            for rel, text, ans in (("capital", f"The capital of {en} is", capital),
-                                   ("language", f"The official language of {en} is", lang)):
-                rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0], "half": int(rel == "language")})
-        lp = run([r["ids"] for r in rows])["lp"]
-        rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
-        groups = {}
-        for r in rows:
-            groups.setdefault((r["rel"], len(r["ids"])), []).append(r)
-        pairs = []
-        for g in groups.values():
-            g.sort(key=lambda r: (r["en"] not in ("France", "Italy"), rng.random()))
-            for h_ in halves:  # the middle part fits on the capital prompts and scores on the official-language ones
-                gh = [r for r in g if h_ in (None, r["half"])]
-                for i, r in enumerate(gh):
-                    o = next((gh[(i + k) % len(gh)] for k in range(1, len(gh)) if gh[(i + k) % len(gh)]["a"] != r["a"]),
-                             None)
-                    if o is not None:
-                        pairs.append({"t": r["ids"], "s": o["ids"], "at": r["a"], "as": o["a"], "rel": r["rel"], "half": h_})
-        pairs.sort(key=lambda p: p["rel"] != "capital")
-        log(f"facts: {len(rows)} of {2 * len(COUNTRIES)} prompts answered right, {len(pairs)} pairs")
-        for scope in ("all", "subject", "last"):
-            for p in pairs:
-                n = len(p["t"])
-                p["tp"] = p["sp"] = {"all": list(range(1, n)), "last": [n - 1],
-                                     "subject": [k for k in range(n) if p["t"][k] != p["s"][k]]}[scope]
-            do(f"fact_{scope}", pairs, m_fact, ("ld",), shows=1 if scope == "all" else 0)
-
-        # language: the last position of a capital prompt in one language, from one about another country in the other
-        ok = []
-        for ci, (en, zh, capital, capital_zh, _) in enumerate(COUNTRIES):
-            c = {"en": enc(f"The capital of {en} is"), "zh": enc(f"{zh}的首都是"), "half": ci % 2,
-                 "a_en": first([" " + capital, capital]), "a_zh": first([capital_zh, " " + capital_zh]), "name": en}
-            ok.append(c)
-        lp = run([c[k] for c in ok for k in ("en", "zh")])["lp"].argmax(-1).tolist()
-        ok = [c for i, c in enumerate(ok) if lp[2 * i] in c["a_en"] and lp[2 * i + 1] in c["a_zh"]]
-        ok.sort(key=lambda c: (c["name"] not in ("China", "France"), c["name"] != "China", rng.random()))
-        log(f"language: {len(ok)} of {len(COUNTRIES)} countries answered right in both languages")
-        for tl, sl in (("zh", "en"), ("en", "zh")):
+        if part == "far":  # a story asked for against small talk, in the chat template with thinking off
+            user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n")
+            sides = {k: sorted((user + enc(x) + turn for x in v), key=len) for k, v in (("story", STORIES), ("chat", CHATS))}
+            tops = {k: run(v)["lp"].argmax(-1).tolist() for k, v in sides.items()}
+            for tl, sl in (("story", "chat"), ("chat", "story")):
+                n_ = len(sides[sl])
+                pairs = [{"t": sides[tl][i], "s": sides[sl][(i + k) % n_], "at": tops[tl][i], "as": tops[sl][(i + k) % n_]}
+                         for k in (0, 1) for i in range(len(sides[tl])) if tops[tl][i] != tops[sl][(i + k) % n_]]
+                log(f"far {tl} from {sl}: {len(pairs)} pairs whose replies open differently")
+                for scope in ("all", "tail"):  # every position from the end (not the first), or the template's tail
+                    for q in pairs:
+                        m_ = min(len(q["t"]), len(q["s"])) - 1 if scope == "all" else len(turn)
+                        q["tp"], q["sp"] = (list(range(len(q[k]) - m_, len(q[k]))) for k in ("t", "s"))
+                    do(f"far_{tl}_from_{sl}_{scope}", pairs, m_fact, ("ld",), shows=2 if scope == "all" else 0)
+        if part != "far":
+            # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
+            rows = []
+            for en, _, capital, _, lang in COUNTRIES:
+                for rel, text, ans in (("capital", f"The capital of {en} is", capital),
+                                       ("language", f"The official language of {en} is", lang)):
+                    rows.append({"rel": rel, "en": en, "ids": enc(text), "a": enc(" " + ans)[0], "half": int(rel == "language")})
+            lp = run([r["ids"] for r in rows])["lp"]
+            rows = [r for r, t in zip(rows, lp.argmax(-1).tolist()) if t == r["a"]]
+            groups = {}
+            for r in rows:
+                groups.setdefault((r["rel"], len(r["ids"])), []).append(r)
             pairs = []
+            for g in groups.values():
+                g.sort(key=lambda r: (r["en"] not in ("France", "Italy"), rng.random()))
+                for h_ in halves:  # the middle part fits on the capital prompts and scores on the official-language ones
+                    gh = [r for r in g if h_ in (None, r["half"])]
+                    for i, r in enumerate(gh):
+                        o = next((gh[(i + k) % len(gh)] for k in range(1, len(gh)) if gh[(i + k) % len(gh)]["a"] != r["a"]),
+                                 None)
+                        if o is not None:
+                            pairs.append({"t": r["ids"], "s": o["ids"], "at": r["a"], "as": o["a"], "rel": r["rel"], "half": h_})
+            pairs.sort(key=lambda p: p["rel"] != "capital")
+            log(f"facts: {len(rows)} of {2 * len(COUNTRIES)} prompts answered right, {len(pairs)} pairs")
+            for scope in ("all", "subject", "last"):
+                for p in pairs:
+                    n = len(p["t"])
+                    p["tp"] = p["sp"] = {"all": list(range(1, n)), "last": [n - 1],
+                                         "subject": [k for k in range(n) if p["t"][k] != p["s"][k]]}[scope]
+                do(f"fact_{scope}", pairs, m_fact, ("ld",), shows=1 if scope == "all" else 0)
+
+            # language: the last position of a capital prompt in one language, from one about another country in the other
+            ok = []
+            for ci, (en, zh, capital, capital_zh, _) in enumerate(COUNTRIES):
+                c = {"en": enc(f"The capital of {en} is"), "zh": enc(f"{zh}的首都是"), "half": ci % 2,
+                     "a_en": first([" " + capital, capital]), "a_zh": first([capital_zh, " " + capital_zh]), "name": en}
+                ok.append(c)
+            lp = run([c[k] for c in ok for k in ("en", "zh")])["lp"].argmax(-1).tolist()
+            ok = [c for i, c in enumerate(ok) if lp[2 * i] in c["a_en"] and lp[2 * i + 1] in c["a_zh"]]
+            ok.sort(key=lambda c: (c["name"] not in ("China", "France"), c["name"] != "China", rng.random()))
+            log(f"language: {len(ok)} of {len(COUNTRIES)} countries answered right in both languages")
+            for tl, sl in (("zh", "en"), ("en", "zh")):
+                pairs = []
+                for h_ in halves:
+                    okh = [c for c in ok if h_ in (None, c["half"])]
+                    for i, x in enumerate(okh):
+                        for k in range(1, len(okh)):
+                            y = okh[(i + k) % len(okh)]
+                            sets = [x["a_" + tl], x["a_" + sl], y["a_" + tl], y["a_" + sl]]
+                            if len({t for s_ in sets for t in s_}) == sum(map(len, sets)):
+                                break
+                        else:
+                            continue
+                        pairs.append({"t": x[tl], "s": y[sl], "tp": [len(x[tl]) - 1], "sp": [len(y[sl]) - 1], "half": h_,
+                                      "cells": {"tt": x["a_" + tl], "ts": x["a_" + sl], "st": y["a_" + tl], "ss": y["a_" + sl]}})
+                do(f"lang_{tl}_from_{sl}", pairs, m_lang, ("lang", "content"), shows=1)
+
+            # word pieces: DCLM prefixes ending inside a two-piece word, or after a whole word
+            docs = lens_docs(act_file("dclm"), tok, 600, T, T, full=True)
+            mid, bound = [], []
+            for doc in docs:
+                m_, b_ = [], []
+                for i in range(24, T - 2):
+                    a, b, c = strs[doc[i]], strs[doc[i + 1]], strs[doc[i + 2]]
+                    if re.fullmatch(r" [A-Za-z]+", a) and re.fullmatch(r"[a-z]{2,}", b) and c[:1] and not c[:1].isalpha():
+                        m_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
+                    elif re.fullmatch(r" [a-z]{3,}", a) and re.fullmatch(r" [A-Za-z]+", b):
+                        b_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
+                mid += rng.sample(m_, min(2, len(m_)))
+                bound += rng.sample(b_, min(1, len(b_)))
+            mid, bound = mid[:4 * n_words], bound[:4 * n_words]
+            lp = run([r["ids"] for r in mid + bound])["lp"]
+            top, p_top, pc = lp.argmax(-1).tolist(), lp.max(-1).values.exp().tolist(), (lp.exp() * cont).sum(-1).tolist()
+            n_mid = len(mid)
+            mid = [r for i, r in enumerate(mid) if top[i] == r["next"] and p_top[i] >= 0.5][:n_words]
+            bound = [r for j, r in enumerate(bound) if pc[n_mid + j] < 0.05][:n_words]
+            log(f"words: {len(mid)} mid-word and {len(bound)} word-final prefixes kept")
+            last = lambda r: [len(r["ids"]) - 1]
+            ident = []
             for h_ in halves:
-                okh = [c for c in ok if h_ in (None, c["half"])]
-                for i, x in enumerate(okh):
-                    for k in range(1, len(okh)):
-                        y = okh[(i + k) % len(okh)]
-                        sets = [x["a_" + tl], x["a_" + sl], y["a_" + tl], y["a_" + sl]]
-                        if len({t for s_ in sets for t in s_}) == sum(map(len, sets)):
+                mh = [r for j, r in enumerate(mid) if h_ in (None, j % 2)]
+                for i, r in enumerate(mh):
+                    o = next((mh[(i + k) % len(mh)] for k in range(1, len(mh)) if mh[(i + k) % len(mh)]["next"] != r["next"]),
+                             None)
+                    ident.append({"t": r["ids"], "s": o["ids"], "tp": last(r), "sp": last(o), "tn": r["next"], "sn": o["next"],
+                                  "half": h_})
+            do("word_ident", ident, m_word, ("ld",), shows=2)
+            k = min(len(mid), len(bound))
+            do("word_end", [{"t": mid[i]["ids"], "s": bound[i]["ids"], "tp": last(mid[i]), "sp": last(bound[i])}
+                              for i in range(k)], m_word, ("cont",), shows=2)
+            do("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
+                                for i in range(k)], m_word, ("cont",), shows=1)
+
+            # frames: the same content in two settings, which differ in what comes next
+            qs = [f"What is the capital of {en}?" for en, *_ in COUNTRIES] + [
+                f"What is the official language of {en}?" for en, *_ in COUNTRIES]
+            rng.shuffle(qs)
+            user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n")
+            chat, mode_ = [], []
+            for qi, q in enumerate(qs):  # a plain question and answer against the chat template: does the turn open a thought?
+                Q, pre = enc(q), enc("Question:\n")
+                chat.append({"t": pre + Q + enc("\nAnswer:"), "s": user + Q + turn,
+                             "tshare": list(range(len(pre), len(pre) + len(Q))),
+                             "sshare": list(range(len(user), len(user) + len(Q)))})
+                mode_.append({"t": user + Q + turn + enc("<think>\n\n</think>\n\n"), "s": user + Q + turn + enc("<think>\n"),
+                              "half": qi % 2})
+            frame("chat", chat, think)
+            frame("think", mode_, mask(lambda x: x in ("Okay", "Alright", "Hmm", "Well")), scopes=("last",))
+            sents = []  # one sentence of each document, 9-30 tokens, on one line
+            for doc in docs:
+                for i in range(1, T - 32):
+                    if strs[doc[i - 1]].endswith(".") and re.fullmatch(r" [A-Z][a-z]+", strs[doc[i]]):
+                        j = next((j for j in range(i + 8, i + 30) if strs[doc[j]] == "."), None)
+                        if j is not None and not any("\n" in strs[x] for x in doc[i:j + 1]):
+                            sents.append(tok.decode(doc[i:j + 1]).strip())
                             break
-                    else:
-                        continue
-                    pairs.append({"t": x[tl], "s": y[sl], "tp": [len(x[tl]) - 1], "sp": [len(y[sl]) - 1], "half": h_,
-                                  "cells": {"tt": x["a_" + tl], "ts": x["a_" + sl], "st": y["a_" + tl], "ss": y["a_" + sl]}})
-            do(f"lang_{tl}_from_{sl}", pairs, m_lang, ("lang", "content"), shows=1)
-
-        # word pieces: DCLM prefixes ending inside a two-piece word, or after a whole word
-        docs = lens_docs(act_file("dclm"), tok, 600, T, T, full=True)
-        mid, bound = [], []
-        for doc in docs:
-            m_, b_ = [], []
-            for i in range(24, T - 2):
-                a, b, c = strs[doc[i]], strs[doc[i + 1]], strs[doc[i + 2]]
-                if re.fullmatch(r" [A-Za-z]+", a) and re.fullmatch(r"[a-z]{2,}", b) and c[:1] and not c[:1].isalpha():
-                    m_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
-                elif re.fullmatch(r" [a-z]{3,}", a) and re.fullmatch(r" [A-Za-z]+", b):
-                    b_.append({"ids": doc[:i + 1], "next": doc[i + 1]})
-            mid += rng.sample(m_, min(2, len(m_)))
-            bound += rng.sample(b_, min(1, len(b_)))
-        mid, bound = mid[:4 * n_words], bound[:4 * n_words]
-        lp = run([r["ids"] for r in mid + bound])["lp"]
-        top, p_top, pc = lp.argmax(-1).tolist(), lp.max(-1).values.exp().tolist(), (lp.exp() * cont).sum(-1).tolist()
-        n_mid = len(mid)
-        mid = [r for i, r in enumerate(mid) if top[i] == r["next"] and p_top[i] >= 0.5][:n_words]
-        bound = [r for j, r in enumerate(bound) if pc[n_mid + j] < 0.05][:n_words]
-        log(f"words: {len(mid)} mid-word and {len(bound)} word-final prefixes kept")
-        last = lambda r: [len(r["ids"]) - 1]
-        ident = []
-        for h_ in halves:
-            mh = [r for j, r in enumerate(mid) if h_ in (None, j % 2)]
-            for i, r in enumerate(mh):
-                o = next((mh[(i + k) % len(mh)] for k in range(1, len(mh)) if mh[(i + k) % len(mh)]["next"] != r["next"]),
-                         None)
-                ident.append({"t": r["ids"], "s": o["ids"], "tp": last(r), "sp": last(o), "tn": r["next"], "sn": o["next"],
-                              "half": h_})
-        do("word_ident", ident, m_word, ("ld",), shows=2)
-        k = min(len(mid), len(bound))
-        do("word_end", [{"t": mid[i]["ids"], "s": bound[i]["ids"], "tp": last(mid[i]), "sp": last(bound[i])}
-                          for i in range(k)], m_word, ("cont",), shows=2)
-        do("word_start", [{"t": bound[i]["ids"], "s": mid[i]["ids"], "tp": last(bound[i]), "sp": last(mid[i])}
-                            for i in range(k)], m_word, ("cont",), shows=1)
-
-        # frames: the same content in two settings, which differ in what comes next
-        qs = [f"What is the capital of {en}?" for en, *_ in COUNTRIES] + [
-            f"What is the official language of {en}?" for en, *_ in COUNTRIES]
-        rng.shuffle(qs)
-        user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n")
-        chat, mode_ = [], []
-        for qi, q in enumerate(qs):  # a plain question and answer against the chat template: does the turn open a thought?
-            Q, pre = enc(q), enc("Question:\n")
-            chat.append({"t": pre + Q + enc("\nAnswer:"), "s": user + Q + turn,
-                         "tshare": list(range(len(pre), len(pre) + len(Q))),
-                         "sshare": list(range(len(user), len(user) + len(Q)))})
-            mode_.append({"t": user + Q + turn + enc("<think>\n\n</think>\n\n"), "s": user + Q + turn + enc("<think>\n"),
-                          "half": qi % 2})
-        frame("chat", chat, think)
-        frame("think", mode_, mask(lambda x: x in ("Okay", "Alright", "Hmm", "Well")), scopes=("last",))
-        sents = []  # one sentence of each document, 9-30 tokens, on one line
-        for doc in docs:
-            for i in range(1, T - 32):
-                if strs[doc[i - 1]].endswith(".") and re.fullmatch(r" [A-Z][a-z]+", strs[doc[i]]):
-                    j = next((j for j in range(i + 8, i + 30) if strs[doc[j]] == "."), None)
-                    if j is not None and not any("\n" in strs[x] for x in doc[i:j + 1]):
-                        sents.append(tok.decode(doc[i:j + 1]).strip())
-                        break
-        upper = []
-        for s_ in sents:
-            t = enc(s_)
-            cut = [k for k in range(5, len(t)) if re.fullmatch(r" [a-z]{3,}", strs[t[k]])]
-            if cut:  # a sentence cut before a lowercase word, as written and in capitals
-                text = tok.decode(t[:cut[len(cut) // 2]])
-                upper.append({"t": enc(text), "s": enc(text.upper())})
-        frame("caps", upper, caps, lower, scopes=("last",))
-        lists = []
-        for _ in range(4 * n_frame):  # a list after commas against a bulleted list: what follows the last item?
-            t, s_, tsh, ssh = enc("Shopping list:"), enc("Shopping list:\n-"), [], []
-            for k, w in enumerate(rng.sample(ITEMS, rng.randint(4, 7))):
-                if k:
-                    t, s_ = t + enc(","), s_ + enc("\n-")
-                tsh.append(len(t))
-                ssh.append(len(s_))
-                t, s_ = t + enc(" " + w), s_ + enc(" " + w)
-            lists.append({"t": t, "s": s_, "tshare": tsh, "sshare": ssh})
-        frame("list", lists, nl, comma)
+            upper = []
+            for s_ in sents:
+                t = enc(s_)
+                cut = [k for k in range(5, len(t)) if re.fullmatch(r" [a-z]{3,}", strs[t[k]])]
+                if cut:  # a sentence cut before a lowercase word, as written and in capitals
+                    text = tok.decode(t[:cut[len(cut) // 2]])
+                    upper.append({"t": enc(text), "s": enc(text.upper())})
+            frame("caps", upper, caps, lower, scopes=("last",))
+            lists = []
+            for _ in range(4 * n_frame):  # a list after commas against a bulleted list: what follows the last item?
+                t, s_, tsh, ssh = enc("Shopping list:"), enc("Shopping list:\n-"), [], []
+                for k, w in enumerate(rng.sample(ITEMS, rng.randint(4, 7))):
+                    if k:
+                        t, s_ = t + enc(","), s_ + enc("\n-")
+                    tsh.append(len(t))
+                    ssh.append(len(s_))
+                    t, s_ = t + enc(" " + w), s_ + enc(" " + w)
+                lists.append({"t": t, "s": s_, "tshare": tsh, "sshare": ssh})
+            frame("list", lists, nl, comma)
     for h in hooks:
         h.remove()
     log("PATCH DONE")
@@ -1161,7 +1221,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, middle: bool = False
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far"))
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
@@ -1177,7 +1237,7 @@ def main() -> None:
     elif a.part == "comprehend":
         comprehend(a.items, 64)
     else:
-        patch(a.words, a.frames, 32, 20, middle=a.part == "middle")
+        patch(a.words, a.frames, 32, 20, part=a.part)
 
 
 if __name__ == "__main__":
