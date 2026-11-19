@@ -19,7 +19,8 @@ dark and bright dimensions (``rand_d``, ``rand_b``; random orthonormal bases in 
 Parts:
 
 - ``trace``: per layer, ``K_L``; how loud each layer's dark and bright sectors are to every later layer's lens (the
-  mean gain of the sector's directions over a random direction's: 1 = as loud as random); in context, the dark share
+  mean gain of the sector's directions over a random direction's: 1 = as loud as random; each lens's loudest direction,
+  a fixed offset that holds up to 93% of its gain early, left out); in context, the dark share
   of the residual, attention and MLP outputs (raw and centred; against the share of dimensions and a per-coordinate
   null) and of what drives firing neurons (``½ (g_d/g + u_d/u)`` over the top 1% |activations|, against a random subspace
   of the dark dimension); single-layer ablations (every layer, every sector): ΔNLL, KL to the clean model and the KL the
@@ -281,9 +282,11 @@ def trace(n_docs: int, batch: int) -> None:
         s, Vb, K = sec["s"][L], sec["V"][L].float(), sec["K"][L]
         for M in range(L, nL):
             A = s[:, None] * sec["GM"][M] * s[None, :]
+            lam, u = torch.linalg.eigh(A)
+            A = A - lam[-1] * u[:, -1:] @ u[:, -1:].T  # the lens's loudest direction, a fixed offset (``soft``), left out
             trA, trB = A.trace(), ((A @ Vb) * Vb).sum()
-            rel_dark[L, M] = ((trA - trB) / (d - K) / (trA / d)).item()
-            rel_bright[L, M] = (trB / K / (trA / d)).item()
+            rel_dark[L, M] = ((trA - trB) / (d - K) / (trA / (d - 1))).item()
+            rel_bright[L, M] = (trB / K / (trA / (d - 1))).item()
     del sec["GM"]
     torch.cuda.empty_cache()
     tok, model, means = model_and_means(sec)
@@ -1136,9 +1139,9 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
             wd = tensors(MODEL, [arch.layout(MODEL)[L].prefix + "mlp.down_proj.weight"])
             wd = next(iter(wd.values())).to(DEV).float().T / s_
             for k, x in (("resid", xw[late]), ("mlp", cap_["m"][L].float()[late] / s_), ("write", wd)):
-                pw = (x @ V).pow(2)
+                pw = (x @ V[:, 1:]).pow(2)  # without the fixed offset
                 pw = pw / pw.sum(-1, keepdim=True)
-                soft[k + "_share"], soft[k + "_loud"] = (pw @ w).mean().item(), (pw @ g).mean().item() / gr.item()
+                soft[k + "_share"], soft[k + "_loud"] = (pw @ w[1:]).mean().item(), (pw @ g[1:]).mean().item() / gr.item()
             row["soft"] = soft
             out["layers"][L] = row
             prev = u
