@@ -1905,6 +1905,26 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
   the dark sector. Thinking mode is the exception: at L6-L16 it takes 2,100-2,700 directions, as random ones do, and
   750-890 at L20-L24. MLP outputs and neuron writes read quieter than a random direction to their own layer's lens
   at L2-L24 (0.2-0.8 times).
+- **The lenses' readouts span the residual, unevenly** (`span`, in fp64). In raw coordinates the final norm leaves two
+  coordinates almost unread: its weight is about 10⁻⁴ on 1838 and 2276, against a median of 2, and 1838 is one of the
+  offset's coordinates at L4-L10. The residual's metric, which divides by that weight, restores them. Otherwise every
+  readout is full rank, with its singular values spread over many orders of magnitude. Counting the directions read
+  within a factor of 1,000 of the second loudest (the loudest is the offset):
+
+  | layers | R-lens, outputs | R-lens, MLP inputs | S-lens footprints, outputs |
+  |---|---|---|---|
+  | L0-L5 | 1,390-2,240 | 550-1,430 (L2: 3,470) | 4,030-4,070 |
+  | L6-L9 | 3,190-3,690 | 1,130-1,430 | 3,950-3,990 |
+  | L10-L16 | 3,790-4,030 | 2,220-3,960 | 3,750-3,950 |
+  | L20-L24 | 4,088-4,093 | 4,071-4,091 | 3,270-3,580 |
+  | L30-L35 | 4,094-4,096 | 4,094-4,095 | 1,780-2,930 |
+
+  Both factors of the R-lens set its bottom. The readout's 32 quietest directions are shrunk by the lens's Jacobian to
+  5-9% of its median gain in length at L0-L12, and land where the unembedding reads 0.1-0.3% of its median; the
+  Jacobian's singular values spread over a factor of 10⁶-10⁸ at L0-L12 and 10³ by L24. So early on the R-lens barely
+  reads about half the residual, and the S-lens covers it. What two prompts differ in sits inside the R-lens's span
+  there: the rank ladder puts at most 0.02 of the gap past rank 2,048 at L0-L8. The factor of 1,000 is a convention;
+  the spectra are continuous.
 - **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
   inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
   ablations likely remove what prompts share rather than what they differ in. Early the
@@ -1929,7 +1949,7 @@ a sentence as prose or as code (in a comment or a string) found no clean next-to
 directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The far pairs come from
 16 story requests and 16 small-talk messages. The S-lens's sector uses the footprints with the lens's stretch, not its
 polar factor. The soft weight `g / (g + ḡ)` is one choice; the ranks are by gain averaged over contexts. Compact outputs
-are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft}_qwen3-8b.*`.
+are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft,span}_qwen3-8b.*`.
 
 ## Open questions
 

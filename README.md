@@ -487,7 +487,9 @@ sector from L4-L12, and the dark part of the difference, most of its energy, cha
 needs the R-lens's top directions and more of the difference besides, and thinking mode at L12 sits in a few directions
 neither lens weights. Ranked by gain without a cut (its loudest direction, the residual's massive-activation offset,
 left out), the R-lens puts what prompts differ in well above chance at every layer: the early dark sector is the lens's
-middle ranks. So the dark sector likely holds what prompts share rather than what they differ in
+middle ranks. The readouts span the residual unevenly: early, the R-lens barely reads about half of it, which the
+S-lens covers, and nothing two prompts differ in sits there. So the dark sector likely holds what prompts share rather
+than what they differ in
 ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits
