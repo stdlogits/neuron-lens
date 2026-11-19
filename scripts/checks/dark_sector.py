@@ -71,6 +71,9 @@ Parts:
   sits along it and what moving along it does, beside the second and a random direction. A soft census of the residual,
   the MLP outputs and the writes; and for six tasks, the soft sectors and a ladder of the top ``K`` directions by gain,
   the rest past them and random ``K``-dim subspaces, patched as ``patch`` does.
+- ``span``: whether the lenses' readouts span the residual, in fp64: the R-lens readout's numerical rank at each output
+  and MLP input, the S-lens footprints' at each output, and which factor sets the bottom (the unembedding, the final
+  norm, the lens's Jacobian).
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -81,6 +84,7 @@ Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
     python scripts/checks/dark_sector.py middle
     python scripts/checks/dark_sector.py far
     python scripts/checks/dark_sector.py soft
+    python scripts/checks/dark_sector.py span
 """
 import argparse
 import json
@@ -649,6 +653,68 @@ def comprehend(n_items: int, batch: int) -> None:
     for h in hooks:
         h.remove()
     log("COMPREHEND DONE")
+
+
+# ------------------------------------------------------------------------------------------------------- span
+
+def span() -> None:
+    """Do the lenses' readouts span the residual? In fp64, per layer: the R-lens readout's gains at each output and
+    each MLP input, the S-lens footprints' Gram at each output, their numerical ranks (directions above ``10^-e`` of the
+    loudest gain, and above ``10^-6`` of the second, the loudest being the fixed offset), and which factor sets the
+    bottom: the unembedding's Gram (centred, scaled by the final norm ``γ``), ``γ``, the lens's Jacobian or the metric."""
+    f64 = torch.float64
+    nm = arch.names(MODEL)
+    n = arch.text_config(MODEL).num_hidden_layers
+    head = tensors(MODEL, [nm["unembed"], nm["norm"], nm["embed"]])
+    gamma = head[nm["norm"]].to(DEV, f64)
+    kid = kept()
+    wk = head[nm["unembed"]][kid].to(DEV, f64)
+    C = (wk - wk.mean(0)) * gamma
+    G = C.T @ C
+    we = head[nm["embed"]][kid].to(DEV, f64)
+    we = we - we.mean(0)
+    GE = we.T @ we
+    del C, wk, we
+    d = G.shape[0]
+    lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=("J_out", "J_mid", "K_out"))
+    spec = lambda A: torch.linalg.eigvalsh(A).flip(0).clamp_min(0)
+
+    def ranks(g):
+        return {f"1e-{e}": int((g > g[0] * 10 ** -e).sum()) for e in (3, 6, 9, 12)} | {
+            "no_top_1e-6": int((g[1:] > g[1] * 1e-6).sum()) + 1}
+
+    gG = spec(G)
+    small = gamma.abs().topk(4, largest=False)
+    res = {"unembed": {"ranks": ranks(gG), "min_over_max": (gG[-1] / gG[0]).item()},
+           "gamma_smallest": [[int(i), v.item()] for v, i in zip(small.values, small.indices)],
+           "gamma_median": gamma.abs().median().item(), "layers": []}
+    log(f"unembedding Gram ranks {res['unembed']['ranks']}; smallest |γ| {res['gamma_smallest']} (median "
+        f"{res['gamma_median']:.2f})")
+    for L in range(n):
+        row = {"L": L}
+        for point, J in (("out", lm["J_out"][L] if L < n - 1 else None), ("mid", lm["J_mid"][L])):
+            s_ = metric.s2(MODEL, point, L, DEV).to(f64).sqrt()
+            J = torch.eye(d, device=DEV, dtype=f64) if J is None else J.to(DEV, f64)
+            sv = torch.linalg.svdvals(J)
+            g, V = torch.linalg.eigh(s_[:, None] * (J.T @ G @ J) * s_[None, :])
+            g, V = g.flip(0).clamp_min(0), V.flip(1)
+            low = V[:, -32:] * s_[:, None]  # the readout's 32 quietest directions, raw
+            y = J @ low
+            row[point] = {"ranks": ranks(g), "J_ranks": ranks(sv.pow(2)), "J_sv_min_over_max": (sv[-1] / sv[0]).item(),
+                          "low_through_J": (y.norm(dim=0) / low.norm(dim=0)).median().item() / sv.median().item(),
+                          "low_read_by_unembed": ((y * (G @ y)).sum(0) / y.pow(2).sum(0)).median().item() / gG.median().item()}
+        s_ = metric.s2(MODEL, "out", L, DEV).to(f64).sqrt()
+        K = lm["K_out"][L].to(DEV, f64)
+        row["S_out"] = {"ranks": ranks(spec((K @ GE @ K.T) / s_.pow(2)[:, None] / s_.pow(2)[None, :])),
+                        "K_ranks": ranks(torch.linalg.svdvals(K).pow(2))}
+        res["layers"].append(row)
+        o, m_, so = row["out"], row["mid"], row["S_out"]
+        log(f"L{L:2d} directions within 1e-3 of the second (singular values): R out {o['ranks']['no_top_1e-6']}, R mid "
+            f"{m_['ranks']['no_top_1e-6']}, S out {so['ranks']['no_top_1e-6']} | R out above 1e-6 of the top "
+            f"{o['ranks']['1e-12']} | J σ min/max {o['J_sv_min_over_max']:.1e}, J within 1e-3 of its second "
+            f"{o['J_ranks']['no_top_1e-6']} | quietest readout directions: {o['low_through_J']:.2f} of J's median gain, "
+            f"{o['low_read_by_unembed']:.1e} of the unembedding's median")
+    save("span", res)
 
 
 # ------------------------------------------------------------------------------------------------------- patch
@@ -1423,7 +1489,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far", "soft"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far", "soft", "span"))
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
@@ -1438,6 +1504,8 @@ def main() -> None:
         bands(a.eval_docs, a.new_tokens, a.batch)
     elif a.part == "comprehend":
         comprehend(a.items, 64)
+    elif a.part == "span":
+        span()
     else:
         patch(a.words, a.frames, 32, 20, which=a.part)
 
