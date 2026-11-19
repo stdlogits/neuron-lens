@@ -63,6 +63,12 @@ Parts:
   Each sector is swapped at every position (aligned from the end, the first left out) or at the template's tail after the
   message, both ways round, scored as ``patch`` is (the two replies' first tokens; the KL toward the source over the
   target's own reply), with greedy generations.
+- ``soft``: brightness without a cut. Each direction of the R-lens's readout is weighted by ``g / (g + ḡ)``, its gain
+  against a random direction's (above half where it reads louder than chance); a vector's loudness is its gain-weighted
+  energy over a random vector's. The loudest direction (``giant``): where it points, what it reads, how the residual
+  sits along it and what moving along it does, beside the second and a random direction. A soft census of the residual,
+  the MLP outputs and the writes; and for six tasks, the soft sectors and a ladder of the top ``K`` directions by gain,
+  the rest past them and random ``K``-dim subspaces, patched as ``patch`` does.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -72,6 +78,7 @@ Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
     python scripts/checks/dark_sector.py patch
     python scripts/checks/dark_sector.py middle
     python scripts/checks/dark_sector.py far
+    python scripts/checks/dark_sector.py soft
 """
 import argparse
 import json
@@ -110,13 +117,14 @@ def save(part: str, res: dict) -> None:
     (SUMMARY / f"dark_sector_{part}_{STEM}.log").write_text("\n".join(LOG) + "\n")
 
 
-def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
+def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool = False) -> dict:
     """``s`` (the metric's √s² per layer), ``V`` (bright bases, whitened, fp16), ``K``, ``R`` (random ``K``-dim bases) at
     each layer's output; with ``mid`` the same at the MLP input (``s_mid``, ``V_mid``, ``K_mid``, ``R_mid``), plus the raw
     readout Grams ``GM`` at each output (for ``trace``'s loudness table), and ``J_out`` (CPU); with ``s_lens`` the
     S-lens's bright sector at each output (``VS``, ``KS``, ``RS``); with ``keep`` (and ``s_lens``) each output's top
     ``keep`` directions of the R-lens (``VRt``), the S-lens (``VSt``) and their average (``VMt``: the mean of the two
-    whitened Grams, each scaled to unit trace), and a random ``keep``-dim basis (``Rt``)."""
+    whitened Grams, each scaled to unit trace), and a random ``keep``-dim basis (``Rt``); with ``full`` every direction
+    of the R-lens's readout at each output (``VF``, by gain) and their gains (``gain``)."""
     nm = arch.names(MODEL)
     n = arch.text_config(MODEL).num_hidden_layers
     head = tensors(MODEL, [nm["unembed"], nm["norm"]])
@@ -142,14 +150,15 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
     lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=parts)
     gen = torch.Generator(device=DEV).manual_seed(0)
     out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM", "VS", "KS", "RS", "overlap",
-                           "VRt", "VSt", "VMt", "Rt")}
+                           "VRt", "VSt", "VMt", "Rt", "VF", "gain")}
 
     def top(Gr, s, X):
         gain, V = torch.linalg.eigh(s[:, None] * Gr * s[None, :])
         gain, V = gain.flip(0).clamp_min(0), V.flip(1)
         e = (X @ V).pow(2) * gain
         k = int(((e.cumsum(1) / e.sum(1, keepdim=True)).mean(0) < SHARE).sum()) + 1
-        return k, V[:, :k].half().contiguous(), torch.linalg.qr(torch.randn(d, k, device=DEV, generator=gen))[0].half(), V
+        R = torch.linalg.qr(torch.randn(d, k, device=DEV, generator=gen))[0].half()
+        return k, V[:, :k].half().contiguous(), R, V, gain
 
     for L in range(n):
         p = arch.layout(MODEL)[L].prefix
@@ -159,13 +168,15 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
         Gr = J.T @ G @ J
         s = metric.s2(MODEL, "out", L, DEV).sqrt()
         X = w[p + "mlp.down_proj.weight"].to(DEV).float().T / s
-        k, V, R, VR = top(Gr, s, X / X.norm(dim=1, keepdim=True))
+        k, V, R, VR, gR = top(Gr, s, X / X.norm(dim=1, keepdim=True))
+        if full:
+            out["VF"].append(VR.half().contiguous()), out["gain"].append(gR)
         out["s"].append(s), out["K"].append(k), out["V"].append(V), out["R"].append(R)
         if s_lens:  # the token footprints K ē at this output, as whitened vectors: their Gram, and its top directions
             Kl = lm["K_out"][L].to(DEV).float()
             s2_ = s.pow(2)
             GS = Kl @ GE @ Kl.T / s2_[:, None] / s2_[None, :]
-            k, VS, RS, VSf = top(GS, s, X / X.norm(dim=1, keepdim=True))
+            k, VS, RS, VSf, _ = top(GS, s, X / X.norm(dim=1, keepdim=True))
             out["KS"].append(k), out["VS"].append(VS), out["RS"].append(RS)
             out["overlap"].append((V.float().T @ VS.float()).pow(2).sum().item() / k)  # S-bright's share in R-bright
             if keep:
@@ -183,7 +194,7 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
             g = w[p + "post_attention_layernorm.weight"].to(DEV).float()
             rows = torch.cat([w[p + "mlp.gate_proj.weight"].to(DEV).float(), w[p + "mlp.up_proj.weight"].to(DEV).float()])
             Xm = rows * g * s  # covector rows c as whitened vectors s ⊙ c
-            k, V, R, _ = top(Jm.T @ G @ Jm, s, Xm / Xm.norm(dim=1, keepdim=True))
+            k, V, R, _, _ = top(Jm.T @ G @ Jm, s, Xm / Xm.norm(dim=1, keepdim=True))
             out["s_mid"].append(s), out["K_mid"].append(k), out["V_mid"].append(V), out["R_mid"].append(R)
             del Jm, Xm, rows
         del w, J, X
@@ -196,9 +207,12 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0) -> dict:
     return out
 
 
-def project(x: torch.Tensor, s: torch.Tensor, basis: torch.Tensor) -> torch.Tensor:
+def project(x: torch.Tensor, s: torch.Tensor, basis: torch.Tensor, w: torch.Tensor | None = None) -> torch.Tensor:
     """The part of raw vectors ``x`` in the span of the whitened orthonormal ``basis``, in raw coordinates."""
-    return (((x.float() / s).half() @ basis) @ basis.T).float() * s
+    c = (x.float() / s).half() @ basis
+    if w is not None:  # each direction's part weighted (a soft sector)
+        c = (c.float() * w).half()
+    return (c @ basis.T).float() * s
 
 
 def model_and_means(sec: dict, extra_hooks=None):
@@ -672,7 +686,11 @@ TOPK = 1024  # a reference distribution's kept tokens in the KLs (the rest poole
 MIDDLE_K = (8, 32, 128, 512)  # subspace dimensions of the middle part
 MIDDLE_LAYERS = (0, 1, 2, 4, 6, 8, 10, 12, 16, 20)
 MIDDLE_TASKS = ("fact_subject", "lang_zh_from_en", "word_ident", "frame_think_last")
-GEO = (0.25, 0.5, 0.75)  # points on the shortest rotation from the S-lens's top directions to the R-lens's
+GEO = (0.25, 0.5, 0.75)
+SOFT_LAYERS = (0, 2, 4, 6, 8, 10, 12, 16, 20, 24, 30, 35)
+SOFT_K = (1, 4, 16, 64, 256, 1024, 2048)  # the soft part's rank ladder
+SOFT_TASKS = ("fact_subject", "lang_zh_from_en", "word_ident", "frame_think_last", "far_story_from_chat_all",
+              "far_chat_from_story_all")  # points on the shortest rotation from the S-lens's top directions to the R-lens's
 FOLLOW = 20  # tokens of the target's greedy continuation, scored teacher-forced
 STORIES = [
     "Write a short story about a dragon who learns to bake bread.",
@@ -731,7 +749,7 @@ def geodesic(U1: torch.Tensor, U2: torch.Tensor, t: float) -> torch.Tensor:
 
 def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch") -> None:
     middle = which == "middle"
-    sec = sectors(s_lens=True, keep=2 * max(MIDDLE_K) if middle else 0)
+    sec = sectors(s_lens=True, keep=2 * max(MIDDLE_K) if middle else 0, full=which == "soft")
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
@@ -749,7 +767,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
     nl, comma = mask(lambda x: x.startswith("\n")), mask(lambda x: x.startswith(","))
     think = mask(lambda x: x == "<think>")
     rng = random.Random(0)
-    S = {"mode": None, "basis": None}
+    S = {"mode": None, "basis": None, "weights": None}
     cap = {"h": [None] * nL, "m": [None] * nL}
 
     def hook(M, kind):
@@ -766,7 +784,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
             x = x.clone()
             t = x[b, p]
             dt = S["src"][kind][M].float() - t.float()
-            add = project(dt, sec["s"][M], S["basis"]) if S["basis"] is not None else part(dt, M, S["sector"], sec)
+            add = (project(dt, sec["s"][M], S["basis"], S["weights"]) if S["basis"] is not None
+                   else part(dt, M, S["sector"], sec))
             x[b, p] = (t.float() + add).to(x.dtype)
             return (x, *out[1:]) if isinstance(out, tuple) else x
         return h
@@ -798,7 +817,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
             att = torch.zeros_like(ids)
             for i, r in enumerate(rs):
                 ids[i, :len(r)], att[i, :len(r)] = torch.tensor(r), 1
-            S.update({"mode": mode, "T": n, "basis": None, "p": torch.tensor([j for q in ps for j in q], dtype=torch.long, device=DEV),
+            S.update({"mode": mode, "T": n, "basis": None, "weights": None, "p": torch.tensor([j for q in ps for j in q], dtype=torch.long, device=DEV),
                       "b": torch.tensor([i for i, q in enumerate(ps) for _ in q], dtype=torch.long, device=DEV), **kw})
             if src is not None:
                 S["src"] = {k: v[:, off[b0]:off[b0 + len(rs)]] for k, v in src.items()}
@@ -833,6 +852,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
 
     def generate(row, pos, mode=None, src=None, **kw):
         S.update({"mode": mode, "T": len(row), "b": torch.zeros(len(pos), dtype=torch.long, device=DEV), "basis": None,
+                  "weights": None,
                   "p": torch.tensor(pos, dtype=torch.long, device=DEV), "src": src, **kw})
         with torch.inference_mode():
             out = model.generate(torch.tensor([row], device=DEV), max_new_tokens=new, do_sample=False,
@@ -1061,11 +1081,187 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
         res.setdefault("middle", {})[name] = out
         save("middle", res)
 
-    do = middle_task if middle else task
+    def giant(docs):
+        """The R-lens readout's loudest direction at each output (``v1``), beside its second (``v2``) and a random
+        direction: where it points (raw coordinates, the previous layer's), what it reads (its push on the kept tokens,
+        against their log frequency and the unembedding's top direction), how the residual sits along it, and what
+        moving the residual along it does (its component set to its mean, to zero or doubled, at positions ≥ 1, against
+        the KL the lens predicts); and the soft census (each direction weighted by ``g / (g + ḡ)``) of the residual,
+        the MLP outputs and the neuron writes."""
+        from neuron_lens.arch import counts_path
+        W_U, gamma = model.lm_head.weight, model.model.norm.weight.float()
+        kid = kept().to(DEV)
+        Wk = W_U[kid].float()
+        C = (Wk - Wk.mean(0)) * gamma
+        del Wk
+        g1 = torch.linalg.eigh(C.T @ C)[1][:, -1]
+        logc = torch.load(counts_path(MODEL), weights_only=False)["counts"][kid.cpu()].float().add(1).log().to(DEV)
+        rk = lambda x: x.argsort().argsort().float()
+        spear = lambda a, b: torch.corrcoef(torch.stack([rk(a), rk(b)]))[0, 1].item()
+        gen_ = torch.Generator(device=DEV).manual_seed(1)
+        stats, evals = docs[:32], torch.tensor(docs[32:64], device=DEV)
+        cap_ = run(stats, [list(range(T)) for _ in stats], "cap")["cap"]
+        posn = torch.arange(T, device=DEV).repeat(len(stats))
+        late, sink = posn >= FIRST, posn == 0
+        out, prev, dirs = {"layers": {}}, None, {}
+        for L in range(nL):
+            s_, V, g = sec["s"][L], sec["VF"][L].float(), sec["gain"][L]
+            r = torch.randn(d, device=DEV, generator=gen_)
+            dirs[L] = {"v1": V[:, 0], "v2": V[:, 1], "rand": r / r.norm()}
+            J = sec["J_out"][L].to(DEV).float() if L < sec["J_out"].shape[0] else torch.eye(d, device=DEV)
+            u = V[:, 0] * s_
+            f = J @ u
+            z = C @ f
+            a = f @ g1
+            top8 = (u / u.norm()).pow(2).topk(8)
+            xw = cap_["h"][L].float() / s_
+            row = {"gain_over_mean": (g[0] / g.mean()).item(), "gain_over_second": (g[0] / g[1]).item(),
+                   "raw_top8": top8.indices.tolist(), "raw_top8_share": top8.values.sum().item(),
+                   "cos_prev": None if prev is None else (u @ prev / u.norm() / prev.norm()).abs().item(),
+                   "cos_unembed_top": (a / f.norm()).abs().item(),
+                   "push_on_unembed_top": ((a * (C @ g1)).pow(2).sum() / z.pow(2).sum()).item(),
+                   "freq_spearman": spear(z, logc),
+                   "top_tokens": [strs[i] for i in kid[z.topk(12).indices].tolist()],
+                   "bottom_tokens": [strs[i] for i in kid[(-z).topk(12).indices].tolist()]}
+            for nm_, v in dirs[L].items():
+                c = xw @ v
+                mu_ = xw[late].mean(0)
+                row[nm_] = {"share": (c[late].pow(2).mean() / xw[late].pow(2).sum(-1).mean()).item(),
+                            "mean": c[late].mean().item(), "std": c[late].std().item(), "sink": c[sink].mean().item(),
+                            "cos_mean": (mu_ @ v / mu_.norm()).item()}
+            w = g / (g + g.mean())
+            soft = {"dims": w.sum().item()}
+            wd = tensors(MODEL, [arch.layout(MODEL)[L].prefix + "mlp.down_proj.weight"])
+            wd = next(iter(wd.values())).to(DEV).float().T / s_
+            for k, x in (("resid", xw[late]), ("mlp", cap_["m"][L].float()[late] / s_), ("write", wd)):
+                pw = (x @ V).pow(2)
+                pw = pw / pw.sum(-1, keepdim=True)
+                soft[k + "_share"], soft[k + "_loud"] = (pw @ w).mean().item(), (pw @ g).mean().item() / g.mean().item()
+            row["soft"] = soft
+            out["layers"][L] = row
+            prev = u
+            log(f"L{L:2d} v1 gain {row['gain_over_mean']:7.1f}x random, {row['gain_over_second']:6.1f}x v2 | raw top8 "
+                f"{row['raw_top8'][:4]} {row['raw_top8_share']:.2f} | cos prev {row['cos_prev'] or 0:.2f} | unembed top "
+                f"cos {row['cos_unembed_top']:.2f} push {row['push_on_unembed_top']:.2f} | freq rho "
+                f"{row['freq_spearman']:+.2f} | share v1/v2/rand {row['v1']['share']:.4f} {row['v2']['share']:.4f} "
+                f"{row['rand']['share']:.4f} (1/d {1 / d:.4f}) | v1 mean {row['v1']['mean']:+.1f} std "
+                f"{row['v1']['std']:.1f} sink {row['v1']['sink']:+.1f} cos(mean) {row['v1']['cos_mean']:+.2f}")
+            log(f"     + {''.join(row['top_tokens'][:8])!r} | - {''.join(row['bottom_tokens'][:8])!r} | soft dims "
+                f"{soft['dims']:.0f}; bright share/loudness resid {soft['resid_share']:.2f}/{soft['resid_loud']:.1f} "
+                f"mlp {soft['mlp_share']:.2f}/{soft['mlp_loud']:.1f} writes {soft['write_share']:.2f}/"
+                f"{soft['write_loud']:.1f} (random {w.mean().item():.2f}/1.0)")
+        del cap_
+        torch.cuda.empty_cache()
+        # moving the residual along each direction, scored on 32 other documents
+        tgt_ids = evals[:, FIRST + 1:T]
+        final, clean = {}, []
+
+        def grab(mod, args, o):
+            final["h"] = o[0] if isinstance(o, tuple) else o
+
+        hk = layers[-1].register_forward_hook(grab)
+        for b0 in range(0, len(evals), 8):
+            lp = model(input_ids=evals[b0:b0 + 8], use_cache=False).logits[:, FIRST:T - 1].float().log_softmax(-1)
+            rms = final["h"][:, FIRST:T - 1].float().pow(2).mean(-1, keepdim=True).add(1e-6).sqrt()
+            clean.append((lp, rms))
+        hk.remove()
+        out["moves"] = {}
+        for L in SOFT_LAYERS:
+            J = sec["J_out"][L].to(DEV).float() if L < sec["J_out"].shape[0] else torch.eye(d, device=DEV)
+            for nm_, v in dirs[L].items():
+                vs = v * sec["s"][L]
+                zv = (W_U.float() @ (gamma * (J @ vs)))  # the lens's logit push per unit of the component
+                mean_c = out["layers"][L][nm_]["mean"]
+                for op in ("mean", "zero", "double"):
+                    st_ = {}
+
+                    def move(mod, args, o, v=v, vs=vs, op=op, mean_c=mean_c, st_=st_, sL=sec["s"][L]):
+                        x = o[0] if isinstance(o, tuple) else o
+                        c = (x[:, 1:].float() / sL) @ v
+                        new = {"mean": torch.full_like(c, mean_c), "zero": torch.zeros_like(c), "double": 2 * c}[op]
+                        st_["dc"] = new - c
+                        x = x.clone()
+                        x[:, 1:] = (x[:, 1:].float() + st_["dc"][..., None] * vs).to(x.dtype)
+                        return (x, *o[1:]) if isinstance(o, tuple) else x
+
+                    hk = layers[L].register_forward_hook(move)
+                    acc = {"dnll": 0.0, "kl": 0.0, "kl_pred": 0.0, "dent": 0.0, "agree": 0.0}
+                    for bi, b0 in enumerate(range(0, len(evals), 8)):
+                        lp_c, rms = clean[bi]
+                        lp = model(input_ids=evals[b0:b0 + 8], use_cache=False).logits[:, FIRST:T - 1].float().log_softmax(-1)
+                        t_ = tgt_ids[b0:b0 + 8, :, None]
+                        pc = lp_c.exp()
+                        acc["dnll"] += (lp_c.gather(-1, t_) - lp.gather(-1, t_)).mean().item()
+                        acc["kl"] += (pc * (lp_c - lp)).sum(-1).mean().item()
+                        acc["dent"] += ((-(lp.exp() * lp).sum(-1)) - (-(pc * lp_c).sum(-1))).mean().item()
+                        acc["agree"] += (lp.argmax(-1) == lp_c.argmax(-1)).float().mean().item()
+                        dz = st_["dc"][:, FIRST - 1:T - 2, None] / rms * zv
+                        acc["kl_pred"] += (pc * (lp_c - (lp_c + dz).log_softmax(-1))).sum(-1).mean().item()
+                    hk.remove()
+                    nb = (len(evals) + 7) // 8
+                    out["moves"][f"{L}/{nm_}/{op}"] = {k: v_ / nb for k, v_ in acc.items()}
+            log(f"L{L:2d} moves " + " | ".join(
+                f"{op}: " + " ".join(f"{nm_} {out['moves'][f'{L}/{nm_}/{op}']['dnll']:+.3f}/"
+                                     f"{out['moves'][f'{L}/{nm_}/{op}']['kl']:.3f}/{out['moves'][f'{L}/{nm_}/{op}']['kl_pred']:.3f}/"
+                                     f"{out['moves'][f'{L}/{nm_}/{op}']['dent']:+.2f}" for nm_ in ("v1", "v2", "rand"))
+                for op in ("mean", "zero", "double")) + "  (ΔNLL/KL/lens KL/Δentropy)")
+        del clean
+        torch.cuda.empty_cache()
+        res["giant"] = out
+        save("soft", res)
+
+    SOFT_SWITCH = SWITCH | {"far_story_from_chat_all": "flip", "far_chat_from_story_all": "flip"}
+
+    def soft_task(name, pairs, metric, primary, shows=0):
+        """At each of ``SOFT_LAYERS``, the soft sectors (each direction of the R-lens's readout weighted by
+        ``g / (g + ḡ)``, its gain against a random direction's, or by the rest), the top ``K`` directions by gain, the
+        rest past them and random ``K``-dim subspaces, patched from the source; with the difference's loudness (its
+        gain-weighted energy over a random vector's) and its energy by rank."""
+        if name not in SOFT_TASKS:
+            return
+        tr, sr = [p["t"] for p in pairs], [p["s"] for p in pairs]
+        tp, sp = [p["tp"] for p in pairs], [p["sp"] for p in pairs]
+        ct, cs = run(tr, tp, "cap"), run(sr, sp, "cap")
+        ref = run(tr, keep=True)["top"]
+        clean_t, clean_s = summ(metric(ct["lp"], pairs)), summ(metric(cs["lp"], pairs))
+        k0, sw = primary[0], SOFT_SWITCH[name]
+        gen_ = torch.Generator(device=DEV).manual_seed(2)
+        out = {"n": len(pairs), "clean_t": clean_t, "clean_s": clean_s, "layers": {}}
+        log(f"[{name}] n={len(pairs)} clean target {k0} {clean_t[k0]:.2f} {sw} {clean_t[sw]:.2f} | source "
+            f"{clean_s[k0]:.2f} {clean_s[sw]:.2f}")
+        for L in SOFT_LAYERS:
+            s_, V, g = sec["s"][L], sec["VF"][L], sec["gain"][L]
+            w = g / (g + g.mean())
+            dw = (cs["cap"]["h"][L].float() - ct["cap"]["h"][L].float()) / s_
+            pe = (dw @ V.float()).pow(2).sum(0)
+            Rb = torch.linalg.qr(torch.randn(d, max(SOFT_K), device=DEV, generator=gen_))[0].half()
+            conds = {"soft_bright": (V, w), "soft_dark": (V, 1 - w)}
+            for K in SOFT_K:
+                conds |= {f"top{K}": (V[:, :K], None), f"rest{K}": (V[:, K:], None), f"rand{K}": (Rb[:, :K], None)}
+            row = {"loud": ((pe * g).sum() / pe.sum() / g.mean()).item(), "soft_share": ((pe * w).sum() / pe.sum()).item(),
+                   "soft_dims": w.mean().item(), "energy_top": {K: (pe[:K].sum() / pe.sum()).item() for K in SOFT_K}}
+            for c_, (B, wt) in conds.items():
+                o = run(tr, tp, "h", src=cs["cap"], layers={L}, basis=B.contiguous(), weights=wt, refs=(ref,))
+                r = summ(metric(o["lp"], pairs))
+                row[c_] = {"kl": o["kl"].mean().item(), "switch": r[sw]} | {
+                    "frac_" + k: (r[k] - clean_t[k]) / (clean_s[k] - clean_t[k]) for k in primary}
+            out["layers"][L] = row
+            f_ = lambda c_, row=row: f"{row[c_]['frac_' + k0]:+.2f}/{row[c_]['switch']:.2f}"
+            log(f"  L{L:2d} loud {row['loud']:6.1f} soft share {row['soft_share']:.2f} (random {row['soft_dims']:.2f}) | "
+                f"soft bright {f_('soft_bright')} dark {f_('soft_dark')} | top " + " ".join(f"{K}:{f_(f'top{K}')}" for K in SOFT_K)
+                + " | rest " + " ".join(f"{K}:{f_(f'rest{K}')}" for K in SOFT_K)
+                + " | rand " + " ".join(f"{K}:{f_(f'rand{K}')}" for K in SOFT_K)
+                + " | energy top " + " ".join(f"{K}:{v:.2f}" for K, v in row["energy_top"].items()))
+        res.setdefault("soft", {})[name] = out
+        save("soft", res)
+
+    do = soft_task if which == "soft" else middle_task if middle else task
     halves = (0, 1) if middle else (None,)
 
     with torch.inference_mode():
-        if which == "far":  # a story asked for against small talk, in the chat template with thinking off
+        if which == "soft":
+            giant(lens_docs(act_file("dclm"), tok, 64, T, T, full=True))
+        if which in ("far", "soft"):  # a story asked for against small talk, in the chat template with thinking off
             user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n")
             sides = {k: sorted((user + enc(x) + turn for x in v), key=len) for k, v in (("story", STORIES), ("chat", CHATS))}
             tops = {k: run(v)["lp"].argmax(-1).tolist() for k, v in sides.items()}
@@ -1221,7 +1417,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far", "soft"))
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
