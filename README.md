@@ -482,10 +482,10 @@ breaks something different at each depth. Early, word forms, the kind of documen
 of context ("the capital of the south is the city of Marseille", comprehension lost on every kind of sentence). Late, the
 pieces that finish a word ("I am Q, a large language model"), with comprehension kept; removing the late bright sector
 instead leaves "the, the, the". Swapping a sector between two prompts shows where their difference lives: which country,
-the answer's language and the next word piece move with the bright sector from L4-L10, and the dark part of the
-difference, most of its energy, changes nothing. In between, the country sits in the R-lens's next few hundred
-directions past the bright sector, and thinking mode at L12 in a few directions neither lens weights. So the dark sector
-likely holds what such prompts share rather than what they differ in
+the answer's language, the next word piece, and even whether the reply is a story or small talk move with the bright
+sector from L4-L12, and the dark part of the difference, most of its energy, changes nothing. In between, the country
+needs the R-lens's top directions and more of the difference besides, and thinking mode at L12 sits in a few directions
+neither lens weights. So the dark sector likely holds what prompts share rather than what they differ in
 ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits

@@ -40,7 +40,7 @@ pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them
 | [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
 | [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
 | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B's and 0.6B's heads are the 8B's and 1.7B's, their neurons match a parent each and are ranked by its activation: three lineages, not five sizes |
-| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words; what two prompts differ in turns bright by L4-L10, and the dark rest of their difference is inert |
+| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words; what two prompts differ in turns bright by L4-L12, and the dark rest of their difference is inert |
 
 ## §1. The lenses: stability and corpus dependence
 
@@ -1837,6 +1837,17 @@ The swaps between prompts (`patch`, `middle`) ran on an H100.
     never does, with one exception: over the last layers the list's comma or new line moves into the dark sector (31% of
     pairs at L32, 86% at L33, all at L34-L35, where the bright sector switches 5-20% and a random subspace of the dark
     sector's size none).
+  - **Prompts with nothing in common but the template** (`far`). A story asked for ("Write a story about a robot
+    exploring an abandoned city.") against small talk ("Good morning! Did you sleep well last night?"), in the chat
+    template without thinking, 32 pairs each way, patched at every position (aligned from the end). The reply's opening
+    switches with the dark sector at L0-L2 (66-88% of pairs), less often than with a random subspace of its size from L4
+    (31-81% against 75-84% at L4-L8, 16-41% against 84-97% at L10), and from L12 almost never (0-9%). The bright sector
+    switches it from L12 (34%; 53-72% at L16-L20). In between the two mix: with the bright sector from the small talk
+    and the rest from the story request, either way round, the reply at L6 is a story titled "Monday on the Moon". Over
+    the L9-L20 band of MLP writes, their dark parts move the reply's next 20 tokens 0.41-0.62 of the way toward the
+    source's (a random subspace of their size 0.52-0.74, their bright parts 0.20-0.35) while switching 0-6% of
+    openings; one chat reply comes out in the story's markdown ("**Ugh, Mondays."). Patched only at the template's tail
+    after the message, nothing switches before L16.
 - **The S-lens's sector.** The same rule on the token footprints at each output, `K_L ē` (the S-lens's map from the
   embedding, over the kept tokens), gives 908 directions at L0, 761 at L9, 539 at L19 and 59 at L35. It overlaps the
   R-lens's bright sector no more than chance at L0-L3 and 1.2-1.6 times chance at L4-L20. It carries the country at L0
@@ -1852,10 +1863,14 @@ The swaps between prompts (`patch`, `middle`) ran on an H100.
     ends. Their apparent gains at L0-L4 (up to 0.51 of the gap from 8-128 directions, where either end carries none)
     vanish in the union of the two lenses' directions, which contains them (0.00-0.17): projecting at a slant moves the
     S-lens part of the difference into the R-lens's directions. The average of the two lenses carries less than the
-    R-lens alone, and the union of their top 512 directions no more than the R-lens's top 1,024.
-  - **The country sits just past the bright sector's cut.** At L4-L8 the R-lens's top 1,024 directions carry 0.53-0.74
-    of it (49-71% switch), its top 512 0.14-0.31, the S-lens's top 1,024 0.09-0.16 and a random 1,024 0.03-0.12; the
-    bright sector there has 328-521 directions. The country is compact at every layer: 32 directions fitted on the
+    R-lens alone.
+  - **In the middle the country needs the R-lens's top directions and more of the difference besides.** At L4-L8 the
+    R-lens's top 512 directions carry 0.14-0.31 of it (the bright sector there has 328-521). Adding the S-lens's top 512
+    brings 0.68-0.73 (67-73% switch), the R-lens's next 512 0.53-0.74 and 512 random directions 0.41-0.59, while each
+    addition alone carries 0.00-0.02 and 1,024 random directions 0.03-0.12. What an addition brings grows with the share
+    of the difference's energy it adds: the S-lens's top 512 hold 0.18-0.20 of it, the R-lens's next 512 and random ones
+    0.12-0.13, and per unit of energy added the S-lens's and the R-lens's next directions bring about as much (3.0-3.9 of
+    the gap), random ones a little less (2.5-2.9). The country is compact at every layer: 32 directions fitted on the
     capital prompts carry 0.63-0.86 of it on the official-language ones (51-80% switch).
   - **Some variables sit outside both lenses.** At L12, 8 directions fitted on other questions switch thinking mode in
     every pair (0.80 of the gap), while either lens's top 1,024 carries at most 0.18 and switches none; such directions
@@ -1863,14 +1878,16 @@ The swaps between prompts (`patch`, `middle`) ran on an H100.
     the answer's language, and the R-lens's top 1,024 0.03-0.50.
   - **What the answer reads is R-like, and the content isn't there yet.** The top 32 directions of the gradients overlap
     the R-lens's top 32 at 4-97 times chance (0.03-0.76 against 0.008), yet carry at most 0.37 of the gap.
-- **What this suggests.** What two prompts differ in turns bright by L4-L10, and the dark part of their difference is
-  inert, so the dark sector's ablations likely remove what such pairs share rather than what they differ in. Early the
+- **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
+  inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
+  ablations likely remove what prompts share rather than what they differ in. Early the
   dark sector is nearly the whole residual and carries everything; later it may hold the kind of document, position, or
   the residual's scale, which the R-lens's LN rule holds fixed (untested). The one variable found in it by swapping is late
   formatting (the list's comma or new line at L32-L35), in line with the late ablations dropping pieces of words and with
   Gurnee et al. (2026), who find the features outside the J-space mostly low-level syntax and bookkeeping. The 90% cut
-  is a hard line on a graded spectrum: in the middle layers the country sits in the R-lens's next few hundred directions,
-  and some variables (thinking mode at L12, the answer's language at L0-L2) in compact directions neither lens weights.
+  is a hard line on a graded spectrum: in the middle layers the country needs the R-lens's top directions and more of
+  the difference besides, and some variables (thinking mode at L12, the answer's language at L0-L2) sit in compact
+  directions neither lens weights.
   Some of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely
   enough to name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
   [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
@@ -1882,9 +1899,9 @@ comprehension test is one template with 48 items a type, at ceiling when clean, 
 accuracies. The bands are chosen by hand. The neurons and tokens named are top lists. A swap changes one layer, so a
 setting the model reads again from its own tokens can't move before late layers, and a pair shows only what it varies;
 a sentence as prose or as code (in a comment or a string) found no clean next-token contrast. The middle part's fitted
-directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The S-lens's sector uses
-the footprints with the lens's stretch, not its polar factor. Compact outputs are
-`data/summary/dark_sector_{trace,bands,comprehend,patch,middle}_qwen3-8b.*`.
+directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The far pairs come from
+16 story requests and 16 small-talk messages. The S-lens's sector uses the footprints with the lens's stretch, not its
+polar factor. Compact outputs are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far}_qwen3-8b.*`.
 
 ## Open questions
 
