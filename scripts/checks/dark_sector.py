@@ -65,7 +65,8 @@ Parts:
   target's own reply), with greedy generations.
 - ``soft``: brightness without a cut. Each direction of the R-lens's readout is weighted by ``g / (g + ḡ)``, its gain
   against a random direction's (above half where it reads louder than chance); a vector's loudness is its gain-weighted
-  energy over a random vector's. The loudest direction (``giant``): where it points, what it reads, how the residual
+  energy over a random vector's. ``ḡ`` leaves out the loudest direction, which holds 50-93% of the readout's gain at
+  L0-L9 and is a nearly fixed offset (the residual's massive activations). The loudest direction (``giant``): where it points, what it reads, how the residual
   sits along it and what moving along it does, beside the second and a random direction. A soft census of the residual,
   the MLP outputs and the writes; and for six tasks, the soft sectors and a ladder of the top ``K`` directions by gain,
   the rest past them and random ``K``-dim subspaces, patched as ``patch`` does.
@@ -1129,14 +1130,15 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
                 row[nm_] = {"share": (c[late].pow(2).mean() / xw[late].pow(2).sum(-1).mean()).item(),
                             "mean": c[late].mean().item(), "std": c[late].std().item(), "sink": c[sink].mean().item(),
                             "cos_mean": (mu_ @ v / mu_.norm()).item()}
-            w = g / (g + g.mean())
+            gr = g[1:].mean()  # a random direction's gain, the loudest direction left out
+            w = g / (g + gr)
             soft = {"dims": w.sum().item()}
             wd = tensors(MODEL, [arch.layout(MODEL)[L].prefix + "mlp.down_proj.weight"])
             wd = next(iter(wd.values())).to(DEV).float().T / s_
             for k, x in (("resid", xw[late]), ("mlp", cap_["m"][L].float()[late] / s_), ("write", wd)):
                 pw = (x @ V).pow(2)
                 pw = pw / pw.sum(-1, keepdim=True)
-                soft[k + "_share"], soft[k + "_loud"] = (pw @ w).mean().item(), (pw @ g).mean().item() / g.mean().item()
+                soft[k + "_share"], soft[k + "_loud"] = (pw @ w).mean().item(), (pw @ g).mean().item() / gr.item()
             row["soft"] = soft
             out["layers"][L] = row
             prev = u
@@ -1231,14 +1233,15 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
             f"{clean_s[k0]:.2f} {clean_s[sw]:.2f}")
         for L in SOFT_LAYERS:
             s_, V, g = sec["s"][L], sec["VF"][L], sec["gain"][L]
-            w = g / (g + g.mean())
+            gr = g[1:].mean()  # a random direction's gain, the loudest direction (a fixed offset, below) left out
+            w = g / (g + gr)
             dw = (cs["cap"]["h"][L].float() - ct["cap"]["h"][L].float()) / s_
             pe = (dw @ V.float()).pow(2).sum(0)
             Rb = torch.linalg.qr(torch.randn(d, max(SOFT_K), device=DEV, generator=gen_))[0].half()
             conds = {"soft_bright": (V, w), "soft_dark": (V, 1 - w)}
             for K in SOFT_K:
                 conds |= {f"top{K}": (V[:, :K], None), f"rest{K}": (V[:, K:], None), f"rand{K}": (Rb[:, :K], None)}
-            row = {"loud": ((pe * g).sum() / pe.sum() / g.mean()).item(), "soft_share": ((pe * w).sum() / pe.sum()).item(),
+            row = {"loud": ((pe * g).sum() / pe.sum() / gr).item(), "soft_share": ((pe * w).sum() / pe.sum()).item(),
                    "soft_dims": w.mean().item(), "energy_top": {K: (pe[:K].sum() / pe.sum()).item() for K in SOFT_K}}
             for c_, (B, wt) in conds.items():
                 o = run(tr, tp, "h", src=cs["cap"], layers={L}, basis=B.contiguous(), weights=wt, refs=(ref,))
