@@ -729,8 +729,8 @@ def geodesic(U1: torch.Tensor, U2: torch.Tensor, t: float) -> torch.Tensor:
     return torch.linalg.qr(X * torch.cos(t * theta) + Q * torch.sin(t * theta))[0]
 
 
-def patch(n_words: int, n_frame: int, batch: int, new: int, part: str = "patch") -> None:
-    middle = part == "middle"
+def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch") -> None:
+    middle = which == "middle"
     sec = sectors(s_lens=True, keep=2 * max(MIDDLE_K) if middle else 0)
     from transformers import AutoModelForCausalLM
     tok = tokenizer()
@@ -955,7 +955,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, part: str = "patch")
         log("  random K-dim share             " + " ".join(f"{out['share']['h']['rand_b'][L]:.2f}" for L in show))
         log("  S-bright share                 " + " ".join(f"{out['share']['h']['s_bright'][L]:.2f}" for L in show))
         log("  random K_S-dim share           " + " ".join(f"{out['share']['h']['rand_sb'][L]:.2f}" for L in show))
-        save(part, res)
+        save(which, res)
 
     def frame(name, pairs, a, b=None, scopes=("shared", "last"), shows=1):
         """Pairs that differ in frame around the same content, kept where the clean source's next token is in ``a`` and
@@ -1065,7 +1065,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, part: str = "patch")
     halves = (0, 1) if middle else (None,)
 
     with torch.inference_mode():
-        if part == "far":  # a story asked for against small talk, in the chat template with thinking off
+        if which == "far":  # a story asked for against small talk, in the chat template with thinking off
             user, turn = enc("<|im_start|>user\n"), enc("<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n")
             sides = {k: sorted((user + enc(x) + turn for x in v), key=len) for k, v in (("story", STORIES), ("chat", CHATS))}
             tops = {k: run(v)["lp"].argmax(-1).tolist() for k, v in sides.items()}
@@ -1079,7 +1079,7 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, part: str = "patch")
                         m_ = min(len(q["t"]), len(q["s"])) - 1 if scope == "all" else len(turn)
                         q["tp"], q["sp"] = (list(range(len(q[k]) - m_, len(q[k]))) for k in ("t", "s"))
                     do(f"far_{tl}_from_{sl}_{scope}", pairs, m_fact, ("ld",), shows=2 if scope == "all" else 0)
-        if part != "far":
+        if which != "far":
             # facts: aligned prompts that differ in the country, patched at every position, the country's or the last
             rows = []
             for en, _, capital, _, lang in COUNTRIES:
@@ -1237,7 +1237,7 @@ def main() -> None:
     elif a.part == "comprehend":
         comprehend(a.items, 64)
     else:
-        patch(a.words, a.frames, 32, 20, part=a.part)
+        patch(a.words, a.frames, 32, 20, which=a.part)
 
 
 if __name__ == "__main__":
