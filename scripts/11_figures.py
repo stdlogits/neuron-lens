@@ -747,9 +747,9 @@ def fig_lens_blind() -> None:
     arms = [a for a in (("lens", "lens reads only", 0), ("contexts", "top contexts only", 1),
                         ("both", "both (Sonnet)", 2), ("opus", "both (Opus)", 3)) if f"all/{a[0]}" in d]
     for ax, key, ref, ref_label, ylabel, lo, title in (
-            (axes[0], "fires_all", None, "control: another pole's label", "detection AUROC on held-out firings", 0.5,
+            (axes[0], "fires_all", None, "control: another pole's label", "detection AUROC on held-out firings", 0.4,
              "Where it fires"),
-            (axes[1], "writes_top1", 0.25, "chance", "own label picked from steered text", 0.0,
+            (axes[1], "writes_auroc", 0.5, "chance", "AUROC of its own label against three others", 0.4,
              "What it promotes, when steered")):
         ax.set_title(title)
         if ref is None:  # the derangement control, both arms pooled
@@ -769,9 +769,8 @@ def fig_lens_blind() -> None:
         ax.set_ylim(lo, 1.0)
         ax.set_ylabel(ylabel)
         ax.set_xlabel("layer band")
-        if key == "writes_top1":
-            pct(ax)
-            ax.annotate("chance", (len(bands) - 1, 0.25), xytext=(0, -10), textcoords="offset points", ha="center",
+        if key == "writes_auroc":
+            ax.annotate("chance", (len(bands) - 1, 0.5), xytext=(0, -10), textcoords="offset points", ha="center",
                         fontsize=8, color=INK2)
     handles, labels = axes[0].get_legend_handles_labels()
     axes[0].legend(handles[1:] + handles[:1], labels[1:] + labels[:1], loc="upper left", bbox_to_anchor=(0, -0.2),
@@ -780,13 +779,14 @@ def fig_lens_blind() -> None:
            f"160 random poles, {160 // len(bands)} a band. Explainers saw lens reads, top contexts or both (Sonnet; Opus "
            "for both), never steering; blind Sonnet scorers tested their labels on held-out firings and on steered text.",
            "findings §13; data/summary/lens_blind_qwen3-8b.json",
-           "Left: mean detection AUROC of each arm's \"fires\" label on 6 held-out top contexts against 6 quiet "
-           f"positions (half from the same documents): lens reads alone {d['all/lens']['fires_all']:.2f}, contexts "
-           f"{d['all/contexts']['fires_all']:.2f}, both {d['all/both']['fires_all']:.2f}; dashed, another pole's label. "
-           "Right: how often a judge picks the pole's own \"promotes\" label out of four from its band, from greedy text "
-           f"steered at 0.5-2 nats: lens reads {d['all/lens']['writes_top1']:.0%} ({d[bands[-1] + '/lens']['writes_top1']:.0%} "
-           f"at {bands[-1]}), contexts {d['all/contexts']['writes_top1']:.0%}, both {d['all/both']['writes_top1']:.0%}; "
-           "dashed, chance. Bars: 95% bootstrap intervals over poles.")
+           "Both sides scored by AUROC (chance 0.5), against different negatives. Left: each arm's \"fires\" label, "
+           "scoring 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone "
+           f"{d['all/lens']['fires_all']:.2f}, contexts {d['all/contexts']['fires_all']:.2f}, both "
+           f"{d['all/both']['fires_all']:.2f}; dashed, another pole's label. Right: a judge reads greedy text steered at "
+           "0.5-2 nats and weighs the pole's own \"promotes\" label against three others from its band: lens reads "
+           f"{d['all/lens']['writes_auroc']:.2f} ({d[bands[-1] + '/lens']['writes_auroc']:.2f} at {bands[-1]}), contexts "
+           f"{d['all/contexts']['writes_auroc']:.2f}, both {d['all/both']['writes_auroc']:.2f}. Bars: 95% bootstrap "
+           "intervals over poles.")
 
 
 def fig_library() -> None:

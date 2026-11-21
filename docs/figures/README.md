@@ -90,7 +90,7 @@ Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (
 
 ![Labels written blind: lens reads predict what a pole promotes, contexts where it fires](15_lens_blind.png)
 
-Left: mean detection AUROC of each arm's "fires" label on 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.69, contexts 0.85, both 0.85; dashed, another pole's label. Right: how often a judge picks the pole's own "promotes" label out of four from its band, from greedy text steered at 0.5-2 nats: lens reads 51% (71% at L21-L35), contexts 41%, both 59%; dashed, chance. Bars: 95% bootstrap intervals over poles.
+Both sides scored by AUROC (chance 0.5), against different negatives. Left: each arm's "fires" label, scoring 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.69, contexts 0.85, both 0.85; dashed, another pole's label. Right: a judge reads greedy text steered at 0.5-2 nats and weighs the pole's own "promotes" label against three others from its band: lens reads 0.69 (0.82 at L21-L35), contexts 0.62, both 0.73. Bars: 95% bootstrap intervals over poles.
 
 ## 16. One persona label in three matches the pole's lens reads; swapped names rarely do
 

@@ -1,7 +1,7 @@
 {
  "heads": {
   "L0h7": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.46875,
    "control": 0.71875,
    "writes": 0.0,
@@ -9,10 +9,11 @@
     "fires": 0.44999998807907104,
     "attends": 0.4000000059604645,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L3h6": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.875,
    "writes": 1.0,
@@ -20,10 +21,11 @@
     "fires": 0.10000000149011612,
     "attends": 0.30000001192092896,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L4h12": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.53125,
    "control": 0.34375,
    "writes": 0.0,
@@ -31,10 +33,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.4000000059604645,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L1h4": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -42,10 +45,11 @@
     "fires": 0.5,
     "attends": 0.8500000238418579,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L1h8": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.84375,
    "control": 0.53125,
    "writes": 1.0,
@@ -53,10 +57,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.5,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L3h9": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 1.0,
@@ -64,10 +69,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L4h1": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0625,
    "writes": 0.0,
@@ -75,10 +81,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.25,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L3h2": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.625,
    "writes": 0.0,
@@ -86,10 +93,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.20000000298023224,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L0h9": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.375,
    "control": 0.875,
    "writes": 0.0,
@@ -97,10 +105,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.4000000059604645,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L4h10": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.3125,
    "control": 0.5,
    "writes": 0.0,
@@ -108,10 +117,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.4000000059604645,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L1h2": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -119,10 +129,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.4000000059604645,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L4h11": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.5625,
    "writes": 0.0,
@@ -130,10 +141,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L0h0": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -141,10 +153,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.3499999940395355,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L4h5": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.8125,
    "control": 0.1875,
    "writes": 0.0,
@@ -152,10 +165,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.15000000596046448,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L4h13": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.5,
    "control": 0.1875,
    "writes": 0.0,
@@ -163,10 +177,11 @@
     "fires": 0.25,
     "attends": 0.6000000238418579,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L0h1": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -174,10 +189,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.30000001192092896,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L2h6": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 0.0,
@@ -185,10 +201,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.6000000238418579,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L4h14": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -196,10 +213,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.4000000059604645,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L3h0": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.5,
    "control": 0.65625,
    "writes": 1.0,
@@ -207,10 +225,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.25,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L3h1": {
-   "band": "L0-L4",
+   "band": "association L0-L19",
    "own": 0.5,
    "control": 0.0,
    "writes": 0.0,
@@ -218,10 +237,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.25,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L13h6": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.75,
    "control": 1.0,
    "writes": 0.0,
@@ -229,10 +249,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.30000001192092896,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L6h0": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.375,
    "control": 0.5,
    "writes": 1.0,
@@ -240,10 +261,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.4000000059604645,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L7h8": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.9375,
    "control": 0.8125,
    "writes": 0.0,
@@ -251,10 +273,11 @@
     "fires": 0.5,
     "attends": 0.3499999940395355,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L12h12": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.6875,
    "control": 0.1875,
    "writes": 0.0,
@@ -262,10 +285,11 @@
     "fires": 0.25,
     "attends": 0.30000001192092896,
     "writes": 0.5
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L10h2": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.0,
    "control": 0.0,
    "writes": 0.0,
@@ -273,10 +297,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.3499999940395355,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L12h5": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 0.0,
@@ -284,10 +309,11 @@
     "fires": 0.44999998807907104,
     "attends": 0.3499999940395355,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L12h15": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.125,
    "writes": 1.0,
@@ -295,10 +321,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.30000001192092896,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L9h8": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.625,
    "writes": 0.0,
@@ -306,10 +333,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.6000000238418579,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L5h11": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -317,10 +345,11 @@
     "fires": 0.44999998807907104,
     "attends": 0.4000000059604645,
     "writes": 0.550000011920929
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L5h1": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.1875,
    "writes": 0.0,
@@ -328,10 +357,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.25,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L6h6": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -339,10 +369,11 @@
     "fires": 0.5,
     "attends": 0.44999998807907104,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L8h14": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 0.0,
@@ -350,10 +381,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.20000000298023224,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L10h1": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 0.0,
@@ -361,10 +393,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.25,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L7h3": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.875,
    "control": 0.3125,
    "writes": 1.0,
@@ -372,10 +405,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.20000000298023224,
     "writes": 0.20000000298023224
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L11h12": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -383,10 +417,11 @@
     "fires": 0.5,
     "attends": 0.550000011920929,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L13h7": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -394,10 +429,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.20000000298023224,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L7h13": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 0.0,
    "control": 0.71875,
    "writes": 1.0,
@@ -405,10 +441,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.550000011920929,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L12h13": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.25,
    "writes": 0.0,
@@ -416,10 +453,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.25,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L8h6": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.75,
    "writes": 0.0,
@@ -427,10 +465,11 @@
     "fires": 0.5,
     "attends": 0.550000011920929,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L8h0": {
-   "band": "L5-L13",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 1.0,
    "writes": 0.0,
@@ -438,10 +477,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.30000001192092896,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L28h13": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.1875,
    "control": 0.875,
    "writes": 1.0,
@@ -449,10 +489,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L24h4": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 1.0,
    "control": 0.40625,
    "conf": {
@@ -462,7 +503,7 @@
    }
   },
   "L30h5": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.9375,
    "control": 0.5,
    "writes": 0.0,
@@ -470,10 +511,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.15000000596046448,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L18h0": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.8125,
    "control": 0.1875,
    "writes": 1.0,
@@ -481,10 +523,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.4000000059604645,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L14h9": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.21875,
    "writes": 0.0,
@@ -492,10 +535,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.4000000059604645,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L16h14": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.75,
    "control": 0.875,
    "writes": 1.0,
@@ -503,10 +547,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.800000011920929,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L15h3": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.75,
    "control": 0.71875,
    "writes": 1.0,
@@ -514,10 +559,11 @@
     "fires": 0.15000000596046448,
     "attends": 0.15000000596046448,
     "writes": 0.25
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L20h10": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.53125,
    "control": 0.65625,
    "conf": {
@@ -527,7 +573,7 @@
    }
   },
   "L20h11": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.4375,
    "control": 0.46875,
    "writes": 0.0,
@@ -535,10 +581,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.4000000059604645,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L24h11": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.84375,
    "control": 0.0,
    "writes": 1.0,
@@ -546,10 +593,11 @@
     "fires": 0.20000000298023224,
     "attends": 0.20000000298023224,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L14h11": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.90625,
    "control": 0.75,
    "writes": 0.0,
@@ -557,10 +605,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L19h1": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.84375,
    "control": 0.5625,
    "writes": 1.0,
@@ -568,10 +617,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.5
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L25h4": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 1.0,
    "control": 0.5,
    "writes": 0.0,
@@ -579,10 +629,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.20000000298023224,
     "writes": 0.5
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L22h9": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.4375,
    "control": 0.21875,
    "writes": 0.0,
@@ -590,10 +641,11 @@
     "fires": 0.25,
     "attends": 0.20000000298023224,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L22h13": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.40625,
    "control": 0.375,
    "writes": 0.0,
@@ -601,10 +653,11 @@
     "fires": 0.15000000596046448,
     "attends": 0.20000000298023224,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L23h13": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.75,
    "control": 0.625,
    "writes": 0.0,
@@ -612,10 +665,11 @@
     "fires": 0.44999998807907104,
     "attends": 0.4000000059604645,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L23h8": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 0.96875,
    "control": 0.5,
    "writes": 0.0,
@@ -623,10 +677,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.20000000298023224,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L27h14": {
-   "band": "L14-L32",
+   "band": "workspace L20-L32",
    "own": 1.0,
    "control": 0.875,
    "writes": 0.0,
@@ -634,10 +689,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.25,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L14h7": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 0.625,
    "control": 0.6875,
    "writes": 0.0,
@@ -645,10 +701,11 @@
     "fires": 0.25,
     "attends": 0.3499999940395355,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L18h1": {
-   "band": "L14-L32",
+   "band": "association L0-L19",
    "own": 1.0,
    "control": 0.28125,
    "writes": 1.0,
@@ -656,10 +713,11 @@
     "fires": 0.25,
     "attends": 0.4000000059604645,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L36h5": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -667,10 +725,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.25,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L38h1": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.75,
    "control": 0.96875,
    "writes": 0.0,
@@ -678,10 +737,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L44h10": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 1.0,
    "writes": 1.0,
@@ -689,10 +749,11 @@
     "fires": 0.44999998807907104,
     "attends": 0.30000001192092896,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L35h9": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.9375,
    "control": 0.9375,
    "writes": 1.0,
@@ -700,10 +761,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.44999998807907104,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L35h6": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.78125,
    "control": 0.3125,
    "writes": 1.0,
@@ -711,10 +773,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.30000001192092896,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L36h1": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.53125,
    "control": 0.25,
    "writes": 0.0,
@@ -722,10 +785,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.3499999940395355,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L35h7": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.84375,
    "writes": 0.0,
@@ -733,10 +797,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.3499999940395355,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L39h13": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.65625,
    "writes": 0.0,
@@ -744,10 +809,11 @@
     "fires": 0.25,
     "attends": 0.25,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L41h9": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.40625,
    "control": 0.0,
    "writes": 0.0,
@@ -755,10 +821,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.4000000059604645,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L44h12": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.0,
    "writes": 1.0,
@@ -766,10 +833,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.25,
     "writes": 0.11999999731779099
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L39h3": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -777,10 +845,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.30000001192092896,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L44h4": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.5,
    "control": 0.25,
    "writes": 0.0,
@@ -788,10 +857,11 @@
     "fires": 0.5,
     "attends": 0.44999998807907104,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L33h8": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.875,
    "control": 0.78125,
    "writes": 0.0,
@@ -799,10 +869,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.30000001192092896,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L33h12": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 1.0,
    "control": 0.0,
    "writes": 0.0,
@@ -810,10 +881,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.25,
     "writes": 0.4000000059604645
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L41h14": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.75,
    "control": 0.75,
    "writes": 0.0,
@@ -821,10 +893,11 @@
     "fires": 0.4000000059604645,
     "attends": 0.5,
     "writes": 0.6000000238418579
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L44h3": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.21875,
    "control": 0.78125,
    "writes": 0.0,
@@ -832,10 +905,11 @@
     "fires": 0.15000000596046448,
     "attends": 0.44999998807907104,
     "writes": 0.30000001192092896
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L41h5": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.6875,
    "control": 0.96875,
    "writes": 0.0,
@@ -843,10 +917,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.4000000059604645,
     "writes": 0.44999998807907104
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L43h11": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.46875,
    "control": 0.53125,
    "writes": 1.0,
@@ -854,10 +929,11 @@
     "fires": 0.30000001192092896,
     "attends": 0.20000000298023224,
     "writes": 0.15000000596046448
-   }
+   },
+   "writes_auroc": 1.0
   },
   "L41h2": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.75,
    "control": 1.0,
    "writes": 0.0,
@@ -865,10 +941,11 @@
     "fires": 0.3499999940395355,
     "attends": 0.30000001192092896,
     "writes": 0.5
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   },
   "L33h14": {
-   "band": "L33-L47",
+   "band": "motor L33-L47",
    "own": 0.25,
    "control": 1.0,
    "writes": 0.0,
@@ -876,7 +953,8 @@
     "fires": 0.30000001192092896,
     "attends": 0.20000000298023224,
     "writes": 0.3499999940395355
-   }
+   },
+   "writes_auroc": 0.3333333333333333
   }
  },
  "batch": "msgbatch_01DJGQT5xJH92TsbETYVoRro",
@@ -894,31 +972,31 @@
    0.409375,
    0.56328125
   ],
-  "writes": [
+  "writes_auroc": [
+   0.547008547008547,
+   0.47863247863247865,
+   0.6153846153846154
+  ],
+  "writes_picked": [
    0.32051282051282054,
    0.21794871794871795,
    0.4230769230769231
   ],
   "bands": {
-   "L0-L4": {
-    "own": 0.7921875,
-    "control": 0.40625,
-    "writes": 0.4
+   "association L0-L19": {
+    "own": 0.8157552083333334,
+    "control": 0.4557291666666667,
+    "writes_auroc": 0.5833333333333334
    },
-   "L5-L13": {
-    "own": 0.83125,
-    "control": 0.4734375,
-    "writes": 0.25
+   "workspace L20-L32": {
+    "own": 0.7083333333333334,
+    "control": 0.5,
+    "writes_auroc": 0.4666666666666666
    },
-   "L14-L32": {
-    "own": 0.759375,
-    "control": 0.5140625,
-    "writes": 0.3888888888888889
-   },
-   "L33-L47": {
+   "motor L33-L47": {
     "own": 0.7453125,
     "control": 0.5515625,
-    "writes": 0.25
+    "writes_auroc": 0.5
    }
   }
  }

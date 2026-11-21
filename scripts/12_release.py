@@ -964,8 +964,6 @@ and its first 5 top contexts; a pole that is a faint shadow of the neuron's othe
 and is marked (§7). Each model has its own prompt with worked examples (`scripts/prompts/<model>/neurons.md` on
 GitHub). Gemma 4's cards are text alone (no images or sounds). A handful of poles have empty labels.
 {label_checks}
-The longer card's labels were also checked on Qwen3-8B with steering: a judge picked a pole's write label out of four from steered text 61% of the time [0.52, 0.69] (chance 25%),
-best late (80% at L28-L35, 41% at L0-L8; §13).
 
 ![Random poles read blind](figures/15_lens_blind.png)
 

@@ -19,7 +19,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§10](#10-attention-heads-circuits-read-token-by-token) | a head's input reads with the S-lens; what each head copies and attends to, from the weights |
 | | [§11](#11-attention-heads-what-their-reads-name) | late heads write the next token; S-side reads are shared across a layer's heads |
 | | [§12](#12-what-feeds-a-unit-edges-and-sources) | weight edges rank every source's effect (ρ 0.88) but name a tenth of what drives a pole: co-firing does |
-| **IV. Describing units in words** | [§13](#13-labels-from-the-evidence) | labels from the lenses alone: firing AUROC 0.80, writes picked 65%; the catalog's labels, 0.82-0.88 on six models |
+| **IV. Describing units in words** | [§13](#13-labels-from-the-evidence) | labels from the lenses alone: AUROC 0.69 for firing and for writes; the catalog's labels, 0.82-0.88 on six models |
 | | [§14](#14-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
 | **V. A second model, three modalities** | [§15](#15-gemma-4-12b-the-text-catalog-in-a-second-model) | Gemma 4 12B reads like Qwen3-8B; a read that turns a covector into a vector needs the residual's metric |
 | | [§16](#16-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
@@ -942,7 +942,10 @@ when amplified.
   set. This test is made of firings, so it favours evidence made of firings.
 - **Writes** are scored by steering: the pole's write is added at doses where it changes the next-token distribution by
   0.5, 1 and 2 nats of KL (10-19× its typical activation), on four prompts; a fresh judge sees the steered text and four
-  labels from the same band and picks the pole's own (chance 25%).
+  labels from the same band and gives each a probability of being the pole's own; the score is the AUROC of the pole's
+  own label against the other three (chance 0.5).
+- Both are AUROCs, but against different negatives (quiet text or another pole's firings for firing, other poles' labels
+  for writes), so a firing score and a write score don't compare directly.
 - **Cards are leak-free:** nothing on a card summarizes the held-out documents.
 
 **A pilot with full evidence** (`checks/describe_cards.py`, `checks/describe_score.py`): 197 poles (2 random neurons a
@@ -958,30 +961,30 @@ activation scale and rates), **both** on one card, with Claude Sonnet 5.5 and wi
 Sonnet. Six held-out firings against six quiet positions, three from random documents and three from the firings' own
 documents. 18 sampled poles are near-silent (most at L1-L2) and have no firing test.
 
-| band | fires AUROC: lens / contexts / both / Opus | writes picked: lens / contexts / both / Opus |
+| band | fires AUROC: lens / contexts / both / Opus | writes AUROC: lens / contexts / both / Opus |
 |---|---|---|
-| sensory L0-L3 (22 firing) | 0.78 / 0.97 / 0.97 / 0.97 | 0.40 / 0.40 / 0.46 / 0.50 |
-| association L4-L8 | 0.70 / 0.93 / 0.93 / 0.92 | 0.47 / 0.44 / 0.55 / 0.44 |
-| workspace L9-L20 | 0.64 / 0.78 / 0.80 / 0.80 | 0.48 / 0.34 / 0.57 / 0.48 |
-| motor L21-L35 | 0.69 / 0.78 / 0.77 / 0.83 | 0.71 / 0.47 / 0.78 / 0.67 |
-| all | 0.69 / 0.85 / 0.85 / 0.87 | 0.51 / 0.41 / 0.59 / 0.52 |
+| sensory L0-L3 (22 firing) | 0.78 / 0.97 / 0.97 / 0.97 | 0.65 / 0.64 / 0.60 / 0.70 |
+| association L4-L8 | 0.70 / 0.93 / 0.93 / 0.92 | 0.66 / 0.65 / 0.73 / 0.62 |
+| workspace L9-L20 | 0.64 / 0.78 / 0.80 / 0.80 | 0.62 / 0.56 / 0.70 / 0.66 |
+| motor L21-L35 | 0.69 / 0.78 / 0.77 / 0.83 | 0.82 / 0.65 / 0.87 / 0.81 |
+| all | 0.69 / 0.85 / 0.85 / 0.87 | 0.69 / 0.62 / 0.73 / 0.70 |
 
-Controls: another pole's firing label scores 0.54-0.59; writes chance is 0.25.
+Controls: another pole's firing label scores 0.54-0.59; writes chance is 0.5.
 
 ![Random poles read blind](figures/15_lens_blind.png)
 
 - **From the lenses alone, labels beat chance on both tests:** firing labels at AUROC 0.69 (33% of labels at 0.8 or more,
-  against 7% of controls), write labels picked 51% of the time.
+  against 7% of controls), write labels at 0.69.
 - **Scored on firings, contexts lead the lenses for where a pole fires** (0.85 against 0.69), as evidence made of firings
   should, in every band and most in the sensory band (0.97 against 0.78), whose poles are token detectors.
   Same-document negatives cost both arms about 0.04, so neither's labels are mostly topic labels.
-- **For what it promotes, the lenses beat contexts** (51% against 41%): 71% in the motor band, where strongly steered text
-  has 20% more of its tokens in the pole's own R-lens top 64 than unsteered text (other poles' reads: no change), and
-  near chance in the sensory band (40%, as contexts), where steering mostly degenerates the text (§7: early meaning is
-  input-side).
-- **Combining helps writes, not firing:** both sources on one card score 0.85 for firing, as contexts alone, and 59% for
-  writes, more than either alone (78% in the motor band).
-- **Opus explains no better than Sonnet** (0.87 against 0.85 for firing, 52% against 59% for writes), which suggests the
+- **For what it promotes, the lenses beat contexts** (0.69 against 0.62), most in the motor band (0.82 against 0.65),
+  where strongly steered text has 20% more of its tokens in the pole's own R-lens top 64 than unsteered text (other poles'
+  reads: no change). Earlier the two are close (0.62-0.66 against 0.56-0.65), and steering often degenerates the text
+  (§7: early meaning is input-side).
+- **Combining helps writes, not firing:** both sources on one card score 0.85 for firing, as contexts alone, and 0.73 for
+  writes, more than either alone (0.87 in the motor band).
+- **Opus explains no better than Sonnet** (0.87 against 0.85 for firing, 0.70 against 0.73 for writes), which suggests the
   bottleneck is the evidence, not the explainer. On 100 more random poles, Claude Haiku 5.5 matches Sonnet when the card
   has contexts (firing AUROC 0.82 against 0.83; `checks/haiku_blind.py`) and trails it from the lenses alone (0.71 with
   the reads chosen by depth).
@@ -1020,12 +1023,12 @@ a harder contrast than quiet text; AUROC per pole, on 150 random firing poles a 
   strengths scored the same within noise on the same poles (Qwen3-8B 0.81, Gemma 4 0.81) at twice the cost, and with
   lower confidence (mean firing confidence 0.34 against 0.44 on Qwen3-8B, 0.30 against 0.40 on Gemma 4).
 - **Heads** (20 random heads a band, the same test against another head's firings): Qwen3-8B's firing labels score 0.72
-  [0.66, 0.78] and its write labels are picked 51% of the time [40, 61], from what the head's firings promote in context
-  (chance 25%); Gemma 4's 0.78 [0.72, 0.84] and 32% [22, 42]. Gemma 4's OV reads rarely pass a test (§15), and what a
+  [0.66, 0.78], and its write labels 0.67 [0.60, 0.74] when a judge picks one of four from what the head's firings promote
+  in context (AUROC against the other three: 1 when it picks the head's own, 1/3 otherwise; chance 0.5); Gemma 4's 0.78
+  [0.72, 0.84] and 0.55 [0.48, 0.62]. Gemma 4's OV reads rarely pass a test (§15), and what a
   head's OV map promotes is not what it writes in context; its write labels follow its cards. Tables by band:
   `data/summary/labels_heads_<model>.md`.
-- Write labels of neurons were not steered on these cards; on Qwen3-8B the longer card's were picked 61% of the time
-  [52, 69] (80% at L28-L35, 41% at L0-L8). 150 poles is about ±4 points a model; a band holds 9-65 of them, so its value is good to ±5-15.
+- Write labels of the catalog's neurons were not checked by steering. 150 poles is about ±4 points a model; a band holds 9-65 of them, so its value is good to ±5-15.
   `data/summary/label_check_<model>.json`.
 
 **Simulation** (`checks/simulate_labels.py`). Bills et al. (2023)'s test on the same 150 Qwen3-8B poles: Claude Sonnet 5.5

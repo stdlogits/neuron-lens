@@ -458,6 +458,8 @@ def grade(args) -> None:
             true = k["options"].index(k["pole"])
             r["p_true"] = q[true]
             r["top1"] = (q[true] == max(q)) / sum(x == max(q) for x in q)
+            # AUROC of the own label against the three rivals: the share of rivals it outranks, ties half
+            r["auroc_w"] = mean((q[true] > q[j]) + 0.5 * (q[true] == q[j]) for j in range(4) if j != true)
 
     # Judge-free: steered tokens in the pole's own R-lens top 64, against three other poles' of its band.
     base = [t for g in m["base"] for t in g]
@@ -487,8 +489,9 @@ def grade(args) -> None:
              "fires: AUROC of the scorer's probabilities on held-out top contexts against quiet ones, all / random "
              "/ same-document negatives, matched (control: another pole's label of the band and arm); "
              "holds = matched AUROC against all negatives >= 0.8",
-             "writes: the judge's probability on the pole's own label among four of its band and arm (chance "
-             "0.25), and top-1 accuracy; means with 95% bootstrap intervals over poles"]
+             "writes: the AUROC of the pole's own label against the three other labels of its band and arm that the "
+             "judge saw beside it (chance 0.5), the judge's probability on the own label (chance 0.25) and top-1 "
+             "accuracy; means with 95% bootstrap intervals over poles"]
     summary = {}
     for name, sel in [("all", lambda p: True)] + [(f"L{lo}-L{hi}", lambda p, lo=lo, hi=hi: lo <= p["layer"] <= hi)
                                                   for lo, hi in BANDS]:
@@ -510,9 +513,11 @@ def grade(args) -> None:
                              f"({row['fires_same_control']:.2f})  holds {row['fires_holds']:.2f} "
                              f"({row['fires_holds_control']:.2f})")
             if w:
+                row["writes_auroc"] = mean(r["auroc_w"] for r in w)
                 row["writes_p"] = mean(r["p_true"] for r in w)
                 row["writes_top1"] = mean(r["top1"] for r in w)
-                lines.append(f"  {arm:8s} writes n {len(w):3d}  p(own) {ci([r['p_true'] for r in w], row, 'writes_p')}  "
+                lines.append(f"  {arm:8s} writes n {len(w):3d}  AUROC {ci([r['auroc_w'] for r in w], row, 'writes_auroc')} "
+                             f"(chance 0.5)  p(own) {ci([r['p_true'] for r in w], row, 'writes_p')}  "
                              f"top-1 {ci([r['top1'] for r in w], row, 'writes_top1')}  (chance 0.25)")
             fw = [r for r in f if "top1" in r]
             if fw:  # firing poles with both tests: how many labels hold on each side

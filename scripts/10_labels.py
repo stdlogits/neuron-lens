@@ -684,6 +684,13 @@ nothing else: {"pick": "A"} (or B, C, D)."""
 
 
 def check(args) -> None:
+    if args.summary_only:  # the saved per-head scores, summarized again
+        result = json.loads((SUMMARY / f"labels_heads_{NAME}.json").read_text())
+        lines = summarize(result["heads"], result)
+        (SUMMARY / f"labels_heads_{NAME}.json").write_text(json.dumps(result, indent=1))
+        (SUMMARY / f"labels_heads_{NAME}.md").write_text("\n".join(lines) + "\n")
+        print("\n".join(lines))
+        return
     rows = load_heads().to_pylist()
     lab = {(r["layer"], r["head"]): r for r in pq.read_table(head_table("labels")).to_pylist()}
     tok = tokenizer()
@@ -762,14 +769,23 @@ def auroc(p: list[float], truth: list[int]) -> float:
 
 
 def summarize(per: dict, result: dict) -> list[str]:
-    """The card's section on the head labels, from the check."""
+    """The card's section on the head labels, from the check, by depth band (``arch.depth_bands``). The judge picks one
+    `writes` label of four, so its AUROC for the head's own label against the three others is 1 when it picks it and
+    1/3 when it picks another (the own label loses to that one and ties the other two): chance is 0.5."""
+    roles = arch.depth_bands(MODEL)
+    band_of = lambda hid: next(f"{r} L{lo}-L{hi}" for r, (lo, hi) in roles.items() if lo <= int(hid[1:].split("h")[0]) <= hi)
+    for hid, v in per.items():
+        v["band"] = band_of(hid)
+        if "writes" in v:
+            v["writes_auroc"] = 1.0 if v["writes"] else 1 / 3
+
     def stat(key, band=None):
         xs = [v[key] for v in per.values() if key in v and (band is None or v["band"] == band)]
         return (sum(xs) / len(xs), *boot(xs)) if xs else (float("nan"),) * 3
-    own, ctl, wr = stat("own"), stat("control"), stat("writes")
-    result["summary"] = {"firing": own, "control": ctl, "writes": wr,
-                         "bands": {b: {k: stat(k, b)[0] for k in ("own", "control", "writes")}
-                                   for b in sorted({v["band"] for v in per.values()}, key=lambda s: int(s[1:].split("-")[0]))}}
+    own, ctl, wr = stat("own"), stat("control"), stat("writes_auroc")
+    result["summary"] = {"firing": own, "control": ctl, "writes_auroc": wr, "writes_picked": stat("writes"),
+                         "bands": {b: {k: stat(k, b)[0] for k in ("own", "control", "writes_auroc")}
+                                   for b in dict.fromkeys(band_of(hid) for hid in sorted(per, key=lambda h: int(h[1:].split("h")[0])))}}
     lines = ["Every head described by Claude Haiku 5.5 from its card (batch API, effort low, no thinking):",
              "`fires` (where its output is large), `attends` (what it attends to there) and `writes` (what its",
              "output promotes), each with a confidence 0-1, and `note`. The cards show the head's pattern scores,",
@@ -782,11 +798,11 @@ def summarize(per: dict, result: dict) -> list[str]:
               f"the scorer separates them at AUROC {own[0]:.2f} [{own[1]:.2f}, {own[2]:.2f}]; a third head's labels on the "
               f"same contexts score {ctl[0]:.2f}."),
              (f"- **Writes:** given what the head's firings actually promote in context (`out_R_z`, not on the card), a "
-              f"judge picks its `writes` label out of four from its band {100 * wr[0]:.0f}% of the time "
-              f"[{100 * wr[1]:.0f}, {100 * wr[2]:.0f}] (chance 25%)."), "",
-             "| band | firing AUROC | control | writes picked |", "|---|---|---|---|"]
+              f"judge picks the head's `writes` label among four from its band: AUROC {wr[0]:.2f} [{wr[1]:.2f}, {wr[2]:.2f}] "
+              f"for its own label against the other three (chance 0.5)."), "",
+             "| band | firing AUROC | control | writes AUROC |", "|---|---|---|---|"]
     for b, v in result["summary"]["bands"].items():
-        lines.append(f"| {b} | {v['own']:.2f} | {v['control']:.2f} | {100 * v['writes']:.0f}% |")
+        lines.append(f"| {b} | {v['own']:.2f} | {v['control']:.2f} | {v['writes_auroc']:.2f} |")
     return lines
 
 
@@ -798,6 +814,7 @@ def torch_load(path):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=("cards", "pilot", "submit", "status", "collect", "retry", "shards", "check"))
+    ap.add_argument("--summary-only", action="store_true", help="check: re-summarize the saved head check, no batch")
     ap.add_argument("--side", choices=("neurons", "heads"), default="neurons")
     ap.add_argument("--thinking", choices=("on", "off"), default="off")
     ap.add_argument("--n", type=int, default=60, help="pilot requests")

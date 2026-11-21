@@ -286,10 +286,11 @@ value and keys come mostly from neurons, and the query a third to a half from ea
 
 **13. Labels from the evidence.** Claude explainers labelled 160 random poles from only their lens reads, only their top
 contexts, or both, never seeing steering. Scored by *detection* (can a fresh model, given the label, pick the pole's
-held-out top firings out from quiet text; AUROC, 0.5 chance), lens-only firing labels score 0.69; scored by whether a judge
-picks the pole's write label out of four from text steered by it, lens-only write labels are picked 51% of the time (71% in
-the motor band; chance 25%). Contexts lead for firing (0.85) and the lenses for writes (contexts: 41%), both on one card
-do best for writes (59%), and Claude Opus explains no better than Sonnet: the bottleneck is the evidence. The catalog's labels come from Claude Haiku on a lean card, the one
+held-out top firings out from quiet text; AUROC, 0.5 chance), lens-only firing labels score 0.69; scored by how a judge
+ranks the pole's write label against three others from text steered by it (AUROC again, against other labels rather than
+quiet text), lens-only write labels score 0.69 too (0.82 in the motor band). Contexts lead for firing (0.85) and the lenses
+for writes (contexts: 0.62), both on one card do best for writes (0.73), and Claude Opus explains no better than Sonnet:
+the bottleneck is the evidence. The catalog's labels come from Claude Haiku on a lean card, the one
 input and one write read the reading plan names for the pole's depth plus its top contexts, for six models at $303 in
 all; blind, they pick a pole's held-out firings out from another pole's at AUROC 0.82-0.88 (another pole's label:
 0.44-0.54). Asked to predict activations token by token, they correlate at 0.21 on Qwen3-8B (another pole's label: 0.00):
