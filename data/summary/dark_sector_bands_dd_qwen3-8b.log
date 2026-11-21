@@ -1,0 +1,32 @@
+09:58:42 sectors: K_out 161 109 60 192 328 423 502 521 518 610 716 817 907 979 1070 1114 1235 1383 1494 1715 1848 1920 2224 2386 2509 2609 2621 2688 2726 2763 2819 2876 2933 3047 3295 3367
+09:58:42 S-lens sectors: K 908 819 701 838 825 847 797 787 767 761 754 731 714 688 673 652 637 605 588 539 496 481 433 375 313 316 293 251 216 200 162 136 105 96 89 59
+09:58:42   their share in the R-lens's bright sector 0.05 0.02 0.02 0.05 0.10 0.13 0.15 0.15 0.18 0.18 0.24 0.29 0.32 0.34 0.38 0.38 0.44 0.49 0.57 0.63 0.67 0.69 0.74 0.73 0.74 0.72 0.68 0.64 0.47 0.52 0.36 0.30 0.17 0.24 0.43 0.78 (random: 0.04 0.03 0.01 0.05 0.08 0.10 0.12 0.13 0.13 0.15 0.17 0.20 0.22 0.24 0.26 0.27 0.30 0.34 0.36 0.42 0.45 0.47 0.54 0.58 0.61 0.64 0.64 0.66 0.67 0.67 0.69 0.70 0.72 0.74 0.80 0.82)
+09:58:42 doubly dark: dims 3027 3168 3335 3066 2943 2826 2797 2788 2811 2725 2626 2548 2475 2429 2353 2330 2224 2108 2014 1842 1752 1695 1439 1335 1274 1171 1182 1157 1154 1133 1115 1084 1058 953 712 670 | s_only 908 819 701 838 825 847 797 787 767 761 754 731 714 688 673 652 637 605 588 539 496 481 433 375 313 316 293 251 216 200 162 136 105 96 89 59
+09:58:42   quieter than chance to both (λ < 1) 3156 3233 3286 3185 3179 3171 3046 3018 3003 2997 2970 2958 2989 2980 2997 2992 2992 3003 3036 3030 3033 2999 2987 2966 2905 2887 2801 2774 2790 2719 2704 2697 2722 2667 2567 2384 | soft count Σ 1/(1+λ) 2865 2974 3027 2948 2947 2948 2835 2809 2804 2802 2782 2773 2800 2796 2806 2806 2799 2804 2805 2781 2758 2698 2638 2562 2489 2458 2379 2347 2340 2283 2253 2229 2231 2179 2105 2033
+09:58:42   dd's share in jd 0.98 0.99 0.99 0.99 0.97 0.96 0.97 0.97 0.98 0.97 0.96 0.95 0.94 0.93 0.92 0.91 0.90 0.88 0.89 0.88 0.87 0.88 0.86 0.86 0.86 0.85 0.86 0.87 0.88 0.88 0.87 0.86 0.85 0.83 0.80 0.83 (random: 0.74 0.77 0.81 0.75 0.72 0.69 0.68 0.68 0.69 0.67 0.64 0.62 0.60 0.59 0.57 0.57 0.54 0.51 0.49 0.45 0.43 0.41 0.35 0.33 0.31 0.29 0.29 0.28 0.28 0.28 0.27 0.26 0.26 0.23 0.17 0.16)
+09:58:58 clean         | NLL dclm 2.744 code 1.350 zh 3.236 chat 2.309 | ' Paris. The capital of Italy is Rome. The capital of Spain i'
+09:59:11 dark   L0     | NLL dclm 3.794 code 3.500 zh 5.549 chat 2.905 | ' Paris. The capital of Germany is Berlin. The capital of Ita'
+09:59:22 dd     L0     | NLL dclm 2.909 code 1.858 zh 3.669 chat 2.428 | ' Paris. The capital of Germany is Berlin. The capital of Ita'
+09:59:34 s_only L0     | NLL dclm 2.758 code 1.382 zh 3.281 chat 2.331 | ' Paris. The capital of France is Paris. The capital of Franc'
+09:59:46 rand_dd L0     | NLL dclm 5.181 code 4.323 zh 7.427 chat 4.234 | ' a country in Europe. It is known for its beautiful architec'
+09:59:58 dark   L1-8   | NLL dclm 4.155 code 3.110 zh 4.359 chat 3.334 | ' Paris. The capital of Germany is Berlin. The capital of Ita'
+10:00:10 dd     L1-8   | NLL dclm 3.459 code 2.568 zh 3.895 chat 2.890 | ' Paris. The capital of Germany is Berlin. The capital of Ita'
+10:00:22 s_only L1-8   | NLL dclm 2.779 code 1.447 zh 3.311 chat 2.381 | ' Paris. The capital of the region of Île-de-France is also P'
+10:00:34 rand_dd L1-8   | NLL dclm 6.144 code 5.125 zh 7.703 chat 5.588 | ' . The French Revolution is a historical event that took pla'
+10:00:46 dark   L9-20  | NLL dclm 3.258 code 2.152 zh 3.700 chat 2.688 | ' a city in the south of France, and the capital of the south'
+10:00:59 dd     L9-20  | NLL dclm 3.092 code 1.924 zh 3.526 chat 2.495 | ' a city in the south of France, and the capital of the Unite'
+10:01:10 s_only L9-20  | NLL dclm 2.827 code 1.518 zh 3.294 chat 2.348 | ' Paris. The capital of Italy is Rome. The capital of Germany'
+10:01:23 rand_dd L9-20  | NLL dclm 3.384 code 2.567 zh 3.826 chat 2.661 | ' à Paris, and the capital of the United states is Washington'
+10:01:35 dark   L21-35 | NLL dclm 3.517 code 2.255 zh 4.256 chat 2.757 | ' Paris. Which city is known for being the birthplace of jazz'
+10:01:47 dd     L21-35 | NLL dclm 3.251 code 2.091 zh 4.205 chat 2.873 | ' Paris. Which city is the capital of Germany? Also, what is '
+10:01:59 s_only L21-35 | NLL dclm 2.965 code 1.531 zh 3.383 chat 2.110 | ' Paris. The capital of Germany is Berlin. The capital of Ita'
+10:02:10 rand_dd L21-35 | NLL dclm 3.345 code 3.058 zh 4.850 chat 2.961 | ' Paris. The capital of France is Paris. The capital of Franc'
+10:02:23 dark   L1-35  | NLL dclm 6.441 code 9.678 zh 7.364 chat 6.035 | ' not a                                              '
+10:02:36 dd     L1-35  | NLL dclm 5.166 code 6.405 zh 5.517 chat 4.568 | ' a                                               '
+10:02:49 s_only L1-35  | NLL dclm 3.170 code 1.895 zh 3.631 chat 2.245 | ' a city that is also the name of a famous French painter. Wh'
+10:03:02 rand_dd L1-35  | NLL dclm 8.170 code 10.123 zh 11.505 chat 8.004 | ' a,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,'
+10:03:14 jd     L1-8   | NLL dclm 3.502 code 2.672 zh 3.935 chat 2.940 | ' Paris. The capital of Italy is Rome. The capital of Spain i'
+10:03:26 jd     L9-20  | NLL dclm 3.119 code 1.974 zh 3.555 chat 2.530 | ' a city in the south of France, and the capital of the Unite'
+10:03:39 jd     L1-35  | NLL dclm 5.116 code 6.940 zh 5.578 chat 4.657 | ' a                                               '
+10:03:52 rand_so L1-8   | NLL dclm 4.241 code 2.869 zh 6.863 chat 3.472 | ' Paris. The capital of Italy is Rome. The capital of SpainSp'
+10:04:04 rand_so L1-35  | NLL dclm 4.641 code 3.410 zh 7.752 chat 3.657 | ' Paris, and the capital of Paris is Paris. The capital of Fr'

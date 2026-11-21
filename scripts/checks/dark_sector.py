@@ -921,7 +921,7 @@ def sparse(n_docs: int, n_chat: int, per_doc: int) -> None:
         h.remove()
     H = [torch.cat(x) for x in H]
     P = pos.numel()
-    del model
+    del model, layers, hooks
     torch.cuda.empty_cache()
 
     nm = arch.names(MODEL)
