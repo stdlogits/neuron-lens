@@ -1,62 +1,63 @@
 # Findings
 
-What the catalog shows about the neurons and attention heads of Qwen3-8B (§1-§12, §17, §18, §21), Gemma 4 12B
-(§13-§16, in text, images and sound) and the rest of the Qwen3 family to 14B (§19, §20), and how far each way of reading them goes. Each section gives
-its setup, its results against controls, and its limits; the methods are in [design.md](design.md)
-and the overview in the [README](../README.md).
+What the catalog shows about the neurons and attention heads of Qwen3-8B, Gemma 4 12B (in text, images and sound) and the
+rest of the Qwen3 family to 14B, and how far each way of reading them goes. Each section gives its setup, its results
+against controls, and its limits; the methods are in [design.md](design.md) and the overview in the
+[README](../README.md). The sections run in seven parts:
 
-Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a
-pipeline stage (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in
-`data/summary/`, and figures are drawn by `scripts/11_figures.py`. Firings and token swaps are samples of what a unit does: a
-test against them says whether a read names that target, not whether the read is right (§4, §7).
+| | § | in one line |
+|---|---|---|
+| **I. The lenses and the corpus** | [§1](#1-the-lenses-stability-and-corpus-dependence) | both lenses' halves agree within 0.06; a chat-fitted lens changes tokens, not concepts or causal scores |
+| | [§2](#2-activations-over-15m-positions) | scale, near-silent L1, first-position L2-L3, language and code selectivity at the ends of the network |
+| **II. Reading a neuron from its weights** | [§3](#3-a-writes-lens-read-predicts-what-steering-it-does) | the R-lens read of a write predicts steering (r 0.45-0.50 at L4-L8, 0.9+ from L22), ahead of the J-lens |
+| | [§4](#4-one-firing-is-one-sample-of-a-write) | a write read is a pole's average push; before L21 a pole's firings don't predict each other |
+| | [§5](#5-prediction-and-suppression) | late poles fire before the word they promote; suppression from L32; two signs of one neuron |
+| | [§6](#6-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
+| | [§7](#7-the-input-side) | the S-lens names early neurons' tokens through L8, the R-lens read from L9; on SiLU's negative lobe a pole reads its up row |
+| | [§8](#8-what-each-read-names-and-which-read-to-use-where) | each read against the token under a firing, after it, or its drivers; the reading plans and the depth bands |
+| **III. Units in context** | [§9](#9-attention-sinks-the-outputs-temperature-and-entropy-neurons) | two null-space dimensions carry the attention sinks and set the output's temperature |
+| | [§10](#10-attention-heads-circuits-read-token-by-token) | a head's input reads with the S-lens; what each head copies and attends to, from the weights |
+| | [§11](#11-attention-heads-what-their-reads-name) | late heads write the next token; S-side reads are shared across a layer's heads |
+| | [§12](#12-what-feeds-a-unit-edges-and-sources) | weight edges rank every source's effect (ρ 0.88) but name a tenth of what drives a pole: co-firing does |
+| **IV. Describing units in words** | [§13](#13-labels-from-the-evidence) | labels from the lenses alone: firing AUROC 0.80, writes picked 65%; the catalog's labels, 0.82-0.88 on six models |
+| | [§14](#14-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
+| **V. A second model, three modalities** | [§15](#15-gemma-4-12b-the-text-catalog-in-a-second-model) | Gemma 4 12B reads like Qwen3-8B; a read that turns a covector into a vector needs the residual's metric |
+| | [§16](#16-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
+| | [§17](#17-one-concept-in-text-images-and-sound) | 4,382 poles keep their image label on every text test; 19 hold one concept across all three modalities |
+| | [§18](#18-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
+| **VI. Across Qwen3's sizes** | [§19](#19-the-qwen3-family-what-changes-with-size) | late reads hold while early ones fall with size; bases read like their siblings; what post-training changed |
+| | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B and 0.6B are width-pruned from the 8B and 1.7B: three lineages, not five sizes |
+| **VII. What the lenses miss** | [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the dark sector matters 300-5,700 times more than the lens predicts; what prompts differ in turns bright, and the rest is inert |
 
-**Terms.** A *pole* is one sign of a neuron's activation (SwiGLU activations take both), written
-`L8 n344 +`. Its *write* is `±W_down[:, n]`, its *read direction* `â ± b̂` (the gate and up rows).
-Its *top firings* are its strongest position in each of its 64 top documents (its 24 top documents in §3 and §4). The *bands* are cut from each model's reading
-plan (§8, `arch.depth_bands`): sensory, association, workspace and motor, for Qwen3-8B L0-L3, L4-L8, L9-L20 and L21-L35,
-for Gemma 4 12B L0-L19, L20-L32 and L33-L47 (no sensory band). Sections written before 2026-11-21 used Qwen3-8B's
-earlier five (L0-L8, L9-L12, L13-L20, L21-L27, L28-L35) and Gemma 4's quarters (L0-L11, …, L36-L47), and name the
-ranges they used. A *mismatched control* scores another unit of the same layer on this unit's
-tokens. *Kept tokens* are the tokens seen 5+ times in the activation corpora, without byte-fallback
-pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them.
+Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
+(`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in `data/summary/`, and figures are drawn by
+`scripts/11_figures.py`. Firings and token swaps are samples of what a unit does: a test against them says whether a read
+names that target, not whether the read is right (§4, §8).
 
-| § | in one line |
-|---|---|
-| [§1](#1-the-lenses-stability-and-corpus-dependence) | both lenses' halves agree within 0.06; a chat-fitted lens changes tokens, not concepts or causal scores |
-| [§2](#2-activations-over-15m-positions) | scale, near-silent L1, first-position L2-L3, language and code selectivity at the ends of the network |
-| [§3](#3-a-writes-lens-read-predicts-what-steering-it-does) | the R-lens read of a write predicts steering (r 0.45-0.50 at L4-L8, 0.9+ from L22), ahead of the J-lens |
-| [§4](#4-one-firing-is-one-sample-of-a-write) | a write read is a pole's average push, which steering confirms; before L21 a pole's firings don't predict each other |
-| [§5](#5-prediction-and-suppression) | late poles fire before the word they promote; suppression from L32; two signs of one neuron |
-| [§6](#6-the-input-side) | the S-lens names early neurons' tokens through L8, the R-lens read from L9 |
-| [§7](#7-what-each-read-names) | each read against the token under a firing, the token after it or its exact drivers, and what those targets can say |
-| [§8](#8-describing-neurons) | labels from the lenses alone: firing AUROC 0.80, writes picked 65%; Haiku labels every pole |
-| [§9](#9-attention-sinks-the-outputs-temperature-and-entropy-neurons) | two null-space dimensions carry the attention sinks and set the output's temperature |
-| [§10](#10-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
-| [§11](#11-attention-heads-circuits-read-token-by-token) | a head's input reads with the S-lens; what each head copies and attends to, from the weights |
-| [§12](#12-attention-heads-tests-and-labels) | late heads write the next token; a label for every head |
-| [§13](#13-gemma-4-12b-the-text-catalog-in-a-second-model) | Gemma 4 12B reads like Qwen3-8B: the S-lens names early inputs, write reads predict steering (r 0.97 at L36-L47); a read that turns a covector into a vector needs the residual's metric |
-| [§14](#14-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
-| [§15](#15-one-concept-in-text-images-and-sound) | 4,382 poles keep their image label on every text test; 19 hold one concept across all three modalities |
-| [§16](#16-attention-heads-in-image-and-audio-contexts) | single heads carry what an image shows into the text; sound is too weak to trace |
-| [§17](#17-direct-edges-between-neurons) | weight edges between poles rank every source's effect (ρ 0.88), but name a tenth of what drives a pole: co-firing does |
-| [§18](#18-what-a-write-adds-beyond-what-it-reads) | a write leans on its `up` row through L14, but the rest of it carries 84-100% of the steering effect |
-| [§19](#19-the-qwen3-family-what-changes-with-size) | across Qwen3 0.6B-14B, late reads hold while early ones fall with size: the S-lens's input reads between 28 and 36 layers, early steering at every step; bases' R-lens input reads trail only on the pooled null; what post-training changed |
-| [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B's and 0.6B's heads are the 8B's and 1.7B's, their neurons match a parent each and are ranked by its activation: three lineages, not five sizes |
-| [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the residual's dark sector, which the R-lens barely reads, matters 300-5,700 times more than the lens predicts; removed early it breaks form and frame, in the middle facts and comprehension, late the pieces of words; what two prompts differ in turns bright by L4-L12, and the dark rest of their difference is inert |
+**Terms.** A *pole* is one sign of a neuron's activation (SwiGLU activations take both), written `L8 n344 +`. Its *write*
+is `±W_down[:, n]`, its *read direction* `â ± b̂` (the gate and up rows). Its *top firings* are its strongest position in
+each of its 64 top documents, and `act_top`, its typical high activation, is the median of the first 24 (§3 and §4 use
+those 24). The *depth bands* are cut from each model's reading plan (§8): for Qwen3-8B, sensory L0-L3, association L4-L8,
+workspace L9-L20 and motor L21-L35; tables name the layer ranges they average over. A *mismatched control* scores another
+unit of the same layer on this unit's tokens. *Kept tokens* are the tokens seen 5+ times in the activation corpora,
+without byte-fallback pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them.
 
-## §1. The lenses: stability and corpus dependence
+## I. The lenses and the corpus
 
-**Setup.** Both lenses are fitted by `02_fit.py` on the first 1,000 rows of DCLM-shuffled, 128 tokens
-each, in bf16 with fp32 sums on one H100 (about 11.5 s a document per lens). The documents alternate
-between an even and an odd half; the split-half difference is `‖even − odd‖ / ‖mean‖` (Frobenius) per
-layer. Neuron-by-neuron agreement is from `checks/lens_compare.py` over 12 layers; the J-lens is
-Neuronpedia's (461 wikitext prompts).
+The two instruments the other sections use: lenses fitted on 1,000 web documents, and activations over 15M positions of
+four kinds of text.
 
-**The halves agree.** The R-lens's split-half difference is 0.04-0.06 at L0-L18, 0.03 at L19-L22, 0.02
-at L23-L27 and 0.01 or less from L28, as expected from two documents' estimates differing by 65%
-(`0.65/√500` ≈ 0.03). Its `mid` target is within 0.01 of that; the S-lens is 0.00-0.05 (`mid`) and
-0.01-0.05 (`out`), highest at L16-L20. Neuron by neuron, the halves' write reads share the top token
-for 89-99% of neurons:
+### §1. The lenses: stability and corpus dependence
+
+**Setup.** Both lenses are fitted by `02_fit.py` on the first 1,000 rows of DCLM-shuffled, 128 tokens each, in bf16 with
+fp32 sums on one H100 (about 11.5 s a document per lens). The documents alternate between an even and an odd half; the
+split-half difference is `‖even − odd‖ / ‖mean‖` (Frobenius) per layer. Neuron-by-neuron agreement is from
+`checks/lens_compare.py` over 12 layers; the J-lens is Neuronpedia's (461 wikitext prompts).
+
+**The halves agree.** The R-lens's split-half difference is 0.04-0.06 at L0-L18, 0.03 at L19-L22, 0.02 at L23-L27 and
+0.01 or less from L28, as expected from two documents' estimates differing by 65% (`0.65/√500` ≈ 0.03). Its `mid`
+target is within 0.01 of that; the S-lens is 0.00-0.05 (`mid`) and 0.01-0.05 (`out`), highest at L16-L20. Neuron by
+neuron, the halves' write reads share the top token for 89-99% of neurons:
 
 | layer | halves: top-1 agree | halves: top-10 overlap | R-lens vs J-lens: top-1 agree |
 |---|---|---|---|
@@ -70,21 +71,20 @@ for 89-99% of neurons:
 ![Split-half difference of each lens by layer](figures/04_lens_reliability.png)
 
 - **The R-lens and J-lens disagree most where the R-lens predicts steering better** (L4-L23, §3).
-- **RelP's rules lower the noise.** On a Qwen3-0.6B prototype of the S-lens, fitted per offset on 12
-  documents, RelP halved the split-half noise of the true-gradient version (L7: 0.15 against 0.26)
-  and fit exact token footprints slightly better (R² +0.02-0.03 from L1). On 8B, RelP beats the true
-  derivative on both sides (§3, §6).
-- **Early writes share one direction.** At L2 the R-lens's top singular direction holds 0.78 of
-  `J_L`'s energy and 0.95 of a median write (0.27 at L5, 0.02 or less from L23). It reads `the, a, in,
-  and` one way and code tokens (`startIndex`) the other. The halves agree there (0.89), so this is the
-  early Jacobian, not noise; early neurons are read from their inputs instead (§6).
-- **Raw reads have hub tokens**, the same few tokens at the top of many poles' reads: at L1, ` the`,
-  ` in` and ` and` sit in 30-31% of write reads' top 10s. Layer-contrastive reads (`_z`), which
-  z-score each token across the layer's poles, remove them.
+- **RelP's rules lower the noise.** On a Qwen3-0.6B prototype of the S-lens (12 documents), RelP halved the split-half
+  noise of the true-gradient version (L7: 0.15 against 0.26) and fit exact token footprints slightly better (R² +0.02-0.03
+  from L1). On Qwen3-8B, RelP beats the true derivative on both sides (§3, §7).
+- **Early writes share one direction.** At L2 the R-lens's top singular direction holds 0.78 of `J_L`'s energy and 0.95
+  of a median write (0.27 at L5, 0.02 or less from L23). It reads `the, a, in, and` one way and code tokens
+  (`startIndex`) the other. The halves agree there (0.89), so this is the early Jacobian, not noise; early neurons are
+  read from their inputs instead (§7).
+- **Raw reads have hub tokens**, the same few tokens at the top of many poles' reads: at L1, ` the`, ` in` and ` and`
+  sit in 30-31% of write reads' top 10s. Layer-contrastive reads (`_z`), which z-score each token across the layer's
+  poles, remove them.
 
-**The corpus changes tokens, not concepts.** An R-lens fitted the same way on 500 UltraChat
-conversations in the chat template (split-half 0.05-0.07 early, 0.01 late) was compared with the
-DCLM lens's 500-document halves, so both sides carry the same noise:
+**The corpus changes tokens, not concepts.** An R-lens fitted the same way on 500 UltraChat conversations in the chat
+template (split-half 0.05-0.07 early, 0.01 late) was compared with the DCLM lens's 500-document halves, so both sides
+carry the same noise:
 
 | layer | top-1 agree: chat vs DCLM (DCLM halves) | top-10 overlap |
 |---|---|---|
@@ -95,25 +95,22 @@ DCLM lens's 500-document halves, so both sides carry the same noise:
 | L24 | 0.78 (0.96) | 0.84 (0.97) |
 | L34 | 0.96 (1.00) | 0.96 (1.00) |
 
-- **Every causal score is the same.** Steering prediction (§3) is within 0.04 at every layer but L3
-  (0.06), ablation identical, persona names (§10) equal from L6 (the DCLM lens is better at L0-L5: 15%
-  of names in the top 10 against 9%), fused personas within 0.02. The chat lens is no better on
-  chat-format tests.
-- **Clear neurons read the same concept in another order** (L8 n1931 +: 圣经, Bible, 基督徒,
-  Scripture under both). **Weak, diffuse writes drift toward each corpus's register:** markdown bold
-  and `...⏎` under chat, `...⏎⏎` and curly quotes under DCLM. Where a read's top probability is low,
-  register tokens are the lens's, not the neuron's.
-- The DCLM lens is the lens of record.
+- **Every causal score is the same.** Steering prediction (§3) is within 0.04 at every layer but L3 (0.06), ablation
+  identical, persona names (§14) equal from L6 (the DCLM lens is better at L0-L5: 15% of names in the top 10 against 9%),
+  fused personas within 0.02. The chat lens is no better on chat-format tests.
+- **Clear neurons read the same concept in another order** (L8 n1931 +: 圣经, Bible, 基督徒, Scripture under both).
+  **Weak, diffuse writes drift toward each corpus's register:** markdown bold and `...⏎` under chat, `...⏎⏎` and curly
+  quotes under DCLM. Where a read's top probability is low, register tokens are the lens's, not the neuron's.
 
 ![A chat-fitted lens against the DCLM halves](figures/05_chat_lens.png)
 
-**Limits.** One fitting corpus of record and 128-token documents. Split-half agreement measures
-stability within a corpus, not freedom from it; the chat lens is one alternative.
+**Limits.** One fitting corpus of record and 128-token documents. Split-half agreement measures stability within a
+corpus, not freedom from it; the chat lens is one alternative.
 
-## §2. Activations over 15M positions
+### §2. Activations over 15M positions
 
-**Setup.** `06_activations.py`, one bf16 pass with eager attention (68 minutes on an RTX 4090; this release reran it on an H100 and keeps each pole's top 64 firings):
-every document of four slices, up to 256 tokens, from position 1, 15.4M positions in all.
+**Setup.** `06_activations.py`, one bf16 pass with eager attention (about 70 minutes on an RTX 4090) over every document
+of four slices, up to 256 tokens each, from position 1: 15.4M positions in all.
 
 | slice | source | documents | positions |
 |---|---|---|---|
@@ -122,10 +119,9 @@ every document of four slices, up to 256 tokens, from position 1, 15.4M position
 | code | codeparrot-clean Python | 7,990 | 1.98M |
 | chat | UltraChat-200k `test_sft`, in the chat template | 8,000 | 2.04M |
 
-Position 0 attends only to itself, so every kept token run alone gives each pole's exact value
-there. `act_top` is the median of a pole's 24 top firings; `rate` is the share of positions past
-`act_top / 4`, from exact counts. Checked on Qwen3-0.6B against an unpadded fp32 brute force: counts
-exact, sums within 0.2%, top values within 0.9%.
+Position 0 attends only to itself, so every kept token run alone gives each pole's exact value there. `rate` is the
+share of positions past `act_top / 4`, from exact counts. Checked on Qwen3-0.6B against an unpadded fp32 brute force:
+counts exact, sums within 0.2%, top values within 0.9%.
 
 | layer | `act_top` | quiet (`act_top` < 0.05) | fires harder at position 0 than anywhere (> 2×) | zh-selective | code-selective |
 |---|---|---|---|---|---|
@@ -145,37 +141,40 @@ Selective: the pole's rate in that slice is at least 10× every other slice's, a
 ![Activation scale and quiet poles by layer](figures/06_activations.png)
 
 - **Scale is flat at 3-5 from L5 to L21, then grows tenfold to L35**, with the residual stream's norm.
-- **L1 is mostly near-silent:** 56% of its poles stay under 0.05 everywhere, position 0 included,
-  like the dead early neurons Voita et al. (2023) found in OPT (there zero under ReLU; here near zero).
-- **L2 and L3 work at position 0.** 62% and 51% of their poles fire there more than twice as hard as
-  at any later position (L2: median 3.7 there against `act_top` 0.011). They do not start the
-  attention sink (zeroing their output there leaves it, §9), and matter little downstream (the loss
-  rises 0.5 nats on the token predicted at position 0, 0.01 from the third). What they compute is open.
-- **Language and code features sit at the ends of the network.** Chinese-selective poles are 1.6-10% of
-  L0-L4 (the most at L1), 1.8-3.7% of L24-L35 and 0.4-0.8% of L6-L20, the U shape reported for language-specific neurons
-  (Tang et al. 2024). Code-selective poles are 3.8-5.6% of L10-L30. L29 n8134 + fires at
-  45% of Chinese positions and under 0.04% elsewhere: a language identity, not a word.
-- **Chat-selective poles read as ChatGPT's register**, since UltraChat was generated by ChatGPT on
-  both sides: L3 n6404 − fires on " delve" and " adhere", in user turns too; L28 n11134 + peaks on the
-  year in "As of 20⟦2⟧1", the knowledge-cutoff hedge.
-- **Rare poles are counted exactly.** An earlier 8,192-position sample put `rate` at 0 for 18.6% of
-  poles; exact counts leave 0.65%, all silent. L8 n344 + (owls) fires at 1.8 per 100,000 positions.
-- **`act_top` is a tail statistic** and grows with the corpus (1.4-1.8× from a 7,000-document pilot):
-  compare poles within one corpus.
+- **L1 is mostly near-silent:** 56% of its poles stay under 0.05 everywhere, position 0 included, like the dead early
+  neurons Voita et al. (2023) found in OPT (there zero under ReLU; here near zero).
+- **L2 and L3 work at position 0.** 62% and 51% of their poles fire there more than twice as hard as at any later
+  position (L2: median 3.7 there against `act_top` 0.011). They do not start the attention sink (zeroing their output
+  there leaves it, §9), and matter little downstream (the loss rises 0.5 nats on the token predicted at position 0, 0.01
+  from the third). What they compute is open.
+- **Language and code features sit at the ends of the network.** Chinese-selective poles are 1.6-10% of L0-L4 (the most
+  at L1), 1.8-3.7% of L24-L35 and 0.4-0.8% of L6-L20, the U shape reported for language-specific neurons (Tang et al.
+  2024). Code-selective poles are 3.8-5.6% of L10-L30. L29 n8134 + fires at 45% of Chinese positions and under 0.04%
+  elsewhere: a language identity, not a word.
+- **Chat-selective poles read as ChatGPT's register**, since UltraChat was generated by ChatGPT on both sides: L3 n6404 −
+  fires on " delve" and " adhere", in user turns too; L28 n11134 + peaks on the year in "As of 20⟦2⟧1", the
+  knowledge-cutoff hedge.
+- **Rare poles are counted exactly:** `rate` is 0 for 0.65% of poles, all silent, and L8 n344 + (owls) fires at 1.8 per
+  100,000 positions.
+- **`act_top` is a tail statistic** and grows with the corpus (1.4-1.8× from 7,000 documents to 64,000): compare poles
+  within one corpus.
 
-**Limits.** 256 tokens per document under-samples long-range features, and top firings are one per
-document. Only the DCLM slice is a uniform sample; the zh slice is largely traditional script, code is
-Python only, and chat is one synthetic dataset.
+**Limits.** 256 tokens per document under-samples long-range features, and top firings are one per document. Only the
+DCLM slice is a uniform sample; the zh slice is largely traditional script, code is Python only, and chat is one
+synthetic dataset.
 
-## §3. A write's lens read predicts what steering it does
+## II. Reading a neuron from its weights
 
-**Setup** (`checks/causal_lens.py`, MPS, bf16). 32 random neurons per layer plus the named ones
-(`neuron_lens/known.py`), 1,194 neurons, both poles. **Steering** adds `±α·W_down[:, n]` to layer `L`'s
-MLP output at positions 16-63 of 16 DCLM documents of 64 tokens, at 1× and 4× the pole's typical top
-activation (`act_top` in the `acts` table, the median of its 24 top firings), and records the mean
-change in log-probabilities. **Score:** Pearson r over the tokens seen 5+ times between that change and
-a lens's logits for the write. **Control:** the next random neuron's read from the same layer. Medians
-over the random picks (64 poles a layer).
+Whether a lens read says what a neuron does: the write side against steering and firings (§3-§6), the input side
+against the tokens that drive it (§7), and which read to trust at each depth (§8).
+
+### §3. A write's lens read predicts what steering it does
+
+**Setup** (`checks/causal_lens.py`, MPS, bf16). 32 random neurons per layer plus the named ones (`neuron_lens/known.py`),
+1,194 neurons, both poles. **Steering** adds `±α·W_down[:, n]` to layer `L`'s MLP output at positions 16-63 of 16 DCLM
+documents of 64 tokens, at 1× and 4× the pole's `act_top`, and records the mean change in log-probabilities. **Score:**
+Pearson r over the tokens seen 5+ times between that change and a lens's logits for the write. **Control:** the next
+random neuron's read from the same layer. Medians over the random picks (64 poles a layer).
 
 | layer | logit lens | J-lens | R-lens | control |
 |---|---|---|---|---|
@@ -191,57 +190,47 @@ over the random picks (64 poles a layer).
 
 ![Lens reads against steering and ablation](figures/07_steering.png)
 
-- **A read of one write vector, with no forward pass, predicts what adding it does downstream**. The
-  R-lens reaches 0.45-0.50 at L4-L8, 0.65-0.75 at L12-L16 and 0.9 or more from L22; controls stay
-  within ±0.04.
-- **The R-lens leads the J-lens from L4 to L23** by 0.03-0.13 (L7: 0.50 against 0.37), and in top-10
-  overlap. The J-lens leads at L0, they tie at L1-L3 and converge from L24. The logit lens, which
-  ignores the later layers, trails until about L20.
-- **Nearly every pole has a specific effect when amplified.** From L5, 94-100% of random poles' writes
-  predict their own steering effect (r past 0.24, the 99th percentile of mismatched pairs pooled over
-  layers), against 0-6% of mismatched pairs. L1-L3 are lower (32-58% of the poles that fire pass; median
-  r 0.08 at L1 and 0.14 at L2) because their poles barely fire, so their doses are tiny.
-- **Named concept poles show the R-lens's largest leads:** L8 n5315 − ("nature") at r 0.60 against
-  0.14 for the J-lens (at 4×); steering it raises ` trees`, ` vegetation`, ` gardens` and 植物, while the
-  J-lens reads its write as brackets. Named poles are otherwise no more readable than random ones.
-- **Ablation where a pole fires** (zeroing the neuron at its peak in its first 8 top documents, the
-  `acts` table's `top_doc` and `top_pos`) agrees far less before L21 (r under 0.15 to L16, 0.87 at L32),
-  and the lenses tie there. §4 explains why.
+- **A read of one write vector, with no forward pass, predicts what adding it does downstream.** The R-lens reaches
+  0.45-0.50 at L4-L8, 0.65-0.75 at L12-L16 and 0.9 or more from L22; controls stay within ±0.04.
+- **The R-lens leads the J-lens from L4 to L23** by 0.03-0.13 (L7: 0.50 against 0.37), and in top-10 overlap. The J-lens
+  leads at L0, they tie at L1-L3 and converge from L24. The logit lens, which ignores the later layers, trails until
+  about L20.
+- **Nearly every pole has a specific effect when amplified.** From L5, 94-100% of random poles' writes predict their own
+  steering effect (r past 0.24, the 99th percentile of mismatched pairs pooled over layers), against 0-6% of mismatched
+  pairs. L1-L3 are lower (32-58% of the poles that fire pass; median r 0.08 at L1 and 0.14 at L2) because their poles
+  barely fire, so their doses are tiny.
+- **Named concept poles show the R-lens's largest leads:** L8 n5315 − ("nature") at r 0.60 against 0.14 for the J-lens
+  (at 4×); steering it raises ` trees`, ` vegetation`, ` gardens` and 植物, while the J-lens reads its write as brackets.
+  Named poles are otherwise no more readable than random ones.
+- **Ablation where a pole fires** (zeroing the neuron at its peak in its first 8 top documents) agrees far less before L21
+  (r under 0.15 to L16, 0.87 at L32), and the lenses tie there. §4 explains why.
 
-**Limits.** 16 held-out DCLM documents of 64 tokens, the lens corpus's source (the chat lens ties, §1).
-Pearson r over 100k tokens is dominated by small changes; the top-10 overlap complements it. bf16 rounds
-weak poles' writes partly away, so the ablation numbers are lower bounds (§4), and weak effects depend
-on the device: re-run on an RTX 4090 at the same firings (390 poles of six layers), ablations measured
-on MPS reproduce at a median r of 0.997 for the strongest quarter of effects and 0.55 for the weakest.
-An earlier version of this sample took its doses and ablation sites from a 6,999-document pilot of the
-activation pass that was not released ([issue #2](https://github.com/stdlogits/neuron-lens/issues/2));
-measured again from the released tables, steering at 1× moved by 0.02 or less except at L1 (0.15 to
-0.08), at 4× (doses now about 1.5× larger) by up to 0.08, and ablation by 0.05 or less.
-`causal/causal.pt` now holds every input it was measured from, `top_doc` and `top_pos` included.
+**Limits.** 16 held-out DCLM documents of 64 tokens, the lens corpus's source (the chat lens ties, §1). Pearson r over
+100k tokens is dominated by small changes; the top-10 overlap complements it. bf16 rounds weak poles' writes partly away,
+so the ablation numbers are lower bounds (§4), and weak effects depend on the device: rerun on an RTX 4090 at the same
+firings (390 poles of six layers), the ablations reproduce at a median r of 0.997 for the strongest quarter of effects and
+0.55 for the weakest.
 
-## §4. One firing is one sample of a write
+### §4. One firing is one sample of a write
 
 Steering adds a pole's write at every position of neutral text and reads off its average effect. A firing is one
 context. How much of what a write does can one firing show?
 
-**The token after a firing is a narrow test of a write.** For every pole, §7 scores whether its write read promotes the
-tokens that follow its top firings. Before L22, 1-4% of poles do (net of chance); from L23 it rises to 31-32% at L28-L29,
-and is 17-25% at L32-L35, where suppression takes over (§5). The same write reads predict steering for 94-100% of poles from
-L5 (§3). One read, two results: the difference is in what each test asks.
+**The token after a firing is a narrow test of a write.** For every pole, §8 scores whether its write read promotes the
+tokens that follow its top firings. Before L22, 1-4% of poles do (net of chance); from L23 it rises to 31-32% at
+L28-L29, and is 17-25% at L32-L35, where suppression takes over (§5). The same write reads predict steering for 94-100%
+of poles from L5 (§3). One read, two results: the difference is in what each test asks.
 
 ![Amplified against in context](figures/08_amplified_vs_in_context.png)
 
-**Per-context linearization** (`checks/context_linearity.py`; one H100, fp32 with TF32 matmuls, 57
-minutes). §3's random poles at their top firings, the strongest position in each of their 24 top
-documents (the `acts` table's `top_doc`, `top_pos`, `top_val`), scored where they fired at least twice
-(2,290 of 2,304 poles). At each firing, one batch of four rows multiplies the neuron's activation `a`
-there by 1, 0, 1.25 and 0.75: the effect of removing the firing (clean − removed) and its first-order
-effect `a·∂logp/∂a` (the central difference of the last two, over 0.5), each a change in
-log-probabilities summed over the firing position and the next 8. Correlations are Pearson r over the
-kept tokens; per-firing values are a pole's median over its firings, and the table gives medians over
-poles. "One context vs the pole's other 23" compares a firing's first-order effect with the mean of the
-pole's other firings'; steering is §3's at 1×. The measurement used the top firings of an earlier
-activation pass over the same documents, which the released `acts` match up to bf16 rounding.
+**Per-context linearization** (`checks/context_linearity.py`; one H100, fp32 with TF32 matmuls). §3's random poles at
+their top firings, the strongest position in each of their 24 top documents, scored where they fired at least twice
+(2,290 of 2,304 poles). At each firing, one batch of four rows multiplies the neuron's activation `a` there by 1, 0, 1.25
+and 0.75: the effect of removing the firing (clean − removed) and its first-order effect `a·∂logp/∂a` (the central
+difference of the last two, over 0.5), each a change in log-probabilities summed over the firing position and the next 8.
+Correlations are Pearson r over the kept tokens; per-firing values are a pole's median over its firings, and the table
+gives medians over poles. "One context vs the pole's other 23" compares a firing's first-order effect with the mean of the
+pole's other firings'; steering is §3's at 1×.
 
 | band | removed vs first-order | one context vs the pole's other 23 | lens vs one context | lens vs the mean of 24 | steering vs the mean firing effect | steering vs lens |
 |---|---|---|---|---|---|---|
@@ -255,28 +244,28 @@ Every control (another pole's values) is within 0.01 of zero.
 
 ![Per-context linearization](figures/09_context_linearity.png)
 
-- **A firing's effect is close to linear:** removing it does what its first-order effect says
-  (0.92-1.00; L1-L2 are noise, since their poles barely fire).
-- **Before L21 a pole's firings don't predict each other.** The same pole firing equally hard pushes the logits
-  different ways in different contexts: one context's effect correlates with the mean of its other
-  23 at 0.05-0.11, and 12 contexts against 12 others reach only 0.16-0.27. From L28 the effect is
-  nearly the same everywhere (0.78; 0.94 split-half).
-- **The lens reads the shared part.** Against one context, the weight-only read gets 60-85% of the
-  correlation the pole's own other firings get, in every band.
-- **Lens and steering agree with each other, not with firings.** Before L21 the lens predicts steering
-  at 0.40-0.76, while steering predicts the pole's mean firing effect at 0.08-0.29. From L28 all agree.
-- **Precision matters.** In bf16 a weak pole's write partly rounds away in the residual: on five test
-  neurons, removed against first-order was r 0.05-0.77 in bf16 and 0.83-0.99 in fp32.
+- **A firing's effect is close to linear:** removing it does what its first-order effect says (0.92-1.00; L1-L2 are noise,
+  since their poles barely fire).
+- **Before L21 a pole's firings don't predict each other.** The same pole firing equally hard pushes the logits different
+  ways in different contexts: one context's effect correlates with the mean of its other 23 at 0.05-0.11, and 12 contexts
+  against 12 others reach only 0.16-0.27. From L28 the effect is nearly the same everywhere (0.78; 0.94 split-half).
+- **The lens reads the shared part.** Against one context, the weight-only read gets 60-85% of the correlation the pole's
+  own other firings get, in every band.
+- **Lens and steering agree with each other, not with firings.** Before L21 the lens predicts steering at 0.40-0.76, while
+  steering predicts the pole's mean firing effect at 0.08-0.29. From L28 all agree.
+- **Precision matters.** In bf16 a weak pole's write partly rounds away in the residual: on five test neurons, removed
+  against first-order was r 0.05-0.77 in bf16 and 0.83-0.99 in fp32.
 
 **What this means.** The lens and steering agree because both average over contexts. Before L21, what a pole does at one
 firing is mostly specific to that context, which no single vector, from a lens or from steering, can carry; the pole's own
-other firings predict it little better than the read does, so this is a fact about the model and not the lens. A write read is
-the pole's average push. A firing is one context's share of it, and from L28, where the context stops mattering, the two agree.
+other firings predict it little better than the read does, so this is a fact about the model and not the lens. A write
+read is the pole's average push. A firing is one context's share of it, and from L28, where the context stops mattering,
+the two agree.
 
-**Limits.** 32 random neurons a layer; a 9-position window misses later effects; Pearson r weighs
-all tokens alike; TF32 makes weak early poles' values lower bounds.
+**Limits.** 32 random neurons a layer; a 9-position window misses later effects; Pearson r weighs all tokens alike; TF32
+makes weak early poles' values lower bounds.
 
-## §5. Prediction and suppression
+### §5. Prediction and suppression
 
 **Setup** (`checks/side_agreement.py`; no model). For each pole's top firings, the token after
 the peak. **Predict:** the share of firings whose next token is in the write read's top 10.
@@ -325,23 +314,90 @@ same layer and sign.
 shares are lower bounds. A bottom-10 token is a directional association, not a measured suppression
 after later layers.
 
-## §6. The input side
+### §6. What a write adds beyond what it reads
 
-Early neurons are best read from what drives them. This section asks which weight-only read names
-those tokens, at which depth.
+If MLPs mainly amplified what attention brings them, a neuron's write would point along what it reads. [Matthew
+Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) questioned that, and suggested reading the part of an output
+orthogonal to its input.
+
+**Setup** (`checks/write_parts.py`; Qwen3-8B, MPS, fp32). Weights, 512 random neurons a layer: the cosine of a neuron's
+write with its gate and up rows, and the top 12 of the R-lens read of the write, orthogonal to the read direction `â ± b̂`
+or to the whole gate-up plane (`neurons.orthogonal_write`). Census, §3's random picks, 16 neurons a layer at even layers
+L4-L34, both poles (511 live poles): the pole's write added at positions 16+ of 16 documents at 1× `act_top` (§3's
+protocol), split into the part along `â ± b̂` and the rest; and removing the same parts of real firings (8 top firings, 8
+positions after each). Blind Sonnet ratings of two token lists per pole (same concept, related but distinct, different, or
+unclear for lack of a theme), with shuffled pairs mixed in; the second rater judged the orthogonal-to-read-direction list
+and the orthogonal-to-plane list for the same poles together. Pairs, keys and ratings are in `data/summary/write_parts/`.
+
+| layer | `cos(w, up)` | `\|cos(w, gate)\|` | the write's top 12 kept when orthogonalized to the plane: Euclidean / in the metric |
+|---|---|---|---|
+| L6 | +0.35 | 0.06 | 0.57 / 0.27 |
+| L10 | +0.55 | 0.13 | 0.44 / 0.14 |
+| L14 | +0.45 | 0.14 | 0.46 / 0.19 |
+| L18 | +0.29 | 0.20 | 0.49 / 0.25 |
+| L22 | +0.26 | 0.14 | 0.53 / 0.37 |
+| L26 | +0.12 | 0.09 | 0.75 / 0.68 |
+| L30 | −0.02 | 0.06 | 0.85 / 0.84 |
+| L34 | −0.17 | 0.05 | 0.69 / 0.70 |
+
+- **The self-alignment is with `up`.** Through L14 a neuron's write leans on the direction its `up` row carries; the gate
+  row's cosine is small. At L18-L22 the two sizes close; by L30 the `up` alignment is gone, and it reverses at the last
+  layers. Subtracting only the read direction leaves half of this in, which is why the catalog removes the plane.
+  `cos_write_up`, `cos_write_gate` keep it per pole.
+- **Effect sizes.** Steering, medians by band: the orthogonal part's effect is 84-100% of the whole write's, the along-read
+  part's 8-34%; `r(whole, orth)` 0.94-1.00. `r(along, orth)` is about 0 at every depth, but any two orthogonal vectors would
+  tend to that, and no random-split control was run.
+- **Meaning, blind.** Orthogonal part against the pole's own read, per rater, among 240 real poles (same / related /
+  different / unclear): rater 1, L4-L20 18/5/5/116, L22-L34 10/24/5/57; rater 2, L4-L20 16/8/18/102, L22-L34 10/22/6/58;
+  orthogonal to the plane (rater 2), 18/8/14/104 and 10/21/6/59; shuffled pairs 0/3/6/51 and 0/0/16/44. The move to a
+  related concept from L22 replicates; before it the part is as often unrelated as the same concept, and rarely related.
+  Removing either part of real firings is too noisy for this: 83% of those lists are unclear.
+- **Which kind of related.** Some late pairs are concept shifts (L22 n1988 +: faced, confronted → trying, navigating);
+  others are collocates of a next word (L30 n165 +: dismantle → apart). `L21 n1180 −` reads *women* and writes women, wives
+  and husbands; with what it reads removed, its write reads parenting, childbirth and family education (育儿, 生育, 家庭教育).
+- **In the residual's metric** (§15). The measurements above split the write in the raw basis, removing the parts along
+  the gate and up rows themselves. The catalog's `write_orth_*` remove the rows as vectors, `s² ⊙ a` and `s² ⊙ b`
+  (`neurons.orthogonal_write`): still a write neither row reads, with a different part taken out. The cosines move by 0.02
+  at most, but the rest of the write keeps less of what the whole write's R-lens read names through L22 (the last column,
+  over every `+` pole), and the two splits agree from L26. The massive-activation coordinates, where `s²` reaches 10⁵× its
+  median, don't cause it: clipping `s²` at its 99th percentile changes the kept share by 0.02 at most. In the census,
+  `write_orth_R` passes for 23% of L28-L35's poles (Euclidean: 25%; §8). The steering and blind ratings were not rerun
+  with the metric's split.
+
+**How much a pole amplifies** (`parallel`, `orthogonal` in the `firings` table, `17_firings.py`; design.md): the factor a
+firing adds along what its neuron reads, and what it adds off that direction, on the same scale. Medians over poles that
+aren't quiet, Qwen3-8B by band (L0-L8, L9-L12, L13-L20, L21-L27, L28-L35): `parallel` +0.45, +0.55, +0.29, +0.13 and
+−0.06 (below zero for 12%, 7%, 21%, 26% and 71% of poles), `orthogonal` 1.0-2.1. Mid-network poles amplify the part they
+read, and the last layers suppress it mildly. Gemma 4 by quarter: `parallel` +0.01, +0.22, +0.19, +0.01 (below zero for
+45%, 22%, 20%, 44%); its `orthogonal`, 12-67, carries the post-MLP norm's weights and doesn't compare across models. In
+high dimension any write sits mostly off a given direction, so the sign and size of `parallel` are the informative part;
+no random-direction control was run.
+
+**Reads at the firings.** The same table reads what the residual holds where a pole fires (`before`), the layer's MLP
+output there (`mlp`) and the model's prediction (`pred`). Of the top 16 tokens a pole's steering promotes, the share in
+each read's top 16 (`checks/firing_reads.py`; controls 0.03 or less): Qwen3-8B L21-L35, `write_R` 0.60-0.82, `mlp_R`
+0.18-0.21, the residual after the layer 0.09-0.11, `before_R` 0.05; Gemma 4 12B L24-L47, 0.41-0.68, 0.11-0.14, 0.08,
+0.05. A read of the residual after the layer, the sum of `before` and `mlp`, lands between them, so the table doesn't
+keep it.
+
+**Limits.** One model; a rater per comparison and many unclear lists, so the counts describe poles legible on both sides.
+The read direction is a heuristic, and the lens read of a pole's input at early layers is uninformative for many (§7).
+
+### §7. The input side
+
+Early neurons are best read from what drives them. This section asks which weight-only read names those tokens, at which
+depth.
 
 **Setup.**
-- **The reads** (`08_reads.py`) of a pole's read direction `c = â ± b̂`: `read_S`, the S-lens to the
-  MLP input, scores token `v` by `c · K_L (W_E[v] − mean(W_E))` (which input tokens drive the pole);
-  `read_R`, the R-lens from the MLP input (what the residual says when it drives the pole), of the read direction made a
-  vector by the residual's metric (§13); each also
-  layer-contrastive (`_z`). Gate and up rows are nearly orthogonal (median cosine 0.00 ± 0.005 at
-  every layer, except L2), so each pole has a distinct direction.
-- **Exact drivers** (`07_drivers.py`): every kept token at position 24 of 8 real documents (4 web, 2
-  code, 2 chat), followed by the documents' own next 16 tokens; per pole, the 64 tokens with the
-  largest activation at the token, and summed over the 16 after. An fp32 rerun through L9 shares
-  98-99% of a pole's top 20 on average at the token (94-99% summed; `checks/drivers_precision.py`);
-  later layers are unchecked.
+- **The reads** (`08_reads.py`) of a pole's read direction `c = â ± b̂`: `read_S`, the S-lens to the MLP input, scores
+  token `v` by `c · K_L (W_E[v] − mean(W_E))` (which input tokens drive the pole); `read_R`, the R-lens from the MLP input
+  (what the residual says when it drives the pole), of the read direction made a vector by the residual's metric (§15);
+  each also layer-contrastive (`_z`). Gate and up rows are nearly orthogonal (median cosine 0.00 ± 0.005 at every layer,
+  except L2), so each pole has a distinct direction.
+- **Exact drivers** (`07_drivers.py`): every kept token at position 24 of 8 real documents (4 web, 2 code, 2 chat),
+  followed by the documents' own next 16 tokens; per pole, the 64 tokens with the largest activation at the token, and
+  summed over the 16 after. An fp32 rerun through L9 shares 98-99% of a pole's top 20 on average at the token (94-99%
+  summed; `checks/drivers_precision.py`); later layers are unchecked.
 
 **Early neurons are token-family detectors.** Exact drivers of random early poles:
 
@@ -353,8 +409,8 @@ those tokens, at which depth.
 | L1 n11672 − | 德国, german, Germany, German, Germans |
 | L2 n6890 + | Whitney, Courtney, Chelsea, Kendall, Shelby, Lindsay |
 
-**The S-lens names them from the weights, through L8.** Share of each read's top 10 among the pole's
-20 exact drivers (control 0.003 or less; `checks/side_agreement.py`):
+**The S-lens names them from the weights, through L8.** Share of each read's top 10 among the pole's 20 exact drivers
+(control 0.003 or less; `checks/side_agreement.py`):
 
 | layer | `read_S` | `read_S_z` | `read_R` |
 |---|---|---|---|
@@ -373,36 +429,51 @@ those tokens, at which depth.
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
-- **L0-L4:** `read_S` names exact drivers (32% of its top 10 at L0, 5-12% at L1-L4), and at L0 the
-  peak token of 36% of top firings (another pole's read: under 0.1%); the R-lens read of the same direction
-  almost none. At L1-L8 the S-lens read names 2-10% of peak tokens, against under 0.5% for the R-lens
-  read (2% at L8).
-- **L8 is the crossover:** both reads name drivers (the S-lens 6-7%, the R-lens 4%), and a pole's S-lens, R-lens and
-  write reads share the most tokens (0.15-0.32 tokens of their top 10s on average; control 0.002 or less).
-- **From L9 the R-lens read names more:** 4% at L9-L12, 6-8% at L22-L30. On the input side too, the
-  R-lens takes over where the S-lens stops.
+- **L0-L4:** `read_S` names exact drivers (32% of its top 10 at L0, 5-12% at L1-L4), and at L0 the peak token of 36% of
+  top firings (another pole's read: under 0.1%); the R-lens read of the same direction almost none. At L1-L8 the S-lens
+  read names 2-10% of peak tokens, against under 0.5% for the R-lens read (2% at L8).
+- **L8 is the crossover:** both reads name drivers (the S-lens 6-7%, the R-lens 4%), and a pole's S-lens, R-lens and write
+  reads share the most tokens (0.15-0.32 tokens of their top 10s on average; control 0.002 or less).
+- **From L9 the R-lens read names more:** 4% at L9-L12, 6-8% at L22-L30. On the input side too, the R-lens takes over
+  where the S-lens stops.
 - **L13-L20 shares the fewest tokens with the exact drivers** (2-4% for the R-lens read). The drivers are also at their
-  weakest there: the strongest single-token swap reaches a median 9% of a pole's typical firing at L13-L20, against 36% at L0-L8
-  and 22% at L28-L35 (`checks/driver_reach.py`; Gemma 4: 11% at L24-L35, 61% at L0-L11), so a low share in this stretch says little
-  about either.
-- **Past L8, raw S-lens reads are swamped by hub tokens** (rare CJK, spam-cluster and code pieces
-  shared by most poles). `read_S_z` recovers concepts (L10 n9952 +: glaciers, terrain, 公里 "km",
-  Mountains; L30 n2310 +, a "green" neuron: 繁殖 "breeding", Lawn, rooting) but gives up the literal
-  peak token, so both columns are kept.
-- **Read and write often name one concept** from the middle on: L8 n1931 + reads 圣经 (Bible), 基督教,
-  信仰 (faith) and writes 圣经, 基督徒, Bible; L20 n2281 − reads else, 否则 (otherwise) and writes else,
-  otherwise; L32 n2407 + reads 斗争 (struggle), fight and writes fight, fighting, 战斗.
+  weakest there: the strongest single-token swap reaches a median 9% of a pole's typical firing at L13-L20, against 36%
+  at L0-L8 and 22% at L28-L35 (`checks/driver_reach.py`; Gemma 4: 11% at L24-L35, 61% at L0-L11), so a low share in this
+  stretch says little about either.
+- **Past L8, raw S-lens reads are swamped by hub tokens** (rare CJK, spam-cluster and code pieces shared by most poles).
+  `read_S_z` recovers concepts (L10 n9952 +: glaciers, terrain, 公里 "km", Mountains; L30 n2310 +, a "green" neuron: 繁殖
+  "breeding", Lawn, rooting) but gives up the literal peak token, so both columns are kept.
+- **Read and write often name one concept** from the middle on: L8 n1931 + reads 圣经 (Bible), 基督教, 信仰 (faith) and
+  writes 圣经, 基督徒, Bible; L20 n2281 − reads else, 否则 (otherwise) and writes else, otherwise; L32 n2407 + reads 斗争
+  (struggle), fight and writes fight, fighting, 战斗.
 
-**Early neurons write back what they detect.** `write_S` reads a write through the S-lens to the
-layer's output: which input token would put the write there (through the lens's polar factor, §13). It shares
-1.73 tokens of 10 with the pole's exact drivers at L0 (control 0.002), 0.20-0.44 at L1-L4, 0.11-0.27 at L5-L8
-and 0.01-0.03 at L11-L18, then 0.10-0.19 again at L21-L25 (control 0.003; the Euclidean read 0.02-0.04 there).
-L0 n1649 −, which fires on `ain`, writes `ain | ains | AIN | aine | strain`, where its R-lens write read is
-`... | ..." | the`. MLP0-MLP8 in effect act as an extended embedding.
+**Early neurons write back what they detect.** `write_S` reads a write through the S-lens to the layer's output: which
+input token would put the write there (through the lens's polar factor, §15). It shares 1.73 tokens of 10 with the pole's
+exact drivers at L0 (control 0.002), 0.20-0.44 at L1-L4, 0.11-0.27 at L5-L8 and 0.01-0.03 at L11-L18, then 0.10-0.19 again
+at L21-L25 (control 0.003; the Euclidean read 0.02-0.04 there). L0 n1649 −, which fires on `ain`, writes `ain | ains |
+AIN | aine | strain`, where its R-lens write read is `... | ..." | the`. MLP0-MLP8 in effect act as an extended embedding.
 
-**Why the S-lens read fades: a token's effect is mostly nonlinear past L0** (`checks/s_linearity.py`;
-96 tokens swapped in at position 16 of 4 documents, MPS, fp32). R² of each predictor against the
-token's exact footprint on the MLP input, at its own position and summed over later ones:
+**On SiLU's negative lobe a pole reads its up row** (`checks/lobe_reads.py`). At L1-L3, 49-78% of top firings ride SiLU's
+negative lobe (the gate below zero; 14% at L4, 2% or less from L5). SiLU is nearly flat there (its floor is −0.28; Gemma
+4's GELU has the same shape), so the activation follows `up`, and which way of the gate raises it varies from pole to pole:
+`â ± b̂` points the wrong way. For active poles with `neg_lobe` (`acts`) past a half, the rank of a pole's most frequent
+firing token in its S-lens read, among the kept tokens (50 is chance), is 16-48 at Qwen3-8B's L0-L4 and 40-61 at Gemma 4's
+L0-L10 with `â ± b̂`, 52-84 and 39-60 with its negative, and 71-81 and 63-82 with the up row alone, `∓b̂`, which the
+catalog uses (`neurons.read_rows`); ordinary poles reach 69-95 and 75-95 with `â ± b̂`. The edges agree (§12): with
+`â ± b̂`, an edge's push ranks the upstream neurons' contributions at Spearman −0.27, −0.61 and 0.52 at L1-L3, and with the
+up row at 0.80, 0.77 and 0.80 (0.86-0.91 from L4).
+- **The reads stay hard to interpret by eye.** In `read_S_z` at Qwen3-8B's L1-L4 a firing token is in the top 64 for 9-19%
+  of such poles with the up row (8-17% with `â ± b̂`), against 47-73% for ordinary poles; of 30 random such poles, 1-3 have
+  a firing token in their top 16. L0 is the exception (71% with the negative of `â ± b̂`, 20% with the up row).
+- **Many are faint shadows of the neuron's other pole,** with the same up row and a shut gate: their `act_top` is a median
+  0.24 of the other pole's in Qwen3-8B (0.70 in Gemma 4; 1.05 and 1.03 for ordinary poles), though about a quarter are the
+  larger pole. L0 n3228 is one: its − pole is a clean 十 neuron (`act_top` 7.9; pushed at that size it raises what follows
+  a number, `-year`, `-month`, 月份), and its + pole (0.31) fires on byte fragments sharing 十's bytes, its up row reading
+  十. Label cards mark such shadows.
+
+**Why the S-lens read fades: a token's effect is mostly nonlinear past L0** (`checks/s_linearity.py`; 96 tokens swapped
+in at position 16 of 4 documents, MPS, fp32). R² of each predictor against the token's exact footprint on the MLP input,
+at its own position and summed over later ones:
 
 | layer | own position: exact linearization in context (true / RelP) | S-lens | embedding | summed: RelP linearization | S-lens |
 |---|---|---|---|---|---|
@@ -411,38 +482,37 @@ token's exact footprint on the MLP input, at its own position and summed over la
 | L5 | 0.12 / 0.15 | 0.09 | 0.03 | 0.07 | 0.06 |
 | L15 | 0.07 / 0.17 | 0.10 | 0.01 | 0.02 | 0.02 |
 
-- Even the exact linearization in the token's own context explains 86% of its footprint at L0 but 30%
-  at L1 and 7% at L15: swapping a whole token is far outside the regime of local linearizations past
-  L0's MLP (this bounds local linearizations, not every possible linear map).
-- On the summed footprint, the quantity it estimates, the S-lens does about as well as that
-  per-context linearization: averaging over contexts and summing over positions cost little.
+- Even the exact linearization in the token's own context explains 86% of its footprint at L0 but 30% at L1 and 7% at
+  L15: swapping a whole token is far outside the regime of local linearizations past L0's MLP (this bounds local
+  linearizations, not every possible linear map).
+- On the summed footprint, the quantity it estimates, the S-lens does about as well as that per-context linearization:
+  averaging over contexts and summing over positions cost little.
 - RelP beats the true derivative from L1 (0.17 against 0.07 at L15).
-- **But nonlinearity does not explain the fall after L8.** The linear share is flat from L4 to L17 (R²
-  about 0.10), while the S-lens read's driver hits peak at L8 and fall by L11. The cause is open
-  (candidates: read-write alignment, the norm weight's selectivity, how much context L8 neurons use).
+- **But nonlinearity does not explain the fall after L8.** The linear share is flat from L4 to L17 (R² about 0.10), while
+  the S-lens read's driver hits peak at L8 and fall by L11. The cause is open (candidates: read-write alignment, the norm
+  weight's selectivity, how much context L8 neurons use).
 
-**Limits.** At L1-L3, 49-78% of top firings have a negative gate, where the read direction `â ± b̂`
-points the wrong way (§17). Drivers are measured at one position of 8 contexts. The S-lens footprint
-averages over contexts, so it reads a direction on average: on the Qwen3-0.6B prototype a pole's exact
-top 20 tokens of 6,000 were 70% right at L0, 25% at L1 and about 0% from L5.
+**Limits.** Drivers are measured at one position of 8 contexts. The S-lens footprint averages over contexts, so it reads
+a direction on average: on the Qwen3-0.6B prototype a pole's exact top 20 tokens of 6,000 were 70% right at L0, 25% at L1
+and about 0% from L5. The negative-lobe reads are tested on the S-lens only.
 
-## §7. What each read names
+### §8. What each read names, and which read to use where
 
 `checks/reads_at_firings.py` counts how often each weight-only read names what can be counted around a pole: the token
-under each top firing, the token after it, and its exact drivers (§6). These targets are narrow, and a firing is one context
-summarized by a token: a pass says a read names that target, a miss doesn't make the read wrong, and the shares describe the
-reads at each depth, not single poles. The catalog keeps no per-pole test.
+under each top firing, the token after it, and its exact drivers (§7). These targets are narrow, and a firing is one
+context summarized by a token: a pass says a read names that target, a miss doesn't make the read wrong, and the shares
+describe the reads at each depth, not single poles. The catalog keeps no per-pole test.
 
 **Setup.** For each of the 884,736 poles, with its 64 top firings and 64 exact drivers:
 - `read_S`: the mean layer-contrastive z of the peak tokens, under the read direction's S-lens read;
 - `read_R`: of the exact drivers, under its R-lens read;
 - `write_R`: of the tokens after the firings, under the write read; `write_S`: of the peak tokens, under the write's S-lens
-  read; `write_orth_R`, `write_orth_S`: as the write's, for the write orthogonal to the neuron's gate and up rows (§18);
+  read; `write_orth_R`, `write_orth_S`: as the write's, for the write orthogonal to the neuron's gate and up rows (§6);
 - p-values against mismatched pairs (another pole of the layer and sign, on this pole's tokens); Benjamini-Hochberg over
   the layer's poles at a 5% false discovery rate; *net of chance* is the share past the mismatched pairs' 99th percentile
   minus their own share;
-- token modes: a third of the firings share one peak token, or one next token (`acts`' `cur_mode`, `next_mode`); near-silent:
-  `act_top` under 0.05, not scored.
+- token modes: a third of the firings share one peak token, or one next token (`acts`' `cur_mode`, `next_mode`);
+  near-silent: `act_top` under 0.05, not scored.
 
 | band | `read_S` | `read_R` | `write_R` | `write_S` | `write_orth_R` | `write_orth_S` | token mode | next-token mode | near-silent |
 |---|---|---|---|---|---|---|---|---|---|
@@ -457,256 +527,80 @@ Shares of poles passing at 5% FDR, band means over layers; net of chance in brac
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
-- **Each read names its target at its own depth.** `read_S` passes for 85% of poles at L0 and 23-35% at L1, L3 and L4 (L2: 9%,
-  since 61% of its poles are near-silent), and almost none at L10-L20. `read_R` names exact drivers for 12-18% of poles at L13-L20 and
-  31-41% at L27-L31 (44-51% with the released Euclidean read; §13). `write_S` passes for 13% of L0-L8's poles, nearly always together with `read_S`: early neurons write back what
-  they detect (§6). `write_R` passes from L23, most at L28-L29 (30-31% net), and the part of a write off what the neuron reads holds
-  nearly as well there: `write_orth_R` passes for 23% of L28-L35's poles, against 27% for the whole write (§18).
+- **Each read names its target at its own depth.** `read_S` passes for 85% of poles at L0 and 23-35% at L1, L3 and L4 (L2:
+  9%, since 61% of its poles are near-silent), and almost none at L10-L20. `read_R` names exact drivers for 12-18% of poles
+  at L13-L20 and 31-41% at L27-L31 (44-51% with a Euclidean read; §15). `write_S` passes for 13% of L0-L8's poles, nearly
+  always together with `read_S`: early neurons write back what they detect (§7). `write_R` passes from L23, most at
+  L28-L29 (30-31% net), and the part of a write off what the neuron reads holds nearly as well there: `write_orth_R`
+  passes for 23% of L28-L35's poles, against 27% for the whole write (§6).
 - **The token after a firing is a narrow target for a write.** A write read that misses it can still predict the pole's
   steering effect, as 94-100% do from L5 (§3), and before L21 a pole's firings don't predict each other (§4).
 - **The token under a firing is a narrow target for a read.** An R-lens read reads forward: L30 n7004 + fires on ` play`
-  and reads *role*, and L30 n2003 + fires on ` is` and ` way`, before ` too`, and reads *too*. And the token is rarely what drives the
-  firing: the embedding's direct share of an activation is under 0.5% from L7, the rest coming through heads and earlier neurons
-  (§17). L16 n101 + peaks on ` alone` and commas and reads *group, 团队, 小组*; L31 n1492 + fires on spaces and commas and reads *用电, 电路,
-  electric*.
+  and reads *role*, and L30 n2003 + fires on ` is` and ` way`, before ` too`, and reads *too*. And the token is rarely what
+  drives the firing: the embedding's direct share of an activation is under 0.5% from L7, the rest coming through heads
+  and earlier neurons (§12). L16 n101 + peaks on ` alone` and commas and reads *group, 团队, 小组*; L31 n1492 + fires on
+  spaces and commas and reads *用电, 电路, electric*.
 - **Exact drivers are a token-level target too.** They swap one token at one position of 8 documents, and at L13-L20 the
-  strongest swap reaches a median 9% of a typical firing (§6). A concept carried by the surrounding text has no single token to find.
+  strongest swap reaches a median 9% of a typical firing (§7). A concept carried by the surrounding text has no single
+  token to find.
 
-**Which read to use where,** from §3-§7. The bands are priors: weigh a pole's sides by its reads, contexts and drivers
-together, and say which side a description rests on.
+**Signal holds to rank 64** (`checks/rank_depth.py`; nine layers). Per rank, the share of poles whose token at that rank
+shows up after a top firing (writes) or at the peak (reads), against a mismatched pole. Ranks 49-64 still run several
+times above chance for most reads (L28's write read 22×, L12's `read_R` 9×), at a tenth to a half of a top-8 token's rate.
+The exception is the plain write read before L21 (1.0-1.7× at ranks 49-64), hub tokens at every rank; its `_z` read keeps
+signal there from L8 (3-5×). Gemma 4's late write reads hold the same way (L36-L40: 25×). The catalog keeps the top 64.
 
-| layers | what drives a pole | what a pole writes |
-|---|---|---|
-| L0-L7 | `read_S`: literal tokens (raw at L0-L4) | `write_S`: what it detects, written back; `write_R` from about L4 |
-| L8 | both lenses, agreeing most | both |
-| L9-L12 | `read_R`, with `read_S_z` as a concept view | `write_R`: predicts steering |
-| L13-L20 | `read_R`, `read_S_z`, with contexts and exact drivers beside them (reads and contexts tie in §8's blind test) | `write_R`, for steering |
-| L21-L35 | `read_R`, `read_S_z` | `write_R`: steering, and the next token from about L23; suppression from L32 |
+![Read signal by rank](figures/12_rank_depth.png)
 
-**Signal holds to rank 64** (`checks/rank_depth.py`; nine layers). Per rank, the share of
-poles whose token at that rank shows up after a top firing (writes) or at the peak (reads), against a
-mismatched pole. Ranks 49-64 still run several times above chance for most reads (L28's write read
-22×, L12's `read_R` 9×), at a tenth to a half of a top-8 token's rate. The exception is the plain write read
-before L21 (1.0-1.7× at ranks 49-64), hub tokens at every rank; its `_z` read keeps signal there from L8
-(3-5×). Gemma 4's late write reads hold the same way (L36-L40: 25×). The catalog keeps the top 64.
+**The reading plans** (`checks/depth_reads.py`, `arch.PLANS`). Token hits are one guide to which read to trust; whether a
+read is coherent is another. For each labelled model, 15-16 layers spread over the depth and around its transitions, 8
+random firing poles a layer, the eight weight reads shuffled under neutral names: two raters of different lineages (Claude
+Opus and Codex) rated each list's coherence (0-2) and, for input reads, whether it agrees with the pole's five contexts
+(0-1). They agreed closely: Pearson 0.83-0.90 over 1,024 lists a model, the same score for 80-87%. A model's reading plan
+takes the most coherent read at each depth: the S-lens input read in the first layers, the R-lens input read after, and the
+R-lens write read everywhere, which also predicts steering (§3, §19). The label cards show the plan's reads (§13).
+- **Coherent is not the same as matching the contexts.** Gemma 4's R-lens input read rates 1.0-1.9 at L0-L18 but agrees
+  with the contexts for 0-38% of poles there. Its themes are each pole's own (another pole of the layer shares under 1% of
+  its first 24 tokens): British spellings or Spanish names on poles that fire on punctuation and possessives. A read can
+  name what drives a pole through a concept, a style or a script that five firings don't show (§4), so agreement didn't
+  decide the plans.
+- **The census's weak band reads well.** At Qwen3-8B's L13-L20, where few reads name the exact firing token or drivers
+  (above), the R-lens reads rate 1.0-1.9 and the write reads 1.6-1.75, among the most coherent of any depth.
+- **Where the census differs, the plans follow coherence.** Through L8, `read_S` names Qwen3-8B's firing token more often
+  than `read_R` does, though from L4 the R-lens read is the more coherent list.
 
-![Read signal by rank](figures/13_rank_depth.png)
+**The depth bands** (`arch.depth_bands`, `data/summary/depth.json`). The plans' edges cut each model into the bands every
+summary, label check and the site use. *Sensory*: the input read is the S-lens's. *Association*: the R-lens's, which often
+names an associated concept. *Workspace*: the R-lens's, without that line. *Motor*: from where writes often name the next
+word, Qwen3-8B's L21 (its writes name the next token from about L23, above) at the same relative depth in the other sizes,
+and Gemma 4's L33 (§15). Motor holds where it starts first, and a base model takes its post-trained model's bands:
+
+| model | sensory | association | workspace | motor |
+|---|---|---|---|---|
+| Qwen3-0.6B | L0-L5 | L6-L8 | L9-L15 | L16-L27 |
+| Qwen3-1.7B | L0-L9 | L10-L15 | | L16-L27 |
+| Qwen3-4B | L0-L5 (`read_S_z`) | L6-L8 | L9-L20 | L21-L35 |
+| Qwen3-8B | L0-L3 | L4-L8 | L9-L20 | L21-L35 |
+| Qwen3-14B | L0-L8 | L9-L11 | L12-L22 | L23-L39 |
+| Gemma 4 12B | | L0-L19 | L20-L32 | L33-L47 |
+
+For a single Qwen3-8B pole, weigh the sides together: the S-lens input read and `write_S` through L8, the R-lens input
+read from L4 (`read_S_z` as a concept view), exact drivers and top contexts beside them at L13-L20, and the R-lens write
+read for steering from about L4, the next token from about L23 and suppression from L32 (§5). Say which side a description
+rests on.
 
 **Limits.** The tests are token-level, so a read of a concept that shows in no single token scores low. Exact drivers come
-from one position of 8 documents. Each pole must clear the FDR on its own evidence; net shares count weak cases in aggregate. A
-third of firings is a chosen threshold.
+from one position of 8 documents. Each pole must clear the FDR on its own evidence; net shares count weak cases in
+aggregate. A third of firings is a chosen threshold. Only the plans' input edges were rated, each to within a rated layer
+or two, by two raters on 8 poles a layer: a qualitative check, not a measurement of every pole. Ratings and keys are in
+`data/summary/depth_reads/`.
 
-## §8. Describing neurons
+## III. Units in context
 
-Can the evidence be turned into words that predict what a pole does? Three studies: a pilot with full
-evidence cards, a blind test of how far the lenses alone go, and a cheap labeller run on every pole.
+Neurons that act through the residual's geometry rather than its vocabulary (§9), attention heads read as neurons are
+(§10, §11), and what feeds a unit when it fires (§12).
 
-**Scoring.** An explainer writes two labels with a confidence: where the pole **fires**, and what its
-write **promotes** when amplified.
-- **Firing** is scored by detection (Paulo et al. 2024): fresh scorers see the label and a shuffled
-  set of held-out top firings (top documents the card did not show, each cut at the firing token) and
-  quiet positions, and give each a probability of firing; the score is the AUROC. The control is
-  another pole's label on the same set. This test is made of firings, so it favours evidence made of firings.
-- **Writes** are scored by steering: the pole's write is added at doses where it changes the
-  next-token distribution by 0.5, 1 and 2 nats of KL (7-15× its typical activation), on four prompts;
-  a fresh judge sees the steered text and four labels from the same band and picks the pole's own
-  (chance 25%).
-- **Cards are leak-free:** nothing on a card summarizes the held-out documents. (The pilot's cards
-  still carried a steering-sample ablation summary that overlapped 90 of its 945 scored positives;
-  dropping those moved its mean AUROC from 0.926 to 0.927, and later cards omit it.)
-
-**The pilot** (`checks/describe_cards.py`, `checks/describe_score.py`): 197 poles (2 random neurons
-a layer, both poles, and 53 named poles), Claude Sonnet explainers, full cards (lens reads, top 5
-contexts, activation statistics, steering, outside labels). Over the 189 that fire, 5 held-out firings
-against 5 quiet positions score a mean AUROC of **0.93** [0.91, 0.94] (control 0.54); 0.96 at
-L0-L11, 0.89 at L12-L23 and 0.91 at L24-L35. Most poles are token- or phrase-level detectors, often of
-what comes next: L7 n271 + poxviruses (monkey⟦p⟧ox), L9 n8548 − an AI assistant's self-reference ("my
-training", "been programmed"), L16 n6934 + " upon" in "Once upon a time", L26 n4061 − the word before
-"suicide". The explainers judged that the descriptions rest on activations everywhere, with the weight
-reads agreeing on about 40% of cards from L12 and a quarter or fewer before. Its score sets and
-scorers' answers were not kept, so these numbers stand as recorded; the scripts rebuild the same 197
-cards from the current catalog (their steering from §3's current sample) and draw fresh held-out sets.
-
-**The blind test** (`checks/lens_blind.py`): 160 random poles, 32 per band, explainers that never see
-steering, in four arms: **lens** (only the eight weight-only reads, plain and `_z`, 12 tokens each),
-**contexts** (only the top 5 contexts, activation scale and rates), **both** on one card, with Sonnet
-and with Opus. Six held-out firings against six quiet positions, three from random documents and three
-from the firings' own documents.
-
-| band | fires AUROC: lens / contexts / both / Opus | writes picked: lens / contexts / both / Opus |
-|---|---|---|
-| L0-L8 | 0.79 / 0.93 / 0.92 / 0.94 | 0.34 / 0.45 / 0.42 / 0.49 |
-| L9-L12 | 0.79 / 0.91 / 0.91 / 0.90 | 0.73 / 0.55 / 0.66 / 0.64 |
-| L13-L20 | 0.76 / 0.79 / 0.84 / 0.82 | 0.58 / 0.42 / 0.53 / 0.49 |
-| L21-L27 | 0.81 / 0.82 / 0.88 / 0.89 | 0.66 / 0.54 / 0.60 / 0.63 |
-| L28-L35 | 0.83 / 0.93 / 0.90 / 0.91 | 0.95 / 0.76 / 0.94 / 0.91 |
-| all | 0.80 / 0.87 / 0.89 / 0.89 | 0.65 / 0.54 / 0.63 / 0.63 |
-
-Controls: another pole's firing label scores 0.58; writes chance is 0.25.
-
-![Random poles read blind](figures/14_lens_blind.png)
-
-- **From the lenses alone, a random pole gets a usable description most of the time:** firing labels
-  at AUROC 0.80 (58% of labels at 0.8 or more, against 16% of controls), write labels picked 65% of
-  the time.
-- **Scored on firings, contexts lead the lenses for where a pole fires** (0.87 against 0.80), as evidence made of firings
-  should, and tie them at L13-L27. Same-document negatives cost both arms about 0.05, so neither's labels
-  are mostly topic labels.
-- **For what it promotes, the lenses beat contexts** (65% against 54%): 95% at L28-L35, where 42% of
-  strongly steered tokens are in the pole's own R-lens top 64 (none in other poles'); 58-73% at
-  L9-L27, where the judge matches concepts (L11 n4351 + reads *trauma, genocide, survivors*, and
-  steered, the model writes of "a powerful narrative of trauma"); near chance at L0-L8, where steering
-  mostly degenerates the text (§6: early meaning is input-side).
-- **Combining helps a little:** both sources on one card reach AUROC 0.89 and 63%; the lenses add to
-  contexts only for firing at L13-L27 (+0.03-0.07). Picking each side's best source does as well.
-- **Opus explains no better than Sonnet** (0.89 and 63% each), which suggests the bottleneck is the
-  evidence, not the explainer.
-- **Where the sides differ:** format and fragment detectors whose reads name something else. L34
-  n7339 − fires on a word-initial W (W|inters), its read direction names GPUs (Nvidia, Radeon), and
-  its write is 再 (again): three sides that don't agree, and no test here says which describes the pole.
-- **Confidence ranks:** lens firing labels at confidence 0.7 or more score 0.97, below 0.4 0.67.
-- **17% of firing poles defeat every arm**, 19 of 25 at L9-L27: code-identifier fragments and Chinese
-  punctuation whose held-out firings vary in surface form.
-
-**A label for every pole** (`10_labels.py`, `checks/haiku_blind.py`). The same tests on 100 more
-random poles compared Claude Haiku 5.5 with Sonnet, on the blind test's cards and on a depth-aware
-card that shows only the reads that carry signal at the pole's layer (§7), hub tokens removed:
-
-| arm | fires AUROC (control) | fires holds | writes picked |
-|---|---|---|---|
-| Haiku, lens card | 0.66 (0.55) | 0.30 | 0.57 |
-| Haiku, depth-aware lens card | 0.71 (0.55) | 0.41 | 0.63 |
-| Haiku, depth-aware card with contexts | 0.82 (0.56) | 0.61 | 0.61 |
-| Sonnet, lens and contexts | 0.83 (0.56) | 0.62 | 0.62 |
-
-With contexts, Haiku matches Sonnet; from the lenses alone it trails. The depth-aware card with
-contexts then labelled all 884,736 poles through the Batch API (44,244 requests of 10 neurons each,
-$105). Confidence ranks (firing AUROC 0.94 at 0.7 or more, 0.79 below 0.4), but only 6-15% of each
-band's labels reach 0.7. The full run was checked only through this 100-pole sample.
-
-**Relabelling the negative-lobe poles** (`10_labels.py cards --flipped`, `checks/relabel_check.py`). The up-row reads (§17) replaced the
-weight-only reads of 63,423 Qwen3-8B poles and 63,958 Gemma 4 poles, so the 42,578 and 50,920 neurons holding them were labelled again
-($9.87 and $14.21 on the Batch API; every head again, $0.28 and $0.19). A pole that is a faint shadow of the neuron's other pole (`neg_lobe` past a
-half, `act_top` under a quarter of the other pole's) is marked on its card. Checked blind by Claude Sonnet on about 150 random such poles a
-model: 4 of a pole's held-out firings (ranks 6-24) against 4 of another flipped pole of its layer, AUROC per pole for each label on the same contexts:
-
-| | new label | first label | another pole's new label | new − first |
-|---|---|---|---|---|
-| Qwen3-8B (149 poles) | 0.80 [0.75, 0.84] | 0.75 [0.70, 0.80] | 0.52 | +0.05 [0.00, 0.10] |
-| Gemma 4 12B (148) | 0.72 [0.68, 0.77] | 0.71 [0.67, 0.76] | 0.53 | +0.01 [−0.04, 0.07] |
-
-The new labels are at least as good, likely a little better on Qwen3-8B, and no more confident (firing confidence 0.21 against 0.24 on
-Qwen3-8B, 0.25 for both on Gemma 4). Every other pole keeps its first label.
-
-**The reading plans** (2026-11-15; `checks/depth_reads.py`, `arch.PLANS`). For the labels of the Qwen3 family
-(§19) and the relabel of Qwen3-8B and Gemma 4 after the residual's metric (§13), a card shows one input read and one write read a
-pole, 24 tokens each, without strengths: confidence is how clearly the card shows one theme. Which read, at each depth, was set
-by reading. For each model, 15-16 layers spread over the depth and around its transitions, 8 random firing poles a layer, the
-eight weight reads shuffled under neutral names; two raters of different lineages (Claude Opus, Codex) rated each list's
-coherence (0-2) and, for input reads, whether it agrees with the pole's five contexts (0-1). They agreed closely: Pearson
-0.83-0.90 over 1,024 lists a model, the same score for 80-87%. The plans take the most coherent read: the S-lens input read in
-the first layers (Qwen3-0.6B L0-L5, 1.7B L0-L9, 4B L0-L5 through its z read, 8B L0-L3, 14B L0-L8, none in Gemma 4), the R-lens
-input read after, and the R-lens write read everywhere, which also predicts steering (§3, §19).
-- **The plans cut the depth bands** (2026-11-21; `arch.PLANS`, `arch.depth_bands`, `data/summary/depth.json`), which the
-  summaries, the label checks and the site share. Sensory: the S-lens input read. Association: the R-lens input read
-  with the line that it often names an associated concept. Workspace: the R-lens input read without it. Motor: from
-  the plans' next-word line, Qwen3-8B's L21 (§7's last rows; its writes name the next token from about L23) at the same
-  relative depth in the other sizes and Gemma 4's L33 (§13); motor holds where it starts first, so Qwen3-1.7B (association line to L18, next-word writes from L16)
-  has no workspace band. Qwen3-0.6B L0-L5, L6-L8, L9-L15, L16-L27; 1.7B L0-L9, L10-L15, L16-L27; 4B L0-L5, L6-L8,
-  L9-L20, L21-L35; 8B L0-L3, L4-L8, L9-L20, L21-L35; 14B L0-L8, L9-L11, L12-L22, L23-L39; Gemma 4 L0-L19, L20-L32,
-  L33-L47. Only the input edges were rated, each to within a rated layer or two; the early-write line (where steering
-  follows the write read less closely, §3) and the head lines (the head census) were not. Where the firing census differs (in·S names Qwen3-8B's firing token more often than in·R through L8,
-  §7), the bands follow coherence.
-- **Coherent is not the same as matching the contexts.** Gemma 4's R-lens input read rates 1.0-1.9 at L0-L18 but agrees with
-  the contexts for 0-38% of poles there. Its themes are each pole's own (another pole of the layer shares under 1% of its
-  first 24 tokens): British spellings or Spanish names on poles that fire on punctuation and possessives. A read can name what
-  drives a pole through a concept, a style or a script that five firings don't show (§4), so agreement didn't decide the
-  plans; the prompt says where the input read often differs from the firing tokens, and to label firing from the contexts.
-- **The census's weak band reads well.** At Qwen3-8B's L13-L20, where few reads name the exact firing token or drivers (§7),
-  the R-lens reads rate 1.0-1.9 and the write reads 1.6-1.75, among the most coherent of any depth.
-- Ratings, keys and per-layer means: `data/summary/depth_reads/`, `data/summary/depth_reads_<model>.{json,log}`. Two raters,
-  8 poles a layer and round: a qualitative check, not a measurement of every pole. Head plans follow the census (§11, §12).
-
-**The lean card's run** (2026-11-15; `10_labels.py`, `checks/relabel_check.py --poles all`, `10_labels.py check`). With these
-plans, Claude Haiku 5.5 (Batch API, effort low, no thinking, 10 neurons a request) labelled every pole and head of Qwen3-0.6B,
-1.7B, 4B and 14B, and labelled Qwen3-8B and Gemma 4 again, replacing all their earlier labels (the negative-lobe relabels above
-included): 4,968,448 poles and 5,568 heads for $303 (Qwen3-8B $52.78 and Gemma 4 $90.26, against $105 and $172 for the
-earlier card; heads $0.05-0.19 a model). One 60-request pilot on Qwen3-8B priced every model to within 2%. 0.1-0.4% of
-requests came back with a pole missing or a note after an id and were sent again; a request that failed twice went card by
-card. The API refused one chunk of ten Qwen3-1.7B cards three times, whose cards then passed one at a time, and one Qwen3-14B
-neuron (L34 n15908) even alone: its poles have empty labels and a note saying so. Two other poles have empty labels from Haiku
-itself. Checked blind by Claude Sonnet 5.5 on 150 random firing poles a model, as the relabel above (4 held-out firings, ranks
-6-24, against 4 of another firing pole of the layer; AUROC per pole, the earlier labels at the release before the run):
-
-| | lean label | another pole's label | earlier label | lean − earlier | by depth quarter |
-|---|---|---|---|---|---|
-| Qwen3-0.6B | 0.86 [0.82, 0.90] | 0.51 | | | 0.88 / 0.85 / 0.81 / 0.89 |
-| Qwen3-1.7B | 0.88 [0.84, 0.91] | 0.54 | | | 0.85 / 0.83 / 0.88 / 0.95 |
-| Qwen3-4B | 0.86 [0.82, 0.89] | 0.51 | | | 0.94 / 0.82 / 0.84 / 0.82 |
-| Qwen3-8B | 0.84 [0.80, 0.87] | 0.44 | 0.81 [0.77, 0.86] | +0.03 [−0.02, 0.07] | 0.79 / 0.84 / 0.84 / 0.87 |
-| Qwen3-14B | 0.82 [0.78, 0.87] | 0.50 | | | 0.85 / 0.81 / 0.82 / 0.82 |
-| Gemma 4 12B | 0.82 [0.77, 0.86] | 0.50 | 0.81 [0.77, 0.85] | +0.01 [−0.04, 0.05] | 0.78 / 0.85 / 0.85 / 0.80 |
-
-- **As good as the earlier card at half the cost, and surer.** On the same poles and contexts the lean labels score at least
-  as well as the earlier ones, with mean firing confidence 0.44 against 0.34 (Qwen3-8B) and 0.40 against 0.30 (Gemma 4).
-- **Firing labels hold at every depth and size.** No quarter of any model falls below 0.78; the smaller models score a little
-  higher (0.86-0.88, against 0.82-0.84 at 8B, 12B and 14B).
-- **Heads** (`10_labels.py check`, 20 random heads a band): Qwen3-8B's firing labels score 0.72 [0.66, 0.78] (the earlier
-  card's 0.70) and its write labels are picked 51% of the time [40, 61] (54%); Gemma 4's 0.78 [0.72, 0.84] (0.71) and 32%
-  [22, 42] (32%). Tables by band: `data/summary/labels_heads_<model>.md`.
-- Firing labels only: no write label was steered this time (the earlier card's 61% on Qwen3-8B, above, is that card's). The
-  contrast is another firing pole of the layer, harder than the quiet positions of the 100-pole test. 150 poles is about ±4
-  points a model, a quarter about ±8. `data/summary/label_check_<model>.json`.
-
-**Simulation** (2026-11-17; `checks/simulate_labels.py`). Bills et al. (2023)'s test on the same 150 Qwen3-8B poles: Claude
-Sonnet 5.5 (Batch API, default thinking) sees only a firing label and predicts the pole's activation, 0 to 10, at every token
-of 15 excerpts of 64 tokens, shuffled: 5 around held-out top firings (ranks 6-24), 5 around weak firings (a peak at a quarter
-to a half of `act_top`, under the regime detection draws from) and 5 at random, the last two from 2,000 random activation
-documents outside the pole's top 64. True activations come from a bf16 forward pass over each excerpt's document (Apple
-silicon; the top firings within 4% of the catalog's values), the pole's sign applied and clipped at zero. The score is the
-correlation of simulated and true activations over all 960 tokens (Bills's top-and-random score). Three labels run on the
-same excerpts: the lean label, the label it replaced, and another firing pole of the layer's. The run cost $4.64.
-
-| | lean label | earlier label | another pole's label |
-|---|---|---|---|
-| correlation, all tokens | 0.21 [0.18, 0.25] | 0.20 [0.16, 0.24] | −0.00 |
-| within top / weak excerpts | 0.23 / 0.09 | 0.21 / 0.10 | 0.00 / 0.00 |
-| correlation of excerpt peaks | 0.44 [0.38, 0.49] | 0.39 [0.33, 0.45] | −0.04 |
-| top / weak excerpts found among random ones (AUROC) | 0.75 / 0.61 | 0.73 / 0.61 | 0.49 / 0.50 |
-| top excerpts' predicted peak within a token of the true one | 25% | 24% | 0.5% |
-
-- **The labels name the context a pole fires in more often than the token.** Scored by each excerpt's peak (which excerpts
-  fire, and how strongly) a label reaches 0.44; token by token 0.21. Of the 750 held-out top excerpts, the predicted peak
-  lands on the true token in 16%, one or two tokens after it in 9% and before it in 4% (near misses lean to the token
-  after), 3-5 tokens off in 5%, further off in the excerpt in 31% (before and after as the room allows), and 35% are
-  predicted silent: the label doesn't cover that firing at all. 29 of the 150 labels land within a token on three or more of
-  their five, 62 on none. Detection sees none of this, since its contexts end at the firing token. Misses read by hand
-  include a label naming the word about to come (L31 n9635 −, "academic disciplines and fields of study", fires on " degree"
-  and " career" before a field is named) and one naming the construction around the token (L4 n8221 −, "Python import
-  statements", fires on the module name after `from`; L5 n1493 +, "view and visit counts", on the field name " Votes", not
-  the count). Where a label names the token, the simulation is close to exact: L0 n6001 − ("no need", 0.92), L31 n94 +
-  ("al" starting chemical names, 0.89).
-- **Weak firings are mostly outside the labels.** Excerpts that peak at a quarter to a half of `act_top` are found among
-  random ones at AUROC 0.61 and correlate at 0.09: a label written from top contexts describes the top regime (§4).
-- **The lean labels simulate as well as the earlier ones** (+0.01 [−0.02, 0.05]), as they detect.
-- **Spread:** median 0.17, 30% of poles at 0.3 or more, 9% at 0.5 or more; highest at L0-L8 (0.30, against 0.16-0.22
-  after), where detection is lowest (§8's quarters: 0.79 against 0.84-0.87). Confidence ranks weakly (0.25 for the 9
-  labels at 0.7 or more, 0.17 for the 57 under 0.4).
-- **The two tests agree on whether a label recognises a pole's firings, less on the token.** Per pole, the detection AUROC
-  ranks with the simulation's excerpt-level scores at Spearman 0.42-0.44 (labels that fail detection leave half their top
-  excerpts predicted silent, those at 1.0 a quarter), with the token-level score at 0.20. Detection's 8 contexts a pole,
-  half its poles at 1.0, cap how well either can rank.
-- Scores are correlations, on another scale from the detection AUROCs, from one simulator. A label that names the token a
-  pole fires on beside its concept would likely close part of the token-level gap (untested).
-  `data/summary/label_simulation_qwen3-8b.json`.
-
-**Limits.** Positives come from the high-activation regime (top documents only; the simulation above adds weak firings),
-and quiet positions are an easier contrast than near misses. 32 poles a band is about ±15 points (100 poles for the Haiku
-test, ±20). Steering is amplified past natural firing (5-18× in the blind test, 7-29× in the Haiku
-test), in bf16. Explainers, scorers and judges are all Claude models, in separate instances, and the
-explainers' prompt carried the depth priors.
-
-## §9. Attention sinks, the output's temperature and entropy neurons
+### §9. Attention sinks, the output's temperature and entropy neurons
 
 The largest activations in the model all act through two residual dimensions that the output ignores.
 
@@ -718,11 +612,11 @@ its own token, so its values count each first token once) and `checks/external_c
 dimensions 1838 and 2276 (median 2.0 elsewhere), so writes there move no logit directly. But they hold
 64% of the final residual's squared norm at the median position, so they set the norm the final RMSNorm
 divides by: the final RMS is 24.2 at the median and would be 14.6 without them. Writing to them
-rescales every logit (RMSNorm algebra; the measurement is new here).
+rescales every logit.
 
 **The attention sink at position 0.** Three L6 neurons (n5723 +, n8518 −, n422 +) fire at up to 10,752
 at the first position and write 95-96% of their squared norm onto dimension 2276, raising the
-residual's norm from 44 to 12,091 (these are Muyu He's three dimensions, here with their poles). Later
+residual's norm from 44 to 12,091 (the three Muyu He reported, here with their poles). Later
 layers' heads attend to that position by default. The trigger is layer 0's MLP output at position 0:
 
 | at position 0 | L6 n5723 | first tokens with a sink | attention on position 0 at L9 / L21 / L33 | loss on token 2 / tokens 3+ |
@@ -769,84 +663,10 @@ and on this measurement; `null_share` flags them only together with the activati
 **Limits.** 16,128 positions, and the second sink's clearing rests on 11 positions. Poles are ablated
 one at a time, though the four L34 poles fire together. The sink share uses a cutoff (|dim 2276| over
 2,000 after L6; clean, about 12,000), and under the position-1 swap four first tokens land within 15% of
-it, among them the chat slice's shared `<|im_start|>`: 1,776 here at batches of 8, 16 and 32 (MPS,
-bf16), 1,904-2,008 on another GPU. There it crossed the cutoff with the batch size, taking all 32 chat
-documents with it, so the earlier count over documents moved from 9% to 34%
-([issue #2](https://github.com/stdlogits/neuron-lens/issues/2)). `checks/sinks.py` lists these tokens.
+it, among them the chat template's `<|im_start|>`, which crosses it with the batch size and the device; the table counts
+distinct first tokens, each once, and `checks/sinks.py` lists the four.
 
-## §10. Outside labels
-
-How do labels from other methods compare with the catalog? The main outside source is the [Neuron
-Persona Library](https://neuronpersonas.com) (by jfonsecarivera), 34,220 rows, each a pole whose push
-on "Who are you?" made the model claim a persona, named by Claude Haiku. `neuron_lens/known.py` holds
-smaller sets: six steering-verified persona neurons from an earlier experiment on this model, and
-published neurons from Sudarsh, Sauers, Muyu He and Kazemi et al.
-
-**Strict name matches** (`checks/library_crosscheck.py`): the first token of a persona name's words in
-the pole's write read. In the top 10 for 52% of L30-L35 rows and 30% of L24-L29 rows under every lens,
-2-3% at L12-L17 (control 0.2-0.3%). At L0-L5, the R-lens finds 15% where the J-lens finds 1% and the
-logit lens 3%.
-
-**Generous matches** (`checks/library_judge.py`): 360 rows, 60 per layer group; Claude Sonnet judges
-score each read against its persona's name and, shuffled in, another row's (0-3; 2 or more is a clear
-match: the concept in any language, or a strongly associated thing). Reads from the write side, the
-input side (`read_R` and `read_S`) or both together:
-
-| layers | write | input | both |
-|---|---|---|---|
-| L0-L5 | 0.35 (0.02) | 0.35 (0.02) | 0.38 (0.03) |
-| L6-L11 | 0.27 (0.02) | 0.22 (0.02) | 0.33 (0.07) |
-| L12-L17 | 0.20 (0.07) | 0.17 (0.07) | 0.28 (0.10) |
-| L18-L23 | 0.22 (0.02) | 0.10 (0.03) | 0.27 (0.05) |
-| L24-L29 | 0.45 (0.00) | 0.37 (0.02) | 0.50 (0.03) |
-| L30-L35 | 0.53 (0.02) | 0.42 (0.02) | 0.62 (0.02) |
-
-![Persona labels judged against each side](figures/15_library_judge.png)
-
-- **A generous reading doubles the strict rate:** weighted by the library's depth mix (mostly
-  L6-L17), 27% of rows clearly match the write read, 22% the input read and 34% both together
-  (swapped names 3-6%). Translations and associated words count: L9 n3370 − "Dragon" writes dragon,
-  龙, dragons.
-- **Mid-network is hardest** (20-22% of rows at L12-L23 on the write side).
-- **Fused personas.** The library also pushed 2-3 neurons at once; 3,097 of 13,861 pairs gave a persona
-  no parent gives alone. The R-lens read of the summed pushes ranks words in neither parent's name in
-  its top 100 for 19% of pairs (mismatched names 3%; J-lens 10%, logit lens 7%;
-  `checks/combo_crosscheck.py`). The best parent's read alone does about as well (24%, control 5%):
-  the new concept is mostly latent in one parent's write.
-- **Steering one prompt finds personas, not everything.** Of the 71,661 poles whose write predicts
-  what follows their firings (§7), 4.0% have a library row, mostly because 98% sit at L21-L35, where
-  the library is thin; against each layer's base rate the library is enriched for them (1.5×;
-  `checks/library_crosscheck.py`). What it misses has no self-description: idiom completers (L30
-  n1034 + writes *again* on "once"), morphology (L8 n1541 + writes *-ism*/主义 on the stem before it),
-  everyday concepts (L28 n8868 − writes *democracy* on "arist|", "olig|").
-
-**Against whole evidence cards** (§8's pilot), the explainers' verdicts on outside labels:
-
-| source | method | agrees | partial | disagrees |
-|---|---|---|---|---|
-| earlier persona-steering experiment | steering-verified personas | 6 | 0 | 0 |
-| Sudarsh | activation contrast × `W_down`, steering | 10 | 3 | 0 |
-| Neuron Persona Library | steering on "Who are you?" | 13 | 9 | 11 |
-| Sauers | steering and causal search | 7 | 3 | 4 |
-| Muyu He | MLP energy at token 0 | 3 | 1 | 2 |
-| Kazemi et al. | refusal gradient × activation difference | 1 | 1 | 1 |
-
-- **Activations sharpen the steering-verified labels:** L8 n1931 + ("Jesus") fires on the Bible as
-  scripture ("God's⟦ Word⟧", "non-B⟦ib⟧lical"); L21 n1180 − ("mother") on leaving work to care for
-  family ("stay⟦-at⟧-home moms"); L27 n1343 + ("candidate") on deciding to run for office.
-- **Labels from steering one prompt disagree with the firings most often:** the library's "creator god" pole, L8 n8079 +,
-  fires on time words (times, 时间, `timing_stats`); Kazemi et al.'s refusal neuron, L14 n7924 +, fires
-  on light, playful request framing.
-- Unsigned labels count both poles, so one pole of each often "disagrees".
-
-So the methods are complementary: steering on one identity prompt reaches the personas, activations
-and lenses reach the rest, and each checks the other where they overlap.
-
-**Limits.** Strict matching scores only the first tokens of names. 60 rows a group is about ±12
-points. The judges are the library labeller's model family. About a third of the library's strongly
-pushed replies change with the batch layout.
-
-## §11. Attention heads: circuits read token by token
+### §10. Attention heads: circuits read token by token
 
 A head moves information between positions: its QK circuit decides which earlier position it reads,
 its OV circuit what it writes from there. Both can be read from the weights over the whole vocabulary,
@@ -880,7 +700,7 @@ the token after the attended position for an R-lens input:
 | L28-L35 | +0.80 | +0.08 | +0.42 | +0.11 |
 | all | +0.51 | +0.23 | +0.13 | +0.08 |
 
-![Which lens on each side of a head](figures/16_head_lens_sides.png)
+![Which lens on each side of a head](figures/13_head_lens_sides.png)
 
 - **The input side is the S-lens, for both circuits.** An S input beats an R input with the same
   output lens in every band, on this test and on whole predicted columns (the one exception is the
@@ -892,7 +712,7 @@ the token after the attended position for an R-lens input:
 - **The output side is the S-lens early and the R-lens late,** as for neuron writes: S→S leads at
   L1-L8 and edges S→R at L13-L20 (where it also predicts whole columns better), S→R leads at L9-L12
   and by far from L21. Induction heads favour S→R, duplicate-token heads S→S.
-- An earlier, coarser test agrees: of the four brackets' copying scores, only S→R tracked single-head
+- A coarser test agrees: of the four brackets' copying scores, only S→R tracked single-head
   ablation better than the raw score (Spearman +0.22, +0.08 over raw, 95% interval +0.03 to +0.12;
   `checks/head_circuits.py`).
 - The catalog reads keys and values with the S-lens; OV as `ov_R` (S→R, trusted from L9) and `ov_S` (S→S, trusted
@@ -929,9 +749,7 @@ with the q/k norms' derivative and RoPE averaged over the head's own offsets.
   over tokens seen 10+ times as keys): Spearman over tokens +0.18 at L0-L8 (control +0.07), +0.01 at
   L13-L20 (−0.01), +0.16 at L28-L35 (+0.04); best at L0 (+0.42: L0h27 attends to the starts of code and
   documents, L0h0 to Chinese and Japanese function words). The S-lens beats raw embeddings wherever
-  either reads anything (`checks/head_qk.py`). The released pass renormalized attention without the
-  sink by `1 − a₀`, which bf16 rounds to 0 for sink heads; `06_activations.py` now divides by the
-  non-sink sum, which on a 176-document slice raises these means by at most 0.03 (at L28-L35).
+  either reads anything (`checks/head_qk.py`).
 - **Late heads attend to what they copy:** at L28-L35, 23% of heads attend mostly to tokens high in
   their own copy read (control 7%; `checks/head_census.py`), and class suppressors to the class they suppress (L31h23 attends to
   ` Combination | Equality` and suppresses ` alternative | balance | combination`). Mid-network, where a
@@ -946,8 +764,8 @@ with the q/k norms' derivative and RoPE averaged over the head's own offsets.
   that to copies of a random earlier token. At L28-L35 the weight read's per-head median tracks it at
   Spearman +0.54 across heads (another head's read +0.08, `qk_self_S` −0.17), and +0.50 with the model's
   final top-1 as the target; less earlier (+0.46 at L13-L20, where R-lens on both sides does better,
-  +0.33 at L21-L27). The query is the R-lens row made a vector by the residual's metric (§13); with the released
-  Euclidean query these were +0.62, +0.58, +0.39 and +0.21.
+  +0.33 at L21-L27). The query is the R-lens row made a vector by the residual's metric (§15); a Euclidean query
+  scores +0.62, +0.58, +0.39 and +0.21.
   - Of the 20% of L21-L35 heads that seek most, 17 lower the target's logit (direct effect, against a
     random earlier token's): copy suppression in context, among them L33h21, L32h9, L27h7, L29h16 and
     L31h30 (the list is in `data/summary/head_seek_qwen3-8b.log`). The weight read finds them at
@@ -962,17 +780,18 @@ with the q/k norms' derivative and RoPE averaged over the head's own offsets.
   query is ` she` or ` he`.
 
 **Limits.** The OV read assumes the head reads one token's footprint; in context a head mixes several
-positions. Reads are scale-free. The S-lens footprint is a context-averaged stand-in (§6). The QK read
+positions. Reads are scale-free. The S-lens footprint is a context-averaged stand-in (§7). The QK read
 is first-order: attention that depends on the query's context or on position alone (previous-token,
 induction) is not read.
 
-## §12. Attention heads: tests and labels
+### §11. Attention heads: what their reads name
 
-**What each read names** (`checks/reads_at_firings.py`). Each head's weight-only reads are scored at its 64 top firings
+**Setup** (`checks/reads_at_firings.py`). Each head's weight-only reads are scored at its 64 top firings
 (largest output norm, one per document) against the layer's other heads on the same firings; BH over
 all 1,152 heads at 5%, as shares of each band's heads (no per-head test is kept). `ov_R`: the attended token's column promotes the next token; `ov_copy`: the head
 promotes what it attends to; `ov_S`, `qk_S`: the attended token scores high in the head's own read. Token mode: a third of
-firings sharing a query or attended token.
+firings sharing a query or attended token. Pattern: previous-token or self attention past 0.5, or an induction or
+duplicate-token score past 0.3 (§10).
 
 | band | `ov_R` | `ov_copy` | `ov_S` | `qk_S` | token mode: query / attended | pattern |
 |---|---|---|---|---|---|---|
@@ -983,7 +802,7 @@ firings sharing a query or attended token.
 | L28-L35 | 0.26 | 0.16 | 0.00 | 0.08 | 0.25 / 0.19 | 0.04 |
 | all | 0.07 | 0.05 | 0.00 | 0.02 | 0.15 / 0.21 | 0.07 |
 
-![What each head's reads name](figures/17_head_census.png)
+![What each head's reads name](figures/14_head_census.png)
 
 - **Late heads write the next token:** `ov_R` holds for 26% of L28-L35's heads (53% at L33). Read
   from their actual outputs in context, 32-61% of heads from L21 promote the token that follows their
@@ -991,46 +810,356 @@ firings sharing a query or attended token.
   (`heads/acts`' `out_R_z`; `checks/head_census.py`).
 - **The S-side reads never separate a head from its layer.** S→S copying is common to nearly every
   head (`ov_S_copy` medians +0.31 to +0.68 by band), and the mean query's favourite keys are
-  shared too. They stay useful as reads of what heads do (§11), not as evidence that a firing is this
+  shared too. They stay useful as reads of what heads do (§10), not as evidence that a firing is this
   head's.
-
-**A label for every head** (`10_labels.py --side heads`). Claude Haiku 5.5 labelled all 1,152 heads
-from leak-free cards (patterns, output scale, OV and QK reads with both self-match diagonals, drivers, the
-first 5 contexts): where it fires, what it attends to, what it writes ($0.30 on the Batch API). Checked
-blind on 100 random heads, 20 a band, by Claude Sonnet:
-- **Firing:** the labels separate 4 held-out top firings from 4 of another head of the band at AUROC
-  0.70 [0.64, 0.77]; a third head's labels score 0.50. Half the heads (55%) score 0.8 or more. The
-  contrast is another head's strongest firings, harder than §8's quiet text.
-- **Writes:** a judge shown the firings' in-context output read picks the head's own label out of four
-  54% of the time [45, 65] (chance 25%): 79% at L28-L35, 67% at L9-L12, 55% at L21-L27, 42% at
-  L13-L20, 28% at L0-L8.
-- Most labels are unconfident (median 0.25-0.30), and confidence tracks the score only weakly
-  (Spearman +0.15).
-- The labels before `qk_self_R` was on the cards scored the same within noise (0.71 and 49%), and the
-  copy suppressors' labels barely changed: their `qk_self_R` lists are scattered tokens, and the
-  labeller leans on the contexts and the OV reads.
 
 **Limits.** The tests compare a head with its own layer, so a property shared by a layer's heads never
 passes: the right null for "this head", the wrong one for "these heads". Firings are the top 64 by
 output norm, one per document, which favours heads with large outputs; sink heads fire where they leave
-the sink. 20 heads a band is noisy.
+the sink.
 
-## §13. Gemma 4 12B: the text catalog in a second model
+### §12. What feeds a unit: edges and sources
 
-**Setup.** The pipeline (`06`-`09`, `checks/causal_lens.py`) run on the base model
-`google/gemma-4-12B` with `NEURON_LENS_MODEL=google/gemma-4-12B`, on H100s in bf16: 48 layers ×
-15,360 GELU-tanh neurons and 16 heads a layer. Its architecture differs in ways the readers follow
-(a norm after the MLP and a per-layer scalar on the write, shared keys and values on global layers,
-a softcap on the logits; design.md, [Gemma 4 12B](design.md#gemma-4-12b)). Both lenses were fitted
-as Qwen3-8B's, on the same 1,000 DCLM documents (about 16 s a document per lens on one H100);
-split-half differences are 0.01-0.12 by layer for the R-lens (median about 0.05) and 0.01-0.07 for
-the S-lens. The activation corpora have Qwen3-8B's sizes (15.4M positions), with the chat slice as
-plain `User:` / `Assistant:` turns, since the base model has no chat template. The causal sample is
-24 random neurons a layer, both poles, with no J-lens to compare.
+What feeds a neuron? The residual stream is a sum: what a neuron writes reaches every later layer's MLP
+input unchanged, so the direct path from one pole to a later one is a number from the weights. This
+section builds those edges for Qwen3-8B and asks how much of what drives a pole when it fires they name.
 
-**Steering** (as §3: the write added at 1× and 4× the pole's `act_top` at positions 16-63 of 16
-DCLM documents; Pearson r with the lens's read, medians over the random poles; controls within
-±0.05 at every layer):
+**Setup.**
+- **Edges** (`16_edges.py`; weights only, fp32, minutes). For a pole A of layer L and a pole B of a later layer M: `cos`,
+  the cosine of A's write `±W_down[:, n]` with B's read direction (`â ± b̂`, or the up row for a negative-lobe pole, §7) in
+  the residual's metric at B's MLP input (§15), and `push = cos · act_top_A · ‖w_A‖ / rms_M`, how far one of A's top firings moves B's normalized MLP
+  input along B's read direction (`rms_M`: the median RMS of the residual entering layer M's MLP over
+  64 documents, 0.1 at L0, 1.0 at L12, 6.6 at L28 and 26 at L35). Each pole keeps its 64 strongest
+  in-edges (from earlier poles) and out-edges (to later ones) by |push| among those with
+  |cos| ≥ 5/√d = 0.078, which random directions reach about once in 1.7 million (the `edges` table).
+- **In context** (`checks/edges_in_context.py`; H100, fp32). §3's 32 random neurons a layer
+  at L1-L35, both poles, at their first 5 top firings (2,228 poles). At a firing, B's MLP input is the
+  normalized sum of the embedding, every head's write at layers up to M and every neuron's below M.
+  Holding the norm's scale and SiLU's ratio `silu(g)/g` (RelP's rules), the half rule splits B's
+  activation exactly over these sources (largest error 4·10⁻⁵).
+
+**The wiring is real.** Against the layer before alone, the median pole's strongest |cos| is 0.12
+(0.10-0.15 by band), against 0.063 for the same writes under a random rotation. 92% of poles have an
+in-edge above the floor (L0's have none to have), half of them strongest from the layer before. A
+concept pole is wired from its concept: L14 n1561 + (animals, pets, livestock) has in-edges from L12
+n7934 − (dogs, pets, veterinary), L9 n11117 + (pet words), L11 n9841 − (animals, birds, bees) and L10
+n10730 + (animal and rodent nouns).
+
+Shares of the activation at the pole's top firings (medians over poles of each pole's mean):
+
+| band | heads | neurons | top 64 neuron poles | firing among them | the 64 in-edges | 64 random poles | in-edge sources firing | recall (control) | ρ |
+|---|---|---|---|---|---|---|---|---|---|
+| L1-L8 | 0.33 | 0.66 | 0.81 | 0.41 | 0.05 | 0.00 | 0.03 | 0.06 (0.00) | 0.88 |
+| L9-L12 | 0.25 | 0.74 | 1.13 | 0.45 | 0.14 | 0.00 | 0.04 | 0.06 (0.00) | 0.89 |
+| L13-L20 | 0.49 | 0.51 | 1.03 | 0.55 | 0.09 | 0.00 | 0.03 | 0.07 (0.00) | 0.87 |
+| L21-L27 | 0.42 | 0.58 | 0.72 | 0.59 | 0.09 | 0.00 | 0.04 | 0.08 (0.00) | 0.87 |
+| L28-L35 | 0.19 | 0.81 | 0.79 | 0.62 | 0.10 | 0.00 | 0.07 | 0.04 (0.00) | 0.88 |
+
+*Firing*: at `act_top / 4` or more in its pole (the `acts` tables' rate threshold). *Recall*: the share
+of the 64 largest |contributions| that are in-edges (control: another pole's in-edges). *ρ*: Spearman
+over every upstream neuron, in the pole it is in, between its push and its contribution.
+
+- **A pole's direct input is concentrated.** The 64 upstream neuron poles that contribute most sum to 72-113% of its
+  activation (signed: past 100%, the rest cancels), and 41-62% of them are firing there themselves. Heads carry a third,
+  half at L13-L20; the embedding 2% at most (at L1), under 0.5% from L7. Over every pole's first 5 firings (the `sources`
+  table) heads carry a median 19-52% by band.
+- **The edges get the direction right, not the traffic.** An edge's push ranks every upstream neuron's
+  contribution at Spearman 0.87-0.89: the weights say what each would do. But the in-edges are 4-8% of
+  the 64 largest contributors and carry 5-14% of the activation, because their sources fire at only
+  3-7% of the pole's top firings. What drives a pole is which units fire with it, which no list from
+  the weights can know (the same gap as between global weights and attribution graphs over transcoder
+  features; Ameisen et al. 2025).
+- **In context the sources read as one concept.** `explain 14 1561 +` gives the animal pole's sources
+  at its five top firings: L12 n7934 − (11%), then animal, veterinary, pet and young-animal poles from
+  L4-L13 (L12 n7182 −, L11 n2301 −, L13 n12072 +, L10 n11987 +, L4 n12138 + "vet", L10 n4140 − cats),
+  topical copy heads (L12h18, L14h7, L14h6: +11.5%) and two heads that suppress topical nouns (L14h5,
+  L12h8: −9%). Three of its ten largest neuron sources are among its 16 strongest in-edges (L12 n7934 −,
+  L12 n7182 −, L11 n2301 −).
+- **Early poles read their up row.** At L1-L3 most top firings ride SiLU's negative lobe, where `â ± b̂` points the wrong
+  way (§7): with it, ρ is −0.27, −0.61 and 0.52 there; with the up row for those poles, 0.80, 0.77 and 0.80.
+- **Early hubs.** A few L0-L1 neurons sit in most early in-lists: the 1% most-listed sources hold 59% of
+  the in-list entries at L0-L8 (8-18% later), and L0 n11466 − (甩, "fling") is in 26% of L1-L8 poles'
+  lists. Shared lists show as recall's control at L1-L2 (0.04-0.05).
+- **Driven by differs from wired to and fires with** (every pole, its top 16 of each at its first 5 firings;
+  `checks/relations.py`). A pole's top 16 driven-by sources are a median of 31-44% in its top 16 in-edges or fires-with
+  lists (13-19% and 19-25% taken alone; another pole's lists 0): 56-69% of its largest contributors are in neither,
+  because a source's contribution is its activation times its wiring, and the top of the product is not the top of either
+  factor. Contributions are diffuse: in a 160-pole probe the top 16 carried only 1-5% of the summed absolute contribution.
+
+**Into a head** (`17_firings.py --parts heads`, the `heads/sources` table; H100). A head's firing reduces to a read of the
+residual entering its layer through each input (design.md): the value at the positions it attends to, and the query and
+keys through the score margin between its most attended key and the mean of them (equal to the log-probability margin to
+5·10⁻⁶). Every head's first 5 top firings (5,760 in Qwen3-8B, 3,840 in Gemma 4); the shares sum to 1 within 1.3·10⁻³.
+Medians over a band's layers, share of neurons / earlier heads:
+
+| band | value | query | key |
+|---|---|---|---|
+| Qwen3-8B L1-L8 | 0.90 / 0.10 | 0.65 / 0.34 | 0.83 / 0.17 |
+| L9-L12 | 0.90 / 0.10 | 0.67 / 0.33 | 0.83 / 0.17 |
+| L13-L20 | 0.94 / 0.06 | 0.61 / 0.39 | 0.87 / 0.13 |
+| L21-L27 | 0.85 / 0.15 | 0.54 / 0.46 | 0.77 / 0.23 |
+| L28-L35 | 0.86 / 0.14 | 0.60 / 0.40 | 0.82 / 0.18 |
+| Gemma 4 L1-L11 | 0.92 / 0.08 | 0.78 / 0.21 | 0.90 / 0.10 |
+| L12-L23 | 0.82 / 0.18 | 0.57 / 0.43 | 0.81 / 0.19 |
+| L24-L35 | 0.85 / 0.15 | 0.67 / 0.33 | 0.81 / 0.19 |
+| L36-L47 | 0.85 / 0.15 | 0.66 / 0.35 | 0.76 / 0.24 |
+
+What a head copies and what it can be found by come mostly from neurons; what it looks for takes a third to a half from
+earlier heads, which suggests composition between heads runs mainly through the query (Q-composition, Elhage et al. 2021,
+here measured at firings). There is no signed weight edge into a head: two heads meet through a matrix, not a dot product.
+
+**Gemma 4** has the same split (the in-context sample, 3,008 poles): heads carry 12-26% of the activation, neurons 74-86%,
+and an edge's push ranks every upstream neuron at ρ 0.89-0.92. Over every pole's first 5 firings, heads carry a median
+13-26%. From L12 its edges behave as Qwen3-8B's: the in-edges are 3-9% of the 64 largest contributors and carry 8-9% of the
+activation, their sources firing at 4-6% of the pole's firings (random sources 1-2%), and a pole's top 16 driven-by sources
+are 13-19% in its top 16 in-edges, 25-31% in either list. At L1-L11 they name almost none of the sources (2% of the
+largest, 0.6% of the activation; 0% of the driven-by, 6% in either list). A pole's largest |cos| with the layer before's
+writes is a median 0.08-0.15, against 0.066 for the same writes rotated at random, and the 1% most-listed sources hold
+12-28% of the entries. Taken in the raw basis these were 0.002-0.018 and 52-66%, and the in-edges carried none of the
+activation: the cosine that admits an edge pairs a write with a read row, which the raw basis weighs by each coordinate's
+units, so it let through a few hub neurons and dropped the rest (§15).
+
+**What this means.** The edges are the model's wiring: what a pole's firing would do to each later pole,
+the counterpart of a write read (§3), and like it an average that leaves the context out (§4). Which
+units drive a pole when it fires is the context's: a list of what feeds a pole needs activations, its
+sources at its top firings, which `explain` gives one pole at a time.
+
+**Limits.** Direct paths at one position: what heads carry between positions, and paths through other units, are not
+edges. `push` holds each source at its typical top firing, and Gemma 4's `edges` take each write at its norm's typical
+scale. 32 random neurons a layer, 5 firings each.
+
+## IV. Describing units in words
+
+The evidence turned into labels, checked blind (§13) and against labels made another way (§14).
+
+### §13. Labels from the evidence
+
+Can the evidence be turned into words that predict what a unit does? A blind test asks how far the lenses alone go; the
+catalog's labels are then checked by detection and by simulation.
+
+**Scoring.** An explainer writes two labels with a confidence: where the pole **fires**, and what its write **promotes**
+when amplified.
+- **Firing** is scored by detection (Paulo et al. 2024): fresh scorers see the label and a shuffled set of held-out top
+  firings (top documents the card did not show, each cut at the firing token) and quiet positions or another pole's
+  firings, and give each a probability of firing; the score is the AUROC. The control is another pole's label on the same
+  set. This test is made of firings, so it favours evidence made of firings.
+- **Writes** are scored by steering: the pole's write is added at doses where it changes the next-token distribution by
+  0.5, 1 and 2 nats of KL (7-15× its typical activation), on four prompts; a fresh judge sees the steered text and four
+  labels from the same band and picks the pole's own (chance 25%).
+- **Cards are leak-free:** nothing on a card summarizes the held-out documents.
+
+**A pilot with full evidence** (`checks/describe_cards.py`, `checks/describe_score.py`): 197 poles (2 random neurons a
+layer, both poles, and 53 named poles), Claude Sonnet explainers, full cards (lens reads, top 5 contexts, activation
+statistics, steering, outside labels). Over the 189 that fire, 5 held-out firings against 5 quiet positions score a mean
+AUROC of **0.93** [0.91, 0.94] (control 0.54). Most poles are token- or phrase-level detectors, often of what comes next:
+L7 n271 + poxviruses (monkey⟦p⟧ox), L9 n8548 − an AI assistant's self-reference ("my training", "been programmed"), L16
+n6934 + " upon" in "Once upon a time", L26 n4061 − the word before "suicide".
+
+**The blind test** (`checks/lens_blind.py`): 160 random poles, 32 per band, explainers that never see steering, in four
+arms: **lens** (only the eight weight-only reads, plain and `_z`, 12 tokens each), **contexts** (only the top 5 contexts,
+activation scale and rates), **both** on one card, with Sonnet and with Opus. Six held-out firings against six quiet
+positions, three from random documents and three from the firings' own documents.
+
+| band | fires AUROC: lens / contexts / both / Opus | writes picked: lens / contexts / both / Opus |
+|---|---|---|
+| L0-L8 | 0.79 / 0.93 / 0.92 / 0.94 | 0.34 / 0.45 / 0.42 / 0.49 |
+| L9-L12 | 0.79 / 0.91 / 0.91 / 0.90 | 0.73 / 0.55 / 0.66 / 0.64 |
+| L13-L20 | 0.76 / 0.79 / 0.84 / 0.82 | 0.58 / 0.42 / 0.53 / 0.49 |
+| L21-L27 | 0.81 / 0.82 / 0.88 / 0.89 | 0.66 / 0.54 / 0.60 / 0.63 |
+| L28-L35 | 0.83 / 0.93 / 0.90 / 0.91 | 0.95 / 0.76 / 0.94 / 0.91 |
+| all | 0.80 / 0.87 / 0.89 / 0.89 | 0.65 / 0.54 / 0.63 / 0.63 |
+
+Controls: another pole's firing label scores 0.58; writes chance is 0.25.
+
+![Random poles read blind](figures/15_lens_blind.png)
+
+- **From the lenses alone, a random pole gets a usable description most of the time:** firing labels at AUROC 0.80 (58% of
+  labels at 0.8 or more, against 16% of controls), write labels picked 65% of the time.
+- **Scored on firings, contexts lead the lenses for where a pole fires** (0.87 against 0.80), as evidence made of firings
+  should, and tie them at L13-L27. Same-document negatives cost both arms about 0.05, so neither's labels are mostly topic
+  labels.
+- **For what it promotes, the lenses beat contexts** (65% against 54%): 95% at L28-L35, where 42% of strongly steered
+  tokens are in the pole's own R-lens top 64 (none in other poles'); 58-73% at L9-L27, where the judge matches concepts
+  (L11 n4351 + reads *trauma, genocide, survivors*, and steered, the model writes of "a powerful narrative of trauma");
+  near chance at L0-L8, where steering mostly degenerates the text (§7: early meaning is input-side).
+- **Combining helps a little:** both sources on one card reach AUROC 0.89 and 63%; the lenses add to contexts only for
+  firing at L13-L27 (+0.03-0.07). Picking each side's best source does as well.
+- **Opus explains no better than Sonnet** (0.89 and 63% each), which suggests the bottleneck is the evidence, not the
+  explainer. On 100 more random poles, Claude Haiku 5.5 matches Sonnet when the card has contexts (firing AUROC 0.82
+  against 0.83; `checks/haiku_blind.py`) and trails it from the lenses alone (0.71 with the reads chosen by depth).
+- **Where the sides differ:** format and fragment detectors whose reads name something else. L34 n7339 − fires on a
+  word-initial W (W|inters), its read direction names GPUs (Nvidia, Radeon), and its write is 再 (again): three sides that
+  don't agree, and no test here says which describes the pole.
+- **Confidence ranks:** lens firing labels at confidence 0.7 or more score 0.97, below 0.4 0.67.
+- **17% of firing poles defeat every arm**, 19 of 25 at L9-L27: code-identifier fragments and Chinese punctuation whose
+  held-out firings vary in surface form.
+
+**The catalog's labels** (`10_labels.py`). Claude Haiku 5.5 (Batch API, effort low, no thinking, 10 neurons a request)
+labels every pole and head of Qwen3-0.6B, 1.7B, 4B, 8B and 14B and Gemma 4 12B: 4,968,448 poles and 5,568 heads for $303
+(Qwen3-8B $52.78, Gemma 4 $90.26). A pole's card shows how often it fires and which text slices it favours, the one input
+read and one write read its model's reading plan names for its depth (§8), 24 tokens each without strengths, and its first
+5 top contexts; confidence is how clearly the card shows one theme. A pole that is a faint shadow of its neuron's other
+pole (§7) keeps only its write read and is marked. A head's card shows its attention patterns, how often it fires, the
+plan's OV read, its QK reads with both self-match diagonals (§10), its drivers as query and key, and its first 5 contexts.
+Each model has its own prompt with worked examples (`scripts/prompts/`).
+
+**Checked blind** (`checks/relabel_check.py --poles all`, `10_labels.py check`). Claude Sonnet 5.5 sees a firing label and
+8 contexts, 4 of the pole's held-out top firings (ranks 6-24, off every card) and 4 of another firing pole of its layer,
+a harder contrast than quiet text; AUROC per pole, on 150 random firing poles a model:
+
+| | label | another pole's label | by depth quarter |
+|---|---|---|---|
+| Qwen3-0.6B | 0.86 [0.82, 0.90] | 0.51 | 0.88 / 0.85 / 0.81 / 0.89 |
+| Qwen3-1.7B | 0.88 [0.84, 0.91] | 0.54 | 0.85 / 0.83 / 0.88 / 0.95 |
+| Qwen3-4B | 0.86 [0.82, 0.89] | 0.51 | 0.94 / 0.82 / 0.84 / 0.82 |
+| Qwen3-8B | 0.84 [0.80, 0.87] | 0.44 | 0.79 / 0.84 / 0.84 / 0.87 |
+| Qwen3-14B | 0.82 [0.78, 0.87] | 0.50 | 0.85 / 0.81 / 0.82 / 0.82 |
+| Gemma 4 12B | 0.82 [0.77, 0.86] | 0.50 | 0.78 / 0.85 / 0.85 / 0.80 |
+
+- **Firing labels hold at every depth and size.** No quarter of any model falls below 0.78; the smaller models score a
+  little higher (0.86-0.88, against 0.82-0.84 at 8B, 12B and 14B). A longer card with every tier of reads and their
+  strengths scored the same within noise on the same poles (Qwen3-8B 0.81, Gemma 4 0.81) at twice the cost, and with
+  lower confidence (mean firing confidence 0.34 against 0.44 on Qwen3-8B, 0.30 against 0.40 on Gemma 4).
+- **Heads** (20 random heads a band, the same test against another head's firings): Qwen3-8B's firing labels score 0.72
+  [0.66, 0.78] and its write labels are picked 51% of the time [40, 61], from what the head's firings promote in context
+  (chance 25%); Gemma 4's 0.78 [0.72, 0.84] and 32% [22, 42]. Gemma 4's OV reads rarely pass a test (§15), and what a
+  head's OV map promotes is not what it writes in context; its write labels follow its cards. Tables by band:
+  `data/summary/labels_heads_<model>.md`.
+- Write labels of neurons were not steered on these cards; on Qwen3-8B the longer card's were picked 61% of the time
+  [52, 69] (80% at L28-L35, 41% at L0-L8). 150 poles is about ±4 points a model, a quarter about ±8.
+  `data/summary/label_check_<model>.json`.
+
+**Simulation** (`checks/simulate_labels.py`). Bills et al. (2023)'s test on the same 150 Qwen3-8B poles: Claude Sonnet 5.5
+sees only a firing label and predicts the pole's activation, 0 to 10, at every token of 15 excerpts of 64 tokens,
+shuffled: 5 around held-out top firings (ranks 6-24), 5 around weak firings (a peak at a quarter to a half of `act_top`)
+and 5 at random, the last two from 2,000 random activation documents outside the pole's top 64. True activations come
+from a bf16 forward pass over each excerpt's document, the pole's sign applied and clipped at zero. The score is the
+correlation of simulated and true activations over all 960 tokens (Bills's top-and-random score). Three labels run on the
+same excerpts: the catalog's label, the longer card's, and another firing pole's of the layer.
+
+| | label | longer card's label | another pole's label |
+|---|---|---|---|
+| correlation, all tokens | 0.21 [0.18, 0.25] | 0.20 [0.16, 0.24] | −0.00 |
+| within top / weak excerpts | 0.23 / 0.09 | 0.21 / 0.10 | 0.00 / 0.00 |
+| correlation of excerpt peaks | 0.44 [0.38, 0.49] | 0.39 [0.33, 0.45] | −0.04 |
+| top / weak excerpts found among random ones (AUROC) | 0.75 / 0.61 | 0.73 / 0.61 | 0.49 / 0.50 |
+| top excerpts' predicted peak within a token of the true one | 25% | 24% | 0.5% |
+
+- **The labels name the context a pole fires in more often than the token.** Scored by each excerpt's peak (which excerpts
+  fire, and how strongly) a label reaches 0.44; token by token 0.21. Of the 750 held-out top excerpts, the predicted peak
+  lands on the true token in 16%, one or two tokens after it in 9% and before it in 4%, 3-5 tokens off in 5%, further off
+  in the excerpt in 31%, and 35% are predicted silent: the label doesn't cover that firing at all. Detection sees none of
+  this, since its contexts end at the firing token. Misses read by hand include a label naming the word about to come (L31
+  n9635 −, "academic disciplines and fields of study", fires on " degree" and " career" before a field is named) and one
+  naming the construction around the token (L4 n8221 −, "Python import statements", fires on the module name after
+  `from`). Where a label names the token, the simulation is close to exact: L0 n6001 − ("no need", 0.92), L31 n94 + ("al"
+  starting chemical names, 0.89).
+- **Weak firings are mostly outside the labels.** Excerpts that peak at a quarter to a half of `act_top` are found among
+  random ones at AUROC 0.61 and correlate at 0.09: a label written from top contexts describes the top regime (§4).
+- **Spread:** median 0.17, 30% of poles at 0.3 or more, 9% at 0.5 or more; highest at L0-L8 (0.30, against 0.16-0.22
+  after), where detection is lowest. Confidence ranks weakly (0.25 for the 9 labels at 0.7 or more, 0.17 for the 57 under
+  0.4).
+- **The two tests agree on whether a label recognises a pole's firings, less on the token.** Per pole, the detection AUROC
+  ranks with the simulation's excerpt-level scores at Spearman 0.42-0.44, with the token-level score at 0.20. A label that
+  names the token a pole fires on beside its concept would likely close part of the token-level gap (untested).
+  `data/summary/label_simulation_qwen3-8b.json`.
+
+**Limits.** Positives come from the high-activation regime (top documents only; the simulation adds weak firings).
+32 poles a band is about ±15 points (100 poles for the Haiku test, ±20). Steering is amplified past natural firing (5-18×
+in the blind test), in bf16. Explainers, scorers and judges are all Claude models, in separate instances, and the
+explainers' prompt carried the depth priors. The pilot's held-out sets were not kept. Gemma 4's neuron labels are checked
+for firing only.
+
+### §14. Outside labels
+
+How do labels from other methods compare with the catalog? The main outside source is the [Neuron
+Persona Library](https://neuronpersonas.com) (by jfonsecarivera), 34,220 rows, each a pole whose push
+on "Who are you?" made the model claim a persona, named by Claude Haiku. `neuron_lens/known.py` holds
+smaller sets: six steering-verified persona neurons from a persona-steering experiment of ours on this model, and
+published neurons from Sudarsh, Sauers, Muyu He and Kazemi et al.
+
+**Strict name matches** (`checks/library_crosscheck.py`): the first token of a persona name's words in
+the pole's write read. In the top 10 for 52% of L30-L35 rows and 30% of L24-L29 rows under every lens,
+2-3% at L12-L17 (control 0.2-0.3%). At L0-L5, the R-lens finds 15% where the J-lens finds 1% and the
+logit lens 3%.
+
+**Generous matches** (`checks/library_judge.py`): 360 rows, 60 per layer group; Claude Sonnet judges
+score each read against its persona's name and, shuffled in, another row's (0-3; 2 or more is a clear
+match: the concept in any language, or a strongly associated thing). Reads from the write side, the
+input side (`read_R` and `read_S`) or both together:
+
+| layers | write | input | both |
+|---|---|---|---|
+| L0-L5 | 0.35 (0.02) | 0.35 (0.02) | 0.38 (0.03) |
+| L6-L11 | 0.27 (0.02) | 0.22 (0.02) | 0.33 (0.07) |
+| L12-L17 | 0.20 (0.07) | 0.17 (0.07) | 0.28 (0.10) |
+| L18-L23 | 0.22 (0.02) | 0.10 (0.03) | 0.27 (0.05) |
+| L24-L29 | 0.45 (0.00) | 0.37 (0.02) | 0.50 (0.03) |
+| L30-L35 | 0.53 (0.02) | 0.42 (0.02) | 0.62 (0.02) |
+
+![Persona labels judged against each side](figures/16_library_judge.png)
+
+- **A generous reading doubles the strict rate:** weighted by the library's depth mix (mostly
+  L6-L17), 27% of rows clearly match the write read, 22% the input read and 34% both together
+  (swapped names 3-6%). Translations and associated words count: L9 n3370 − "Dragon" writes dragon,
+  龙, dragons.
+- **Mid-network is hardest** (20-22% of rows at L12-L23 on the write side).
+- **Fused personas.** The library also pushed 2-3 neurons at once; 3,097 of 13,861 pairs gave a persona
+  no parent gives alone. The R-lens read of the summed pushes ranks words in neither parent's name in
+  its top 100 for 19% of pairs (mismatched names 3%; J-lens 10%, logit lens 7%;
+  `checks/combo_crosscheck.py`). The best parent's read alone does about as well (24%, control 5%):
+  the new concept is mostly latent in one parent's write.
+- **Steering one prompt finds personas, not everything.** Of the 71,661 poles whose write predicts
+  what follows their firings (§8), 4.0% have a library row, mostly because 98% sit at L21-L35, where
+  the library is thin; against each layer's base rate the library is enriched for them (1.5×;
+  `checks/library_crosscheck.py`). What it misses has no self-description: idiom completers (L30
+  n1034 + writes *again* on "once"), morphology (L8 n1541 + writes *-ism*/主义 on the stem before it),
+  everyday concepts (L28 n8868 − writes *democracy* on "arist|", "olig|").
+
+**Against whole evidence cards** (§13's pilot), the explainers' verdicts on outside labels:
+
+| source | method | agrees | partial | disagrees |
+|---|---|---|---|---|
+| our persona-steering experiment | steering-verified personas | 6 | 0 | 0 |
+| Sudarsh | activation contrast × `W_down`, steering | 10 | 3 | 0 |
+| Neuron Persona Library | steering on "Who are you?" | 13 | 9 | 11 |
+| Sauers | steering and causal search | 7 | 3 | 4 |
+| Muyu He | MLP energy at token 0 | 3 | 1 | 2 |
+| Kazemi et al. | refusal gradient × activation difference | 1 | 1 | 1 |
+
+- **Activations sharpen the steering-verified labels:** L8 n1931 + ("Jesus") fires on the Bible as
+  scripture ("God's⟦ Word⟧", "non-B⟦ib⟧lical"); L21 n1180 − ("mother") on leaving work to care for
+  family ("stay⟦-at⟧-home moms"); L27 n1343 + ("candidate") on deciding to run for office.
+- **Labels from steering one prompt disagree with the firings most often:** the library's "creator god" pole, L8 n8079 +,
+  fires on time words (times, 时间, `timing_stats`); Kazemi et al.'s refusal neuron, L14 n7924 +, fires
+  on light, playful request framing.
+- Unsigned labels count both poles, so one pole of each often "disagrees".
+
+So the methods are complementary: steering on one identity prompt reaches the personas, activations
+and lenses reach the rest, and each checks the other where they overlap.
+
+**Limits.** Strict matching scores only the first tokens of names. 60 rows a group is about ±12
+points. The judges are the library labeller's model family. About a third of the library's strongly
+pushed replies change with the batch layout.
+
+## V. A second model, three modalities
+
+Gemma 4 12B, from another lab: whether the text results hold (§15), and what its neurons and heads do with images and
+sound (§16-§18).
+
+### §15. Gemma 4 12B: the text catalog in a second model
+
+**Setup.** The catalog's stages and `checks/causal_lens.py` run on the base model `google/gemma-4-12B`
+(`NEURON_LENS_MODEL=google/gemma-4-12B`), on H100s in bf16: 48 layers × 15,360 GELU-tanh neurons and 16 heads a layer.
+Its architecture differs in ways the readers follow (a norm after the MLP and a per-layer scalar on the write, shared keys
+and values on global layers, a softcap on the logits; design.md, [Gemma 4 12B](design.md#gemma-4-12b)). Both lenses are
+fitted as Qwen3-8B's, on the same 1,000 DCLM documents (about 16 s a document per lens on one H100); split-half
+differences are 0.01-0.12 by layer for the R-lens (median about 0.05) and 0.01-0.07 for the S-lens. The activation corpora
+have Qwen3-8B's sizes (15.4M positions), with the chat slice as plain `User:` / `Assistant:` turns, since the base model
+has no chat template. The causal sample is 24 random neurons a layer, both poles, with no J-lens to compare.
+
+**Steering** (as §3: the write added at 1× and 4× the pole's `act_top` at positions 16-63 of 16 DCLM documents; Pearson r
+with the lens's read, medians over the random poles; controls within ±0.05 at every layer):
 
 | layer | logit lens, 1× | R-lens, 1× | R-lens, 4× | R-lens, ablation where it fires |
 |---|---|---|---|---|
@@ -1044,21 +1173,19 @@ DCLM documents; Pearson r with the lens's read, medians over the random poles; c
 | L40 | 0.85 | 0.96 | 0.95 | 0.64 |
 | L46 | 0.94 | 0.99 | 0.98 | 0.91 |
 
-![Gemma 4: lens reads against steering and ablation](figures/19_gemma_steering.png)
+![Gemma 4: lens reads against steering and ablation](figures/18_gemma_steering.png)
 
-- **From L11 the R-lens read of a write predicts steering, as in Qwen3-8B:** a median r (over each
-  band's layers) of 0.53 at L12-L23, 0.82 at L24-L35 and 0.97 at L36-L47. The logit lens trails until
-  the last layers (0.08, 0.44 and 0.86 by the same bands).
-- **Before L11 neither lens predicts a 1× push** (r 0.00-0.09). The correlation rises with the dose
-  (L0: 0.07 at 1×, 0.26 at 4×), which suggests the natural-scale pushes are too small to measure
-  over the documents' own variation rather than misread. Ranked instead of correlated, an amplified
-  write raises the tokens its R-lens read names above other poles' read tokens at a median rank of
-  0.98 at L0-L11 (`checks/write_steer.py`, a 192-pole panel, with an earlier R-lens fit on 174
-  documents).
-- **Ablation agrees only late,** as in Qwen3-8B (§4): 0.05 at L12-L23, 0.17 at L24-L35, 0.71 at
-  L36-L47.
+- **From L11 the R-lens read of a write predicts steering, as in Qwen3-8B:** a median r (over each band's layers) of 0.53
+  at L12-L23, 0.82 at L24-L35 and 0.97 at L36-L47. The logit lens trails until the last layers (0.08, 0.44 and 0.86 by the
+  same bands).
+- **Before L11 neither lens predicts a 1× push** (r 0.00-0.09). The correlation rises with the dose (L0: 0.07 at 1×, 0.26
+  at 4×), which suggests the natural-scale pushes are too small to measure over the documents' own variation rather than
+  misread. Ranked instead of correlated, an amplified write raises the tokens its R-lens read names above other poles'
+  read tokens at a median rank of 0.98 at L0-L11 (`checks/write_steer.py`, a 192-pole panel, through an R-lens fitted on
+  174 documents).
+- **Ablation agrees only late,** as in Qwen3-8B (§4): 0.05 at L12-L23, 0.17 at L24-L35, 0.71 at L36-L47.
 
-**What each read names** (`checks/reads_at_firings.py`, as §7, BH over all poles at 5%):
+**What each read names** (`checks/reads_at_firings.py`, as §8, BH over all poles at 5%):
 
 | band | `read_S` | `read_R` | `write_R` | `write_S` | token mode | near-silent |
 |---|---|---|---|---|---|---|
@@ -1068,62 +1195,58 @@ DCLM documents; Pearson r with the lens's read, medians over the random poles; c
 | L36-L47 | 0.03 | 0.48 | 0.19 | 0.00 | 0.15 | 0.00 |
 | all | 0.13 | 0.29 | 0.07 | 0.02 | 0.29 | 0.00 |
 
-![Gemma 4: what each read names, by layer](figures/20_gemma_census.png)
+![Gemma 4: what each read names, by layer](figures/19_gemma_census.png)
 
-- **The same shape as Qwen3-8B's.** The S-lens names the firing token for 88-95% of L0-L1's poles, and the R-lens write promotes
-  the next token late (`write_R` 22-36% at L33-L40).
-- **Read as a vector, the R-lens read of the input names more than in Qwen3-8B.** `read_R` names the exact drivers
-  for 28-49% of a layer's poles at L11-L23 (L12: 13%), 9-38% at L24-L33 and 59-69% at L34-L42 (Qwen3-8B, L27-L31:
-  31-41%), falling to 11% by L46-L47. Released, it named them for 0-4% by band: it read a covector as a vector, which
-  Gemma 4's residual punishes (the residual's units, below).
-- **The input-side stage reaches L13, at about Qwen3-8B's relative depth.** `read_S` falls to 4% at L8
-  and 1% at L9, then rises again to 48-65% at L10-L11 and 33-34% at L12-L13, where `write_S` also holds for 19-30% of poles
-  (L11-L13): early neurons that write back the tokens they detect (§6), ending at 27% of the depth (Qwen3-8B: L8,
-  23%).
-- **Late writes fall off at the end:** `write_R` drops from 27% at L40 to 7-13% at L44-L47, where
-  Qwen3-8B's keeps rising to its last layer.
-- **No poles are near-silent.** Gemma's activations take both signs at every layer, and none of its early
-  layers is near-silent as Qwen3-8B's L1 is (§2).
+- **The same shape as Qwen3-8B's.** The S-lens names the firing token for 88-95% of L0-L1's poles, and the R-lens write
+  promotes the next token late (`write_R` 22-36% at L33-L40).
+- **The R-lens read of the input names more than in Qwen3-8B.** `read_R` names the exact drivers for 28-49% of a layer's
+  poles at L11-L23 (L12: 13%), 9-38% at L24-L33 and 59-69% at L34-L42 (Qwen3-8B, L27-L31: 31-41%), falling to 11% by
+  L46-L47. Read in the raw basis, as a Euclidean vector, it names them for 0-4% by band (the residual's units, below).
+- **The input-side stage reaches L13, at about Qwen3-8B's relative depth.** `read_S` falls to 4% at L8 and 1% at L9, then
+  rises again to 48-65% at L10-L11 and 33-34% at L12-L13, where `write_S` also holds for 19-30% of poles (L11-L13): early
+  neurons that write back the tokens they detect (§7), ending at 27% of the depth (Qwen3-8B: L8, 23%).
+- **Late writes fall off at the end:** `write_R` drops from 27% at L40 to 7-13% at L44-L47, where Qwen3-8B's keeps rising
+  to its last layer.
+- **No poles are near-silent.** Gemma's activations take both signs at every layer, and none of its early layers is
+  near-silent as Qwen3-8B's L1 is (§2).
 
-![Both models: steering by relative depth](figures/18_two_models.png)
+![Both models: steering by relative depth](figures/17_two_models.png)
 
-**Heads** (`checks/reads_at_firings.py`, as §12). With 16 heads a layer, a head's mismatched control has 240 pairs,
-so no p-value falls below 1/241, and BH over 768 heads passes none. At an uncorrected p ≤ 0.05 (5% by chance), `ov_R` holds for 23% of L36-L47's heads and
-`ov_copy` for 18%. `qk_self_S` finds the 26
-duplicate-token heads at AUROC 0.95 (Qwen3-8B: 0.96).
-
-- **The cross-lens self-match points the same way** (`qk_self_R`, `checks/head_seek.py` as §11, 2,000
-  documents). A head's median `qk_self_R` tracks its seeking of the R-lens top-1 in context at Spearman +0.51 at L24-L35
-  and +0.40 at L36-L47 (another head's read −0.05 and +0.04; `qk_self_S` +0.07 and +0.11), and +0.60 at L24-L35 with the
-  model's final top-1 as the target (Qwen3-8B, L28-L35: +0.50). Late heads seek less here: per matching key, 1.7× uniform
-  at L36-L47 against 1.3× for a random earlier token (Qwen3-8B, L28-L35: 2.7× against 0.8×). Of the top fifth of L24-L47's
-  heads by seeking, the 25 that lower the target's logit are found at AUROC 0.88 (`qk_self_S` 0.50; a negative OV
-  copy score 0.78); many sit on the global layers (L29, L35, L41). At L12-L23, as at Qwen3-8B's L13-L20, the
-  R-lens on both sides tracks seeking best (+0.55; `qk_self_R` +0.47, `qk_self_S` +0.26). L1-L11 heads seek most of all
-  and no read tracks it (+0.13 at best). With the released query (a covector read as a vector, below) these were +0.26,
-  +0.18, +0.40 and AUROC 0.66, and duplicate-token heads were found at AUROC 0.65 against 0.80 now.
+**Heads** (`checks/reads_at_firings.py`, as §11). With 16 heads a layer, a head's mismatched control has 240 pairs, so no
+p-value falls below 1/241, and BH over 768 heads passes none. At an uncorrected p ≤ 0.05 (5% by chance), `ov_R` holds for
+23% of L36-L47's heads and `ov_copy` for 18%. `qk_self_S` finds the 26 duplicate-token heads at AUROC 0.95 (Qwen3-8B:
+0.96).
+- **The cross-lens self-match points the same way** (`qk_self_R`, `checks/head_seek.py` as §10, 2,000 documents). A head's
+  median `qk_self_R` tracks its seeking of the R-lens top-1 in context at Spearman +0.51 at L24-L35 and +0.40 at L36-L47
+  (another head's read −0.05 and +0.04; `qk_self_S` +0.07 and +0.11), and +0.60 at L24-L35 with the model's final top-1 as
+  the target (Qwen3-8B, L28-L35: +0.50). Late heads seek less here: per matching key, 1.7× uniform at L36-L47 against 1.3×
+  for a random earlier token (Qwen3-8B, L28-L35: 2.7× against 0.8×). Of the top fifth of L24-L47's heads by seeking, the 25
+  that lower the target's logit are found at AUROC 0.88 (`qk_self_S` 0.50; a negative OV copy score 0.78); many sit on the
+  global layers (L29, L35, L41). At L12-L23, as at Qwen3-8B's L13-L20, the R-lens on both sides tracks seeking best (+0.55;
+  `qk_self_R` +0.47, `qk_self_S` +0.26). L1-L11 heads seek most of all and no read tracks it (+0.13 at best). With a
+  Euclidean query these were +0.26, +0.18, +0.40 and AUROC 0.66.
 
 **The residual's units** (`neuron_lens.metric`, `checks/read_metric.py`; design.md). [Matthew
-Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) noticed that the released Gemma 4 input reads (`read_R`) were junk
-while its write reads were fine.
+Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) noticed that Gemma 4's input reads, taken in the raw basis,
+were junk while its write reads were fine.
 
 - **The cause: a covector read as a vector.** A pole's read row (its gate and up rows times the input norm's weight γ) is a
-  covector: what the activation applies to the residual. The S-lens pulls covectors back; the R-lens transports vectors, and fed
-  a covector it treats the raw basis as Euclidean. That basis carries a unit per coordinate: rescaling coordinate `i`, with every
-  norm's `γ_i` and every write compensating, leaves the model nearly unchanged (only the rms sees it). Gemma 4's coordinate scales
-  (of `x / rms` where a norm reads it) span 80-1,600× by layer (99th over 1st percentile), γ ≈ 1/σ (correlation 0.91-0.99), and
-  the R-lens's columns track γ, so every read lands on the same few low-variance coordinates: the same hub tokens. Qwen3-8B's
-  scales span 3-6×, and the same error is mild there. The same error sat in `qk_self_R`'s query (a token's R-lens row fed to
-  `W_Q`) and in the cosines between a write and its neuron's read rows.
+  covector: what the activation applies to the residual. The S-lens pulls covectors back; the R-lens transports vectors,
+  and fed a covector it treats the raw basis as Euclidean. That basis carries a unit per coordinate: rescaling coordinate
+  `i`, with every norm's `γ_i` and every write compensating, leaves the model nearly unchanged (only the rms sees it).
+  Gemma 4's coordinate scales (of `x / rms` where a norm reads it) span 80-1,600× by layer (99th over 1st percentile),
+  γ ≈ 1/σ (correlation 0.91-0.99), and the R-lens's columns track γ, so every read lands on the same few low-variance
+  coordinates: the same hub tokens. Qwen3-8B's scales span 3-6×, and the error is mild there. The same error affects a
+  head's R-lens query (`qk_self_R`) and the cosines between a write and its neuron's read rows.
 - **The fix: a metric that moves with the units.** In the frame a norm reads, `y = γ ⊙ x / rms`, the coordinates don't
-  move, so a vector built there and mapped back is free of them: `v = s² ⊙ c`, `s² = σ / |γ|`, with σ the residual's standard
-  deviation per coordinate where the norm reads it (`02_fit.py --lens scale`, the lens's 1,000 documents, split-half
-  0.01-0.04). For a pole that is `σ ⊙ w` in the norm's frame (`w` the raw row): the row times the residual's scale, between
-  the row itself (`w / γ`, which needs a floor where γ ≈ 0) and the diagonal Haufe pattern (`σ²γ ⊙ w`). Net of chance on the
-  exact drivers (as above) / the share of the read's top 64 in what the R-lens reads from the residual at the top firings
-  (`before_R_z`; another pole's firings 0.001):
+  move, so a vector built there and mapped back is free of them: `v = s² ⊙ c`, `s² = σ / |γ|`, with σ the residual's
+  standard deviation per coordinate where the norm reads it (`02_fit.py --lens scale`, the lens's 1,000 documents,
+  split-half 0.01-0.04). For a pole that is `σ ⊙ w` in the norm's frame (`w` the raw row): the row times the residual's
+  scale, between the row itself (`w / γ`, which needs a floor where γ ≈ 0) and the diagonal Haufe pattern (`σ²γ ⊙ w`). Net
+  of chance on the exact drivers (as above) / the share of the read's top 64 in what the R-lens reads from the residual at
+  the top firings (`before_R_z`; another pole's firings 0.001):
 
-  | layer | Euclidean (released) | `w / γ` | `σ ⊙ w` (the catalog's) | `σ²γ ⊙ w` | `1/‖J_i‖` (the lens's own) |
+  | layer | Euclidean | `w / γ` | `σ ⊙ w` (the catalog's) | `σ²γ ⊙ w` | `1/‖J_i‖` (the lens's own) |
   |---|---|---|---|---|---|
   | Gemma 4 L12 | 0.02 / 0.002 | 0.03 / 0.002 | 0.17 / 0.019 | 0.16 / 0.019 | 0.02 / 0.002 |
   | L18 | 0.04 / 0.005 | 0.10 / 0.012 | 0.31 / 0.041 | 0.33 / 0.042 | 0.15 / 0.021 |
@@ -1135,79 +1258,52 @@ while its write reads were fine.
   | L28 | 0.36 / 0.206 | 0.36 / 0.207 | 0.33 / 0.237 | 0.24 / 0.196 | 0.37 / 0.194 |
   | L31 | 0.32 / 0.224 | 0.31 / 0.218 | 0.26 / 0.242 | 0.18 / 0.194 | 0.35 / 0.220 |
 
-  `w / γ` is floored at half the median |γ|. On Gemma 4, `σ ⊙ w` lifts both scores at every layer from L12. The floored row trails it at
-  L12-L24, where its floor decides, and from L30 has the higher net and the lower share at the firings; the lens's own
-  metric moves with the units too, and reads worse. On Qwen3-8B the metric matters
-  little, and `σ ⊙ w` trades net for agreement at the firings: net down by up to 0.06 (L31), the firings' share up at every layer from L12.
-  In the census `read_R` passes for 18% of Qwen3-8B's poles (21% released; 31-41% at L27-L31 against 44-51%) and 29% of Gemma 4's
-  (2%). The catalog takes `σ ⊙ w`, which needs no floor, for `read_R`, `read_R_z`, `qk_self_R`'s query, `cos_write_*` and
-  `write_orth_*` (oblique: what the neuron's read rows don't see), and the edges (§17). At L6 no map helps (net 0.02 at best):
-  the S-lens's depth.
+  `w / γ` is floored at half the median |γ|. On Gemma 4, `σ ⊙ w` lifts both scores at every layer from L12. The floored
+  row trails it at L12-L24, where its floor decides, and from L30 has the higher net and the lower share at the firings;
+  the lens's own metric moves with the units too, and reads worse. On Qwen3-8B the metric matters little, and `σ ⊙ w`
+  trades net for agreement at the firings: net down by up to 0.06 (L31), the firings' share up at every layer from L12. In
+  the census `read_R` passes for 18% of Qwen3-8B's poles (Euclidean: 21%; 31-41% at L27-L31 against 44-51%) and 29% of
+  Gemma 4's (2%). The catalog takes `σ ⊙ w`, which needs no floor, for `read_R`, `read_R_z`, `qk_self_R`'s query,
+  `cos_write_*` and `write_orth_*` (oblique: what the neuron's read rows don't see), and the edges (§12). At L6 no map helps
+  (net 0.02 at best): the S-lens's depth.
 - **Vectors against footprints: the lens's polar factor.** `write_S` sets a write, a vector, against the S-lens's token
-  footprints `K ē_v`, vectors too: which input token would put the write there. That is an inverse problem, and the transpose
-  (`ē_v · Kᵀ w`, the released read) answers it only where `K` doesn't stretch. A ridge inverse, `ē_v · Kᵀ (K Kᵀ + λ)⁻¹ w`,
-  reads better on both models, over a broad optimum at λ 3-10× the mean eigenvalue, but λ is a knob that empirical Bayes
-  doesn't pin (it picks 16 at Qwen3-8B L0, 474 at L8, 0.05 on Gemma 4). The polar factor has none: with `K = (K Kᵀ)^½ U`,
-  `ē_v · Kᵀ (K Kᵀ)^-½ w = (U ē_v) · w`, the footprints with the lens's stretch removed by its nearest rotation, the midpoint
-  between the transpose and the inverse. Over the powers `(K Kᵀ)^-p` it peaks at `p = ½` at 5 of 6 layers tested (Gemma 4
-  L12, net for ¼ / ½ / ¾: 0.22 / 0.24 / 0.16; Qwen3-8B L8: 0.10 / 0.12 / 0.08). The S-lenses are numerically singular
-  (Gemma 4 L11-L13: 94-95% of `K Kᵀ`'s eigenvalues under 1% of their mean; Qwen3-8B L4-L8: 6-13%), so the factor is taken on
-  the lens's range, its eigenvalues floored at 10% of their mean: floors from 1% to 50% read alike, and without one the read
-  collapses below the Euclidean one. Net on the peak tokens, Euclidean / polar: Qwen3-8B L0 0.35 / 0.37, L4 0.13 / 0.16, L8 0.08 / 0.13;
-  Gemma 4 L0 0.06 / 0.08, L11 0.11 / 0.18, L12 0.18 / 0.24, L13 0.20 / 0.27. By eye, the polar
+  footprints `K ē_v`, vectors too: which input token would put the write there. That is an inverse problem, and the
+  transpose (`ē_v · Kᵀ w`, the Euclidean read) answers it only where `K` doesn't stretch. A ridge inverse,
+  `ē_v · Kᵀ (K Kᵀ + λ)⁻¹ w`, reads better on both models over a broad optimum, but λ is a knob that empirical Bayes doesn't
+  pin (it picks 16 at Qwen3-8B L0, 474 at L8, 0.05 on Gemma 4). The polar factor has none: with `K = (K Kᵀ)^½ U`,
+  `ē_v · Kᵀ (K Kᵀ)^-½ w = (U ē_v) · w`, the footprints with the lens's stretch removed by its nearest rotation, the
+  midpoint between the transpose and the inverse. Over the powers `(K Kᵀ)^-p` it peaks at `p = ½` at 5 of 6 layers tested
+  (Gemma 4 L12, net for ¼ / ½ / ¾: 0.22 / 0.24 / 0.16; Qwen3-8B L8: 0.10 / 0.12 / 0.08). The S-lenses are numerically
+  singular (Gemma 4 L11-L13: 94-95% of `K Kᵀ`'s eigenvalues under 1% of their mean; Qwen3-8B L4-L8: 6-13%), so the factor
+  is taken on the lens's range, its eigenvalues floored at 10% of their mean: floors from 1% to 50% read alike, and without
+  one the read collapses below the Euclidean one. Net on the peak tokens, Euclidean / polar: Qwen3-8B L0 0.35 / 0.37, L4
+  0.13 / 0.16, L8 0.08 / 0.13; Gemma 4 L0 0.06 / 0.08, L11 0.11 / 0.18, L12 0.18 / 0.24, L13 0.20 / 0.27. By eye, the polar
   read names more of a legible pole's firing tokens (Gemma 4 L13, in the top 10: a "bits" pole 0 → 4, an orchestra pole
   2 → 6, a border pole 2 → 5) and trades a word's spelling variants for its neighbours in meaning (Qwen3-8B L8: a "period"
-  pole's `-period`, `_period` for ` cycle`, ` cycles`). Gemma 4's `write_S` stays
-  illegible at L0-L6 under every read tested. The catalog takes the polar factor for every vector read against S-lens
-  footprints: `write_S`, `write_orth_S`, `ov_S` and the firings' `before_S` and `mlp_S`. At the firings the Euclidean
-  `before_S` listed the layer's hubs: 95-100% of its top 10 were among the 100 tokens the layer's poles list most. Through
-  the polar factor, the share of a pole's top firings whose peak token is in its top 16 rises at Qwen3-8B L0-L28 from
-  0.02-0.14 to 0.13-0.56 (hubs 0.45-0.90 of the top 10; L35 0.03 → 0.06), and on Gemma 4 at L0, L8 and L12 from
-  0.00-0.07 to 0.17-0.37 (L4 0.01 → 0.04). From Gemma 4's L16 both reads list hubs only (0.96-1.00), and peak tokens
-  reach their top 16 at 0.00-0.17 either way. `before_S_z`, z-scored across the layer's poles, gains less (Qwen3-8B L0
-  0.58 → 0.66; Gemma 4 L0 0.05 → 0.34, L8 0.17 → 0.34). The sources and `before_R` are unchanged.
+  pole's `-period`, `_period` for ` cycle`, ` cycles`). Gemma 4's `write_S` stays illegible at L0-L6 under every read
+  tested. The catalog takes the polar factor for every vector read against S-lens footprints: `write_S`, `write_orth_S`,
+  `ov_S` and the firings' `before_S` and `mlp_S`. At the firings it matters most: the Euclidean `before_S` lists the
+  layer's hubs (95-100% of its top 10 among the 100 tokens the layer's poles list most), and through the polar factor the
+  share of a pole's top firings whose peak token is in its top 16 rises at Qwen3-8B L0-L28 from 0.02-0.14 to 0.13-0.56, and
+  on Gemma 4 at L0, L8 and L12 from 0.00-0.07 to 0.17-0.37. From Gemma 4's L16 both list hubs only.
 - **Tested and dropped for `write_S`:** whitening by the residual's covariance (total, between-token, or within-token as in
   LDA), metrics from what reads the write downstream (the next layer's read rows, the logit pullback), the reciprocal of
   `read_R`'s metric, and down-weighting coordinates by an estimate of their training noise (`w / γ_post²`): none reads
   better than the polar factor, and most no better than the Euclidean read.
 - **What stays Euclidean: lengths the model takes itself.** Every RMSNorm divides by the raw basis's rms. A QK footprint is
-  scaled to unit length, the input norm applied to the footprint as a position's content; raw sizes, or the norm applied on
-  the real residual's background, read worse late (Qwen3-8B L33, `qk_ctx_rho` 0.30 against 0.19 and 0.20), a length in the
-  metric lands between (0.24), and on Gemma 4 all four agree within 0.01. OV's value side needs nothing: `own_token_z`
-  z-scores within a value token's column, so the footprint's size cancels (largest change 10⁻⁴), and copy scores barely move
-  (r ≥ 0.986 against unit-length values).
+  scaled to unit length, the input norm applied to the footprint as a position's content; raw sizes, or the norm applied
+  on the real residual's background, read worse late (Qwen3-8B L33, `qk_ctx_rho` 0.30 against 0.19 and 0.20), a length in
+  the metric lands between (0.24), and on Gemma 4 all four agree within 0.01. OV's value side needs nothing: `own_token_z`
+  z-scores within a value token's column, so the footprint's size cancels.
 - **Which symmetry.** With γ folded into the weights, the model's exact symmetry is a rotation of the residual, under which
-  the Euclidean read is invariant and `σ ⊙ w` is not; rescaling a coordinate is only approximate. That a diagonal metric wins
-  anyway suggests the trained basis is privileged (γ per coordinate, Adam's per-coordinate steps, outlier dimensions). The
-  polar factor is rotation-invariant, as the transpose is.
+  the Euclidean read is invariant and `σ ⊙ w` is not; rescaling a coordinate is only approximate. That a diagonal metric
+  wins anyway suggests the trained basis is privileged (γ per coordinate, Adam's per-coordinate steps, outlier dimensions).
+  The polar factor is rotation-invariant, as the transpose is.
 
-**Labels** (`10_labels.py`, as §8 and §12, with Gemma 4's own reading plan and prompts: four bands
-from the tests above, L0-L4, L5-L13, L14-L32 and L33-L47, and six worked examples of its own poles).
-Claude Haiku 5.5 labelled every head ($0.20) and all 1,474,560 neuron poles (73,728 requests of 10
-neurons each, $171.66).
+**Limits.** The base model, not a chat model; 24 random neurons a layer for the causal sample; no J-lens for Gemma 4. The
+head tests have too little power for a false discovery rate.
 
-- **Haiku is less sure of Gemma 4's neurons.** Median confidence is 0.30 for firing labels and 0.20 for
-  write labels (Qwen3-8B: 0.30 and 0.25), and 3% and 6.5% of them reach 0.7 (Qwen3-8B: 9% and 11%). Firing labels
-  are least sure at L14-L32 (median 0.20; 0.30 in every other band), and write labels most sure there (0.30; 0.10 at
-  L0-L4, 0.20 at L5-L13, 0.15 at L33-L47), where `out·R` predicts steering. Of Gemma 4's neuron labels, only
-  the relabelled negative-lobe poles are checked blind (§8). From L14 their cards show the released R-lens read of the input, the
-  covector read as a vector (above), with priors telling the labeller to expect little: the labels predate the fix. The
-  lean card's run (§8) replaced them after it: blind, 0.82 against 0.81 for these on the same poles.
-
-- **Head labels: the firing labels hold, the write labels barely do.** Checked blind as §12's, on 80 random
-  heads (20 a band) by Claude Sonnet 5.5: the `fires` and `attends` labels tell 4 of a head's held-out
-  firings (ranks 6-24) from 4 of another head's at AUROC 0.71 [0.64, 0.78] (a third head's labels on the
-  same contexts: 0.49), as Qwen3-8B's do (0.70). A judge picks a head's `writes` label out of four from
-  what its firings promote in context 32% of the time [22, 42], near chance (25%; Qwen3-8B: 54%; before
-  `qk_self_R` was on the cards, 22%). Its cards'
-  OV reads rarely pass a test (above), and what a head's OV map promotes is not what it writes in
-  context; the labels follow the cards (`data/summary/labels_heads_gemma-4-12b.md`).
-
-**Limits.** The base model, not a chat model; 24 random neurons a layer for the causal sample; no
-J-lens for Gemma 4, and its neuron labels are checked blind for firing only (§8; `checks/haiku_blind.py` steers on a
-GPU). The head tests have too little power for a false discovery rate.
-
-## §14. Images and sound: what drives a neuron
+### §16. Images and sound: what drives a neuron
 
 Gemma 4 12B takes an image or a sound with no encoder network: each 48 × 48-pixel patch (an image is
 an 8 × 8 grid of them, 384 pixels a side) or 40 ms frame of 16 kHz audio (64 of them, 2.56 s) enters
@@ -1258,7 +1354,7 @@ other poles' reads (1 the most, 0.5 chance), over a panel of 192 poles (`checks/
 | L24-L35 | 0.53 | 0.41 | 0.62 | 0.56 |
 | L36-L47 | 0.48 | 0.49 | 0.43 | 0.47 |
 
-![The media reads' held-out tests](figures/21_media_reads.png)
+![The media reads' held-out tests](figures/20_media_reads.png)
 
 - **The image read is a projection, not a stimulus.** It moves the pole's own read projection most
   through L23, but raises the pole's activation only at L0-L5, and lowers it at L6-L23 (0.09-0.29):
@@ -1278,16 +1374,16 @@ other poles' reads (1 the most, 0.5 chance), over a panel of 192 poles (`checks/
   column streaks from neuron to neuron, a hub pattern like the hub tokens of text reads (§1); the
   optimised patches differ by neuron.
 
-![The patch each neuron reads, and the patch that drives it](figures/22_media_gallery.png)
+![The patch each neuron reads, and the patch that drives it](figures/21_media_gallery.png)
 
 **Limits.** A read is one slot pattern summed over the 64 slots, not a map of where in an image it
 sits. Media lenses are fitted on photos (COCO) and environmental sounds (ESC-50) only. Labels name
 what a document is about, not each patch or frame. The audio tests' held-out clips are among the audio
 S-lens's fitting clips (all of ESC-50), though not the optimisation's.
 
-## §15. One concept in text, images and sound
+### §17. One concept in text, images and sound
 
-**Setup** (`checks/crossmodal.py`). For every pole with a reliable image or audio label (§14; labels
+**Setup** (`checks/crossmodal.py`). For every pole with a reliable image or audio label (§16; labels
 that name a whole collection or a synthetic probe are left out), the label's rank among the
 modality's labels on the text side, three ways: how hard the pole fires on `Here is an example:
 {label}.`, its text S-lens read (`read_S`) and its text R-lens write (`write_R`), each scoring the
@@ -1301,7 +1397,7 @@ label's tokens. A rank of 0.95 or more passes; a shuffled pairing passes 5%.
 | all three | 4,382 poles | 730 poles |
 | poles scored | 253,785 | 248,033 |
 
-![One concept in text, images and sound](figures/23_crossmodal.png)
+![One concept in text, images and sound](figures/22_crossmodal.png)
 
 - **Image concepts are text concepts mid-network.** At L12-L23, 42% of the poles that respond to an
   image label also fire on its name in text, against 5% by chance; 8% at L0-L11, where image labels
@@ -1326,12 +1422,11 @@ label's tokens. A rank of 0.95 or more passes; a shuffled pairing passes 5%.
 
 **Limits.** Label words are English and scored in one template; a rank among the modality's labels
 says the pole prefers this label to the others, not that the concept is all it does. Exemplar labels
-come from the collections, whose coverage of a concept varies. The S-lens test read every pole as `â ± b̂` with the rows
-at unit length in the raw basis, as measured; the catalog's `read_S` now normalizes them in the residual's metric (§13;
-median cosine 0.995-1.000 by layer) and reads the negative-lobe poles by the up row alone (§17; 0.1-15% of a layer's
-poles, most at L4-L8), which `checks/crossmodal.py` now follows. It was not rerun.
+come from the collections, whose coverage of a concept varies. The S-lens test reads every pole as `â ± b̂` with unit rows in
+the raw basis; the catalog's `read_S` normalizes them in the residual's metric (§15; median cosine 0.995-1.000 by layer)
+and reads negative-lobe poles by the up row alone (§7; 0.1-15% of a layer's poles, most at L4-L8).
 
-## §16. Attention heads in image and audio contexts
+### §18. Attention heads in image and audio contexts
 
 **Setup** (`checks/head_media.py --n 64`). 64 mini-ImageNet validation images (64 classes) and 64
 ESC-50 clips (49 classes), each in the media prompt and followed by ` a <label>`, its own and another
@@ -1356,197 +1451,29 @@ over heads (*label writers*). Per-head values are in `heads/image` and `heads/au
 - Which heads read the media is shared across modalities (Spearman +0.51 between image and audio
   reading), and which carry content is not (+0.09).
 
-![Heads in image and audio contexts](figures/24_heads_media.png)
+![Heads in image and audio contexts](figures/23_heads_media.png)
 
 **Limits.** 64 documents a modality in one prompt; zeroing a head measures what the model loses
 without it, not all it does. With the model near chance on sound, the audio results say little.
 
-## §17. Direct edges between neurons
+## VI. Across Qwen3's sizes
 
-What feeds a neuron? The residual stream is a sum: what a neuron writes reaches every later layer's MLP
-input unchanged, so the direct path from one pole to a later one is a number from the weights. This
-section builds those edges for Qwen3-8B and asks how much of what drives a pole when it fires they name.
+Nine more Qwen3 models, 0.6B to 14B, post-trained and base: which reads change with size (§19), and why the family is
+three lineages rather than five sizes (§20).
 
-**Setup.**
-- **Edges** (`16_edges.py`; weights only, fp32, minutes). For a pole A of layer L and a pole B
-  of a later layer M: `cos`, the cosine of A's write `±W_down[:, n]` with B's read direction (`â ± b̂`, or the up row for a negative-lobe pole, below)
-  in the residual's metric at B's MLP input (§13),
-  and `push = cos · act_top_A · ‖w_A‖ / rms_M`, how far one of A's top firings moves B's normalized MLP
-  input along B's read direction (`rms_M`: the median RMS of the residual entering layer M's MLP over
-  64 documents, 0.1 at L0, 1.0 at L12, 6.6 at L28 and 26 at L35). Each pole keeps its 64 strongest
-  in-edges (from earlier poles) and out-edges (to later ones) by |push| among those with
-  |cos| ≥ 5/√d = 0.078, which random directions reach about once in 1.7 million (the `edges` table).
-- **In context** (`checks/edges_in_context.py`; H100, fp32). §3's 32 random neurons a layer
-  at L1-L35, both poles, at their first 5 top firings (2,228 poles). At a firing, B's MLP input is the
-  normalized sum of the embedding, every head's write at layers up to M and every neuron's below M.
-  Holding the norm's scale and SiLU's ratio `silu(g)/g` (RelP's rules), the half rule splits B's
-  activation exactly over these sources (largest error 4·10⁻⁵).
-
-**The wiring is real.** Against the layer before alone, the median pole's strongest |cos| is 0.12
-(0.10-0.15 by band), against 0.063 for the same writes under a random rotation. 92% of poles have an
-in-edge above the floor (L0's have none to have), half of them strongest from the layer before. A
-concept pole is wired from its concept: L14 n1561 + (animals, pets, livestock) has in-edges from L12
-n7934 − (dogs, pets, veterinary), L9 n11117 + (pet words), L11 n9841 − (animals, birds, bees) and L10
-n10730 + (animal and rodent nouns).
-
-Shares of the activation at the pole's top firings (medians over poles of each pole's mean):
-
-| band | heads | neurons | top 64 neuron poles | firing among them | the 64 in-edges | 64 random poles | in-edge sources firing | recall (control) | ρ |
-|---|---|---|---|---|---|---|---|---|---|
-| L1-L8 | 0.33 | 0.66 | 0.81 | 0.41 | 0.05 | 0.00 | 0.03 | 0.06 (0.00) | 0.88 |
-| L9-L12 | 0.25 | 0.74 | 1.13 | 0.45 | 0.14 | 0.00 | 0.04 | 0.06 (0.00) | 0.89 |
-| L13-L20 | 0.49 | 0.51 | 1.03 | 0.55 | 0.09 | 0.00 | 0.03 | 0.07 (0.00) | 0.87 |
-| L21-L27 | 0.42 | 0.58 | 0.72 | 0.59 | 0.09 | 0.00 | 0.04 | 0.08 (0.00) | 0.87 |
-| L28-L35 | 0.19 | 0.81 | 0.79 | 0.62 | 0.10 | 0.00 | 0.07 | 0.04 (0.00) | 0.88 |
-
-*Firing*: at `act_top / 4` or more in its pole (the `acts` tables' rate threshold). *Recall*: the share
-of the 64 largest |contributions| that are in-edges (control: another pole's in-edges). *ρ*: Spearman
-over every upstream neuron, in the pole it is in, between its push and its contribution.
-
-- **A pole's direct input is concentrated.** The 64 upstream neuron poles that contribute most sum to 72-113% of its activation
-  (signed: past 100%, the rest cancels), and 41-62% of them are firing there themselves. Heads carry a third, half at
-  L13-L20; the embedding 2% at most (at L1), under 0.5% from L7. Over every pole's first 5 firings (the `sources` table) heads carry
-  a median 19-52% by band.
-- **The edges get the direction right, not the traffic.** An edge's push ranks every upstream neuron's
-  contribution at Spearman 0.87-0.89: the weights say what each would do. But the in-edges are 4-8% of
-  the 64 largest contributors and carry 5-14% of the activation, because their sources fire at only
-  3-7% of the pole's top firings. What drives a pole is which units fire with it, which no list from
-  the weights can know (the same gap as between global weights and attribution graphs over transcoder
-  features; Ameisen et al. 2025).
-- **In context the sources read as one concept.** `explain 14 1561 +` gives the animal pole's sources
-  at its five top firings: L12 n7934 − (11%), then animal, veterinary, pet and young-animal poles from
-  L4-L13 (L12 n7182 −, L11 n2301 −, L13 n12072 +, L10 n11987 +, L4 n12138 + "vet", L10 n4140 − cats),
-  topical copy heads (L12h18, L14h7, L14h6: +11.5%) and two heads that suppress topical nouns (L14h5,
-  L12h8: −9%). Three of its ten largest neuron sources are among its 16 strongest in-edges (L12 n7934 −,
-  L12 n7182 −, L11 n2301 −).
-- **At L1-L3 `â ± b̂` misled.** With it, ρ was −0.27 at L1, −0.61 at L2 and 0.52 at L3, against
-  0.86-0.91 from L4: at L1-L3, 49-78% of top firings ride SiLU's negative lobe (the gate below 0; 14%
-  at L4, 2% or less from L5), where `â ± b̂` points the wrong way. With the up row for those poles (next
-  point), ρ is 0.80, 0.77 and 0.80.
-- **On the negative lobe a pole reads the up row.** SiLU is nearly flat below zero (its floor is −0.28; Gemma's GELU has the same shape), so there the activation
-  follows `up`, opposite in sign to the pole, and which way of the gate raises it varies from pole to pole. Active poles with `neg_lobe`
-  past a half, S-lens reads (`checks/lobe_reads.py`), the rank of a pole's most frequent firing token among the kept tokens (50 is chance):
-  `â ± b̂` 16-48 at Qwen L0-L4 and 40-61 at Gemma L0-L10; its negative 52-84 and 39-60; the up row alone, `∓b̂`, 71-81 and 63-82 (`read_rows` now
-  uses it). Ordinary poles reach 69-95 and 75-95 with `â ± b̂`. In Qwen's `read_S_z` at L1-L4 a firing token is in the top 64 for 1-2% of poles
-  with the negative, 8-17% with `â ± b̂`, 9-19% with the up row, against 47-73% for ordinary poles. L0 is the exception (71% with the negative, 20% with
-  the up row). Limits: S-lens only, and the reads stay hard to interpret by eye under any rule: of 30 random such poles, 1-3 have a firing token in
-  their top 16. Many are faint shadows of the neuron's other pole, with the same up row and a shut gate: their `act_top` is a median 0.24 of the other pole's in
-  Qwen (0.70 in Gemma; 1.05 and 1.03 for ordinary poles), though about a quarter are the larger pole. L0 n3228 is one: its − pole is a clean 十 neuron (`act_top` 7.9;
-  pushed at that size it raises what follows a number, `-year`, `-month`, 月份), and its + pole (0.31) fires on byte fragments sharing 十's bytes, its up row reading 十.
-- **Early hubs.** A few L0-L1 neurons sit in most early in-lists: the 1% most-listed sources hold 59% of
-  the in-list entries at L0-L8 (8-18% later), and L0 n11466 − (甩, "fling") is in 26% of L1-L8 poles'
-  lists. Shared lists show as recall's control at L1-L2 (0.04-0.05).
-
-- **Driven by differs from wired to and fires with** (every pole, K = 16, first 5 firings; `checks/relations.py`). A pole's
-  top 16 driven-by sources are a median of 31-44% in its top 16 in-edges or fires-with lists (13-19% and 19-25% taken alone; another pole's lists 0): 56-69% of its largest contributors
-  are in neither, because a source's contribution is its activation times its wiring and the top of the product is not the top of
-  either factor. In a 160-pole probe (`data/summary/relations_probe_qwen3-8b.json`) the top 16 carried only 1-5% of the summed absolute contribution, which is diffuse.
-
-- **Into a head** (`17_firings.py --parts heads`, the `heads/sources` table; H100). A head's firing reduces to a read of the residual entering its layer through each
-  input (design.md): the value at the positions it attends to, and the query and keys through the score margin between its most attended key and the mean of them
-  (equal to the log-probability margin to 5·10⁻⁶). Every head's first 5 top firings (5,760 in Qwen3-8B, 3,840 in Gemma 4); the shares sum to 1 within 1.3·10⁻³. Medians over a band's
-  layers, share of neurons / earlier heads:
-
-| band | value | query | key |
-|---|---|---|---|
-| Qwen3-8B L1-L8 | 0.90 / 0.10 | 0.65 / 0.34 | 0.83 / 0.17 |
-| L9-L12 | 0.90 / 0.10 | 0.67 / 0.33 | 0.83 / 0.17 |
-| L13-L20 | 0.94 / 0.06 | 0.61 / 0.39 | 0.87 / 0.13 |
-| L21-L27 | 0.85 / 0.15 | 0.54 / 0.46 | 0.77 / 0.23 |
-| L28-L35 | 0.86 / 0.14 | 0.60 / 0.40 | 0.82 / 0.18 |
-| Gemma 4 L1-L11 | 0.92 / 0.08 | 0.78 / 0.21 | 0.90 / 0.10 |
-| L12-L23 | 0.82 / 0.18 | 0.57 / 0.43 | 0.81 / 0.19 |
-| L24-L35 | 0.85 / 0.15 | 0.67 / 0.33 | 0.81 / 0.19 |
-| L36-L47 | 0.85 / 0.15 | 0.66 / 0.35 | 0.76 / 0.24 |
-
-  What a head copies and what it can be found by come mostly from neurons; what it looks for takes a third to a half from earlier heads, which suggests composition between heads
-  runs mainly through the query (Q-composition, Elhage et al. 2021, here measured at firings). There is no signed weight edge into a head: two heads meet through a matrix, not a dot product.
-
-- **Gemma 4** has the same split (the in-context sample, 3,008 poles): heads carry 12-26% of the activation, neurons 74-86%, and an edge's push ranks every
-  upstream neuron at ρ 0.89-0.92. Over every pole's first 5 firings, heads carry a median 13-26%. From L12 its edges behave as Qwen3-8B's: the in-edges
-  are 3-9% of the 64 largest contributors and carry 8-9% of the activation, their sources firing at 4-6% of the pole's firings (random sources 1-2%),
-  and a pole's top 16 driven-by sources are 13-19% in its top 16 in-edges, 25-31% in either list. At L1-L11 they name almost none of the sources (2% of
-  the largest, 0.6% of the activation; 0% of the driven-by, 6% in either list). A pole's largest |cos| with the layer before's writes is a median
-  0.08-0.15, against 0.066 for the same writes rotated at random, and the 1% most-listed sources hold 12-28% of the entries. Taken in the raw basis,
-  these were 0.002-0.018 and 52-66%, and the in-edges carried none of the activation at any band: the cosine that admits an edge pairs a write with a
-  read row, which the raw basis weighs by each coordinate's units (Gemma 4's span 80-1,600×), so it let through a few hub neurons and dropped the rest
-  (§13).
-
-**What this means.** The edges are the model's wiring: what a pole's firing would do to each later pole,
-the counterpart of a write read (§3), and like it an average that leaves the context out (§4). Which
-units drive a pole when it fires is the context's: a list of what feeds a pole needs activations, its
-sources at its top firings, which `explain` gives one pole at a time.
-
-**Limits.** Direct paths at one position: what heads carry between positions, and paths through other
-units, are not edges. `push` holds each source
-at its typical top firing, and Gemma 4's `edges` take each write at its norm's typical scale. 32 random neurons a layer, 5 firings each.
-
-## §18. What a write adds beyond what it reads
-
-The question this section tests, what an MLP adds beyond amplifying what it receives, and the idea of reading the part of an output orthogonal to its input, came from [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty).
-
-**Setup** (`checks/write_parts.py`; Qwen3-8B, MPS, fp32). Weights, 512 random neurons a layer: the cosine of a neuron's write with its
-gate and up rows, and the top 12 of the R-lens read of the write, orthogonal to the read direction `â ± b̂` or to the whole gate-up plane
-(`neurons.orthogonal_write`). Census, §3's random picks, 16 neurons a layer at even layers L4-L34, both poles (511 live poles): the
-pole's write added at positions 16+ of 16 documents at 1× `act_top` (§3's protocol), split into the part along `â ± b̂` and the rest; and
-removing the same parts of real firings (8 top firings, 8 positions after each). Blind Sonnet ratings of two token lists per pole (same
-concept, related but distinct, different, or unclear for lack of a theme), with shuffled pairs mixed in; the second rater judged the
-orthogonal-to-read-direction list and the orthogonal-to-plane list for the same poles together. Pairs, keys and ratings are in
-`data/summary/write_parts/`.
-
-| layer | `cos(w, up)` | `|cos(w, gate)|` | the write's top 12 kept when orthogonalized to the plane: Euclidean / in the metric |
-|---|---|---|---|
-| L6 | +0.35 | 0.06 | 0.57 / 0.27 |
-| L10 | +0.55 | 0.13 | 0.44 / 0.14 |
-| L14 | +0.45 | 0.14 | 0.46 / 0.19 |
-| L18 | +0.29 | 0.20 | 0.49 / 0.25 |
-| L22 | +0.26 | 0.14 | 0.53 / 0.37 |
-| L26 | +0.12 | 0.09 | 0.75 / 0.68 |
-| L30 | −0.02 | 0.06 | 0.85 / 0.84 |
-| L34 | −0.17 | 0.05 | 0.69 / 0.70 |
-
-- **The self-alignment is with `up`.** Through L14 a neuron's write leans on the direction its `up` row carries; the gate row's cosine is
-  small. At L18-L22 the two sizes close; by L30 the `up` alignment is gone, and it reverses at the last layers. Subtracting only the read
-  direction leaves half of this in, which is why the plane is the version in the catalog. `cos_write_up`, `cos_write_gate` keep it per pole.
-- **Effect sizes.** Steering, medians by band: the orthogonal part's effect is 84-100% of the whole write's, the along-read part's 8-34%; `r(whole, orth)` 0.94-1.00.
-  `r(along, orth)` is about 0 at every depth, but any two orthogonal vectors would tend to that, and no random-split control was run.
-- **Meaning, blind.** Orthogonal part against the pole's own read, per rater, among 240 real poles (same / related / different / unclear): rater 1,
-  L4-L20 18/5/5/116, L22-L34 10/24/5/57; rater 2, L4-L20 16/8/18/102, L22-L34 10/22/6/58; orthogonal to the plane (rater 2), 18/8/14/104 and 10/21/6/59;
-  shuffled pairs 0/3/6/51 and 0/0/16/44. The move to a related concept from L22 replicates; before it the part is as often unrelated as the same concept, and rarely
-  related. Removing either part of real firings is too noisy for this: 83% of those lists are unclear.
-- **Which kind of related.** Some late pairs are concept shifts (L22 n1988 +: faced, confronted → trying, navigating); others are collocates of a next word (L30 n165 +: dismantle → apart).
-- **In the residual's metric** (§13), the catalog's split. The measurements above split the write in the raw basis: the part
-  removed lies along the gate and up rows themselves. The catalog's `write_orth_*` remove the rows as vectors, `s² ⊙ a`
-  (`neurons.orthogonal_write`): still a write neither row reads, with a different part taken out. The cosines move by 0.02
-  at most (the catalog's `cos_write_up`, `cos_write_gate`, medians over every `+` pole), but the rest of the write keeps less
-  of what the whole write's R-lens read names through L22 (the last column, the metric's over every `+` pole), and the two
-  splits agree from L26. Not from the massive-activation coordinates, where `s²` reaches 10⁵× its median: clipping it at its
-  99th percentile changes the kept share by 0.02 at most. In the census, `write_orth_R` passes for 23% of L28-L35's poles
-  (Euclidean: 25%; §7). The steering and blind ratings were not rerun with the metric's split.
-
-**The `firings` table** (`17_firings.py`) reads what the residual holds where a pole fires, the layer's MLP output there and the model's prediction, as activation-side counterparts of these weight reads.
-**How much a pole amplifies** (`parallel`, `orthogonal`, in `firings`; design.md): the factor a firing adds along what its neuron reads, and what it adds off that direction, on the same scale. Medians over poles that aren't
-quiet, Qwen3-8B by band: `parallel` +0.45, +0.55, +0.29, +0.13 and −0.06 (below zero for 12%, 7%, 21%, 26% and 71% of poles), `orthogonal` 1.0-2.1. Mid-network poles amplify the part they read, and the last layers suppress it mildly.
-Gemma 4 by quarter: `parallel` +0.01, +0.22, +0.19, +0.01 (below zero for 45%, 22%, 20%, 44%); its `orthogonal`, 12-67, carries the post-MLP norm's weights and doesn't compare across models. In high dimension any write sits mostly off a given direction, so the sign and size of `parallel` are the informative part; no random-direction control was run.
-
-A read of the residual after the layer was tested and dropped: it is the sum of `before` and `mlp` and lands between them. Of the top 16 tokens a pole's steering promotes, the share in each read's top 16 (`checks/firing_reads.py`; controls 0.03 or less): Qwen3-8B L21-35, `write_R` 0.60-0.82, `mlp_R` 0.18-0.21, after 0.09-0.11, `before_R` 0.05; Gemma 4 12B L24-47, 0.41-0.68, 0.11-0.14, 0.08, 0.05.
-
-**Limits.** One model; a rater per comparison and many unclear lists, so the counts describe poles legible on both sides. The read direction is a heuristic, the
-lens read of a pole's input at early layers is uninformative for many (§6). §3 and §4 stand as first measured, with 24 top firings a pole; §2, §7, §12, §13 and §17 are from this release's tables, whose lists hold 64.
-
-## §19. The Qwen3 family: what changes with size
+### §19. The Qwen3 family: what changes with size
 
 **Setup** (`scripts/catalog_queue.sh` on two H100s, Qwen3-8B's stages and precision). Nine more catalogs: the post-trained
-Qwen3-0.6B, 1.7B, 4B and 14B, and the bases 0.6B, 1.7B, 4B, 8B and 14B (Qwen released dense bases up to 14B). Each model has its
-own R-lens, S-lens and scale, fitted on the same 1,000 DCLM documents as Qwen3-8B's (split-half 0.06 or less at every layer of
-every one; the model card lists them by model), and its catalog covers the same 63,990 activation documents (a base renders the
-chat slice with its post-trained sibling's template): every table but `labels`. Steering is §3's protocol through each model's
-own R-lens (`checks/causal_lens.py`: 32 random neurons a layer, 16 contexts of 64 tokens, 1× `act_top`); the reads are tested
-at the firings as in §7 (`checks/reads_at_firings.py`), as shares of the poles that fire (not near-silent) past the mismatched
-pairs' 99% point, net of theirs. Models are compared by quarter of relative depth. Depth and width grow together in this family:
-0.6B and 1.7B have 28 layers (1,024 and 2,048 wide), 4B and 8B 36 (2,560 and 4,096), 14B 40 (5,120). And the five are three
-lineages: the 0.6B and the 4B are pruned from the 1.7B and the 8B (§20), so a pair of equal depth sets a pruned model beside
-its parent, and a comparison between 28 and 36 layers crosses lineages too.
+Qwen3-0.6B, 1.7B, 4B and 14B, and the bases 0.6B, 1.7B, 4B, 8B and 14B (Qwen's dense bases go up to 14B). Each model has
+its own R-lens, S-lens and scale, fitted on the same 1,000 DCLM documents as Qwen3-8B's (split-half 0.06 or less at every
+layer of every one), and its catalog covers the same 63,990 activation documents (a base renders the chat slice with its
+post-trained sibling's template). Steering is §3's protocol through each model's own R-lens (`checks/causal_lens.py`: 32
+random neurons a layer, 16 contexts of 64 tokens, 1× `act_top`); the reads are tested at the firings as in §8
+(`checks/reads_at_firings.py`), as shares of the poles that fire (not near-silent) past the mismatched pairs' 99% point,
+net of theirs. Models are compared by quarter of relative depth. Depth and width grow together in this family: 0.6B and
+1.7B have 28 layers (1,024 and 2,048 wide), 4B and 8B 36 (2,560 and 4,096), 14B 40 (5,120). And the five are three
+lineages: the 0.6B and the 4B are pruned from the 1.7B and the 8B (§20), so a pair of equal depth sets a pruned model
+beside its parent, and a comparison between 28 and 36 layers crosses lineages too.
 
 Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
 
@@ -1558,58 +1485,50 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
 | 8B | .32 / .04 / .05 / .02 | .09 / .16 / .23 / .23 | .03 / .02 / .07 / .24 | .36 / .66 / .90 / .99 | .19 |
 | 14B | .43 / .05 / .04 / .02 | .10 / .17 / .22 / .28 | .03 / .02 / .07 / .23 | .31 / .58 / .87 / .98 | .20 |
 
-- **The S-lens's input reads fall between 28 and 36 layers.** Past the first quarter it names the firing token for 16-25% of
-  the 28-layer models' firing poles and 2-8% of the 36- and 40-layer models'. At 28 layers width changes little (0.6B and 1.7B
-  within 0.07 of each other in every quarter); at 36 the wider 8B sits below the 4B (0.02-0.05 against 0.05-0.08); the 14B, 4
-  layers deeper and 1,024 wider, matches the 8B. This suggests depth first, then a floor, but five sizes that grow in both
-  can't separate the two, and the step from 28 to 36 layers is also a step from the 1.7B's lineage to the 8B's (§20). The
-  14B, a lineage of its own, is the one independent check of it.
+- **The S-lens's input reads fall between 28 and 36 layers.** Past the first quarter it names the firing token for 16-25%
+  of the 28-layer models' firing poles and 2-8% of the 36- and 40-layer models'. At 28 layers width changes little (0.6B
+  and 1.7B within 0.07 of each other in every quarter); at 36 the wider 8B sits below the 4B (0.02-0.05 against
+  0.05-0.08); the 14B, 4 layers deeper and 1,024 wider, matches the 8B. This suggests depth first, then a floor, but five
+  sizes that grow in both can't separate the two, and the step from 28 to 36 layers is also a step from the 1.7B's lineage
+  to the 8B's (§20). The 14B, a lineage of its own, is the one independent check of it.
 - **The R-lens's input reads hold.** In the last quarter it names the drivers of 19-34% of firing poles at every size. The
   input side turns to it (the first layer where its read passes for as many firing poles as the S-lens's, on three-layer
-  medians, and keeps doing so on half the layers after) at about a quarter of the depth: L7 of 28 (0.6B), L10 of 28 (1.7B),
-  L10 of 36 (4B), L9 of 36 (8B, §6), L10 of 40 (14B).
+  medians, and keeps doing so on half the layers after) at about a quarter of the depth: L7 of 28 (0.6B), L10 of 28
+  (1.7B), L10 of 36 (4B), L9 of 36 (8B, §7), L10 of 40 (14B).
 - **Late writes read the same at every size.** The write's R-lens read promotes what follows the firings for 23-29% of
   firing poles in the last quarter, and steering's median r is 0.87-0.90 in the third quarter and 0.98-0.99 in the last.
-- **Early writes are less legible in larger models.** The first quarter's median steering r falls at every step in size, 0.62,
-  0.49, 0.40, 0.36, 0.31 (second quarter 0.80, 0.73, 0.65, 0.66, 0.58), and the first layer from which it stays at 0.35 or
-  more moves from L0 (both 28-layer models) to L3 (4B), L4 (8B) and L7 (14B).
-- **Near-silent poles appear at 36 layers** (§2): 1% or less of the 28-layer models' first-quarter poles, 14%, 19% and 20% of
-  the 4B's, 8B's and 14B's, none later at any size. The 4B's are the 8B's, kept through its pruning (§20).
-- **Fewer one-token detectors.** Poles with a third of their top firings on one token, of the first quarter's firing poles:
-  0.40, 0.35, 0.35, 0.33, 0.29. These are the poles the S-lens reads best, so their decline accounts for part of its drop.
-- **Heads read less with size** (uncorrected p ≤ 0.05, 5% by chance; §12). In the last quarter the OV read promotes what follows
-  the query for 45%, 44%, 40%, 41% and 37% of heads, and the QK read names the attended token for 32%, 31%, 27%, 24% and 22%.
-- **What drives a pole** (`sources`, §17) splits between earlier neurons and heads alike at every size: neurons carry 54-59% of
-  it on average from L4 through the third quarter (36-76% by layer) and 76-82% in the last quarter.
-- **The bases differ from their siblings on the R-lens's reads.** On the S-lens's reads, steering and near-silent poles they
-  match within 0.03; the write's next-token read trails a little (last quarter 0.19-0.24 against 0.23-0.29); the input read
-  trails at every size: last quarter 0.19 against 0.34 (0.6B), 0.11 against 0.19 (1.7B), 0.14 against 0.27 (4B), 0.09 against
-  0.23 (8B), 0.21 against 0.28 (14B). So their input side turns to the R-lens later (L10, L11 and L11 for the 0.6B-, 4B- and
-  8B-Base; the 14B-Base at L10 like the 14B), and the 1.7B-Base's never does: by quarter its R-lens read passes for 6-16% of
-  firing poles, its S-lens read for 18-58%. The gap is in the test's null, not in the reads (two bullets below).
-- **What post-training changed** (`checks/post_training.py`: Qwen3-8B and Qwen3-4B against their bases, weights only, each
-  model's lenses of record; post-training keeps the neurons' indices). Every matrix moves by 5-11% of its norm in the 8B and
-  6-13% in the 4B, the norms by 6% or less and the final norm by 0.3-0.4%; the embedding and unembedding by 7% and 9% (the
-  4B's, tied, 12%). The change is spread out: `ΔW_down`'s participation ratio is 824-2,506 of the 8B's 4,096 dimensions
-  (664-1,667 of the 4B's 2,560), its top direction 0.2-2.6% of it. Neurons keep their directions (write and read cosines
-  0.991-0.998), and a write's R-lens top 10 keeps 4-5 of its tokens at L0-L3 and 7-9 in the last quarter (medians). The clearest
-  directions of `ΔW_down`, read through the post-trained R-lens from L12 on, are questions (`?`, `吗`), hedges (`maybe`,
-  `perhaps`, `也许`, `可能`), contrast (`但`, `but`), consequence (`因此`, `thus`) and explanation (`也就是说`, `例如`), in both
-  models; the 4B adds `Wait` (L34), `Let` and `让我们` (L29) and the chat template's `<think>` and `<|im_start|>` (L31-L33).
-  That suggests the style of the models' reasoning traces; a direction's sign isn't fixed (both ends are listed), and each
-  holds about 1% or less of a layer's change past L3.
-- **The bases' input reads trail because of the test's null.** Swapping read rows between a model and its base moves
-  `read_R`'s share by 0.01 at most; swapping the R-lens moves all of it, through its Jacobian in the 8B (the base's
-  Jacobian with the post-trained unembedding scores close to the base) and in the 4B's last quarter, while the 4B's readout,
-  its tied embedding, carries most of it earlier. `reads_at_firings.py` scores each pole against a null pooled over its
-  layer's mismatched pairs, and the base's lens widens that null with a few promiscuous reads: the 1% of poles that score
-  highest on other poles' drivers (through the 8B-Base's lens, mostly frequent function words across scripts such as `在`,
-  `对`, `に`, `を`, tabs and single capitals) hold 53-81% of the null's 99%-point exceedances by quarter, against 34-60%
-  through the post-trained lens, and lift that point from 1.2-1.5 to 1.6-2.4.
-  Held to a null of its own (its score on its drivers against its score on 16 other poles'), a pole passes as often through
+- **Early writes are less legible in larger models.** The first quarter's median steering r falls at every step in size,
+  0.62, 0.49, 0.40, 0.36, 0.31 (second quarter 0.80, 0.73, 0.65, 0.66, 0.58), and the first layer from which it stays at
+  0.35 or more moves from L0 (both 28-layer models) to L3 (4B), L4 (8B) and L7 (14B).
+- **Near-silent poles appear at 36 layers** (§2): 1% or less of the 28-layer models' first-quarter poles, 14%, 19% and 20%
+  of the 4B's, 8B's and 14B's, none later at any size. The 4B's are the 8B's, kept through its pruning (§20).
+- **Fewer one-token detectors.** Poles with a third of their top firings on one token, of the first quarter's firing
+  poles: 0.40, 0.35, 0.35, 0.33, 0.29. These are the poles the S-lens reads best, so their decline accounts for part of its
+  drop.
+- **Heads read less with size** (uncorrected p ≤ 0.05, 5% by chance; §11). In the last quarter the OV read promotes what
+  follows the query for 45%, 44%, 40%, 41% and 37% of heads, and the QK read names the attended token for 32%, 31%, 27%,
+  24% and 22%.
+- **What drives a pole** (`sources`, §12) splits between earlier neurons and heads alike at every size: neurons carry
+  54-59% of it on average from L4 through the third quarter (36-76% by layer) and 76-82% in the last quarter.
+
+**The bases read like their siblings, but for a null.** On the S-lens's reads, steering and near-silent poles they match
+within 0.03, and the write's next-token read trails a little (last quarter 0.19-0.24 against 0.23-0.29). The R-lens input
+read seems to trail at every size: last quarter 0.19 against 0.34 (0.6B), 0.11 against 0.19 (1.7B), 0.14 against 0.27
+(4B), 0.09 against 0.23 (8B), 0.21 against 0.28 (14B), so their input side would turn to the R-lens later, and the
+1.7B-Base's never (by quarter its R-lens read passes for 6-16% of firing poles, its S-lens read for 18-58%). The gap is in
+the test's null, not in the reads:
+- Swapping read rows between a model and its base moves `read_R`'s share by 0.01 at most; swapping the R-lens moves all of
+  it, through its Jacobian in the 8B (the base's Jacobian with the post-trained unembedding scores close to the base) and
+  in the 4B's last quarter, while the 4B's readout, its tied embedding, carries most of it earlier.
+- `reads_at_firings.py` scores each pole against a null pooled over its layer's mismatched pairs, and the base's lens widens
+  that null with a few promiscuous reads: the 1% of poles that score highest on other poles' drivers (through the
+  8B-Base's lens, mostly frequent function words across scripts such as `在`, `对`, `に`, `を`, tabs and single capitals)
+  hold 53-81% of the null's 99%-point exceedances by quarter, against 34-60% through the post-trained lens, and lift that
+  point from 1.2-1.5 to 1.6-2.4.
+- Held to a null of its own (its score on its drivers against its score on 16 other poles'), a pole passes as often through
   either lens:
 
-  | model, read_R | pooled null, by quarter | own null, by quarter |
+  | model, `read_R` | pooled null, by quarter | own null, by quarter |
   |---|---|---|
   | 8B, its lens | .06 / .16 / .25 / .25 | .29 / .36 / .41 / .61 |
   | 8B, its base's lens | .03 / .03 / .13 / .07 | .35 / .37 / .42 / .62 |
@@ -1618,422 +1537,321 @@ Post-trained models, by quarter (Q1 / Q2 / Q3 / Q4):
 
   The 8B-Base's own drivers give the same shares within 0.01. So post-training doesn't line up what neurons read with what
   the model says, or change how well a base's R-lens names a pole's drivers; it makes a few of the lens's reads less
-  promiscuous. The logit lens on read directions (the identity in place of the Jacobian) has the 8B's narrowest null (a 99%
-  point of 0.85-1.13) but passes fewer poles against their own in both models (.16 / .31 / .34 / .55 in the 8B).
+  promiscuous. The logit lens on read directions (the identity in place of the Jacobian) has the 8B's narrowest null (a
+  99% point of 0.85-1.13) but passes fewer poles against their own in both models (.16 / .31 / .34 / .55 in the 8B).
 
-**Limits.** One family, five sizes in three lineages (§20), and depth and width grow together; quarters average layers of different roles; the shares
-are token-level (§7), not judgments of coherence; the post-trained models' labels are checked for firing only (§8), and the
-bases have none. Every lens was
-fitted on 1,000 documents whatever the model's size. At L1-L3, a few firings with near-zero gate or `up` dominate `sources`'
-layer means (a share's worst error reaches 533 at the 4B-Base's L2), so the sources bullet starts at L4. The pooled null's
-shares (this section's, by `reads_at_firings.py`) depend on its tail, which a few promiscuous reads lift, so a comparison
-between lenses or models on them can move under a null per pole; only `read_R` between the bases and their siblings was
-checked. The weight diff covers two sizes, reads the MLPs' writes and no heads, and uses the post-trained model's lobe
-signs and near-silent poles for its base. Compact outputs are
+**What post-training changed** (`checks/post_training.py`: Qwen3-8B and Qwen3-4B against their bases, weights only, each
+model's lenses of record; post-training keeps the neurons' indices). Every matrix moves by 5-11% of its norm in the 8B and
+6-13% in the 4B, the norms by 6% or less and the final norm by 0.3-0.4%; the embedding and unembedding by 7% and 9% (the
+4B's, tied, 12%). The change is spread out: `ΔW_down`'s participation ratio is 824-2,506 of the 8B's 4,096 dimensions
+(664-1,667 of the 4B's 2,560), its top direction 0.2-2.6% of it. Neurons keep their directions (write and read cosines
+0.991-0.998), and a write's R-lens top 10 keeps 4-5 of its tokens at L0-L3 and 7-9 in the last quarter (medians). The
+clearest directions of `ΔW_down`, read through the post-trained R-lens from L12 on, are questions (`?`, `吗`), hedges
+(`maybe`, `perhaps`, `也许`, `可能`), contrast (`但`, `but`), consequence (`因此`, `thus`) and explanation (`也就是说`,
+`例如`), in both models; the 4B adds `Wait` (L34), `Let` and `让我们` (L29) and the chat template's `<think>` and
+`<|im_start|>` (L31-L33). That suggests the style of the models' reasoning traces; a direction's sign isn't fixed (both
+ends are listed), and each holds about 1% or less of a layer's change past L3.
+
+**Limits.** One family, five sizes in three lineages (§20), and depth and width grow together; quarters average layers of
+different roles; the shares are token-level (§8), not judgments of coherence; the post-trained models' labels are checked
+for firing only (§13), and the bases have none. Every lens was fitted on 1,000 documents whatever the model's size. At
+L1-L3, a few firings with near-zero gate or `up` dominate `sources`' layer means (a share's worst error reaches 533 at the
+4B-Base's L2), so the sources bullet starts at L4. The pooled null's shares depend on its tail, which a few promiscuous
+reads lift, so a comparison between lenses or models on them can move under a null per pole; only `read_R` between the
+bases and their siblings was checked. The weight diff covers two sizes, reads the MLPs' writes and no heads, and uses the
+post-trained model's lobe signs and near-silent poles for its base. Compact outputs are
 `data/summary/{reads_at_firings,causal_lens,sources,head_sources,edges,reads,post_training}_<model>.*`.
 
-## §20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B
+### §20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B
 
 **Setup** (`checks/lineage.py`: weights and the catalogs' `acts` and `reads` tables, on a CPU). Each pair has the same
 layers and heads: the 4B and the 8B 36 layers of 32 query and 8 key-value heads, the 0.6B and the 1.7B 28 layers of 16 and
 8, all of 128 dimensions. They differ in width: residuals of 2,560 against 4,096 and 1,024 against 2,048, MLPs of 9,728
-neurons against 12,288 and 3,072 against 6,144. A neuron's RMS activation comes from `acts` (its `std` and `mean` over the
-activation corpus); near-silent neurons have both poles' `act_top` under 0.05 (§2). To match neurons across a pair, a
-linear map from the parent's residual to the model's is fitted on the heads' q and k rows (times the input norm's gain),
-which read the normed residual and keep their head-internal basis. It is tested on held-out layers, then refitted on all
-of them. A neuron's score against a parent neuron of the same layer is the mean cosine of their gate rows and of their up
-rows (times the post-attention norm's gain), with the parent's rows taken through the map. Its match comes from a
-one-to-one assignment (Hungarian). The null is its best score against the parent's layer half the depth away.
+neurons against 12,288 and 3,072 against 6,144. A neuron's RMS activation comes from `acts`; near-silent neurons have both
+poles' `act_top` under 0.05 (§2). To match neurons across a pair, a linear map from the parent's residual to the model's is
+fitted on the heads' q and k rows (times the input norm's gain), which read the normed residual and keep their
+head-internal basis; it is tested on held-out layers, then refitted on all of them. A neuron's score against a parent
+neuron of the same layer is the mean cosine of their gate rows and of their up rows, the parent's taken through the map,
+and its match comes from a one-to-one assignment (Hungarian). The null is its best score against the parent's layer half
+the depth away.
 
 - **In the 4B and the 0.6B, neuron index tracks activation.** In a model trained from a random start, indices are
   exchangeable: the 1.7B, 8B, 14B and Gemma 4 have Spearman ρ between a neuron's index and its RMS activation within ±0.03
   on every layer. The 4B ranges from −0.76 to +0.21 by layer (|ρ| > 0.1 on 34 of 36 layers) and the 0.6B from −0.63 to
-  −0.09 (27 of 28); in both, the most active neurons come first. Other models' near-silent neurons sit at a mean position
-  of 0.49-0.50 in their layer (the 8B's L1-L4, the 14B's L0-L6, the 1.7B's L1). The 4B's fill the end of L1 (4,469 at a mean
-  position of 0.76, nearly all past n5,300) and of L3 (2,302 at 0.85, past n7,000), and spread over L2 (4,912 at 0.49), where
-  the order doesn't follow activation. Post-training keeps each neuron's index and direction (§19), so the bases share the
-  order. The site's map draws a layer's neurons in index order, and these blocks are the pale lower parts of the 4B's L1 and L3.
+  −0.09 (27 of 28); in both, the most active neurons come first. Other models' near-silent neurons sit at a mean position of
+  0.49-0.50 in their layer; the 4B's fill the end of L1 (4,469 at a mean position of 0.76) and of L3 (2,302 at 0.85), and
+  spread over L2, where the order doesn't follow activation. Post-training keeps each neuron's index and direction (§19),
+  so the bases share the order.
 - **The heads are the parent's, one for one.** By layer, the correlation over heads of their weight norms between the 4B
-  and the 8B has medians of 0.96 (q) and 0.98 (k, v, o); for the q_norm and k_norm gains over the head dimension it is 0.99,
-  and shuffling the parent's heads gives −0.00. Between the 0.6B and the 1.7B these are 0.93-0.97, 0.97-0.99 and −0.07.
-  Castin et al. (2026, KV-Lingo, their appendix G) report the same pairs' heads aligned one to one.
-- **The residual is a linear image of the parent's.** Most of the 0.6B's coordinates are the 1.7B's. Each of its
-  embedding's columns correlates with one of the 1.7B's at |r| 0.23 (median; 0.08 for the second best), and 1,008 of its
-  1,024 coordinates match distinct ones. The 4B's coordinates don't match (0.058 against 0.046), but a linear map holds.
-  Fitted on the even layers' q and k rows, it predicts the odd layers' rows at a median cosine of 0.55 (0.18-0.73 by layer),
-  and the next head's rows at 0.05. For the 0.6B these are 0.40 (0.05-0.51) and 0.02.
-- **Nearly every neuron of the 4B has a parent.** Its best score clears the null's 99% point for 99-100% of neurons at L1-L34,
-  90% at L0 and 95% at L35 (median best 0.13-0.59 by layer, null 0.07-0.12). The match is one to one: 92-100% of best matches
-  are distinct, except at L1-L3 (53-79%), where near-silent neurons look alike. Matched pairs keep their scale (ρ 0.85-0.95
-  between their RMS activations) and what they write. Each write is read through its own model's R-lens: a pair's reads
-  share 10-30% of their top 16 tokens, random pairs 0.0-0.8% from L5 (up to 10% at L0-L4). The 0.6B's matches are weaker,
-  like its map: the best score clears the null for 36-54% of neurons at L0-L5 and 73-98% from L6, with distinct matches at
-  81-99%. Its pairs' RMS activations correlate at ρ 0.61-0.87, and their write reads share 4-24% of their top 16 (random
-  0.0-0.6%).
-- **The order follows the parent's activation, and the cut took the least active neurons.** A neuron's index has no relation
-  to its parent's (ρ −0.04 to +0.03 in both models). It does follow the parent's RMS activation, more closely than the model's
-  own on 33 of the 4B's 36 layers and on all 28 of the 0.6B's. That ρ reaches −0.74 in the 4B and is −0.2 or below on 30
-  layers; the 0.6B ranges from −0.21 to −0.72. The parent neurons the assignment leaves out are the pruned ones, and they
-  were the least active. In the 4B:
-  - At L1-L3 they are almost all the 8B's near-silent neurons (93%, 89% and 96% of the 2,560). The rest of those stayed
-    near-silent: every near-silent neuron of the 4B at L1-L3 matches one of the 8B's (99-100%), against 1-5% of its firing
-    neurons.
-  - At L4 the cut took 973 of the 8B's 1,079 near-silent neurons, and the 4B has none left there.
-  - Later, the pruned neurons' median RMS activation is 0.70-1.02 of the kept ones'. It is lowest at L5-L7 and L34-L35, and
-    about equal at L8-L11 and L29-L31, where the order is weak too.
-  
-  In the 0.6B the ratio is 0.62-0.99 at every layer.
-- **Most neurons' parents are identified by signals that don't use the map.** Three signals name a parent without the
-  residual map:
-  - the correlation of a neuron's activations with each parent neuron's over the same documents (`coact`: Pearson and
-    Spearman, from position 1, where position 0's sink values are huge; 49k positions for the 4B and 196k for the 0.6B,
-    in bf16 on an RTX 4090);
-  - the tokens their writes' R-lens reads share (`write_R`'s 64 for both poles, each model through its own lens; at least
-    4 shared and a unique best).
-
-  A parent counts as identified when the weight match is also some signal's best. Against shuffled neurons that happens
-  for 0.0-0.2% of a layer. A second round fits each layer's own maps on the identified pairs, for the rows and for the
-  writes (down columns), cross-fitted so no pair is scored through a map it helped fit. Held out, those maps alone recover
-  96-100% of the 4B's pairs and 82-97% of the 0.6B's. The other neurons are then rescored against the parents no pair
-  holds. Where two identified neurons claim one parent (0.2% overall; 1.4% at most, at the 4B's L2), the better weight
-  score keeps it, and every neuron ends with a parent of its own.
+  and the 8B has medians of 0.96 (q) and 0.98 (k, v, o), 0.99 for the q_norm and k_norm gains, and −0.00 with the parent's
+  heads shuffled; between the 0.6B and the 1.7B, 0.93-0.97, 0.97-0.99 and −0.07. Castin et al. (2026, KV-Lingo, their
+  appendix G) report the same pairs' heads aligned one to one.
+- **The residual is a linear image of the parent's.** Most of the 0.6B's coordinates are the 1.7B's: 1,008 of its 1,024
+  embedding columns match distinct ones (median |r| 0.23, 0.08 for the second best). The 4B's coordinates don't match, but
+  a linear map holds: fitted on the even layers' q and k rows, it predicts the odd layers' at a median cosine of 0.55
+  (0.18-0.73 by layer), and the next head's rows at 0.05. For the 0.6B these are 0.40 and 0.02.
+- **Nearly every neuron of the 4B has a parent.** Its best score clears the null's 99% point for 99-100% of neurons at
+  L1-L34, 90% at L0 and 95% at L35 (median best 0.13-0.59 by layer, null 0.07-0.12), and 92-100% of best matches are
+  distinct, except at L1-L3 (53-79%), where near-silent neurons look alike. Matched pairs keep their scale (ρ 0.85-0.95
+  between their RMS activations) and what they write: through each model's own R-lens, a pair's write reads share 10-30%
+  of their top 16 tokens, random pairs 0.0-0.8% from L5. The 0.6B's matches are weaker, like its map: 36-54% clear the
+  null at L0-L5 and 73-98% from L6, pairs' activations correlate at ρ 0.61-0.87, and their write reads share 4-24%.
+- **The order follows the parent's activation, and the cut took the least active neurons.** A neuron's index has no
+  relation to its parent's (ρ −0.04 to +0.03), but follows the parent's RMS activation, more closely than the model's own
+  on 33 of the 4B's 36 layers and all 28 of the 0.6B's (to ρ −0.74 and −0.72). The parent neurons the assignment leaves out
+  are the pruned ones. In the 4B, at L1-L3 they are almost all the 8B's near-silent neurons (93%, 89% and 96% of the
+  2,560), and every near-silent neuron the 4B kept there matches one of the 8B's (99-100%, against 1-5% of its firing
+  neurons); at L4 the cut took 973 of the 8B's 1,079 near-silent neurons, leaving none; later, the pruned neurons' median
+  RMS activation is 0.70-1.02 of the kept ones', lowest at L5-L7 and L34-L35. In the 0.6B the ratio is 0.62-0.99.
+- **Most parents are identified by signals that don't use the map:** the correlation of the two neurons' activations over
+  the same documents (Pearson and Spearman from position 1; 49k positions for the 4B, 196k for the 0.6B, bf16 on an RTX
+  4090), or the tokens their writes' R-lens reads share (at least 4 of 64 and a unique best). A parent counts as identified
+  when the weight match is also some signal's best, which shuffled neurons reach for 0.0-0.2% of a layer. A second round
+  fits each layer's own maps on the identified pairs (cross-fitted, so no pair is scored through a map it helped fit;
+  held out, they recover 96-100% of the 4B's pairs and 82-97% of the 0.6B's) and rescores the rest against the parents no
+  pair holds, so every neuron ends with a parent of its own:
 
   | model | identified | weight match in a signal's top 4 | weights alone | near-silent, as a class |
   |---|---|---|---|---|
   | 4B | 93.3% (93-100% by layer at L4-L33, 91% at L34, 68% at L35, 85% at L0) | 1.2% | 2.2% | 3.3% |
   | 0.6B | 85.3% (67-94% by layer; under 80% at L0-L2 and L27) | 5.0% | 9.7% | none |
 
-  That is 96.5% of the 4B's firing neurons. Its near-silent neurons at L1-L3 match the 8B's near-silent neurons as a
-  class (above), but not one by one. Their weights have shrunk toward a shared direction: the best and second-best
-  scores differ by under 0.005, even with up to 64 shared components removed. Their activations are noise. Among the
-  signals, Pearson agrees with the weights most often (96.6-99.6% at the 4B's L8-L28); the write reads add the most at the last
-  layers, where the activations agree least. Four times as many positions raised the 0.6B by up to 4 points a layer.
-- **What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
-  layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
-  - The heads stay in place.
-  - The residual narrows by channel (the 0.6B) or under enough retraining that only a linear map survives (the 4B).
-  - Each MLP's neurons are ranked by activation and cut, and the kept ones stay in rank order.
-  - Near-silent neurons go first.
+  That is 96.5% of the 4B's firing neurons. Its near-silent neurons at L1-L3 match the 8B's as a class but not one by
+  one: their weights have shrunk toward a shared direction (best and second-best scores within 0.005, even with up to 64
+  shared components removed), and their activations are noise. Pearson agrees with the weights most often (96.6-99.6% at
+  the 4B's L8-L28); the write reads add most at the last layers, where the activations agree least.
 
-  Both sides trained a long way after the cut, so scores are 0.3-0.6 rather than 1, and the parent may have been an earlier
-  checkpoint of the 8B and 1.7B. Qwen's technical report describes one pre-training recipe for every dense size and
-  distillation from larger models in post-training. It doesn't mention pruning.
-- **What it confounds.**
-  - **The size comparison (§19).** The five post-trained sizes form three lineages: the 1.7B's (0.6B and 1.7B, 28 layers),
-    the 8B's (4B and 8B, 36 layers) and the 14B's (40 layers). The step in the S-lens's input reads from 28 to 36 layers is
-    also a step between lineages. The 14B is a lineage of its own and reads like the 8B, so it is the only check that the
-    step goes with depth.
-  - **Width within a lineage (§19).** The 0.6B against the 1.7B and the 4B against the 8B set a cut-down, distilled model
-    beside its parent, not two widths trained alike. The 4B's near-silent poles are the 8B's, inherited; the 14B has its own.
-  - **Index ranges.** In these two models a range of neuron indices is a slice by activation rank, not a random sample: a
-    layer's first neurons are its most active, and the 4B's last neurons at L1 and L3 are near-silent. The catalog's
-    statistics cover every neuron and its steering check samples them at random (`causal_lens.py`), so its tables and §19's
-    shares stand. A pilot, plot or test over an index range in these models doesn't.
+**What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
+layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
+the heads stay in place; the residual narrows by channel (the 0.6B) or under enough retraining that only a linear map
+survives (the 4B); each MLP's neurons are ranked by activation and cut, near-silent ones first, and the kept ones stay in
+rank order. Both sides trained a long way after the cut, so scores are 0.3-0.6 rather than 1, and the parent may have been
+an earlier checkpoint. Qwen's technical report describes one pre-training recipe for every dense size and distillation
+from larger models in post-training; it doesn't mention pruning.
+
+**What it confounds.**
+- **The size comparison (§19).** The five post-trained sizes are three lineages: the 1.7B's (0.6B and 1.7B, 28 layers),
+  the 8B's (4B and 8B, 36 layers) and the 14B's (40 layers). The step in the S-lens's input reads from 28 to 36 layers is
+  also a step between lineages, and the 14B, which reads like the 8B, is the only check that it goes with depth.
+- **Width within a lineage (§19).** The 0.6B against the 1.7B and the 4B against the 8B set a cut-down, distilled model
+  beside its parent, not two widths trained alike. The 4B's near-silent poles are the 8B's, inherited.
+- **Index ranges.** In these two models a range of neuron indices is a slice by activation rank, not a random sample. The
+  catalog's statistics cover every neuron and its steering check samples them at random, so its tables and §19's shares
+  stand; a pilot, plot or test over an index range in these models doesn't.
 
 **Limits.** The parents are the released models, so the network at the cut is inferred. The activations cover 49k-196k
-positions of three slices (DCLM, Chinese web text, code), not chat. "Identified" means two methods agree, each over a
-whole layer, and its error rate is estimated from shuffled neurons only. A wrong parent that both writes and fires
-like the true one, such as a redundant neuron of the parent's, would pass. Where the signals don't agree, the weight
-match is a best guess, forced one to one. The 0.6B's parent's 444 near-silent L1 neurons were not clearly cut first
-(the assignment leaves out 52 of them). The key behind the 4B's order at L0, L2 and L8-L11 isn't recovered from the
-final weights. Compact outputs are `data/summary/lineage_<model>.*` (the 4B and the 0.6B). The maps and the activation
-matches are in `data/checks/lineage_<model>.pt` and `lineage_coact_<model>.pt` (local). Each neuron's parent and status
-are released as the catalog's `lineage` table (`lineage.py table`: the 4B, the 0.6B, the 8B and the 1.7B, each pruned
-model's neurons with their parent and each parent's with its child or `cut`; the bases the same), and neuron-lens.com
-links each neuron to its counterpart.
+positions of three slices (DCLM, Chinese web text, code), not chat. "Identified" means two methods agree, each over a whole
+layer, and its error rate is estimated from shuffled neurons only: a wrong parent that both writes and fires like the true
+one, such as a redundant neuron of the parent's, would pass. Where the signals don't agree, the weight match is a best
+guess, forced one to one. The 0.6B's parent's 444 near-silent L1 neurons were not clearly cut first (the assignment leaves
+out 52 of them). The key behind the 4B's order at L0, L2 and L8-L11 isn't recovered from the final weights. Compact
+outputs are `data/summary/lineage_<model>.*`. Each neuron's parent and status are in the catalog's `lineage` table
+(`lineage.py table`: each pruned model's neurons with their parent and each parent's with its child or `cut`, the bases
+the same), and neuron-lens.com links each neuron to its counterpart.
 
-## §21. The dark sector: what the R-lens barely reads
+## VII. What the lenses miss
 
-**Setup** (`checks/dark_sector.py`: Qwen3-8B in bf16 on an RTX 4090, `trace` and the swaps on an H100, statistics in
-fp32; the released R-lens). At each
-layer's output, the R-lens readout in the residual's metric, `W̄_U diag(γ_f) J_L diag(s)` (`W̄_U`: the kept unembedding,
-centred over tokens), has eigenvectors ordered by gain. A layer's *bright sector* is the fewest of them that carry 90% of
-the lens energy of the layer's writes; its *dark sector* is the rest, orthogonal in the metric. To *ablate* a sector of
-an MLP output is to replace that part with its mean over 64 held-out DCLM documents, at every position but the first.
-The controls remove random subspaces of the dark and the bright dimension, or the whole MLP output. Single layers are
+What lies outside the R-lens's reads, and what removing it breaks (§21).
+
+### §21. The dark sector: what the R-lens barely reads
+
+**Setup** (`checks/dark_sector.py`: Qwen3-8B in bf16 on an RTX 4090 and an H100, statistics in fp32; the lens of record).
+At each layer's output, the R-lens readout in the residual's metric, `W̄_U diag(γ_f) J_L diag(s)` (`W̄_U`: the kept
+unembedding, centred over tokens), has eigenvectors ordered by gain. A layer's *bright sector* is the fewest of them that
+carry 90% of the lens energy of the layer's writes; its *dark sector* is the rest, orthogonal in the metric. To *ablate*
+a sector of an MLP output is to replace that part with its mean over 64 held-out DCLM documents, at every position but the
+first. Controls remove random subspaces of the dark and the bright dimension, or the whole MLP output. Single layers are
 scored on 64 other DCLM documents of 128 tokens (positions 16-126), bands of layers on 32 documents of each activation
 slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three in the chat template without thinking).
 
-- **The bright sector grows with depth.** It has 60-192 directions at L0-L3, 610 at L9, 1,114 at L15, 1,920 at L21,
-  2,688 at L27 and 3,367 at L35, of 4,096. In context the residual is 87-95% dark at L0-L3, 71-81% at L4-L15 and
-  34-50% from L24 (energy in the metric). An MLP output is about as dark as a vector with its energy per coordinate
-  (L9: 0.91 against 0.93): its darkness comes from which coordinates it uses, not from avoiding the lens's directions.
-- **The readout's loudest direction is the residual's massive-activation offset** (`soft`). At every layer one direction
-  reads far louder than the rest: 2,060-3,830 times a random direction at L0-L9 (1.9-131 times the next), 430-730 at
-  L10-L20 and 50-430 later, holding 50-93% of the readout's gain at L0-L9. At L0-L9 98-100% of its weight sits on eight
-  raw coordinates; from L11 to L34 coordinate 4081 leads (29-84% on eight). Along it the residual barely varies at
-  ordinary positions (at L0-L9 a spread of 0.0-0.2 around a mean of 0.1-1.0, in the metric), and from L6 it is 7-115
-  times larger at the first position. Setting it to its mean costs 0.01-0.15 nats a token; setting it to zero costs
-  8.8-11.8 at L0-L8, where the lens predicts a KL of 0.06-0.15 for a measured 9-13. That is the signature of the massive
-  activations Sun et al. (2024, [arXiv:2402.17762](https://arxiv.org/abs/2402.17762)) describe: few, huge, fixed, and
-  needed as they are. From L10 removing it costs 0.09-0.21 nats and sharpens predictions (entropy −0.08 to −0.32), and
-  doubling it flattens them (+0.08 to +0.28) and lowers the loss by 0.02-0.05. Through the lens it reads as a frequency
-  axis: its push on the kept tokens follows their log frequency (|ρ| 0.36-0.46; 0.65 at L35, where it is the
-  unembedding's top direction), with function words (" the", " and", " in") at one end and rare Chinese and code pieces
-  at the other. A fixed offset carries nothing two prompts differ in, but it holds half the writes' lens energy at
-  L0-L2 and inflates any comparison with a random direction early; the loudness below and the soft weights leave it out.
+**The sectors.** The bright sector has 60-192 directions at L0-L3, 610 at L9, 1,114 at L15, 1,920 at L21, 2,688 at L27 and
+3,367 at L35, of 4,096. In context the residual is 87-95% dark at L0-L3, 71-81% at L4-L15 and 34-50% from L24 (energy in
+the metric). An MLP output is about as dark as a vector with its energy per coordinate (L9: 0.91 against 0.93): its
+darkness comes from which coordinates it uses, not from avoiding the lens's directions.
+- **The readout's loudest direction is the residual's massive-activation offset.** At every layer one direction reads far
+  louder than the rest (2,060-3,830 times a random direction at L0-L9, holding 50-93% of the readout's gain there; 50-730
+  later), sitting on a few raw coordinates (eight at L0-L9; 4081 leads from L11). The residual barely varies along it at
+  ordinary positions and is 7-115 times larger at the first position from L6. Setting it to its mean costs 0.01-0.15 nats
+  a token, and setting it to zero 8.8-11.8 at L0-L8: the massive activations of Sun et al. (2024,
+  [arXiv:2402.17762](https://arxiv.org/abs/2402.17762)), few, huge, fixed and needed as they are. Through the lens it
+  reads as a frequency axis (its push on the kept tokens follows their log frequency, |ρ| 0.36-0.46), and from L10
+  doubling it flattens the predictions. It carries nothing two prompts differ in, so the loudness and soft weights below
+  leave it out.
 - **Early dark directions stay dark; later ones are cancelled.** How loud a layer's dark sector is to each later layer's
-  lens, against a random direction (1 = as loud; each lens's loudest direction left out): L1's and L3's are at most
-  0.11 to every lens through L15, and 0.17-0.39 to the unembedding itself. L9's are at most 0.15 within three layers but
-  up to 0.76 later, and L12's 0.14 and up to 0.66: later lenses would read those directions, so what keeps them dark at
-  L9-L12 is what the layers in between do to them.
-- **The lens misses what the dark sector does.** Ablating one layer's dark sector moves the output by a KL of 0.03-0.10
-  at L1-L15, 300-5,700 times what the lens predicts (`W_U (γ_f ⊙ J_L Δm) / rms`, the lens's LN rule). It raises loss
-  by 0.03-0.04 nats at L2-L9, 2-5 times the bright sector's cost, though per unit of energy removed it matters less than
-  the bright sector or a random subspace of its size (KL per unit at L9: 4.4, 6.4 and 5.7 × 10⁻⁴). From L22 the bright
-  sector costs more, and one late layer's dark sector costs little alone (≤ 0.006 nats at L27-L33). At L35, where the lens
-  is the unembedding, it predicts the dark ablation's KL (0.076 against 0.107).
-- **What the dark sector feeds.** It supplies 60-93% of what drives the top 1% of activations through L21, less than a
-  random subspace of its size would (79-99%), so neurons read the bright sector more than its share. A dark perturbation
-  stays dark: after L9's dark sector is removed, the bright share of the change over the next four layers is 0.08-0.17,
-  under the bright sector's share of directions there (0.17-0.24); after its bright sector is removed, the change is half
-  dark one layer on. Later MLPs carry the perturbation forward, adding 4-7 times what attention adds. The later neurons
-  that move most when it is removed are formatting and token units (code separators, punctuation and line-break runs,
-  word fragments, identifiers, prepositions). Removing the bright sector moves later neurons about half as much, and
-  more topical ones among them (education against commerce, slang). L16's MLP stands apart: its output carries ten times
-  its neighbours' energy, 91% of it dark, and dark perturbations from L9 and L12-L15 grow 8-12 fold there (L10's
-  4.5 fold, L11's not at all).
-- **Removing a sector over a band of layers.** Loss added, in nats per token:
+  lens, against a random direction (1 = as loud): L1's and L3's are at most 0.11 to every lens through L15, and 0.17-0.39
+  to the unembedding itself. L9's and L12's are at most 0.15 within three layers but up to 0.66-0.76 later: what keeps
+  them dark is what the layers in between do to them.
 
-  | band | dark removed: DCLM / code / Chinese / chat | bright removed |
-  |---|---|---|
-  | L0 | +1.05 / +2.15 / +2.31 / +0.60 | +0.07-0.19 |
-  | L1-L8 | +1.41 / +1.76 / +1.12 / +1.02 | +0.35-0.67 |
-  | L9-L20 | +0.51 / +0.80 / +0.46 / +0.38 | +0.35 / +0.76 / +1.11 / +0.19 |
-  | L21-L35 | +0.77 / +0.91 / +1.02 / +0.45 | +4.16 / +6.81 / +9.54 / +4.51 |
-  | L1-L35 | +3.70 / +8.33 / +4.13 / +3.73 | +5.59 / +9.79 / +11.49 / +5.99 |
+**The lens misses what the dark sector does.** Ablating one layer's dark sector moves the output by a KL of 0.03-0.10 at
+L1-L15, 300-5,700 times what the lens predicts (`W_U (γ_f ⊙ J_L Δm) / rms`). It raises the loss by 0.03-0.04 nats at
+L2-L9, 2-5 times the bright sector's cost, though per unit of energy removed it matters less than the bright sector or a
+random subspace of its size. From L22 the bright sector costs more, and one late layer's dark sector costs little alone
+(≤ 0.006 nats at L27-L33). At L35, where the lens is the unembedding, it predicts the dark ablation (KL 0.076 against
+0.107).
+- **Neurons read the bright sector more than its share.** The dark sector supplies 60-93% of what drives the top 1% of
+  activations through L21, less than a random subspace of its size would (79-99%). A dark perturbation stays dark (after
+  L9's dark sector is removed, the bright share of the change over the next four layers is 0.08-0.17), carried forward
+  mostly by later MLPs, and the later neurons it moves most are formatting and token units (code separators, punctuation,
+  line-break runs, word fragments); removing the bright sector moves later neurons half as much, and more topical ones.
+- **L16's MLP stands apart:** its output carries ten times its neighbours' energy, 91% of it dark, and dark perturbations
+  from L9 and L12-L15 grow 8-12 fold there.
 
-  The whole MLP output removed at L9-L20 adds 1.11-3.52, and at L1-L35 6.16-12.76. One late layer's dark sector costs
-  little alone (above), but L21-L35's together cost 0.45-1.02: they cover for each other.
-- **Who did it.** Each item asks who did the action in one sentence (forced choice between the two nouns, both orders).
-  There are seven types sharing their nouns and verbs: reversible active, subject relative, passive and object relative,
-  and non-reversible (an inanimate patient) active, passive and object relative. A sector is removed on the sentence's
-  tokens only, at the answer only, or everywhere. The clean model gets 94-100% of items of every type.
-  - **Early damage to the sentence fails the sentences only syntax decides.** Reversible passives and object relatives
-    fail, and actives, subject relatives and every non-reversible type survive, the pattern Caramazza & Zurif (1976)
-    report for agrammatic patients. Removing L0's dark sector everywhere leaves object relatives at 0.52 and the rest at
-    0.90-1.00. Removing the whole MLP output or a random subspace of the dark dimension at L1-L8, on the sentence alone,
-    reverses passives (0.21-0.38): the model reads the first noun as the doer. The pattern isn't specific to the dark
-    sector, which at L1-L8 on the sentence alone costs less (object relatives 0.94).
-  - **The middle dark sector's failure is broad and specific to it.** Removed everywhere, it leaves at most 9% of the
-    clean margin on any type, non-reversible ones included, and object relatives fall below chance (0.23); a random
-    subspace of its dimension keeps 6-22%. On the sentence alone or at the answer alone it keeps 66-98%: what fails is
-    answering from the sentence, not reading it.
-  - **Late damage keeps comprehension.** Removing L21-L35's dark or bright sector keeps 92-100% of items and 40-52% of the
-    margin on every type.
-- **Three depths, three kinds of damage** (from the generations and the tests above):
-  - **Early (L0, L1-L8): form and frame.** The text stays fluent. L0's ablation writes "rome", "madrid" and
-    "Alibabaibaba", and its Chinese collapses into a loop ("是首长，首长是首长"). L1-L8's drifts in genre and fact: "The
-    mitochondria is not the powerhouse of the cell"; the capital list names The Hague for the Netherlands; chat replies
-    turn into reasoning traces ("Okay, so I need to explain…").
-  - **Middle (L9-L20): facts and use of context.** The text loops and is wrong: "The capital of France is a city in the
-    south of France, and the capital of the south is the city of Marseille"; code becomes a column of
-    `# print(fibonacci(n))`. Asked who it is, the model answers "I am an AI assistant", without its name.
-  - **Late (L21-L35): pieces of words.** The content stays right and pieces go missing: "I am Q, a large language model",
-    "due Ray scattering", "passes through Earth atmosphere", "syll counts"; the model drifts into question-and-answer or
-    step-by-step style. Removing the late bright sector instead reduces every prompt to "the, the, the", with
-    comprehension kept.
-- **Swapping a sector between two prompts** (`patch`). A sector of one layer's residual, at chosen positions, takes its
-  value from another prompt's run (the source), and the target's output is scored by how far it moves toward the
-  source's: the share of the gap in the two answers' log-prob difference, and how often the top token switches. The
-  share is in log-probability, so a probability can rise from 10⁻⁸ to 10⁻³ and score well while the output stays put.
-  Controls: random subspaces of each sector's dimension, and the whole residual.
-  - **What two prompts differ in turns bright by L4-L10.** In 99 pairs like "The capital of Italy is" and "The capital
-    of France is", patched at every position, the country moves with the dark sector at L0-L8 (0.67-0.99 of the gap;
-    65-97% of answers switch), no more than a random subspace of its size (0.95-1.00), and with the bright sector from
-    L10 (0.92-0.99; 90-100% switch), when the dark sector moves 0.01-0.08 and switches none. The dark sector still holds
-    78% of the dimensions there, and a random subspace that large moves 0.64-0.98 through L20. The handoff is at L8-L10
-    (dark 0.67, 0.42, 0.08; bright 0.34, 0.61, 0.92). Which piece finishes a word, and whether the word goes on, move
-    with the dark sector at L0-L2 (0.22-0.76) and with the bright sector from L3 (0.60-1.00). Patched at the last
-    position of "中国的首都是" from an English prompt about another country, the bright sector at L6-L16 makes every pair
-    answer its own capital in English ("Beijing"). The dark sector moves the answer's language at most 0.15 at any layer,
-    either way round, and which capital follows moves only from L24.
-  - **The rest of the difference changes nothing.** At L4-L16, 64-83% of the energy of the two prompts' difference is
-    dark. Patched from L10, the dark sector moves the next token's distribution by a KL of 0.02-0.12 (the whole residual:
-    7.7) and the next 20 tokens' (teacher-forced on the target's own continuation) by at most 0.05 (the whole residual:
-    0.29-0.44); for the answer's language and the word pieces, under 0.32 at L4-L20 (3.7-16). Of 65 greedy continuations
-    with the dark sector patched at L6 or later, 39 match the clean ones word for word; with the bright sector, 9.
-  - **Settings are read from the tokens that set them.** Four kinds of pairs, 64 each, keep the content and change the
-    setting: a question asked plainly or in the chat template (does the reply open with `<think>`?), the assistant's turn
-    with thinking on or off (does it open with "Okay"?), a sentence cut before a word as written or in capitals, and a
-    shopping list after commas or bulleted (a comma or a new line after the last item?). Patching the tokens the two
-    prompts share switches nothing before L20, even with the whole residual (around the chat template, nothing at any
-    layer): later layers read the setting again from its own tokens. At the last position the whole residual switches
-    thinking from L11-L12, capitals from L22, the list from L24 and `<think>` from L28. The bright sector follows
-    (thinking at L20-L21, 88-100% of pairs: "Okay, the user is asking for the capital of Spain") and the dark sector
-    never does, with one exception: over the last layers the list's comma or new line moves into the dark sector (31% of
-    pairs at L32, 86% at L33, all at L34-L35, where the bright sector switches 5-20% and a random subspace of the dark
-    sector's size none).
-  - **Prompts with nothing in common but the template** (`far`). A story asked for ("Write a story about a robot
-    exploring an abandoned city.") against small talk ("Good morning! Did you sleep well last night?"), in the chat
-    template without thinking, 32 pairs each way, patched at every position (aligned from the end). The reply's opening
-    switches with the dark sector at L0-L2 (66-88% of pairs), less often than with a random subspace of its size from L4
-    (31-81% against 75-84% at L4-L8, 16-41% against 84-97% at L10), and from L12 almost never (0-9%). The bright sector
-    switches it from L12 (34%; 53-72% at L16-L20). In between the two mix: with the bright sector from the small talk
-    and the rest from the story request, either way round, the reply at L6 is a story titled "Monday on the Moon". Over
-    the L9-L20 band of MLP writes, their dark parts move the reply's next 20 tokens 0.41-0.62 of the way toward the
-    source's (a random subspace of their size 0.52-0.74, their bright parts 0.20-0.35) while switching 0-6% of
-    openings; one chat reply comes out in the story's markdown ("**Ugh, Mondays."). Patched only at the template's tail
-    after the message, nothing switches before L16.
-- **The S-lens's sector.** The same rule on the token footprints at each output, `K_L ē` (the S-lens's map from the
-  embedding, over the kept tokens), gives 908 directions at L0, 761 at L9, 539 at L19 and 59 at L35. It overlaps the
-  R-lens's bright sector no more than chance at L0-L3 and 1.2-1.6 times chance at L4-L20. It carries the country at L0
-  (0.43 of the gap; a random subspace of its size 0.01), no more than chance at L2-L10 (0.03-0.06), and at most 0.20
-  of the answer's language or a setting through L20; its share of the word pieces rises from L10 to 0.56 at L18, where it
-  overlaps the R-lens's more.
-- **The middle layers** (`middle`), where neither bright sector carries the difference. The pairs are split in two halves
-  (the countries into capital and official-language prompts, since one country's direction can't carry another's), and
-  subspaces of 8-512 directions are patched on the second half: each lens's top directions, their average, points along
-  the shortest rotation from the S-lens's to the R-lens's, the union of both, the top directions of the first half's
-  differences, and those of the gradients of its answers (an exact readout of each context).
-  - **Not a blend of the two lenses.** Points along the rotation hold about as much of the difference's energy as its
-    ends. Their apparent gains at L0-L4 (up to 0.51 of the gap from 8-128 directions, where either end carries none)
-    vanish in the union of the two lenses' directions, which contains them (0.00-0.17): projecting at a slant moves the
-    S-lens part of the difference into the R-lens's directions. The average of the two lenses carries less than the
-    R-lens alone.
-  - **In the middle the country needs the R-lens's top directions and more of the difference besides.** At L4-L8 the
-    R-lens's top 512 directions carry 0.14-0.31 of it (the bright sector there has 328-521). Adding the S-lens's top 512
-    brings 0.68-0.73 (67-73% switch), the R-lens's next 512 0.53-0.74 and 512 random directions 0.41-0.59, while each
-    addition alone carries 0.00-0.02 and 1,024 random directions 0.03-0.12. What an addition brings grows with the share
-    of the difference's energy it adds: the S-lens's top 512 hold 0.18-0.20 of it, the R-lens's next 512 and random ones
-    0.12-0.13, and per unit of energy added the S-lens's and the R-lens's next directions bring about as much (3.0-3.9 of
-    the gap), random ones a little less (2.5-2.9). The country is compact at every layer: 32 directions fitted on the
-    capital prompts carry 0.63-0.86 of it on the official-language ones (51-80% switch).
-  - **Some variables sit outside both lenses.** At L12, 8 directions fitted on other questions switch thinking mode in
-    every pair (0.80 of the gap), while either lens's top 1,024 carries at most 0.18 and switches none; such directions
-    overlap the lenses' top 128 at chance or below. At L0-L2, 13 directions fitted on other countries carry 0.41-0.63 of
-    the answer's language, and the R-lens's top 1,024 0.03-0.50.
-  - **What the answer reads is R-like, and the content isn't there yet.** The top 32 directions of the gradients overlap
-    the R-lens's top 32 at 4-97 times chance (0.03-0.76 against 0.008), yet carry at most 0.37 of the gap.
-- **Brightness without a cut** (`soft`). Weighting each direction by `g / (g + ḡ)`, its gain against a random
-  direction's (`ḡ` without the offset), gives a soft bright sector of 115-650 directions at L0-L12, 720-960 at L16-L20
-  and 1,360-1,920 later. It hands over where the hard one does: the country 0.01-0.14 at L0-L8, 0.67 at L10 and
-  0.83-0.88 at L12-L20; the answer's language from L6 (0.82, every pair); word pieces from L4 (0.51-0.69); story against
-  small talk from L16 (0.32-0.74 at L16-L24). The ranks say more. Patching a pair's difference along the lens's
-  directions in order of gain, half of a swap's effect takes 400-880 directions for the country at L0-L8 and 160-290 at
-  L10-L20, 480-580 for story against small talk through L12, 105-150 for the next word piece through L16 and 140-340 for
-  the answer's language, where random subspaces take about 1,300-2,900: the lens ranks what prompts differ in 2.5-20
-  times above chance at every layer, the early ones included, where the 90% cut (60-520 directions there) left it in
-  the dark sector. Thinking mode is the exception: at L6-L16 it takes 2,100-2,700 directions, as random ones do, and
-  750-890 at L20-L24. MLP outputs and neuron writes read quieter than a random direction to their own layer's lens
-  at L2-L24 (0.2-0.8 times).
-- **The lenses' readouts span the residual, unevenly** (`span`, in fp64). In raw coordinates the final norm leaves two
-  coordinates almost unread: its weight is about 10⁻⁴ on 1838 and 2276, against a median of 2, and 1838 is one of the
-  offset's coordinates at L4-L10. The residual's metric, which divides by that weight, restores them. Otherwise every
-  readout is full rank, with its singular values spread over many orders of magnitude. Counting the directions read
-  within a factor of 1,000 of the second loudest (the loudest is the offset):
+**Removing a sector over a band of layers.** Loss added, in nats per token:
 
-  | layers | R-lens, outputs | R-lens, MLP inputs | S-lens footprints, outputs |
-  |---|---|---|---|
-  | L0-L5 | 1,390-2,240 | 550-1,430 (L2: 3,470) | 4,030-4,070 |
-  | L6-L9 | 3,190-3,690 | 1,130-1,430 | 3,950-3,990 |
-  | L10-L16 | 3,790-4,030 | 2,220-3,960 | 3,750-3,950 |
-  | L20-L24 | 4,088-4,093 | 4,071-4,091 | 3,270-3,580 |
-  | L30-L35 | 4,094-4,096 | 4,094-4,095 | 1,780-2,930 |
+| band | dark removed: DCLM / code / Chinese / chat | bright removed |
+|---|---|---|
+| L0 | +1.05 / +2.15 / +2.31 / +0.60 | +0.07-0.19 |
+| L1-L8 | +1.41 / +1.76 / +1.12 / +1.02 | +0.35-0.67 |
+| L9-L20 | +0.51 / +0.80 / +0.46 / +0.38 | +0.35 / +0.76 / +1.11 / +0.19 |
+| L21-L35 | +0.77 / +0.91 / +1.02 / +0.45 | +4.16 / +6.81 / +9.54 / +4.51 |
+| L1-L35 | +3.70 / +8.33 / +4.13 / +3.73 | +5.59 / +9.79 / +11.49 / +5.99 |
 
-  Both factors of the R-lens set its bottom. The readout's 32 quietest directions are shrunk by the lens's Jacobian to
-  5-9% of its median gain in length at L0-L12, and land where the unembedding reads 0.1-0.3% of its median; the
-  Jacobian's singular values spread over a factor of 10⁶-10⁸ at L0-L12 and 10³ by L24. So early on the R-lens barely
-  reads about half the residual, and the S-lens reads that half. With the two readouts' Grams each scaled by its
-  second-loudest gain and summed (the sum bounds the better of the two along any direction within a factor of 2), the
-  smallest eigenvalue is 3×10⁻⁶ to 2×10⁻⁴ at the outputs and 1.2×10⁻⁶ to 1.2×10⁻³ at the MLP inputs: at every layer
-  each direction is read by one lens or the other within a factor of about 1,000 of its second loudest, the weakest
-  (the MLP inputs of L1, L3 and L35) just inside it. The R-lens's quiet directions, up to 2,700 at the outputs and 3,550
-  at the MLP inputs, are all read by the S-lens, at a median of 6-40% of its second loudest in singular value; no
-  direction is dark to both. What two prompts differ in sits inside the R-lens's span there: the rank ladder puts at
-  most 0.02 of the gap past rank 2,048 at L0-L8. The factor of 1,000 is a convention; the spectra are continuous.
-- **The doubly dark sector** (`--doubly`): the directions orthogonal to both lenses' bright sectors, 3,030-3,340 at
-  L0-L3, 2,330-2,940 at L4-L15, 1,750-2,220 at L16-L20 and 670-1,700 later. The R-lens's dark sector is it plus
-  `s_only`, the S-lens's bright sector's part outside the R-lens's (908 directions at L0, 761 at L9, 59 at L35). A soft
-  version, the quietest directions of the two Grams summed (each over its gain on a random direction), as many,
-  holds it almost whole (0.96-0.99 of it at L0-L9 and 0.80-0.96 later, against 0.16-0.81 by chance) and ablates the
-  same. 2,960-3,290 directions are quieter than a random one to both lenses at L0-L22 (2,380-2,970 later), so "dark to
-  neither" in the span test holds only at its loose factor of 1,000. In context the residual holds 55-73% of its energy
-  there at L0-L3, 49-60% at L4-L15 and 11-45% later, below its share of dimensions early (74-81% at L0-L3).
-  - **It carries most of what the dark sector's ablation costs, and the S-lens's part almost none.** One layer at a
-    time, removing it costs 0.007-0.031 nats at L1-L15 (the dark sector 0.010-0.042) and `s_only` at most 0.008 at any
-    of L1-L34. Over bands, in nats per token (DCLM / code / Chinese / chat):
+The whole MLP output removed at L9-L20 adds 1.11-3.52, and at L1-L35 6.16-12.76. One late layer's dark sector costs
+little alone, but L21-L35's together cost 0.45-1.02: they cover for each other.
 
-    | band | dark sector | doubly dark | `s_only` | random, doubly dark's size |
-    |---|---|---|---|---|
-    | L0 | +1.05 / 2.15 / 2.31 / 0.60 | +0.16 / 0.51 / 0.43 / 0.12 | +0.01-0.04 | +1.92-4.19 |
-    | L1-L8 | +1.41 / 1.76 / 1.12 / 1.02 | +0.72 / 1.22 / 0.66 / 0.58 | +0.03-0.10 | +3.28-4.47 |
-    | L9-L20 | +0.51 / 0.80 / 0.46 / 0.38 | +0.35 / 0.57 / 0.29 / 0.19 | +0.04-0.17 | +0.35-1.22 |
-    | L21-L35 | +0.77 / 0.91 / 1.02 / 0.45 | +0.51 / 0.74 / 0.97 / 0.56 | −0.20 to +0.22 | +0.60-1.71 |
-    | L1-L35 | +3.70 / 8.33 / 4.13 / 3.73 | +2.42 / 5.05 / 2.28 / 2.26 | −0.06 to +0.55 | +5.43-8.77 |
+**Three depths, three kinds of damage**, from the generations and a comprehension test. Each test item asks who did the
+action in one sentence (forced choice between the two nouns, both orders), over seven types sharing their nouns and verbs:
+reversible active, subject relative, passive and object relative, and non-reversible (an inanimate patient) active,
+passive and object relative. The clean model gets 94-100% of items of every type.
+- **Early (L0, L1-L8): form and frame.** The text stays fluent. L0's ablation writes "rome", "madrid" and "Alibabaibaba",
+  and its Chinese collapses into a loop ("是首长，首长是首长"); L1-L8's drifts in genre and fact ("The mitochondria is not
+  the powerhouse of the cell"; The Hague for the Netherlands), and chat replies turn into reasoning traces ("Okay, so I
+  need to explain…"). Comprehension fails on the sentences only syntax decides: with L0's dark sector removed, object
+  relatives fall to 0.52 and the rest stay at 0.90-1.00, the pattern Caramazza & Zurif (1976) report for agrammatic
+  patients. The pattern isn't specific to the dark sector: removing the whole MLP output or a random subspace at L1-L8, on
+  the sentence alone, reverses passives (0.21-0.38).
+- **Middle (L9-L20): facts and use of context.** The text loops and is wrong: "The capital of France is a city in the south
+  of France, and the capital of the south is the city of Marseille"; code becomes a column of `# print(fibonacci(n))`;
+  asked who it is, the model answers "I am an AI assistant", without its name. Comprehension fails broadly and
+  specifically: at most 9% of the clean margin kept on any type, object relatives below chance (0.23), against 6-22% kept
+  by a random subspace of the dimension. On the sentence alone or at the answer alone it keeps 66-98%: what fails is
+  answering from the sentence, not reading it.
+- **Late (L21-L35): pieces of words.** The content stays right and pieces go missing ("I am Q, a large language model",
+  "due Ray scattering", "passes through Earth atmosphere"), and comprehension holds (92-100% of items). Removing the late
+  bright sector instead reduces every prompt to "the, the, the", with comprehension kept.
 
-    With `s_only` removed from every MLP output from L1 to L35 the generations stay fluent and almost all right.
-  - **Early, the lenses' quiet directions matter less than random ones.** At L0-L4 a random subspace of the doubly
-    dark sector's dimension costs 9-29 times as much a layer (0.20-2.36 nats against 0.02-0.14), and one of `s_only`'s
-    0.09-0.32 nats against at most 0.013; over L1-L8 such a subspace breaks words ("villagend", "SpainSpain is
-    Beijing") where `s_only` costs 0.03-0.10. From L10 lens and random subspaces cost about the same per unit of energy
-    removed (0.6-0.85 times at L10-L20).
-  - **The dark sector's signature damage needs both parts gone.** The costs don't add: L0's dark sector costs 1.05
-    nats and its two parts 0.16 and 0.01; L1-L8's 1.41 against 0.72 and 0.03. The form errors at L0 ("rome",
-    "Alibabaibaba"), the chat replies turning into reasoning traces at L1-L8, the agrammatic pattern (L0 everywhere:
-    object relatives at 0.52, with the doubly dark sector alone every type at 0.92-1.00), the middle's broad
-    comprehension failure (at most 9% of the margin kept; the doubly dark sector alone keeps 41-93%, as a random
-    subspace of its size does, 31-75%) and the late missing pieces of words ("I am Q", "Earth atmosphere") each appear
-    only with both removed: the doubly dark sector alone at L21-L35 keeps the words whole. What it does alone is the
-    middle's wrong facts ("a city in the south of France", code turned to comments) and early loops (the Chinese
-    prompt repeats its question). At L35 the 59 `s_only` directions alone cost as much as the whole dark sector
-    (0.104 nats against 0.101; 59 random directions 0.012).
-- **The lenses as sparse frames** (`sparse`). Gurnee et al. (2026) define the J-space as the sparse nonnegative
-  combinations of the J-lens's token vectors, a union of cones rather than a subspace (the vectors themselves span the
-  residual, as the R-lens's readout does here). Residuals at 2,048 positions a layer (DCLM and chat, centred, in the
-  metric) are coded greedily with up to 64 nonnegative atoms from the 103,830 kept tokens' R-lens readout rows, the
-  logit lens's, the S-lens's footprints, or random unit vectors. A frame's occupancy is the number of atoms after which
-  it gains less than the random frame does, as theirs is.
-  - **The R-lens's sparse space is small and grows with depth, without a plateau.** Its median occupancy is 0 at
-    L1-L3, 4-9 at L4-L20, 11-22 at L21-L33 and 36-51 at L34-L35. 25 atoms explain at most 0.023 of the variance beyond
-    random at L4-L20, 0.03-0.06 at L21-L28 and 0.07-0.12 later (random: 0.085). The logit lens's frame is no better
-    than random through L6 and close to the R-lens's later. The ceiling is the residual's bright share: the R-lens's
-    25-atom component sits 89-96% in its bright sector from L4, which holds 4-28% of the residual's energy through L15.
-  - **The S-lens's frame takes the early layers, the R-lens's the later ones.** Pooled, the first atom comes from the
-    S-lens's footprints at 94-100% of positions through L5 and from the R-lens's at 67-84% at L10-L17 (45-69% later);
-    of the first 25 the R-lens supplies 2-19% at L0-L3, 28-36% at L4-L9, 37-47% at L10-L17 and 52-77% later. The
-    S-lens's frame beats random by 0.05-0.12 at L0-L2 (occupancy 6-11) and by at most 0.023 at L4-L20. The picks read
-    the same way: at the last position of "中国的首都是" the S-lens's atoms are the prompt's own tokens (都是, 首, 首都)
-    through L6 and the R-lens's are 北京 and 这座城市 ("this city") from L10; after "Monday, Tuesday, Wednesday,", " Days"
-    and 星期 ("weekday") at L10-L18 and " Thursday" from L26; after "The capital of France is", " Paris" first at L30.
-  - **What both leave is the doubly dark sector.** Pooled, 64 atoms explain 0.18-0.22 of the centred residual at
-    L4-L20, as 64 random ones do (0.20), and 0.22-0.39 later. The pooled 25-atom component puts 3-16% of its energy in
-    the doubly dark sector, which holds 54-76% of the residual's at L0-L15.
-- **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
-  inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
-  ablations likely remove what prompts share rather than what they differ in. That damage is mostly not in the
-  directions neither lens reads: the doubly dark sector alone costs a half to two thirds as much and leaves out most
-  of the named failures, the S-lens's bright part alone costs almost nothing, and only both together give it all, as if
-  what they remove is written into both, or read from both at once (untested). Early the
-  dark sector is nearly the whole residual and carries everything; later it may hold the kind of document, position, or
-  the residual's scale, which the R-lens's LN rule holds fixed (untested). The one variable found in it by swapping is late
-  formatting (the list's comma or new line at L32-L35), in line with the late ablations dropping pieces of words and with
-  Gurnee et al. (2026), who find the features outside the J-space mostly low-level syntax and bookkeeping. The 90% cut
-  is a hard line on a graded spectrum: ranked by gain, the lens puts what prompts differ in well above chance at every
-  layer, so the early dark sector is the lens's middle ranks more than directions it can't see. Some variables (thinking
-  mode at L6-L16, the answer's language at L0-L2) sit in compact directions it doesn't rank.
-  As sparse frames the two lenses split the depth as Gurnee et al.'s sensory and workspace bands do: the S-lens's token
-  footprints code the residual's top components through L9, naming the input, and the R-lens's from L10, a third of the
-  way in, where their workspace begins, naming concepts before the next token. But the R-lens's sparse space here holds
-  a few percent of the variance beyond random and grows into the last layers rather than holding a plateau, and its
-  size is capped by the bright sector's share of the residual.
-  Some of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely
-  enough to name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
-  [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
+**Swapping a sector between two prompts** (`patch`). A sector of one layer's residual, at chosen positions, takes its value
+from another prompt's run, and the target's output is scored by how far it moves toward the source's: the share of the
+gap in the two answers' log-prob difference, and how often the top token switches. Controls: random subspaces of each
+sector's dimension, and the whole residual.
+- **What two prompts differ in turns bright by L4-L10.** In 99 pairs like "The capital of Italy is" and "The capital of
+  France is", patched at every position, the country moves with the dark sector at L0-L8 (0.67-0.99 of the gap), no more
+  than a random subspace of its size, and with the bright sector from L10 (0.92-0.99; 90-100% of answers switch), when the
+  dark sector, still 78% of the dimensions, moves 0.01-0.08 and switches none. Which piece finishes a word moves with the
+  bright sector from L3. Patched at the last position of "中国的首都是" from an English prompt about another country, the
+  bright sector at L6-L16 makes every pair answer its own capital in English ("Beijing"); the dark sector moves the
+  answer's language at most 0.15 at any layer.
+- **The rest of the difference changes nothing.** At L4-L16, 64-83% of the energy of the two prompts' difference is dark.
+  Patched from L10, the dark sector moves the next token's distribution by a KL of 0.02-0.12 (the whole residual: 7.7) and
+  the next 20 teacher-forced tokens' by at most 0.05 (0.29-0.44). Of 65 greedy continuations with the dark sector patched
+  at L6 or later, 39 match the clean ones word for word; with the bright sector, 9.
+- **Settings are read from the tokens that set them.** Pairs that keep the content and change a setting (a question asked
+  plainly or in the chat template, thinking on or off, a word in capitals, a list after commas or bullets), 64 each:
+  patching the tokens the two prompts share switches nothing before L20, even with the whole residual, since later layers
+  read the setting again from its own tokens. At the last position the whole residual switches thinking from L11-L12, and
+  the bright sector follows (L20-L21, 88-100% of pairs); the dark sector never does, except the list's comma or new line
+  over the last layers (86% of pairs at L33, all at L34-L35).
+- **Prompts with nothing in common but the template** (`far`): a story request against small talk, in the chat template,
+  32 pairs each way. The reply's opening switches with the dark sector at L0-L2 (66-88%), less often than with a random
+  subspace of its size from L4, and from L12 almost never (0-9%); the bright sector switches it from L12 (53-72% at
+  L16-L20). In between the two mix: with the bright sector from the small talk and the rest from the story request, the
+  reply at L6 is a story titled "Monday on the Moon".
 
-**Limits.** One model and one lens. The sectors come from the R-lens averaged over contexts, so part of what it misses
-may be its averaging rather than a separate channel. The means come from DCLM, which is off the distribution of code
-and chat. The single-layer runs score 7,104 positions, the bands 3,552 a slice; each prompt has one greedy rollout; the
+**Brightness without a cut** (`soft`). Patching a pair's difference along the lens's directions in order of gain, half of a
+swap's effect takes 400-880 directions for the country at L0-L8 and 160-290 at L10-L20, 105-150 for the next word piece
+through L16 and 140-340 for the answer's language, where random subspaces take about 1,300-2,900: the lens ranks what
+prompts differ in 2.5-20 times above chance at every layer, the early ones included, where the 90% cut (60-520 directions)
+left it in the dark sector. A soft weighting, `g / (g + ḡ)` (a direction's gain against a random one's), hands over where
+the hard cut does. Thinking mode is the exception: at L6-L16 it takes 2,100-2,700 directions, as random ones do.
+
+**The middle layers** (`middle`), where neither bright sector carries the difference. Pairs split in halves; subspaces of
+8-512 directions are patched on the second half: each lens's top directions, their blends, the union of both, and the top
+directions of the first half's differences and of its answers' gradients.
+- **Not a blend of the two lenses.** Points along the rotation from the S-lens's directions to the R-lens's hold about as
+  much as its ends, and their apparent gains at L0-L4 vanish in the union of the two lenses' directions.
+- **The country needs the R-lens's top directions and more of the difference besides.** At L4-L8 the R-lens's top 512
+  carry 0.14-0.31 of the gap; adding the S-lens's top 512 brings 0.68-0.73, the R-lens's next 512 0.53-0.74 and 512 random
+  directions 0.41-0.59, each about in proportion to the share of the difference's energy it adds. The country is compact:
+  32 directions fitted on the capital prompts carry 0.63-0.86 of it on official-language prompts.
+- **Some variables sit outside both lenses.** At L12, 8 directions fitted on other questions switch thinking mode in every
+  pair (0.80 of the gap), while either lens's top 1,024 carries at most 0.18 and switches none. The answer's gradients are
+  R-like (their top 32 directions overlap the R-lens's at 4-97 times chance) yet carry at most 0.37 of the gap.
+
+**The two lenses together read every direction, and some barely** (`span`, `--doubly`, fp64). Every readout is full rank,
+with singular values spread over many orders of magnitude; the residual's metric restores the two coordinates the final
+norm nearly ignores (§9). Early on the R-lens barely reads about half the residual (its Jacobian's singular values span
+10⁶-10⁸ at L0-L12), and the S-lens reads that half: with both Grams scaled and summed, every direction at every layer is
+read by one lens or the other within a factor of about 1,000 of its second loudest. But 2,960-3,290 directions are quieter
+than a random one to both lenses at L0-L22, so "dark to neither" holds only at that loose factor. The S-lens's own bright
+sector (the same rule on its token footprints `K_L ē`) has 908 directions at L0, 761 at L9 and 59 at L35; outside the
+R-lens's bright sector it is `s_only`, and the directions orthogonal to both bright sectors are the *doubly dark* sector:
+3,030-3,340 at L0-L3, 2,330-2,940 at L4-L15 and 670-2,220 later, holding 55-73% of the residual's energy at L0-L3 and
+49-60% at L4-L15 (a soft version from the two Grams holds it almost whole and ablates the same).
+- **The doubly dark sector carries a half to two thirds of the dark sector's cost; `s_only` almost none.** Over bands, in
+  nats per token (DCLM / code / Chinese / chat):
+
+  | band | dark sector | doubly dark | `s_only` | random, doubly dark's size |
+  |---|---|---|---|---|
+  | L0 | +1.05 / 2.15 / 2.31 / 0.60 | +0.16 / 0.51 / 0.43 / 0.12 | +0.01-0.04 | +1.92-4.19 |
+  | L1-L8 | +1.41 / 1.76 / 1.12 / 1.02 | +0.72 / 1.22 / 0.66 / 0.58 | +0.03-0.10 | +3.28-4.47 |
+  | L9-L20 | +0.51 / 0.80 / 0.46 / 0.38 | +0.35 / 0.57 / 0.29 / 0.19 | +0.04-0.17 | +0.35-1.22 |
+  | L21-L35 | +0.77 / 0.91 / 1.02 / 0.45 | +0.51 / 0.74 / 0.97 / 0.56 | −0.20 to +0.22 | +0.60-1.71 |
+  | L1-L35 | +3.70 / 8.33 / 4.13 / 3.73 | +2.42 / 5.05 / 2.28 / 2.26 | −0.06 to +0.55 | +5.43-8.77 |
+
+  With `s_only` removed from every MLP output from L1 to L35 the generations stay fluent and almost all right. Early, the
+  lenses' quiet directions matter less than random ones: at L0-L4 a random subspace of the doubly dark dimension costs 9-29
+  times as much a layer, and over L1-L8 it breaks words ("villagend", "SpainSpain is Beijing").
+- **The named failures need both parts gone.** The costs don't add (L0's dark sector 1.05 nats, its parts 0.16 and 0.01).
+  The form errors at L0, the reasoning traces at L1-L8, the agrammatic pattern, the middle's broad comprehension failure
+  and the late missing pieces of words each appear only with both removed. What the doubly dark sector does alone is the
+  middle's wrong facts ("a city in the south of France", code turned to comments) and early loops. At L35 the 59 `s_only`
+  directions alone cost as much as the whole dark sector (0.104 nats against 0.101; 59 random directions 0.012).
+
+**The lenses as sparse frames** (`sparse`). Gurnee et al. (2026) define the J-space as the sparse nonnegative combinations
+of the J-lens's token vectors, a union of cones rather than a subspace. Residuals at 2,048 positions a layer (DCLM and
+chat, centred, in the metric) are coded greedily with up to 64 nonnegative atoms from the 103,830 kept tokens' R-lens
+readout rows, the logit lens's, the S-lens's footprints, or random unit vectors; a frame's occupancy is the number of atoms
+after which it gains less than the random frame does.
+- **The R-lens's sparse space is small and grows with depth, without a plateau.** Its median occupancy is 0 at L1-L3, 4-9
+  at L4-L20, 11-22 at L21-L33 and 36-51 at L34-L35; 25 atoms explain at most 0.023 of the variance beyond random at L4-L20
+  and 0.07-0.12 in the last layers. The ceiling is the residual's bright share: its 25-atom component sits 89-96% in the
+  bright sector from L4, which holds 4-28% of the residual's energy through L15.
+- **The S-lens's frame takes the early layers, the R-lens's the later ones.** Pooled, the first atom comes from the
+  S-lens's footprints at 94-100% of positions through L5 and from the R-lens's at 67-84% at L10-L17. At the last position
+  of "中国的首都是" the S-lens's atoms are the prompt's own tokens (都是, 首, 首都) through L6 and the R-lens's are 北京 and
+  这座城市 ("this city") from L10; after "Monday, Tuesday, Wednesday,", " Days" and 星期 ("weekday") at L10-L18 and
+  " Thursday" from L26.
+- **What both leave is the doubly dark sector:** pooled, 64 atoms explain 0.18-0.22 of the residual at L4-L20, as 64
+  random ones do, and the pooled 25-atom component puts 3-16% of its energy in the doubly dark sector, which holds 54-76%
+  of the residual's at L0-L15.
+
+**What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is inert,
+for prompts built alike and for prompts with nothing in common but the template. So the dark sector's ablations likely
+remove what prompts share rather than what they differ in. That damage is mostly not in the directions neither lens reads:
+the doubly dark sector alone costs a half to two thirds as much and leaves out most of the named failures, and only both
+parts together give it all, as if what they remove is written into both, or read from both at once (untested). Later the
+dark sector may hold the kind of document, position, or the residual's scale, which the R-lens's LN rule holds fixed
+(untested). The one variable found in it by swapping is late formatting, in line with the late ablations dropping pieces
+of words and with Gurnee et al. (2026), who find the features outside the J-space mostly low-level syntax and bookkeeping.
+The 90% cut is a hard line on a graded spectrum: ranked by gain, the lens puts what prompts differ in well above chance at
+every layer, so the early dark sector is the lens's middle ranks more than directions it can't see; some variables
+(thinking mode at L6-L16) sit in compact directions it doesn't rank. As sparse frames the two lenses split the depth as
+Gurnee et al.'s sensory and workspace bands do, the S-lens through L9 and the R-lens from L10, but the R-lens's sparse
+space holds a few percent of the variance beyond random and grows into the last layers rather than holding a plateau. Some
+of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely enough to
+name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
+[arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
+
+**Limits.** One model and one lens. The sectors come from the R-lens averaged over contexts, so part of what it misses may
+be its averaging rather than a separate channel. The means come from DCLM, which is off the distribution of code and
+chat. The single-layer runs score 7,104 positions, the bands 3,552 a slice; each prompt has one greedy rollout; the
 comprehension test is one template with 48 items a type, at ceiling when clean, so its margins say more than its
-accuracies. The bands are chosen by hand. The neurons and tokens named are top lists. A swap changes one layer, so a
-setting the model reads again from its own tokens can't move before late layers, and a pair shows only what it varies;
-a sentence as prose or as code (in a comment or a string) found no clean next-token contrast. The middle part's fitted
-directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The far pairs come from
-16 story requests and 16 small-talk messages. The S-lens's sector uses the footprints with the lens's stretch, not its
-polar factor. The soft weight `g / (g + ḡ)` is one choice; the ranks are by gain averaged over contexts. The doubly
-dark sector rests on the two 90% cuts (its soft version agrees). The sparse coder is greedy with least-squares refits
-(Gurnee et al. use gradient pursuit), its random frame is isotropic in the metric, the R-lens is not their J-lens, and the
-2,048 positions are 32 from each of 64 documents. Compact outputs are
+accuracies. The bands are chosen by hand. A swap changes one layer, so a setting the model reads again from its own tokens
+can't move before late layers, and a pair shows only what it varies. The middle part's fitted directions transfer only for
+what items share, from halves of 13-51 pairs. The S-lens's sector uses the footprints with the lens's stretch, not its
+polar factor. The doubly dark sector rests on the two 90% cuts (its soft version agrees). The sparse coder is greedy with
+least-squares refits (Gurnee et al. use gradient pursuit), its random frame is isotropic in the metric, and the R-lens is
+not their J-lens. Compact outputs are
 `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft,span,sparse}_qwen3-8b.*`, and the doubly dark
 ablations' `dark_sector_{trace,bands,comprehend}_dd_qwen3-8b.*`.
 
@@ -2041,23 +1859,24 @@ ablations' `dark_sector_{trace,bands,comprehend}_dd_qwen3-8b.*`.
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
   residual's scale), why its doubly dark and S-lens parts cost far more together than apart, and whether Gemma 4's has
-  the same three depths; what L16's large dark write does; a lens for the
-  middle layers' variables that neither lens weights, such as thinking mode at L12 (§21).
-- Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
-  flat from L4 to L17 (§6).
-- What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§11).
+  the same three depths; what L16's large dark write does; a lens for the middle layers' variables that neither lens
+  weights, such as thinking mode at L12 (§21).
+- Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is flat from L4 to
+  L17 (§7).
+- What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§10).
 - Whether J++ filtering (Ayonrinde 2026) or a longer context improves early and mid-network reads.
-- Why a base's R-lens maps a few read directions onto frequent function words (§19), and whether a null per pole changes the
-  other comparisons between lenses and models (§7, §19).
+- Whether the firing-averaged RelP direction (the gate's and `up`'s weights set by each firing's activation) improves on
+  the up row at L1-L3 (§7).
+- Why a base's R-lens maps a few read directions onto frequent function words (§19), and whether a null per pole changes
+  the other comparisons between lenses and models (§8, §19).
 - Whether depth, width or lineage sets the S-lens's input reads (§19, §20): a family that varies one at a time, and
   Qwen3-32B (64 layers).
-- What ranked the 4B's neurons at L0, L2 and L8-L11, where the order doesn't follow the 8B's activations (§20), and what
-  would identify the parents of the 0.6B's last 15% and the 4B's last layer (§20): chat documents, longer contexts, or
-  matching the heads' and neurons' joint wiring.
+- What ranked the 4B's neurons at L0, L2 and L8-L11, where the order doesn't follow the 8B's activations, and what would
+  identify the parents of the 0.6B's last 15% and the 4B's last layer (§20): chat documents, longer contexts, or matching
+  the heads' and neurons' joint wiring.
 - Whether the poles of larger models read as coherently to a rater as they pass token-level tests (§19 counts hits only).
-- Why Gemma 4's early writes barely move the output at their natural scale (§13).
-- Gemma 4's labels with its image and sound exemplars on the cards (§14), and media reads
-  per slot, which would say where in an image a neuron looks.
-- Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §17).
-- Why Gemma 4's weight edges at L1-L11 name almost none of what drives a pole (§17).
-- Whether the firing-averaged RelP direction (the gate's and `up`'s weights set by each firing's activation) improves on the up row at L1-L3 (§17).
+- Why Gemma 4's early writes barely move the output at their natural scale (§15), and why its weight edges at L1-L11 name
+  almost none of what drives a pole (§12).
+- Gemma 4's labels with its image and sound exemplars on the cards (§16), and media reads per slot, which would say where
+  in an image a neuron looks.
+- Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §12).

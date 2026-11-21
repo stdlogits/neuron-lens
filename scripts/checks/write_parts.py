@@ -1,4 +1,4 @@
-"""Does splitting a pole's write by what it reads split its causal meaning? (findings §18)
+"""Does splitting a pole's write by what it reads split its causal meaning? (findings §6)
 
 ``measure`` (Qwen3-8B, MPS, fp32): §3's random neurons (``causal_lens.random_neurons``), 16 a layer at even layers L4-L34, both
 poles. Steering by §3's protocol at 1× (the vector at positions 16+ of 16 documents, ``alpha`` the pole's ``act_top``) with the whole

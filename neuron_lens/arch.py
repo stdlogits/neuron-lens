@@ -292,8 +292,8 @@ class Plan:
     lines change. The input edges were set by reading: two raters of different lineages rated each weight read's
     coherence, blind to the lens, at 15-16 layers of each model (``checks/depth_reads.py``), and the plan takes the most
     coherent. The write read is the R-lens's at every depth (it also predicts steering, §3, §19). The head lines follow
-    each model's census of head reads (§11, §12, §19); the next-word edge is Qwen3-8B's L21 at the same relative depth
-    in the other Qwen3 sizes, and Gemma 4's L33 (§13). ``10_labels.py`` writes the lines; the depth bands (``bands``)
+    each model's census of head reads (§10, §11, §19); the next-word edge is Qwen3-8B's L21 at the same relative depth
+    in the other Qwen3 sizes, and Gemma 4's L33 (§15). ``10_labels.py`` writes the lines; the depth bands (``bands``)
     and the site's are cut from the same edges."""
     layers: int
     s_last: int  # the input read is the S-lens's through this layer (-1: at no depth)

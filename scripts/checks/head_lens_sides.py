@@ -1,4 +1,4 @@
-"""Which lens on each side of an attention head's OV circuit (findings §11): the four per-token
+"""Which lens on each side of an attention head's OV circuit (findings §10): the four per-token
 reads, input lens → output lens, S→S, S→R, R→S and R→R, each checked at the census firings
 against the targets it claims.
 
@@ -24,7 +24,7 @@ with v the input target and the attended position before the query:
 The control is the same token through another head of the layer, one fixed control per head.
 Every variant is scored on the same firings: from L1 (R inputs need L−1), with both targets kept.
 By band, by pattern class (``heads/acts``), and the share of heads each variant reads best. Findings
-§11 ran it on a 4,000-document activation pass and again on the full one.
+§10 ran it on a 4,000-document activation pass and again on the full one.
 
     python scripts/checks/head_lens_sides.py
 """

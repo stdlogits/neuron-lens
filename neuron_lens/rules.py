@@ -31,7 +31,7 @@ and reverse-mode gradients follow it, so the S-lens and the R-lens share one rul
 the R-lens's backward map is exactly the transpose of the S-lens's forward one.
 
 RelP is the only rule set here: it beat the true Jacobian on the write side (the R-lens
-against the J-lens) and on the read side (findings §1, §6).
+against the J-lens) and on the read side (findings §1, §7).
 """
 import contextlib
 import math

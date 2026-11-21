@@ -1,4 +1,4 @@
-"""Direct weight edges between neuron poles (pipeline stage 16; findings §17).
+"""Direct weight edges between neuron poles (pipeline stage 16; findings §12).
 
 The residual stream is a sum: what a neuron of layer L writes reaches every later layer's MLP input,
 so the direct path from a pole A to a pole B of a later layer M is one number from the
@@ -9,7 +9,7 @@ later layers it pushes most (``out_*``), each as ``_layer``, ``_neuron``, ``_pol
 
 - ``cos``: the cosine of A's write ``±w_A`` with B's read covector (``neurons.poles``, as ``08_reads.py``:
   ``â ± b̂``, the up row alone on the negative lobe, gate and up rows times the MLP input norm's weight), in the
-  residual's metric at B's MLP input (``neuron_lens.metric``, findings §13);
+  residual's metric at B's MLP input (``neuron_lens.metric``, findings §15);
 - ``push``: ``cos · act_top_A · ‖w_A‖ · gain / rms_M`` (``‖w_A‖`` in the same metric), how far one of A's top firings
   moves B's normalized MLP input along B's read covector at unit length; ``rms_M`` is the median RMS of the residual entering layer M's
   MLP (``RMS_DOCS`` catalog documents, positions from 1). Positive: A's firing drives B's pole;
@@ -26,7 +26,7 @@ chance cosines.
 An edge is the direct path at one position: A's write reaches B where A fired. What a head carries
 between positions, and paths through other units, are not edges. ``push`` holds A at its typical top
 firing; whether A is active when B fires is the context's, which ``checks/edges_in_context.py``
-measures (§17). Per band into ``data/summary/edges_<model>.{log,json}``.
+measures (§12). Per band into ``data/summary/edges_<model>.{log,json}``.
 
     python scripts/16_edges.py [--device mps]
 """

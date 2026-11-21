@@ -1,4 +1,4 @@
-"""Do the firing labels predict a pole's activation token by token (findings §8)? Simulation scoring.
+"""Do the firing labels predict a pole's activation token by token (findings §13)? Simulation scoring.
 
 Bills et al. (2023)'s test of an explanation, on the poles ``relabel_check.py --poles all`` scored by detection
 (``data/summary/label_check_<model>.json``), so each pole gets both scores. A simulator (Claude Sonnet) sees only a
@@ -55,7 +55,7 @@ WEAK = (0.25, 0.5)  # a weak excerpt's peak, as a share of act_top (a quarter is
 FIRES = 0.25  # an excerpt holds a firing when its true peak passes this share of act_top
 PRICE = {"input": 1.0, "output": 5.0}  # $/MTok, Claude Sonnet 5.5's batch prices
 ARMS = ("own", "earlier", "control")
-RELEASE, OLD = "stdlogits/neuron-lens", "37da15370817"  # the release before the lean card's run (findings §8)
+RELEASE, OLD = "stdlogits/neuron-lens", "37da15370817"  # the release before the lean card's run (findings §13)
 SYSTEM = """You simulate one neuron of a language model. Given a description of where the neuron fires, predict its \
 activation at every token of some text excerpts, from 0 to 10: 0 where it is silent, 10 for its strongest typical firing. \
 A neuron is silent on most tokens, and only some excerpts hold a firing. Its activation at a token depends only on that \

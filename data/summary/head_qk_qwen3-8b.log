@@ -81,7 +81,7 @@ most self-seeking (median self-match z), by band:
   L22h22 +2.95 (context +0.01, align +0.21): -dot | oxy | _active | -IN | "a | .IN | _ON | ################################
   L22h21 +2.67 (context +0.19, align +0.30): -dot | _active | “No | oxy | 中国人 | -IN | .IN | (builder
 
-query reads quoted in findings §22 (the keys a query token favours, by z in its row):
+query reads quoted in findings §10 (the keys a query token favours, by z in its row):
   L0h28 query ' Patricia' → favours  Patricia | ricia |  Gloria | ippo | SC |  CC | 出现 |  bus ; disfavours 疫情 |  interactive | ian |  girl | .query | aur |  MOD |  ord
   L1h28 query ' Paris' → favours  Paris | Paris |  Parse |  Radius |  Paradise | Arizona |  airlines |  Universe ; disfavours (ct | (ob |  obt | (sm |  enth | (bt | _ck | Stmt
   L6h21 query ' your' → favours  cattle |  stripes |  retention |  prototypes | 授予 | caled |  fellow |  France ; disfavours mq | Autom | 烟花 | .Should | 清净 | .ask | Lua | ..⏎⏎⏎⏎

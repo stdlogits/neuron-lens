@@ -1,4 +1,4 @@
-"""Are a model's new labels better than its earlier ones (findings §8)?
+"""Are a model's new labels better than its earlier ones (findings §13)?
 
 Blind, on ``PER_MODEL`` random firing poles with at least ``HELD_OUT`` firings, as ``10_labels.py check`` tests the head
 labels: a scorer (Claude Sonnet) sees a pole's ``fires`` label and 8 contexts, 4 of its held-out firings (ranks 6-24, off
@@ -9,8 +9,8 @@ of the layer as a control.
 
 - ``--poles flipped``: the poles on SiLU's negative lobe (``acts``' ``neg_lobe`` past a half), whose first labels were
   written from their ``â ± b̂`` reads and which ``10_labels.py cards --flipped`` labelled again from the up-row reads
-  (findings §17), into ``data/summary/relabel_check_<model>.json``;
-- ``--poles all``: any firing pole, for a run of every pole (the lean card of §8), into
+  (findings §7), into ``data/summary/relabel_check_<model>.json``;
+- ``--poles all``: any firing pole, for a run of every pole (the lean card of §13), into
   ``data/summary/label_check_<model>.json``.
 
     python scripts/checks/relabel_check.py --poles all --old 37da15370817    # after 10_labels.py shards

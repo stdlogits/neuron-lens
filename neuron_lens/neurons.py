@@ -55,12 +55,12 @@ def read_rows(a: torch.Tensor, b: torch.Tensor, lobe: torch.Tensor) -> torch.Ten
     """``[2f, d]``, the poles' read directions, ``+`` poles then ``−``, from the unit gate and up rows
     ``a``, ``b`` ``[f, d]``: ``â ± b̂``, and the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe
     (``lobe``, ``catalog.lobe_signs``). There SiLU is nearly flat, so the activation follows ``up``, opposite
-    in sign to the pole, and which way of the gate raises it varies from pole to pole (findings §17)."""
+    in sign to the pole, and which way of the gate raises it varies from pole to pole (findings §7)."""
     return torch.where(lobe.to(a)[:, None] < 0, torch.cat([-b, b]), torch.cat([a + b, a - b]))
 
 
 def poles(model_id: str, layer: int, lobe: torch.Tensor, dev="cpu") -> dict:
-    """A layer's neurons in the residual's metric (``neuron_lens.metric``, findings §13): ``write`` ``[d, f]``; ``a``, ``b``
+    """A layer's neurons in the residual's metric (``neuron_lens.metric``, findings §15): ``write`` ``[d, f]``; ``a``, ``b``
     ``[f, d]``, the gate and up rows times the MLP input norm (covectors) at unit length in the metric; ``cov`` ``[2f, d]``,
     the poles' read covectors (``read_rows``), what the S-lens pulls back and a write meets; ``vec`` ``[2f, d]``, each
     one's vector ``s² ⊙ cov`` at unit length, what the R-lens transports (``σ ⊙ (ŵ_gate ± ŵ_up)``, the raw rows times

@@ -1,4 +1,4 @@
-"""Evidence cards for the description pilot (findings §8), one markdown block per pole.
+"""Evidence cards for the description pilot (findings §13), one markdown block per pole.
 
 A card gathers what the catalog knows about a pole, from every side:
 
@@ -8,7 +8,7 @@ A card gathers what the catalog knows about a pole, from every side:
 - **exact drivers** (``drivers``): the tokens that drive the pole most in real text, at their own
   position and summed over the 16 after;
 - **the layer's shares** (``reads_at_firings.py``'s summary): the share of the layer's poles whose each read
-  names its target at their top firings (findings §7), a prior on which sides hold at this depth;
+  names its target at their top firings (findings §8), a prior on which sides hold at this depth;
 - **activations** (``acts``): the typical high activation (``act_top``, the median of the top
   documents' extremes), the maximum, the firing rate (past a quarter of ``act_top``) overall and per
   slice, the position it peaks at when a third of the shown documents share one, the first
@@ -58,7 +58,7 @@ from neuron_lens.paths import DATA, LIBRARY, SUMMARY
 
 NAME = arch.stem(MODEL)
 OUT = DATA / "checks" / "describe" / NAME
-TESTS = ("write_R", "write_S", "read_R", "read_S")  # reads_at_firings.py's tests (findings §7)
+TESTS = ("write_R", "write_S", "read_R", "read_S")  # reads_at_firings.py's tests (findings §8)
 N_STEER = 8  # tokens per steering line
 READS = (
     ("write_R", "writes (R-lens of record: what the write promotes downstream)"),

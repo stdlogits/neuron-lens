@@ -9,7 +9,8 @@ the [README](../README.md#reproducing).
 The first model is Qwen3-8B (chat): 36 decoder layers, a 4,096-dimensional residual stream, 12,288
 SwiGLU MLP neurons and 32 attention heads (8 key-value heads, `head_dim` 128) per layer, 151,936
 tokens. The second, Gemma 4 12B, is read the same way where its architecture allows; [its
-section](#gemma-4-12b) gives where it differs and how its images and sounds are read.
+section](#gemma-4-12b) gives where it differs and how its images and sounds are read. The rest of the Qwen3 family
+(0.6B, 1.7B, 4B and 14B, and the five bases) is read exactly as Qwen3-8B, each through its own lenses (findings §19).
 `NEURON_LENS_MODEL` selects the model for every stage (Qwen3-8B by default).
 
 **Neurons and poles.** Neuron `n` of layer `L` is coordinate `n` of `down_proj`'s input, 0-indexed. It
@@ -68,7 +69,7 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   norm's true derivative (below). RelP matched or beat the true derivative wherever they were
   compared: the R-lens leads the J-lens at predicting steering from L4 to L23 (the J-lens leads at L0,
   they tie at L1-L3; §3), and on the input side RelP halves the S-lens's noise and fits footprints
-  better from L1 (§1, §6).
+  better from L1 (§1, §7).
 - **Hand-written layer maps, by component.** Under the rules each decoder layer is, for a given
   document, a fixed linear map: the norms scale each position, the MLP scales its gate and up
   projections per position and neuron, and attention keeps its true derivative.
@@ -151,7 +152,7 @@ Fused projections and CUDA graphs gave nothing more.
 
 **How lenses are judged:** on their merits, by whether their reads are coherent and make sense in
 context, not by a fixed benchmark, which is fallible in its own ways. Every fit reports its split-half
-difference per layer, which also says whether more documents would help. Causal checks (§3, §10)
+difference per layer, which also says whether more documents would help. Causal checks (§3, §14)
 inform; they are not gates. Many neurons reading alike is not a flaw in itself: J-lens reads
 concentrate in a shared subspace, the J-space, loosely a global workspace (Gurnee et al. 2026).
 Hub tokens, which top many reads at once from the lens's geometry, are another cause; layer-contrastive
@@ -173,11 +174,11 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
 | `read_R` | `softmax(W_U · norm(J_L^mid v))`: what the residual says when it drives the pole |
 | `read_S` | `c · K_L^mid (W_E[v] − ē)`: the input tokens that drive the pole |
 | `w_norm`, `cos_gate_up` | `‖W_down[:, n]‖`, `cos(a, b)` in the metric |
-| `cos_write_gate`, `cos_write_up` | the cosine in the metric of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§18) |
+| `cos_write_gate`, `cos_write_up` | the cosine in the metric of the pole's write with the gate and up sides of what it reads (`neurons.write_cosines`): positive where it writes toward them; continuous, and at chance about ±1/√d (§6) |
 | `vocab_skew`, `vocab_kurt` | of the pole's logit-lens logits: prediction and suppression neurons (Gurnee et al. 2024; §5) |
 | `null_share` | the write's share in the bottom 1% of singular directions of `W_U diag(γ)`: entropy neurons (Stolfo et al. 2024; §9) |
 
-- **The residual's metric** (`neuron_lens/metric.py`, §13). A read row is a covector (what a unit applies to the
+- **The residual's metric** (`neuron_lens/metric.py`, §15). A read row is a covector (what a unit applies to the
   residual), a write a vector; the R-lens transports vectors and the S-lens pulls back covectors. Pairing the two kinds
   needs nothing more, but turning one into the other, or comparing two of a kind, needs a metric, and the raw basis
   has none to offer: rescaling a residual coordinate, with every norm's weight compensating, leaves the model nearly
@@ -191,7 +192,7 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
   projection, `16_edges.py` its cosines and pushes, and `qk_self_R` its query. A length the model takes itself stays
   Euclidean: every RMSNorm divides by the raw basis's rms, so a QK footprint's size as a head sees it, and a write's
   energy as the final norm sees it (`null_share`), are Euclidean.
-- **Vectors against footprints** (`write_S`, `write_orth_S`, `ov_S`, and the firings' `before_S`, `mlp_S`; §13). Two
+- **Vectors against footprints** (`write_S`, `write_orth_S`, `ov_S`, and the firings' `before_S`, `mlp_S`; §15). Two
   vectors, a write and a token's S-lens footprint `K ē_v`, and the question is which input token would put the write
   there: an inverse problem. The transpose, `ē · Kᵀ w` (Euclidean), answers it only where `K` doesn't stretch; the
   inverse, `ē · K⁻¹ w`, is unstable where `K` is nearly null (most of Gemma 4's spectrum). `metric.polar` takes their
@@ -201,14 +202,14 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
   of their mean, which keeps the null space out (any floor from 1% to 50% reads alike; without one the read
   collapses). Of the powers `(K Kᵀ)^-p`, `p = ½` reads the peak tokens best on both models; the data's statistics
   (whitening, the within-token discriminant) and the model's downstream reads (the next layer's rows, the logit
-  pullback) read them worse than the transpose (§13).
+  pullback) read them worse than the transpose (§15).
 - **Orthogonal writes** (`write_orth_R`, `write_orth_S`, each with `_z`): the write minus its parts along the
   neuron's gate and up patterns (`s² ⊙ â`, `s² ⊙ b̂`), so that neither row reads it (`neurons.orthogonal_write`), the
-  part that adds something beyond anything it reads (§18). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
+  part that adds something beyond anything it reads (§6). The idea of reading this part is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s.
 - **The negative lobe.** A pole whose top firings ride SiLU's negative lobe (the gate below zero, `acts`'
   `neg_lobe` past a half) reads the up row alone, `∓b̂` (`neurons.read_rows`): SiLU is nearly flat there, so the activation
   follows `up`, and which way of the gate raises it varies from pole to pole. Its `read_*` and in-edges follow; `cos_write_gate` and
-  `cos_write_up` take each row on the side its firings sit (§17). A pole on the negative lobe under a quarter of its partner's `act_top` is
+  `cos_write_up` take each row on the side its firings sit (§7). A pole on the negative lobe under a quarter of its partner's `act_top` is
   a faint shadow of it, and its label card says so (`10_labels.py`).
 - **Layer-contrastive reads** (`_z`) z-score each token's score across the layer's poles (S-lens rows
   as unit vectors), which removes hub tokens. Raw `read_S` keeps literal tokens early; `read_S_z`
@@ -216,16 +217,16 @@ vector, and `norm` the final RMSNorm with its weight (`neuron_lens/readout.py`):
 - **One top-k.** Every ranked list the catalog stores has `catalog.TOP` = 64 entries (token reads, top firings,
   edges, sources, media labels and documents).
 - **Depth:** each read keeps its top 64 tokens with scores (`_ids`, `_val`; `_str` the top 8 decoded);
-  signal holds to rank 64 (§7). At L35, `write_R` is the logit lens.
-- **Which read to use where** depends on depth (§7): the S-lens on the input side through L8, the
-  R-lens from L9, with `read_S_z` as a concept view and, at L13-L20, contexts and exact drivers beside
-  them; `write_S` through L8, `write_R` from about L4. These are priors, from how often each read names what is
-  counted at the firings (`checks/reads_at_firings.py`, §7); weigh a unit's sides by its reads, contexts and drivers
-  together.
+  signal holds to rank 64 (§8). At L35, `write_R` is the logit lens.
+- **Which read to use where** depends on depth. Each model's reading plan (`arch.PLANS`, §8) names the most coherent
+  read at each depth, and its edges cut the model's depth bands (`arch.depth_bands`): for Qwen3-8B the S-lens input
+  read through L3, the R-lens's after, and the R-lens write read everywhere. These are priors: how often each read names
+  what is counted at the firings (`checks/reads_at_firings.py`, §8) differs in places (`read_S` names Qwen3-8B's firing
+  tokens through L8), so weigh a unit's sides by its reads, contexts and drivers together.
 
 ## Reading heads
 
-A head's token maps are read between its own read and write points (§11): a token `v` at its input is
+A head's token maps are read between its own read and write points (§10): a token `v` at its input is
 `X_v`, its S-lens footprint at `L − 1`'s output (`K^out_{L−1}(W_E[v] − ē)`; the embedding at L0).
 
 - **OV** (`ov_R`, `ov_S`): the head's write for `X_v`, `W_O^h W_V^h (γ₁ ⊙ X_v)` with `γ₁` the input
@@ -294,7 +295,7 @@ A head's token maps are read between its own read and write points (§11): a tok
 - **Reads at firings** (`checks/reads_at_firings.py`, after `07` and `08`; a check, not a table): how often each read names
   what is counted around a unit, as a z on a list of tokens against mismatched pairs, the share of each layer's units at a 5%
   false discovery rate: a neuron's `read_S` on its peak tokens, `read_R` on its exact drivers, `write_R` on the tokens after its
-  firings, `write_S` on its peak tokens; a head's reads on its own top firings (§7, §12). A firing is a sample, so these are
+  firings, `write_S` on its peak tokens; a head's reads on its own top firings (§8, §11). A firing is a sample, so these are
   population results about the reads; the catalog keeps no per-unit test.
 
 ## Edges
@@ -311,20 +312,23 @@ activations top many lists at chance cosines. Edges are direct paths at one posi
 the source at its typical top firing; `checks/edges_in_context.py` splits each sampled pole's activation
 at its top firings over the embedding, every head and every upstream neuron (RelP's rules: the norm's
 scale and the activation's ratio held, the half rule over gate and up), which shows how far the edges name what
-drives it (§17).
+drives it (§12).
 
 ## Labels
 
-`10_labels.py` writes an evidence card per neuron (both poles) or per head and has Claude Haiku 5.5
-label each through the Message Batches API: where the unit fires, what it writes when amplified (and
-for heads, what it attends to), each with a confidence. Labels are soft: weighted, with a confidence,
-naming the evidence they rest on.
+`10_labels.py` writes an evidence card per neuron (both poles) or per head and has Claude Haiku 5.5 label each through
+the Message Batches API: where the unit fires, what it writes when amplified (and for heads, what it attends to), each
+with a confidence. A pole's card shows how often it fires and which slices it favours, the one input read and one write
+read its model's reading plan names for its depth (24 tokens each, without strengths), and its first 5 top contexts; a
+head's card its attention patterns, the plan's OV read, its QK reads, its drivers and contexts. Each model has its own
+prompt with worked examples (`scripts/prompts/<model>/`). Labels are soft: weighted, with a confidence, naming the
+evidence they rest on.
 
-**Cards stay leak-free.** Scoring uses a unit's top documents past the first 5 (`N_CONTEXTS`), so
-nothing on a card may summarize them: no peak-token counts or agreement shares over all top documents,
-no ablation in top contexts. Scoring contexts end at the firing token. `checks/lens_blind.py` and
-`checks/haiku_blind.py` score labels by detection and by steering (§8); `10_labels.py check` scores the
-head labels (§12).
+**Cards stay leak-free.** Scoring uses a unit's top documents past the first 5 (`N_CONTEXTS`), so nothing on a card may
+summarize them: no peak-token counts or agreement shares over all top documents, no ablation in top contexts. Scoring
+contexts end at the firing token. `checks/relabel_check.py --poles all` and `10_labels.py check` score the catalog's
+neuron and head labels by detection, `checks/simulate_labels.py` by simulation, and `checks/lens_blind.py` and
+`checks/haiku_blind.py` the blind test's arms by detection and steering (§13).
 
 ## Token mask
 
@@ -353,7 +357,7 @@ up to 256 tokens a document:
 
 DCLM alone would make Chinese- and code-specialized neurons look dead (they are 2-6% of some layers,
 §2). The chat slice gives the speaker frame the chat model was trained for; frames matter for steering
-(§3 steers in document contexts, §10 in "Who are you?", §8 both). Only the DCLM slice is a uniform
+(§3 steers in document contexts, §14 in "Who are you?", §13 both). Only the DCLM slice is a uniform
 sample; the zh slice is largely traditional script, code is Python only, chat is one synthetic
 dataset written by ChatGPT on both sides.
 
@@ -375,7 +379,7 @@ tables, tests and conventions are Qwen3-8B's, with these differences:
   `gelu_tanh(a·x̂)(b·x̂)` and take both signs, so each neuron has two poles. The residual's coordinates differ in
   scale by 80-1,600× (99th over 1st percentile) and the norms' weights undo it (`γ ≈ 1/σ`, correlation 0.91-0.99), so
   a read that turns a row into a vector goes through the metric, or it lands on the few coordinates where the residual
-  barely moves (Reading neurons; §13).
+  barely moves (Reading neurons; §15).
 - **Heads.** Layers 5, 11, …, 47 are global; the others attend within a 1,024-token window. Sliding
   layers have 8 key-value heads of size 256; global layers one of size 512, whose keys are also its
   values (no `v_proj`), with RoPE on a quarter of each head. Values pass a weightless RMSNorm, read
@@ -394,14 +398,13 @@ tables, tests and conventions are Qwen3-8B's, with these differences:
   position 1. The kept tokens are 123,774 of 262,144 (the same corpora, 92.6M Gemma tokens).
 - **Lenses.** Fitted as Qwen3-8B's, on the same 1,000 DCLM documents, at about 16 s a document per lens
   on one H100. Split-half differences are 0.01-0.12 by layer for the R-lens (median about 0.05,
-  largest early) and 0.01-0.07 for the S-lens. The released files carry no provenance records.
+  largest early) and 0.01-0.07 for the S-lens.
 - **Corpora.** The activation slices are Qwen3-8B's rows at the same revisions, except that the chat
   slice is rendered as plain `User:` / `Assistant:` turns (the base model has no chat template), in
   its own file, `act-chat-gemma-4-12b.jsonl`; `first_chat` is on the first token of `User:`.
 - **The causal sample** (`checks/causal_lens.py`) is 24 random neurons a layer, both poles, with the
   write added after the post-feedforward norm at its scale.
-- **The run.** `google/gemma-4-12B` at revision `023679ed`, transformers 5.22.0 and PyTorch 2.13.0
-  (CUDA 12.9), on two H100s, 2026-10-30.
+- **Versions.** `google/gemma-4-12B` at revision `023679ed`, transformers 5.22.0 and PyTorch 2.13.0.
 
 ### Images and sound
 
@@ -445,7 +448,7 @@ a 640-dimensional subspace.
   through the model (24 Adam steps over 128 images or clips; at most 8% of the pixel range, or 0.3 of
   each frame's RMS), scored by its gain on 8 held-out documents.
 - **Cross-modal ranks** (`checks/crossmodal.py`) and **heads in media contexts**
-  (`checks/head_media.py`): findings §15 and §16 give their setups.
+  (`checks/head_media.py`): findings §17 and §18 give their setups.
 
 ## Qwen3.5-35B-A3B (in progress)
 
@@ -546,29 +549,20 @@ the model.
   there is no half rule. Biases enter the primal only (a q or k bias still moves the attention
   pattern's derivative, through the queries and keys it shifts).
 - **The scores' input norm.** The queries and keys read the input LayerNorm's true derivative,
-  `γ r (P − x̂x̂ᵀ/d)`, and the values its LN rule. The LN rule holds a norm's scale so that a linear reader
-  decomposes the forward pass (`f(x) = A x`); the scores keep their true derivative (softmax attention's), and a
-  held scale makes them quadratic in the residual where the model's are scale-free. The true softmax derivative
-  then answers to a rescaling of the residual (its radial part, along `x̂`) as a change of temperature, which the
-  model's norm divides out. With q/k norms (Qwen3, Gemma 4, Qwen3.5) the scores are scale-free already and their
-  norms' true derivative removes the same part, so the rule changes nothing there and applies only where they are
-  absent. Under the plain LN rule it compounded: on Pythia-1.4B the R-lens gained 232× on one direction from L3
-  against the true Jacobian's 0.58× (the LN rule alone 5.4×, the identity rule alone 24×), the tangent growing
-  through the attention of L15-L22; that direction held 86-96% of the lens at L0-L4, and every write read alike
-  (frequent function words against rare-script pieces). With the rule, writes' transported directions meet the true
-  Jacobian's at cosine 0.38-0.73 from L3 and 0.71-0.88 from L9 (against about 0 and 0.05-0.27), in a brute-force
-  check on the real model (autograd under `relp_rules`, 8 documents). Fitted (400 documents), the top direction's
-  share of the lens falls from 0.45-0.74 to 0.02-0.07 at L7-L22, the steering check's r (`checks/causal_lens.py`,
-  1×) rises from 0.05-0.38 to 0.27-0.82 at L0-L11 and from 0.61 to 0.85 at L12, and `read_R` names the exact drivers
-  for 0.26 of L6-L11's poles and 0.45 of L12-L17's (0.00, 0.21 before). A smaller mode stays at L0-L5 (0.41-0.85 of
-  the lens, σ1 35-42 against 250-280), which the brute-force check puts on the identity rule (24× with the norms'
-  true derivative everywhere, against the true 0.58×); open. Pythia-160M's mode is another matter, at the output
-  (its final residual points one way at every position, which the final norm divides out), and the rule leaves it.
-  The catalog's QK reads (`08_reads.py`) read the queries and keys the same way, through the input norm's true
-  derivative averaged over positions (`06_activations.py`'s `in_r`, `in_m`), as Qwen3's and Gemma 4's go through
-  their q/k norms'. On Pythia-1.4B this moves the late heads, where the rule mattered for the lens: `qk_ctx_rho` at
-  L12-L17 0.06 → 0.09 (heads past 0.2: 0.21 → 0.26), the median `qk_self_R` there 0.53 → 0.64; the early bands and
-  Pythia-160M barely move.
+  `γ r (P − x̂x̂ᵀ/d)`, and the values its LN rule. The LN rule holds a norm's scale so that a linear reader decomposes
+  the forward pass (`f(x) = A x`); the scores keep their true derivative (softmax attention's), and a held scale makes
+  them quadratic in the residual where the model's are scale-free, so the true softmax derivative answers a rescaling of
+  the residual (its radial part, along `x̂`) as a change of temperature that the model's norm divides out. With q/k norms
+  (Qwen3, Gemma 4, Qwen3.5) the scores are scale-free already and their norms' true derivative removes the same part, so
+  the rule changes nothing there and applies only where they are absent. Under the plain LN rule the error compounded:
+  on Pythia-1.4B the R-lens gained 232× on one direction from L3 against the true Jacobian's 0.58×, the direction held
+  86-96% of the lens at L0-L4, and every write read alike. With the rule, writes' transported directions meet the true
+  Jacobian's at cosine 0.38-0.73 from L3 and 0.71-0.88 from L9 (against about 0 and 0.05-0.27; autograd under
+  `relp_rules` on the real model, 8 documents), and in a 400-document fit the steering check's r rises from 0.05-0.38 to
+  0.27-0.82 at L0-L11. A smaller mode stays at L0-L5 (0.41-0.85 of the lens), which the brute-force check puts on the
+  identity rule; it is open. The catalog's QK reads (`08_reads.py`) read the queries and keys the same way, through the
+  input norm's true derivative averaged over positions (`06_activations.py`'s `in_r`, `in_m`), as Qwen3's and Gemma 4's
+  go through their q/k norms'.
 - **Parallel blocks.** The MLP reads what the attention reads, so `mid`, the residual the MLP reads,
   is the layer's input: `mid[L]` is `out[L − 1]` for both lenses (the R-lens's `mid[0]` is its
   read of the embeddings, the S-lens's the identity). The fits keep both targets, so every

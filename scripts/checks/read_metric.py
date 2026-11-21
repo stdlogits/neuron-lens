@@ -1,4 +1,4 @@
-"""How a neuron's read covector becomes a vector for the R-lens, and what that does to ``read_R`` (findings §13).
+"""How a neuron's read covector becomes a vector for the R-lens, and what that does to ``read_R`` (findings §15).
 
 A read row ``c`` (the gate or up row times the MLP input norm's weight, what the activation applies to the residual)
 is a covector; the R-lens transports vectors. Rescaling a residual coordinate with every norm's weight compensating is

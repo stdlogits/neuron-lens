@@ -1,4 +1,4 @@
-"""Detection scoring of the description pilot (findings §7, §8): do a pole's labels pick out where it fires?
+"""Detection scoring of the description pilot (findings §8, §13): do a pole's labels pick out where it fires?
 
 A scorer who sees only a label gets up to ten contexts, each ending at one token marked ``⟦ ⟧``: only
 what the model has seen when the pole fires there, so a label cannot be checked against what follows.

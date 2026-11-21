@@ -11,7 +11,7 @@ the lens reads, 16-126) is set against:
 - the S-lens, ``K_L (e_v − ē)``;
 - the embedding (``K = I``).
 
-R² with one fitted scale, and the median per-token cosine (findings §6). Fp32 on MPS (MPS has no forward-mode
+R² with one fitted scale, and the median per-token cosine (findings §7). Fp32 on MPS (MPS has no forward-mode
 AD for ``linear``, hence the finite difference). Log in ``data/summary/s_linearity_<model>.log``.
 
     python scripts/checks/s_linearity.py

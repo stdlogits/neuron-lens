@@ -79,10 +79,10 @@ MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the co
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
 FIGURES = ROOT / "docs" / "figures"
 MODEL_FIGURES = ("02_lenses.png", "04_lens_reliability.png", "05_chat_lens.png", "07_steering.png", "11_drivers.png",
-                 "16_head_lens_sides.png", "19_gemma_steering.png", "21_media_reads.png")
-DATASET_FIGURES = ("01_anatomy.png", "03_depth_map.png", "18_two_models.png", "13_rank_depth.png", "06_activations.png",
-                   "11_drivers.png", "20_gemma_census.png", "14_lens_blind.png", "22_media_gallery.png",
-                   "23_crossmodal.png", "17_head_census.png", "24_heads_media.png")
+                 "13_head_lens_sides.png", "18_gemma_steering.png", "20_media_reads.png")
+DATASET_FIGURES = ("01_anatomy.png", "03_depth_map.png", "17_two_models.png", "12_rank_depth.png", "06_activations.png",
+                   "11_drivers.png", "19_gemma_census.png", "15_lens_blind.png", "21_media_gallery.png",
+                   "22_crossmodal.png", "14_head_census.png", "23_heads_media.png")
 TABLES = {"neurons": {"acts": "every pole's activation statistics and top firings",
                       "drivers": "every pole's 64 token drivers in real contexts",
                       "reads": "every pole's weight-only reads through both lenses",
@@ -341,9 +341,9 @@ def label_check_text(models: list[str]) -> str:
         return ""
     return (f"\nChecked blind by Claude Sonnet 5.5 on {' or '.join(map(str, sorted(n)))} random firing poles a model: given a pole's `fires` "
             "label and 8 contexts, 4 of its held-out top firings (ranks 6-24, off every card) and 4 of another firing pole of its "
-            "layer, the scorer's AUROC per pole, for the label, for another pole's label on the same contexts, and for the pole's "
-            "earlier label where it had one:\n\n"
-            "| model | label | another pole's label | earlier label | label by depth quarter |\n|---|---|---|---|---|\n"
+            "layer, the scorer's AUROC per pole, for the label, for another pole's label on the same contexts, and for the label a "
+            "longer card (every tier of reads, with their strengths) wrote, where one was written:\n\n"
+            "| model | label | another pole's label | longer card's label | label by depth quarter |\n|---|---|---|---|---|\n"
             + "\n".join(rows) + "\n")
 
 
@@ -464,10 +464,10 @@ what a unit applies to the residual). A covector read through the R-lens (a neur
 token row used as a query) goes through `scale.pt` first, `v = (σ / |γ|) ⊙ c` with `γ` the weight of the norm that
 reads that point: for a neuron, its raw rows times the residual's scale. The raw basis carries a unit per coordinate
 (Gemma 4's coordinate scales span 80-1,600×, Qwen3-8B's 3-6×), and fed in as it is, a read row lands on the few
-coordinates where the residual barely moves (§13). A vector set against the S-lens's token footprints (a write in
+coordinates where the residual barely moves (§15). A vector set against the S-lens's token footprints (a write in
 `write_S`, a head's output in `ov_S`, the residual at a pole's firings in `before_S`, `mlp_S`) meets them through the
 lens's nearest rotation: with `K = (K Kᵀ)^½ U`, the read is `w · U ē`, the footprints with the lens's stretch removed,
-which asks which input token would put the vector there (§13).
+which asks which input token would put the vector there (§15).
 {ladder_text(f, ladder)}
 ## Definition
 
@@ -530,7 +530,7 @@ neurons at L2-L16, but reads the same concepts and predicts steering within 0.04
 
 ## Which lens to use where
 
-Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
+Measured on the models' neurons and heads (§3, §7, §10, §15, §16):
 
 - **The R-lens predicts what steering a neuron does.** Correlated with the measured change in
   log-probabilities when a neuron's write is added at about its typical activation, the R-lens read of
@@ -541,9 +541,9 @@ Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
 ![Lens reads against steering](figures/07_steering.png)
 
 - For Gemma 4 12B, from L11: 0.53 at L12-L23, 0.82 at L24-L35 and 0.97 at L36-L47, ahead of the logit
-  lens. Before L11, natural-size pushes are too small for either lens to predict (§13).
+  lens. Before L11, natural-size pushes are too small for either lens to predict (§15).
 
-![Gemma 4: lens reads against steering](figures/19_gemma_steering.png)
+![Gemma 4: lens reads against steering](figures/18_gemma_steering.png)
 
 - **The S-lens reads early layers' input side.** Through L8 of Qwen3-8B (L13 of Gemma 4) it names the
   tokens that make a neuron fire (Qwen3-8B, L0: the firing token is in its top 10 for 36% of top
@@ -559,17 +559,17 @@ Measured on the models' neurons and heads (§3, §6, §11, §13, §14):
   in every band, for both circuits, with one exception: copying at L28-L35 read with an S-lens output),
   and its output with the S-lens through L8 and the R-lens from L9. Late, a head's query reads what its
   position is about to say: with `r-lens/lens.pt` at `L − 1` as the query against S-lens keys, QK's diagonal
-  finds the heads that look up earlier copies of the coming token, copy suppressors among them (§11).
+  finds the heads that look up earlier copies of the coming token, copy suppressors among them (§10).
 
-![Which lens on each side of a head](figures/16_head_lens_sides.png)
+![Which lens on each side of a head](figures/13_head_lens_sides.png)
 
 - **Images and sound** (Gemma 4): a neuron's read direction through the image S-lens is what the
   direction looks like in pixels, a projection: on held-out images it moves the neuron's read
   projection most through L23, but raises its activation only at L0-L5. The audio S-lens read is at
   chance. Optimised from the read by gradient ascent through the model, a patch or a frame raises its
-  neuron through L23 (§14).
+  neuron through L23 (§16).
 
-![What the image and sound reads are good for](figures/21_media_reads.png)
+![What the image and sound reads are good for](figures/20_media_reads.png)
 
 ## Loading
 
@@ -635,13 +635,13 @@ def seek_text(q: dict, g: dict) -> str:
     qb, gb = q["bands"], g["bands"]
     qs, gs = q["late"]["seek and suppress"], g["late"]["seek and suppress"]
     return (f"A head's median `qk_self_R` tracks how much it attends, in context, to earlier copies of the token its position "
-            f"is about to say (the R-lens top-1 at its input; `checks/head_seek.py`, §11): Spearman "
+            f"is about to say (the R-lens top-1 at its input; `checks/head_seek.py`, §10): Spearman "
             f"{qb['L28-35']['rho_seek']['RS']:+.2f} across Qwen3-8B's L28-L35 heads (another head's read "
             f"{qb['L28-35']['rho_seek_control']:+.2f}, `qk_self_S` {qb['L28-35']['rho_seek']['SS']:+.2f}), and it finds the "
             f"{qs['heads']} heads of L21-L35 that seek and lower that token's logit, copy suppression, at AUROC {qs['RS']:.2f}. "
             f"On Gemma 4 the same holds: {gb['L24-35']['rho_seek']['RS']:+.2f} at L24-L35 and "
             f"{gb['L36-47']['rho_seek']['RS']:+.2f} at L36-L47 (`qk_self_S` {gb['L24-35']['rho_seek']['SS']:+.2f} and "
-            f"{gb['L36-47']['rho_seek']['SS']:+.2f}), AUROC {gs['RS']:.2f} for its {gs['heads']} seek-and-suppress heads (§13).")
+            f"{gb['L36-47']['rho_seek']['SS']:+.2f}), AUROC {gs['RS']:.2f} for its {gs['heads']} seek-and-suppress heads (§15).")
 
 
 def media_table(j: dict) -> str:
@@ -825,27 +825,29 @@ Gemma 4's image and audio lenses are fitted the same way on images and sounds.
 
 ## Which read to use where
 
-No read works at every depth (§7, §11). For Qwen3-8B (these bands are priors; weigh a unit's sides by its reads,
-contexts and drivers together):
+No read works at every depth. Each model's reading plan (`arch.PLANS` on GitHub, §8) names the most coherent read at
+each depth, and its edges cut the depth bands the labels and neuron-lens.com use. For Qwen3-8B (priors: weigh a unit's
+sides by its reads, contexts and drivers together):
 
-| layers | what drives a neuron | what a neuron writes | what a head writes |
-|---|---|---|---|
-| L0-L7 | `read_S` (literal tokens, raw at L0-L4) | `write_S` (early neurons write back what they detect); `write_R` from about L4 | `ov_S` |
-| L8 | both | both | `ov_S`, `ov_R` |
-| L9-L12, L21-L35 | `read_R`, with `read_S_z` as a concept-level view | `write_R` | `ov_R` |
-| L13-L20 | `read_R`, `read_S_z`, with `drivers` and `acts` beside them | `write_R`, for steering | `ov_R` (weak) |
+| band | layers | what drives a neuron | what a neuron writes | what a head writes |
+|---|---|---|---|---|
+| sensory | L0-L3 | `read_S` (literal tokens) | `write_S` (what it detects, written back) | `ov_S` |
+| association | L4-L8 | `read_R`, often an associated concept; `read_S` still names many firing tokens | `write_R`, and `write_S` through L8 | `ov_S` |
+| workspace | L9-L20 | `read_R`, `read_S_z`, with `drivers` and `acts` beside them | `write_R`, for steering | `ov_R` (weak at L13-L20) |
+| motor | L21-L35 | `read_R` | `write_R`: the next token from about L23, suppression from L32 | `ov_R` |
 
 Where a head looks: `qk_S` at every depth (weak at L13-L20); of its diagonal, `qk_self_S` through L20 (duplicate-token
-heads) and `qk_self_R` late (L28-L35; mixed at L21-L27), the heads that look up what is about to be said (§11).
+heads) and `qk_self_R` late (L28-L35; mixed at L21-L27), the heads that look up what is about to be said (§10).
 
 ![Which reads work at which depth](figures/03_depth_map.png)
 
 Gemma 4's map has the same shape at its own depths: `read_S` through L13 (falling to under 1% at L9 and rising again at L10-L13),
-`read_R` from L11, `write_R` from about L33 (for steering from L11), and `qk_self_R` from L24 (§13).
+`read_R` from L11, `write_R` from about L33 (for steering from L11), and `qk_self_R` from L24 (§15).
 
-![Both models by relative depth](figures/18_two_models.png)
+![Both models by relative depth](figures/17_two_models.png)
 
-The bands come from how often each read names what can be counted around a pole (`checks/reads_at_firings.py`, §7): the
+Beside the plans' coherence ratings stands a census of how often each read names what can be counted around a pole
+(`checks/reads_at_firings.py`, §8): the
 read direction's S-lens read the peak tokens of its top firings (`read_S`), its R-lens read the exact drivers (`read_R`),
 the write's R-lens read the tokens after the firings (`write_R`), its S-lens read the peak tokens (`write_S`); each scored
 against another pole of the layer on the same tokens, and passing at a 5% false discovery rate. A firing is one context
@@ -859,7 +861,7 @@ Gemma 4 12B:
 
 {band_table(gl["neurons"]["bands"], neuron_cols, "L0-47")}
 
-![Gemma 4: what each read names](figures/20_gemma_census.png)
+![Gemma 4: what each read names](figures/19_gemma_census.png)
 
 ## Conventions
 
@@ -869,7 +871,7 @@ Gemma 4 12B:
   first. Head tables: `layer`, `head` (query head) and `kv_head` (the key-value head it reads). `L8 n344 +`
   is `layer` 8, `neuron` 344, `pole` 1; `L20h17` is `layer` 20, `head` 17.
 - **Token lists.** `<read>_ids` are 64 token ids of the model's tokenizer, `<read>_val` their scores,
-  `<read>_str` the top 8 decoded and joined by ` | ` (newlines as `⏎`). Signal holds to rank 64 (§7).
+  `<read>_str` the top 8 decoded and joined by ` | ` (newlines as `⏎`). Signal holds to rank 64 (§8).
 - **Kept tokens.** Reads cover the tokens seen 5 or more times in the activation corpora, without
   byte-fallback pieces (`token_counts.pt`): {q['kept']:,} for Qwen3-8B, {g['kept']:,} for Gemma 4.
   Undertrained tokens otherwise dominate early reads.
@@ -898,20 +900,20 @@ Gemma 4 12B:
 |---|---|---|
 | `write_R`, `write_R_z` | the R-lens, `softmax(W_U · norm(J^out_L w))`; `_val` are probabilities (the logit lens at the last layer) | the write `w` (Qwen3-8B: `±W_down[:, n]`) |
 | `write_S`, `write_S_z` | against the S-lens's footprints at the layer's output, through the lens's rotation (`w · U ē`, `K = (K Kᵀ)^½ U`): input tokens whose footprint the write imitates | the write |
-| `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§18; the idea is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s) |
+| `write_orth_R`, `write_orth_S`, each with `_z` | the same two lenses | the write with its components along the gate and up rows removed: what it adds beyond anything it reads (§6; the idea is [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty)'s) |
 | `read_R`, `read_R_z` | the R-lens from the MLP input: what the residual says when it drives the pole | the read direction `â ± b̂` as a vector, `s² ⊙ (â ± b̂)` |
 | `read_S`, `read_S_z` | the S-lens to the MLP input: input tokens that drive the pole | the read direction |
 
 `â` and `b̂` are the neuron's gate and up rows times the MLP input norm's weight (covectors, what the activation applies
 to the residual), at unit length in the residual's metric: `â ± b̂` is a heuristic direction for each pole; a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe`
-past a half; §17) reads the up row alone, `∓b̂`, because SiLU is nearly flat there. Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
+past a half; §7) reads the up row alone, `∓b̂`, because SiLU is nearly flat there. Also per row: `w_norm`, `cos_gate_up`, `cos_write_gate`, `cos_write_up` (the
 cosine in the metric of the pole's write with the gate and up rows, each on the side its firings sit, positive where it writes toward
-them; §18), `null_share` (the share of the
+them; §6), `null_share` (the share of the
 write in the bottom 1% of singular directions of `W_U diag(γ)`, where entropy neurons write; Stolfo et
 al. 2024) and `vocab_skew`, `vocab_kurt` of `W_U · norm(w)` (Gurnee et al. 2024's prediction and
 suppression neurons).
 
-![Read signal by rank](figures/13_rank_depth.png)
+![Read signal by rank](figures/12_rank_depth.png)
 
 ### `<model>-neurons-acts`: activation statistics
 
@@ -939,29 +941,28 @@ corpus, FineWeb-2 Chinese, codeparrot Python, and UltraChat dialogues ({q['docs'
 Every kept token at position 24 of 8 real documents (4 web, 2 code, 2 chat), averaged over them, bf16:
 `drivers` are the 64 tokens with the largest activation at the token itself, `drivers_sum` summed over
 it and the 16 positions after. Values are times the pole's sign. For Qwen3-8B, an fp32 check through L9
-shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §6).
+shared 98-99% of a pole's top 20 on average (94-99% for `drivers_sum`; §7).
 
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
 ### `<model>-neurons-labels`: a label for every pole
 
-Every pole described by Claude Haiku 5.5 from a card of its evidence (batch API, effort low, no thinking; §8):
+Every pole described by Claude Haiku 5.5 from a card of its evidence (batch API, effort low, no thinking; §13):
 `fires` (where it fires, 12 words or fewer), `writes` (what its write pushes the model toward when amplified),
 each with a confidence 0-1, and `note`. A card shows how often the pole fires and which text slices it favours,
 one input read and one write read, 24 tokens each (the reads its model's reading plan names for that depth, §8),
 and its first 5 top contexts; a pole that is a faint shadow of the neuron's other pole keeps only its write read
-and is marked (§17). Each model has its own prompt with worked examples (`scripts/prompts/<model>/neurons.md` on
+and is marked (§7). Each model has its own prompt with worked examples (`scripts/prompts/<model>/neurons.md` on
 GitHub). Gemma 4's cards are text alone (no images or sounds). A handful of poles have empty labels.
 {label_checks}
-The earlier labels (a longer card: every tier of reads, with their strengths) were checked on Qwen3-8B with steering
-as well: a judge picked a pole's write label out of four from steered text 61% of the time [0.52, 0.69] (chance 25%),
-best late (80% at L28-L35, 41% at L0-L8; §8).
+The longer card's labels were also checked on Qwen3-8B with steering: a judge picked a pole's write label out of four from steered text 61% of the time [0.52, 0.69] (chance 25%),
+best late (80% at L28-L35, 41% at L0-L8; §13).
 
-![Random poles read blind](figures/14_lens_blind.png)
+![Random poles read blind](figures/15_lens_blind.png)
 
 ### `<model>-neurons-firings`: reads at the firings
 
-The residual at a pole's {TOP} top firings, averaged (each firing scaled by its residual's RMS) and read through the lenses, §18:
+The residual at a pole's {TOP} top firings, averaged (each firing scaled by its residual's RMS) and read through the lenses, §6:
 `before_R`, `before_S`, the residual entering the MLP, through `mid`: what the pole's input holds where it fires; `mlp_R`, `mlp_S`, the
 layer's whole MLP output there, through `out`: what the layer writes when the pole fires, the pole and the neurons firing with it;
 and `pred`, the model's mean next-token logit there. The `_S` reads meet the footprints through the lens's rotation, as `write_S`. Each has a `_z`
@@ -971,7 +972,7 @@ residual it reads, as a multiple of that part, and how much it adds off that dir
 
 ### `<model>-neurons-sources`: what drives a pole, and what fires with it
 
-At a pole's first 5 top firings, the exact RelP split of its activation over the embedding, the heads and earlier neurons (§17). `driven_*`:
+At a pole's first 5 top firings, the exact RelP split of its activation over the embedding, the heads and earlier neurons (§12). `driven_*`:
 the {TOP} upstream poles with the largest mean share, `driven_head_*` the same of the heads, and `emb_share`, `heads_share`,
 `neurons_share` each kind's mean share. `with_*`: the {TOP} earlier poles active at `act_top / 4` or more at the pole's firings, by lift
 (`with_lift`, the share of those firings where they are active over their overall `rate`), with that share (`with_co`). `n_contexts`: the firings used. The three relations
@@ -980,7 +981,7 @@ differ: of a pole's top 16 driven-by sources, a median of 31-44% are in its top 
 ### `<model>-neurons-edges`: direct weight edges
 
 What a neuron writes reaches every later layer's MLP input, so each pole has a direct edge to
-every pole of a later layer (§17). Per pole, its {TOP} strongest in-edges (`in_*`, from earlier poles) and
+every pole of a later layer (§12). Per pole, its {TOP} strongest in-edges (`in_*`, from earlier poles) and
 out-edges (`out_*`, to later ones), strongest first: `_layer`, `_neuron`, `_pole` name the other pole;
 `_cos` is the cosine of the earlier pole's write with the later pole's read direction, in the residual's metric at
 the later pole's MLP input, and `_push` is `cos · act_top · ‖w‖ · gain / rms` (`‖w‖` in that metric), how far one of the
@@ -990,8 +991,8 @@ Edges rank by |push| among those with |cos| ≥ 5/√d = 0.078; `−1` and NaN f
 
 Edges are wiring, not traffic: on Qwen3-8B, a pole's push ranks every upstream neuron's effect when it fires at
 Spearman 0.88, but its in-edges are a tenth of the 16 units that contribute most there, which are mostly
-units firing with it (§17). At L1-L3, 49-78% of top firings have a negative gate, where the read
-direction points the wrong way, and in-edges there are unreliable.
+units firing with it (§12). At L1-L3, where most top firings ride SiLU's negative lobe, a pole is read
+by its up row (§7).
 
 ### `gemma-4-12b-neurons-image`, `gemma-4-12b-neurons-audio`: images and sound
 
@@ -1012,18 +1013,18 @@ and one linear map. One row per pole, beside the text tables:
 
 A media read sums over a document's 64 slots, so it is one pattern wherever it sits, not a map of
 where. Read `read_png` as what the pole's input direction looks like in pixels, a projection: added to
-held-out images it raises the pole only at L0-L5 (§14). The exemplars say what fires a pole, and the
+held-out images it raises the pole only at L0-L5 (§16). The exemplars say what fires a pole, and the
 optimised reads below are patterns that drive it.
 
 {media_table(media)}
 
-![The patch each neuron reads, and the patch that drives it](figures/22_media_gallery.png)
+![The patch each neuron reads, and the patch that drives it](figures/21_media_gallery.png)
 
-**One concept in three modalities** (§15). {xm['passing_both']} poles pass all three text tests for both their
+**One concept in three modalities** (§17). {xm['passing_both']} poles pass all three text tests for both their
 image and their audio label, of {xm['scored_in_both']:,} scored in both (independent lists would share
 {xm['expected_if_independent']:.1f}): {triples}.
 
-![One concept in text, images and sound](figures/23_crossmodal.png)
+![One concept in text, images and sound](figures/22_crossmodal.png)
 
 ### `gemma-4-12b-neurons-image-optimised`, `gemma-4-12b-neurons-audio-optimised`
 
@@ -1043,7 +1044,7 @@ optimisation's.
 
 A head reads token `v` as its S-lens footprint at layer `L − 1`'s output (the embedding at L0) and writes
 into layer `L`'s MLP input. Its OV circuit maps what it reads to what it writes, and its QK circuit
-decides where it reads, both over the whole vocabulary (§11).
+decides where it reads, both over the whole vocabulary (§10).
 
 ### `<model>-heads-reads`: weight-only reads, per token
 
@@ -1091,7 +1092,7 @@ positions after them (the token as the key).
 
 ### How often head reads name their firings
 
-`checks/reads_at_firings.py` (§12), at each head's top firings, with the attended token: `ov_R` (its OV column promotes the
+`checks/reads_at_firings.py` (§11), at each head's top firings, with the attended token: `ov_R` (its OV column promotes the
 token after the query), `ov_copy` (its own `ov_R` z: the head promotes what it reads), `ov_S` (its own `ov_S` z), `qk_S` (its
 `qk_S` z: the QK read predicts what the head attends to), against the layer's other heads on the same firings, at a 5% false
 discovery rate over all heads; and the share with an attention pattern score past a threshold (`prev` or `self` past 0.5,
@@ -1103,9 +1104,9 @@ test. Share of each band's heads, Qwen3-8B:
 
 The S-side tests pass for almost no head. S→S copying and the mean query's favourite keys are shared by a
 layer's heads, so at a head's own firings they don't tell it from its neighbours; they remain reads of
-what each head does (§12).
+what each head does (§11).
 
-![What each head's reads name](figures/17_head_census.png)
+![What each head's reads name](figures/14_head_census.png)
 
 Gemma 4 has 16 heads a layer, so a head's mismatched control has 240 pairs, no p-value falls below
 1/241, and BH over its 768 heads passes none. Share of each band's heads at an uncorrected p ≤ 0.05 (5% by
@@ -1127,7 +1128,7 @@ Gemma 4 12B: its write labels are near chance, so read them as guesses.
 ### `gemma-4-12b-heads-image`, `gemma-4-12b-heads-audio`: heads in image and audio contexts
 
 64 labelled images (mini-ImageNet) and 64 sounds (ESC-50, the classes in turn), each in the media prompt
-and followed by ` a <label>`, its own and another class's (§16). Per head and modality: `read`,
+and followed by ` a <label>`, its own and another class's (§18). Per head and modality: `read`,
 `read_ratio` (attention from the text after the media to its slots, and that over an even spread),
 `sink`, `self`, `within`, `nbr` (attention from a slot to itself, the other slots, and its grid
 neighbours or the frame before); `abl_right`, `abl_wrong`, `content`, `content_z` (each head zeroed: the
@@ -1137,7 +1138,7 @@ mean percentile among the classes, against 200 label shuffles); `top1_mid`, `top
 
 {head_media_text(summary("head_media_gemma-4-12b.json"))}
 
-![Heads in image and audio contexts](figures/24_heads_media.png)
+![Heads in image and audio contexts](figures/23_heads_media.png)
 
 ## Plain files
 
@@ -1148,7 +1149,7 @@ Per model folder (`qwen3-8b/`, `gemma-4-12b/`{ladder_folders}):
   the corpus is not re-hosted here.
 - `token_counts.pt`: `counts[v]`, how often token `v` occurs in the activation corpora (`by_slice` per
   slice).
-- `causal/causal.pt`: the causal sample (§3, §13). `picks`: {q['causal_picks']:,} Qwen3-8B neurons
+- `causal/causal.pt`: the causal sample (§3, §15). `picks`: {q['causal_picks']:,} Qwen3-8B neurons
   `(layer, neuron)`, 32 random per layer plus named ones, or {g['causal_picks']:,} of Gemma 4's, 24 random
   per layer. Per neuron and pole: `steer` `[neuron, pole, dose, vocab]`, the mean change in log-probs
   over positions 16-63 of 16 64-token DCLM contexts (`contexts`) when the write is added there at 1× and
@@ -1187,11 +1188,11 @@ image[["label", "labels_str", "text_fire_rank"]], docs.loc[image["top_doc"][:4],
 - Activation statistics come from bf16 passes over documents of up to 256 tokens; top firings are one
   per document.
 - The tests are token-level, over at most 64 firings per unit and 64 exact drivers per pole. A read can be right about a
-  concept that shows in no single token (§7).
+  concept that shows in no single token (§8).
 - Heads are read through their circuits one token at a time: a head whose role depends on the query's
   context, or on position alone, is read only through `acts`.
 - Media labels name what a whole image or sound is about, not each patch or frame; media reads lose
-  fidelity with depth (§14).
+  fidelity with depth (§16).
 
 ## License
 

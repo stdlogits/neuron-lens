@@ -1,4 +1,4 @@
-"""Attention-head circuits as token maps (findings §11).
+"""Attention-head circuits as token maps (findings §10).
 
 A head ``h`` of layer ``L`` reads the normed residual at layer ``L − 1``'s output and writes into
 layer ``L``'s MLP input (in a parallel block, GPT-NeoX's, into layer ``L``'s output: ``mid`` becomes ``out``

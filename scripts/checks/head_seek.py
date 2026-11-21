@@ -1,4 +1,4 @@
-"""Heads that look up what the residual already says (findings §11): QK's cross-lens diagonal, against attention in
+"""Heads that look up what the residual already says (findings §10): QK's cross-lens diagonal, against attention in
 context and what the head writes there.
 
 ``08_reads.py``'s ``qk_self_S`` is QK's diagonal with the S-lens footprint on both sides: query ``v`` (the position

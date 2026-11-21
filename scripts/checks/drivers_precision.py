@@ -1,5 +1,5 @@
 """Do the catalog's exact drivers survive bf16? ``07_drivers.py`` runs the model in bf16; this reruns its
-neuron pass in fp32 through L9 and compares (findings §6).
+neuron pass in fp32 through L9 and compares (findings §7).
 
 The pass is 07's, imported from it: the same 8 documents, every kept token (``catalog.kept``) at
 position 24 followed by the documents' own 16 tokens, the same order, the same reductions (the
@@ -47,7 +47,7 @@ drivers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(drivers)
 
 LAYERS = 10  # L0-L9
-HITS = 20  # the top drivers the overlap counts (findings §6)
+HITS = 20  # the top drivers the overlap counts (findings §7)
 BATCH = 128  # tokens per pass, each in every document
 KINDS = ("at", "sum")
 SAVED = DATA / "checks" / "drivers-fp32-L00-L09.pt"

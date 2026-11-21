@@ -13,9 +13,9 @@ under the lens's logits for the pole ``s·W_down[:, n]``, plainly and z-scored a
 library's rows of that layer (layer-contrastive). Control: the same with each row's name swapped
 for the next row's of the same layer. Hit rates at ranks 10, 100 and 1,000 by layer group.
 
-**Coverage** (findings §10): which poles the library's steering caught (any published row, every
+**Coverage** (findings §14): which poles the library's steering caught (any published row, every
 category), among all poles and among those whose write predicts what follows their firings
-(``reads_at_firings.py``'s ``write_R`` test at a 5% false discovery rate, §7), against what each layer's base rate
+(``reads_at_firings.py``'s ``write_R`` test at a 5% false discovery rate, §8), against what each layer's base rate
 predicts for the latter (pooled over a band's write-legible poles), since the two sit at different
 depths.
 

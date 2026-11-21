@@ -7,7 +7,7 @@ text side, three ways, each as the rank of that label among all the modality's l
    ``"Here is an example: {label}."``, one prompt per label;
 2. **S-lens text read** (weights): ``u = c · K_L`` (the text S-lens, ``mid`` target), ``c`` the pole's read covector as
    the catalog's ``read_S`` takes it (``neurons.poles``), scored on each label's tokens (the mean of their centred
-   embeddings). The recorded run (findings §15) normalized the gate and up rows in the raw basis and read every pole as
+   embeddings). The recorded run (findings §17) normalized the gate and up rows in the raw basis and read every pole as
    ``â ± b̂``: within a median cosine of 0.995-1.000 of the catalog's covector by layer, except on the negative-lobe poles
    (0.1-15% of a layer's, most at L4-L8), which the catalog reads by the up row alone (median cosine −0.6 to −0.8);
 3. **R-lens write** (weights): ``W_U diag(γ) J_L w`` (the text R-lens; the identity at the last

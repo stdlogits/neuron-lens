@@ -1,4 +1,4 @@
-"""How deep a read's signal goes (findings §7): per rank of each catalog read (to its 64 tokens), how
+"""How deep a read's signal goes (findings §8): per rank of each catalog read (to its 64 tokens), how
 often that token shows up in the pole's behaviour, against a mismatched pole. It set the catalog's
 ``TOP``. No model.
 

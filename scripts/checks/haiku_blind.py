@@ -1,5 +1,5 @@
 """``lens_blind.py``'s blind test on 100 more poles, with Haiku explainers and the depth-aware cards
-of ``10_labels.py`` as extra arms (findings §8).
+of ``10_labels.py`` as extra arms (findings §13).
 
 Only the ``cards`` stage is new: these poles (``data/summary/haiku_blind_poles.json``: both poles of
 50 random neurons over 24 layers) instead of a fresh sample, and two more card kinds:

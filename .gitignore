@@ -11,7 +11,7 @@ logs/**
 # Python and local tooling.
 __pycache__/
 *.py[cod]
-.venv/
+.venv
 *.egg-info/
 build/
 dist/

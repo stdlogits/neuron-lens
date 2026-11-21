@@ -1,4 +1,4 @@
-"""Which firing reads say what the weight reads do not? (``17_firings.py``, findings §18). Run after the firing pass.
+"""Which firing reads say what the weight reads do not? (``17_firings.py``, findings §6). Run after the firing pass.
 
 For each pole with firings, by band, against the next pole of the layer (the control):
 

@@ -31,11 +31,11 @@ from neuron_lens.paths import DATA
 
 MODEL = os.environ.get("NEURON_LENS_MODEL", "Qwen/Qwen3-8B")
 TABLES = ("acts", "drivers", "reads", "labels", "edges", "firings", "sources", "lineage")
-TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top firings, edges, sources, media labels and documents (findings §7)
+TOP = 64  # every ranked list the catalog stores keeps this many: tokens, top firings, edges, sources, media labels and documents (findings §8)
 MIN_COUNT = 5  # tokens seen fewer times in the activation corpora are undertrained (findings §2)
 CONTEXT_BEFORE, CONTEXT_AFTER = 12, 3
 N_CONTEXTS = 5  # top contexts kept in the acts tables; the rest stay held out for scoring
-HELD_OUT = 24  # label checks draw held-out firings from ranks past N_CONTEXTS up to this (findings §8)
+HELD_OUT = 24  # label checks draw held-out firings from ranks past N_CONTEXTS up to this (findings §13)
 TYPICAL = 24  # act_top, a unit's typical high activation, is the median over its top this many documents (the definition doses and rates rest on)
 
 
@@ -100,7 +100,7 @@ def neuron_table(table: str, layer: int, model: str = MODEL):
 
 def lobe_signs(layer: int, model: str = MODEL) -> torch.Tensor:
     """``[2f]``: +1 for the poles whose top firings ride SiLU's positive side, −1 for those on its
-    negative lobe (``acts``' ``neg_lobe`` past a half), which read the up row alone (``neurons.read_rows``, findings §17)."""
+    negative lobe (``acts``' ``neg_lobe`` past a half), which read the up row alone (``neurons.read_rows``, findings §7)."""
     t = pq.read_table(neuron_table("acts", layer, model), columns=["neg_lobe"])
     return 1 - 2 * (torch.from_numpy(t.column(0).to_numpy().copy()) > 0.5).float()
 

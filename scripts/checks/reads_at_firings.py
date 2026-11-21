@@ -1,12 +1,12 @@
-"""How often each weight-only read names what is counted at a unit's firings and drivers, by layer and band (findings §7,
-§12, §13, §18).
+"""How often each weight-only read names what is counted at a unit's firings and drivers, by layer and band (findings §8,
+§11, §15, §6).
 
 Each test scores a read on a list of tokens as a mean z, against mismatched pairs: another unit of the layer scored on this
 unit's tokens. A unit's p-value on a test is the share of its layer's mismatched pairs that score as high; the summary gives
 the share of each layer's units that pass at a false discovery rate of 5% (Benjamini-Hochberg over the layer's units for
 neurons, over all heads for heads) and the share past the 99% point of mismatched pairs net of theirs. These are population
 results about the reads, not verdicts on units: a firing is one context summarized by a token, and the targets are narrow
-(the token under a firing, the token after it), so a read that misses them isn't wrong (§7), and the catalog keeps no
+(the token under a firing, the token after it), so a read that misses them isn't wrong (§8), and the catalog keeps no
 per-unit score. Units with fewer than 3 usable tokens, and near-silent poles (``acts``' ``act_top`` under 0.05), are not
 scored.
 
@@ -18,7 +18,7 @@ scored.
   reads forward, so it isn't scored on the token under a firing;
 - ``write_R``: the write's R-lens read promotes the tokens that follow the firings;
 - ``write_S``: the write's S-lens read names the peak tokens (early neurons write back what they detect);
-- ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up rows (§18);
+- ``write_orth_R``, ``write_orth_S``: the same of the write orthogonal to its neuron's gate and up rows (§6);
 - the shares of near-silent poles, and of poles with a third of their top firings on one peak token or before one token
   (``acts``' ``cur_mode``, ``next_mode``).
 

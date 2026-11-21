@@ -1,4 +1,4 @@
-"""Which read direction do the poles on SiLU's negative lobe have (findings §17)?
+"""Which read direction do the poles on SiLU's negative lobe have (findings §7)?
 
 For the active poles with ``neg_lobe`` past a half, three weight-only directions through the S-lens: ``â ± b̂``, its
 negative, and the up row alone, ``∓b̂``. Two scores against the tokens a pole actually fires on (``acts``' ``peak_tokens``):

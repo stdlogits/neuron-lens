@@ -1,86 +1,78 @@
 # neuron-lens
 
-What does each part of a large language model do? This project reads every MLP neuron and every
-attention head of two open models, [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) (442,368 neurons,
-1,152 heads) and [Gemma 4 12B](https://huggingface.co/google/gemma-4-12B) (737,280 neurons, 768 heads),
-three ways: from their weights alone, through two Jacobian lenses; from what they do on 15M tokens of
-real text; and from the exact tokens that drive them. Gemma 4 also takes images and sound, so its
-neurons are read through images and sound too. The result is a public catalog, the lenses that
-produced it, and measurements of how each way of reading compares with steering, firings and token swaps.
-The rest of the Qwen3 family up to 14B, post-trained and base, is catalogued the same way without
-labels, to see what changes with size.
+What does each part of a large language model do? This project reads every MLP neuron and every attention head of two
+open models, [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) (442,368 neurons, 1,152 heads) and
+[Gemma 4 12B](https://huggingface.co/google/gemma-4-12B) (737,280 neurons, 768 heads), three ways: from their weights
+alone, through two Jacobian lenses; from what they do on 15M tokens of real text; and from the exact tokens that drive
+them. Gemma 4 also takes images and sound, so its neurons are read through images and sound too. The rest of the Qwen3
+family up to 14B, post-trained and base, is catalogued the same way, to see what changes with size. The result is a
+public catalog, the lenses that produced it, and measurements of how far each way of reading goes.
 
-- **Lenses:** [`stdlogits/rs-lenses`](https://huggingface.co/stdlogits/rs-lenses), the R-lens and S-lens
-  for Qwen3-8B, for Gemma 4 12B in text, images and sound, and for Qwen3 from 0.6B to 14B, post-trained and base.
-- **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every
-  neuron's and head's reads, activation statistics, token drivers and tests of each read; what the residual
-  holds where each neuron fires, what drives it and how neurons are wired; labels in
-  words; for Gemma 4, what each neuron responds to in images and sound; and the same tables for nine more
-  Qwen3 models, with labels for the post-trained ones.
+- **Lenses:** [`stdlogits/rs-lenses`](https://huggingface.co/stdlogits/rs-lenses), the R-lens and S-lens for Qwen3 from
+  0.6B to 14B, post-trained and base, and for Gemma 4 12B in text, images and sound.
+- **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every neuron's and
+  head's reads, activation statistics and token drivers; what the residual holds where each neuron fires, what drives it
+  and how neurons are wired; labels in words; and for Gemma 4, what each neuron responds to in images and sound.
+- **Browse it:** [neuron-lens.com](https://neuron-lens.com).
 - **Results:** [docs/findings.md](docs/findings.md). **Methods:** [docs/design.md](docs/design.md).
 
-By [@_a9lim](https://x.com/_a9lim) and [@treetowntree](https://x.com/treetowntree), with Claude. [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) raised the
-question of what MLPs add beyond amplifying their input and suggested the orthogonal write read (finding 18).
+By [@_a9lim](https://x.com/_a9lim) and [@treetowntree](https://x.com/treetowntree), with Claude.
+[Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) raised the question of what MLPs add beyond
+amplifying their input and suggested the orthogonal write read (finding 6), and spotted the junk input reads that led to
+the residual's metric (finding 15).
 
 ## Background
 
 ### Neurons and heads
 
-A transformer keeps one vector per token, the *residual stream* (4,096 numbers in Qwen3-8B). Each of its
-36 layers reads that stream and adds to it, in two steps:
+A transformer keeps one vector per token, the *residual stream* (4,096 numbers in Qwen3-8B). Each of its 36 layers reads
+that stream and adds to it, in two steps:
 
-- **Attention heads move information between tokens.** At each position, a head looks back over the
-  earlier tokens and copies something from them into the current one. Its *QK circuit* decides where it
-  looks; its *OV circuit* decides what it copies. Qwen3-8B has 32 heads a layer. Head L20h17, for
-  example, copies *she* forward and pushes against *he*.
-- **MLP neurons transform what is already there, one position at a time.** A neuron measures how
-  strongly the stream points along a direction it reads (its *activation*), then adds a fixed vector
-  (its *write*) scaled by that activation. Qwen3-8B has 12,288 a layer. In Qwen's SwiGLU MLPs the
-  activation is a gated projection of the stream times a plain linear one ("gate" times "up"), so it
-  can be positive or negative, and each neuron has two *poles* that can mean different things.
-  `L8 n344 +` (layer 8, neuron 344, positive pole) fires on *owl* and writes toward owls and night.
+- **Attention heads move information between tokens.** At each position, a head looks back over the earlier tokens and
+  copies something from them into the current one. Its *QK circuit* decides where it looks; its *OV circuit* decides what
+  it copies. Qwen3-8B has 32 heads a layer. Head L20h17, for example, copies *she* forward and pushes against *he*.
+- **MLP neurons transform what is already there, one position at a time.** A neuron measures how strongly the stream
+  points along a direction it reads (its *activation*), then adds a fixed vector (its *write*) scaled by that activation.
+  Qwen3-8B has 12,288 a layer. In Qwen's SwiGLU MLPs the activation is a gated projection of the stream times a plain
+  linear one ("gate" times "up"), so it can be positive or negative, and each neuron has two *poles* that can mean
+  different things. `L8 n344 +` (layer 8, neuron 344, positive pole) fires on *owl* and writes toward owls and night.
 
-At the bottom, the embedding matrix `W_E` turns each input token into its starting vector; after the
-last layer, a final normalization (`norm`, an RMSNorm) and the unembedding matrix `W_U` turn each
-position's vector into next-token probabilities. Gemma 4 12B is built the same way, with 48 layers,
-16 heads and 15,360 neurons a layer (GELU in place of SiLU in the gate, so its neurons have two poles
-too), and its input positions can also hold a patch of an image or 40 ms of sound.
+At the bottom, the embedding matrix `W_E` turns each input token into its starting vector; after the last layer, a final
+normalization (`norm`, an RMSNorm) and the unembedding matrix `W_U` turn each position's vector into next-token
+probabilities. Gemma 4 12B is built the same way, with 48 layers, 16 heads and 15,360 neurons a layer (GELU in place of
+SiLU in the gate, so its neurons have two poles too), and its input positions can also hold a patch of an image or 40 ms
+of sound.
 
 ![What neurons and heads do](docs/figures/01_anatomy.png)
 
-So "what does this unit mean?" has two halves: what makes it fire (its *input side*) and what its output
-does to the model's predictions (its *write side*). Running the model samples either one: activations over
-a corpus show where a unit fired, and *steering* (adding a unit's write and watching the predictions move)
-shows what a push does. A *lens* answers either half from the weights alone, by turning a vector inside
-the model into a ranking over tokens, averaged over the contexts it was fitted on.
+So "what does this unit mean?" has two halves: what makes it fire (its *input side*) and what its output does to the
+model's predictions (its *write side*). Running the model samples either one: activations over a corpus show where a unit
+fired, and *steering* (adding a unit's write and watching the predictions move) shows what a push does. A *lens* answers
+either half from the weights alone, by turning a vector inside the model into a ranking over tokens, averaged over the
+contexts it was fitted on.
 
 ### Lenses: from the logit lens to the R-lens and S-lens
 
 ![The lens family](docs/figures/02_lenses.png)
 
-- **Logit lens** ([nostalgebraist,
-  2020](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens)). Read a
-  vector `h` at layer `L` as if it were already at the output: `softmax(W_U · norm(h))`. This works
-  near the output and reads mostly noise early on, because the remaining layers transform `h` heavily.
-- **J-lens** ([Gurnee et al., 2026](https://transformer-circuits.pub/2026/workspace/)). Instead of
-  ignoring the later layers, linearize them. `J_L` is the Jacobian of the final residual with respect to
-  layer `L`'s, summed over the current and later positions (so effects carried by attention count) and
-  averaged over a corpus. The read is `softmax(W_U · norm(J_L h))`: what `h` makes the model say, on
-  average, after everything downstream has acted on it.
-- **R-lens** ([camilablank et al.,
-  2026](https://www.lesswrong.com/posts/nv8oedrnLXKRzNEL9/r-lens-making-j-lens-more-faithful-on-early-layers)).
-  The same average Jacobian, taken under [RelP](https://arxiv.org/abs/2508.21258)'s propagation rules
-  instead of the true gradient: norm scales held constant, the SwiGLU gate linearized, and the
-  gate-times-up product passing half of each factor's change. On Qwen3-8B it predicts what steering a
-  neuron does better than the J-lens from layer 4 to 23.
+- **Logit lens** ([nostalgebraist, 2020](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens)).
+  Read a vector `h` at layer `L` as if it were already at the output: `softmax(W_U · norm(h))`. This works near the
+  output and reads mostly noise early on, because the remaining layers transform `h` heavily.
+- **J-lens** ([Gurnee et al., 2026](https://transformer-circuits.pub/2026/workspace/)). Instead of ignoring the later
+  layers, linearize them. `J_L` is the Jacobian of the final residual with respect to layer `L`'s, summed over the current
+  and later positions (so effects carried by attention count) and averaged over a corpus. The read is
+  `softmax(W_U · norm(J_L h))`: what `h` makes the model say, on average, after everything downstream has acted on it.
+- **R-lens** ([camilablank et al., 2026](https://www.lesswrong.com/posts/nv8oedrnLXKRzNEL9/r-lens-making-j-lens-more-faithful-on-early-layers)).
+  The same average Jacobian, taken under [RelP](https://arxiv.org/abs/2508.21258)'s propagation rules instead of the true
+  gradient: norm scales held constant, the SwiGLU gate linearized, and the gate-times-up product passing half of each
+  factor's change. On Qwen3-8B it predicts what steering a neuron does better than the J-lens from layer 4 to 23.
 - **K-lens and S-lens.** The J-lens and R-lens look forward, to the output. Theia Vogel's K-lens
-  ([@voooooogel, 2026](https://x.com/voooooogel/status/2084858861551526002), unpublished) takes the
-  Jacobian the other way, back to the input embeddings: `K_L` averages the Jacobian of layer `L`'s
-  residual with respect to the current and earlier token embeddings, and a direction `c` scores each
-  token `v` by `c · K_L (W_E[v] − mean(W_E))`, answering which input tokens put that direction there.
-  The S-lens, introduced here, is the K-lens under RelP's rules, as the R-lens is the J-lens under
-  them. Under those rules the R-lens's backward map is exactly the transpose of the S-lens's forward
-  one, so one estimator fits both.
+  ([@voooooogel, 2026](https://x.com/voooooogel/status/2084858861551526002), unpublished) takes the Jacobian the other
+  way, back to the input embeddings: `K_L` averages the Jacobian of layer `L`'s residual with respect to the current and
+  earlier token embeddings, and a direction `c` scores each token `v` by `c · K_L (W_E[v] − mean(W_E))`, answering which
+  input tokens put that direction there. The S-lens, introduced here, is the K-lens under RelP's rules, as the R-lens is
+  the J-lens under them. Under those rules the R-lens's backward map is exactly the transpose of the S-lens's forward one,
+  so one estimator fits both.
 
 | lens | maps a vector `h` at layer `L` with | reads with | answers |
 |---|---|---|---|
@@ -89,39 +81,33 @@ the model into a ranking over tokens, averaged over the contexts it was fitted o
 | K / S | `K_L = mean_t Σ_{s≤t} ∂h_L(t)/∂e(s)` | `W_E` | which input tokens put `h` there (true / RelP derivatives) |
 
 For each model, both lenses are fitted on the same 1,000 documents of
-[DCLM](https://huggingface.co/datasets/HuggingFaceFW/dclm_100BT-shuffled) (128 tokens each), at 11-16
-s per document per lens on one H100; Gemma 4's are also fitted on images (COCO) and sounds (ESC-50).
-Fitting needs no training objective: each is an average of exact linearizations. An R-lens read is
-scale-free (the final norm removes a vector's size), and the catalog's S-lens reads use unit
-directions, so reads describe directions, not effect sizes.
+[DCLM](https://huggingface.co/datasets/HuggingFaceFW/dclm_100BT-shuffled) (128 tokens each), at 11-16 s per document per
+lens on one H100; Gemma 4's are also fitted on images (COCO) and sounds (ESC-50). Fitting needs no training objective:
+each is an average of exact linearizations. Reads are scale-free (the final norm removes a vector's size), so they
+describe directions, not effect sizes.
 
 ## The catalog
 
-Every neuron has a `+` and a `−` pole, so the catalog has 884,736 neuron entries and 1,152 heads for
-Qwen3-8B, and 1,474,560 neuron entries and 768 heads for Gemma 4 12B. Qwen3-0.6B, 1.7B, 4B and 14B and the
-bases 0.6B to 14B add 6,103,040 neuron entries and 8,448 heads, labelled but for the bases. Each is read from three sides:
+Every neuron has a `+` and a `−` pole, so the catalog has 884,736 neuron entries and 1,152 heads for Qwen3-8B, and
+1,474,560 neuron entries and 768 heads for Gemma 4 12B; Qwen3-0.6B, 1.7B, 4B and 14B and the five bases add 6,103,040
+neuron entries and 8,448 heads. Each unit is read from three sides:
 
-- **from the weights,** through both lenses: what a neuron writes and what its read direction responds
-  to; what a head copies (OV) and attends to (QK), token by token;
-- **from activations** over 15M positions of web, Chinese, Python and chat text: how hard and how often
-  it fires, and its top contexts;
-- **from exact token drivers:** every common token substituted at one position of 8 real documents,
-  to measure which tokens directly make the unit fire.
+- **from the weights,** through both lenses: what a neuron writes and what its read direction responds to; what a head
+  copies (OV) and attends to (QK), token by token;
+- **from activations** over 15M positions of web, Chinese, Python and chat text: how hard and how often it fires, and its
+  top contexts;
+- **from exact token drivers:** every common token substituted at one position of 8 real documents, to measure which
+  tokens directly make the unit fire.
 
-For Gemma 4, each neuron is also read through images and sound: which of 49,694 labelled images and
-49,703 labelled sounds make it fire, what its read direction looks like as a patch of pixels or 40 ms
-of sound, and a pattern optimised to drive it.
+For Gemma 4, each neuron is also read through images and sound: which of 49,694 labelled images and 49,703 labelled sounds
+make it fire, what its read direction looks like as a patch of pixels or 40 ms of sound, and a pattern optimised to drive
+it.
 
-Either lens can read either side of a neuron. Applied to its read direction, the R-lens says what the
-stream is about to say when the neuron fires, and the S-lens which input tokens put it there; applied
-to its write, the R-lens says what the write makes the model say, and the S-lens which tokens'
-*footprints* it imitates (a token's footprint is the average change it makes to the stream at that
-layer). Raw reads share *hub tokens* that top many units' reads at once (` the`, ` and` early);
-the catalog also keeps *layer-contrastive* reads (`_z`), each token's score z-scored across the
-layer's units, which remove them. Each pole also has its write with what it reads removed (`write_orth_*`),
-the cosines of its write with the gate and up rows it reads (`cos_write_gate`, `cos_write_up`), and, from activations, the
-residual, MLP output and model prediction at its firings (the `firings` table) and what drives it
-when it fires and what fires with it (`sources`, beside the weight `edges`).
+Either lens can read either side of a neuron. Applied to its read direction, the R-lens says what the stream is about to
+say when the neuron fires, and the S-lens which input tokens put it there; applied to its write, the R-lens says what the
+write makes the model say, and the S-lens which tokens' *footprints* it imitates (a token's footprint is the average
+change it makes to the stream at that layer). Raw reads share *hub tokens* that top many units' reads at once (` the`,
+` and` early); *layer-contrastive* reads (`_z`), each token's score z-scored across the layer's units, remove them.
 
 Some Qwen3-8B neuron entries (top tokens, abridged; ⟦ ⟧ marks the token where it fires):
 
@@ -144,42 +130,40 @@ And some heads, read from the weights:
 | `L1h28` | a duplicate-token head: as a query it seeks the same token again (Paris → Paris), and copies almost nothing |
 | `L0h27` | attends to the starts of code and documents (`/*`, `import`) |
 
-Neurons and heads get the same four tables, one row per pole or per head: `reads` (weight-only lens
-reads), `acts` (activation statistics and top firings), `drivers` (exact token drivers) and `labels`
-(Claude Haiku's labels in words).
-Neurons add `firings` (what the residual holds, what the MLP layer writes and what the model predicts where a pole
-fires, and how much the pole amplifies what it reads and adds off it), `edges` (each pole's strongest direct weight edges from earlier poles and to later ones) and `sources` (what drives
-a pole when it fires, and what fires with it). Gemma 4 adds `image` and `audio` tables, per neuron and per head. The [dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents
-every column.
+Neurons and heads get the same tables, one row per pole or per head: `reads` (weight-only lens reads), `acts` (activation
+statistics and top firings), `drivers` (exact token drivers), `sources` (what drives a unit when it fires, and what fires
+with it) and `labels` (Claude Haiku's labels in words). Neurons add `firings` (what the residual holds, what the MLP layer
+writes and what the model predicts where a pole fires) and `edges` (each pole's strongest direct weight edges); the pruned
+Qwen3 pairs add `lineage`, and Gemma 4 adds `image` and `audio` tables. The
+[dataset card](https://huggingface.co/datasets/stdlogits/neuron-lens) documents every column.
 
-**Which read to use where.** No single read works at every depth. The S-lens names what early neurons detect, and the R-lens
-says what a neuron writes and, from the middle of the network on, what it reads
-(findings [§7](docs/findings.md#7-what-each-read-names)). For Qwen3-8B (Gemma 4's map has the same shape at its own depths: the S-lens
-for inputs through L13, and the R-lens for inputs and writes from L11;
-[§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)):
+**Which read to use where.** No single read works at every depth. Each model's *reading plan* names the most coherent
+read at each depth, and its edges cut four *depth bands* (findings [§8](docs/findings.md#8-what-each-read-names-and-which-read-to-use-where)),
+which the labels and the site use. For Qwen3-8B:
 
-| layers | what drives a pole | what a pole writes |
-|---|---|---|
-| L0-L7 | the S-lens read of its read direction (literal tokens) | the S-lens read (early neurons write back the tokens they detect); the R-lens from about L4 |
-| L8 | both lenses, agreeing most | both |
-| L9-L12 | the R-lens read of its read direction (concepts) | the R-lens read: what steering does |
-| L13-L20 | the R-lens read, with exact drivers and top contexts beside it | the R-lens read, for steering |
-| L21-L35 | the R-lens read of its read direction | the R-lens read: what steering does, the next token from about L23, suppression from L32 |
+| band | layers | what drives a pole | what a pole writes |
+|---|---|---|---|
+| sensory | L0-L3 | the S-lens read of its read direction: literal tokens | the tokens it detects, written back (`write_S`) |
+| association | L4-L8 | the R-lens read, often an associated concept; the S-lens still names many firing tokens | the R-lens read: what steering does |
+| workspace | L9-L20 | the R-lens read, with exact drivers and top contexts beside it | the R-lens read |
+| motor | L21-L35 | the R-lens read | the R-lens read: the next token from about L23, suppression from L32 |
+
+Gemma 4 has the same shape at its own depths (the S-lens names firing tokens through L13; association L0-L19, workspace
+L20-L32, motor L33-L47).
 
 ![Which reads work at which depth](docs/figures/03_depth_map.png)
 
 ## Findings
 
-Findings 1-12, 17, 18 and 21 are Qwen3-8B's, 13-16 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or means over a layer's poles
-unless stated. Each heading links to its findings section, with setup, controls and limits.
+Findings 1-14 and 21 are Qwen3-8B's, 15-18 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or
+means over a layer's poles unless stated. Each links to its findings section, with setup, controls and limits.
 
-### 1. The lenses are stable, and their corpus changes tokens, not concepts
+### I. The lenses and the corpus
 
-Fitting each lens on two halves of its corpus gives matrices that differ by at most 6% at every layer,
-and the R-lens halves' reads of neurons' writes share their top token for 89-99% of neurons. An R-lens
-fitted on chat conversations instead shares the top token with the web-text lens for only 31-51% of
-neurons through L16, yet reads the same concepts in a different order and scores the same on every
-causal test, chat-format ones included
+**1. The lenses are stable, and their corpus changes tokens, not concepts.** Lenses fitted on two halves of their corpus
+differ by at most 6% at every layer, and the halves' reads of a write share their top token for 89-99% of neurons. An
+R-lens fitted on chat conversations instead shares the top token with the web-text lens for only 31-51% of neurons
+through L16, yet reads the same concepts in another order and scores the same on every causal test
 ([§1](docs/findings.md#1-the-lenses-stability-and-corpus-dependence)).
 
 ![Split-half reliability of the lenses](docs/figures/04_lens_reliability.png)
@@ -190,38 +174,29 @@ causal test, chat-format ones included
 
 </details>
 
-### 2. Activations: where neurons fire
-
-Over 15M positions, the typical activation is flat at 3-5 from L5 to L21 and grows tenfold to L35. At
-L1, 56% of poles are near-silent; at L2-L3, most poles do their work at the first position alone.
-Chinese-selective poles sit at both ends of the network, code-selective ones at L20-L29, and poles
-selective for the chat slice fire on ChatGPT's register (" delve", "As of 2021")
-([§2](docs/findings.md#2-activations-over-15m-positions)).
+**2. Where neurons fire.** Over 15M positions, the typical activation is flat at 3-5 from L5 to L21 and grows tenfold to
+L35. At L1, 56% of poles are near-silent; at L2-L3, most do their work at the first position alone. Chinese-selective
+poles sit at both ends of the network, code-selective ones at L10-L30, and poles selective for the chat slice fire on
+ChatGPT's register (" delve", "As of 2021") ([§2](docs/findings.md#2-activations-over-15m-positions)).
 
 ![Activation statistics](docs/figures/06_activations.png)
 
-### 3. A neuron's write, read from weights alone, predicts what steering it does
+### II. Reading a neuron from its weights
 
-Add a pole's write vector, at about its typical activation, to 48 positions of 16 web documents,
-measure the change in next-token log-probabilities, and correlate it with the lens's read of the same
-vector. The R-lens reaches a median r of 0.45-0.50 at L4-L8, 0.65-0.75 at L12-L16 and 0.9 or more from
-L22, against ±0.04 for another neuron's read. It leads the J-lens by 0.03-0.13 from L4 to L23; the logit
-lens trails until about L20 (L8: 0.49 against 0.12). From L5, 94-100% of random poles' writes predict
-their own steering effect, against 0-6% for mismatched pairs
-([§3](docs/findings.md#3-a-writes-lens-read-predicts-what-steering-it-does)).
+**3. A write's read predicts what steering it does.** Added at its typical activation to real text, a pole's write moves
+the next-token probabilities the way the R-lens read of that vector says: median r 0.45-0.50 at L4-L8, 0.65-0.75 at
+L12-L16 and 0.9 or more from L22, against ±0.04 for another neuron's read. The R-lens leads the J-lens by 0.03-0.13 from
+L4 to L23, and the logit lens trails until about L20. From L5, 94-100% of random poles' writes predict their own steering
+effect ([§3](docs/findings.md#3-a-writes-lens-read-predicts-what-steering-it-does)).
 
 ![Lens reads against steering](docs/figures/07_steering.png)
 
-### 4. One firing is one sample of what a write does
-
-A pole's write read predicts what steering it does (finding 3), yet it rarely names the token after a firing: before L22,
-1-4% of poles (net of chance) promote the tokens that follow their top firings, against 31-32% at L28-L29. An exact
-linearization of 2,290 poles at their real firings shows why the two differ. A firing's effect is close to linear, but before L21
-it depends on its context: the same pole, firing equally hard, pushes the predictions different ways in different documents, so
-its firings barely predict each other (r 0.05-0.11; from L28: 0.78), and against a single firing the weight-only read gets 60-85% of
-the correlation the pole's own other firings get. The lens and steering agree because both average over contexts. A write read
-is the pole's average push, and a firing is one context's share of it
-([§4](docs/findings.md#4-one-firing-is-one-sample-of-a-write)).
+**4. One firing is one sample of what a write does.** Yet a write read rarely names the token after a firing: before L22,
+1-4% of poles (net of chance) promote what follows their top firings, against 31-32% at L28-L29. An exact linearization
+at 2,290 poles' real firings shows why. Before L21 the same pole, firing equally hard, pushes the predictions different
+ways in different documents, so its firings barely predict each other (r 0.05-0.11; from L28, 0.78). The lens and
+steering agree because both average over contexts: a write read is the pole's average push, and a firing is one context's
+share of it ([§4](docs/findings.md#4-one-firing-is-one-sample-of-a-write)).
 
 ![Amplified against in context](docs/figures/08_amplified_vs_in_context.png)
 
@@ -231,175 +206,144 @@ is the pole's average push, and a firing is one context's share of it
 
 </details>
 
-### 5. Prediction and suppression are two signs of one neuron
-
-Late poles fire on the token before a word their write promotes ("is⟦ once⟧" → *again*; "⟦arist⟧" →
-*-ocracy*). Prediction rises from L20 and peaks at L28-L31, where 7-8% of poles have more than a third
-of their top firings followed by a token they promote (control under 0.1%). Suppression starts at L32
-and overtakes prediction at L35. This is the pattern Gurnee et al. (2024) found in GPT-2; in SwiGLU
-the two kinds sit on one neuron, with the promoting pole firing harder through L32 and
-the suppressing pole from L34 ([§5](docs/findings.md#5-prediction-and-suppression)).
+**5. Prediction and suppression are two signs of one neuron.** Late poles fire on the token before a word their write
+promotes ("is⟦ once⟧" → *again*; "⟦arist⟧" → *-ocracy*). Prediction peaks at L28-L31, where 5-6% of poles have more than a
+third of their top firings followed by a token they promote (control under 0.1%); suppression starts at L32 and overtakes
+it at L34. This is the pattern Gurnee et al. (2024) found in GPT-2; in SwiGLU the two kinds sit on one neuron, the
+promoting pole firing harder through L32 and the suppressing pole from L34
+([§5](docs/findings.md#5-prediction-and-suppression)).
 
 ![Prediction, suppression and the read side by layer](docs/figures/10_side_agreement.png)
 
-### 6. The input side: the S-lens early, the R-lens later, exact sweeps in between
+**6. A neuron writes more than it reads.** If MLPs mainly amplified what attention brings them, a write would point along
+what its neuron reads. Through L14 it does lean that way, almost all on the `up` side (cosine 0.35-0.55 at L6-L14), and the
+lean is gone by L30. But the rest of the write carries 84-100% of its steering effect, and its meaning can differ:
+`L21 n1180 −` reads *women* and writes women, wives and husbands; with what it reads removed, its write reads parenting,
+childbirth and family education (育儿, 生育, 家庭教育)
+([§6](docs/findings.md#6-what-a-write-adds-beyond-what-it-reads)).
 
-Early neurons detect tokens and token families (阔 "wide"; words starting with 出; English given names),
-which no output-facing lens reads: at L2, 95% of a typical write, carried forward by the R-lens, lies
-along one direction. The S-lens recovers these detectors from the weights: at L0, on average 38% of a
-pole's top firings have their token in its S-lens read's top 10 (another pole's read: under 0.1%), and 2-9%
-at L1-L8, where the R-lens read gets under 1.5% (3.5% at L8). Early neurons also write back the
-footprint of the tokens they detect: layers 0-8 in effect act as an extended embedding. From L9
-the R-lens read of the input direction names exact drivers more often. L13-L20 shares the fewest tokens with them, and there
-the strongest single-token swap reaches only about 9% of a typical firing, so the drivers are a weak yardstick in that stretch. Past L0 a token's effect is mostly nonlinear (an exact linearization
-in the token's own context explains 86% of its footprint at L0 and 7% at L15), though that alone
-doesn't explain why S-lens reads fade after L8 ([§6](docs/findings.md#6-the-input-side)).
+**7. The input side: the S-lens early, the R-lens later.** Early neurons detect tokens and token families (阔 "wide";
+words starting with 出; English given names), which no output-facing lens reads: at L2, 95% of a typical write, carried
+forward by the R-lens, lies along one direction. The S-lens recovers these detectors from the weights: at L0 its read names
+the peak token of 36% of a pole's top firings (another pole's read: under 0.1%), and 2-10% at L1-L8, where the R-lens read
+names under 0.5%. Early neurons also write back the footprint of what they detect, so layers 0-8 act as an extended
+embedding. From L9 the R-lens read of the input names exact drivers more often. Where most of L1-L3's firings sit, on
+SiLU's negative lobe, a pole reads its up row alone ([§7](docs/findings.md#7-the-input-side)).
 
 ![Which reads name the exact drivers](docs/figures/11_drivers.png)
 
-### 7. What each read names
-
-Every pole's weight-only reads are scored against what can be counted around it: the S-lens read against the token under each
-firing, the R-lens read against its exact drivers, and the write against the token after a firing. The S-lens names the firing token
-for 85% of poles at L0, the R-lens read names exact drivers for 44-51% at L27-L31, and the write names the next token for about a third
-at L28-L30. These are narrow targets, so a miss doesn't make a read wrong. An R-lens read reads forward (`L30 n7004 +` fires on *play*
-and reads *role*). A firing's token contributes under 0.5% of its activation directly from L7, the rest coming through heads and
-earlier neurons. And the token after a firing is one context's outcome, while the causal test of a write is steering (finding 3)
-([§7](docs/findings.md#7-what-each-read-names)).
+**8. What each read names.** Every pole's reads are scored against what can be counted around it: the S-lens read names
+the firing token for 85% of poles at L0, the R-lens read names exact drivers for 31-41% at L27-L31, and the write names the
+next token for about a third at L28-L30. These are narrow targets, so a miss doesn't make a read wrong: an R-lens read reads
+forward (`L30 n7004 +` fires on *play* and reads *role*), and from L7 a firing's own token supplies under 0.5% of its
+activation directly. Coherence ratings by two raters of different lineages set each model's reading plan, whose edges cut
+the depth bands above ([§8](docs/findings.md#8-what-each-read-names-and-which-read-to-use-where)).
 
 <details><summary>Read signal holds to rank 64</summary>
 
-![Rank depth](docs/figures/13_rank_depth.png)
+![Rank depth](docs/figures/12_rank_depth.png)
 
 </details>
 
-### 8. Describing neurons from the lenses alone
+### III. Units in context
 
-Claude explainers labelled 160 random poles from only their lens reads, only their top contexts, or
-both, never seeing steering. Firing labels are scored by *detection*: can a fresh model, given the
-label, pick the pole's held-out top firings out from quiet text (AUROC; 0.5 is chance). Write labels
-are scored by whether a judge picks the pole's label out of four from text generated while steering
-it. From the lenses alone, firing labels score 0.80 and write labels are picked 65% of the time (95%
-at L28-L35, 34% at L0-L8; chance 25%). Firing labels are scored on firings, which favours top contexts (0.87), yet the lenses
-tie them at L13-L27 and lead for writes (contexts: 54%); both together reach 0.89 and 63%. Claude Opus explains no better than Sonnet, which suggests
-the bottleneck is the evidence. Claude Haiku then labelled all 884,736 poles for $105; on 100 more
-random poles, with a card that keeps only the reads that carry signal at each layer plus top contexts,
-it matches Sonnet (0.82 against 0.83). The labels in the catalog now come from a leaner card, one input and one write
-read a pole chosen for its depth, for Qwen3-0.6B to 14B and Gemma 4: their firing labels pick a pole's held-out firings out from
-another pole's at 0.82-0.88 (another pole's label: 0.44-0.54), as well as the earlier labels on the same poles, at half the
-cost. Asked to predict activations token by token (*simulation*), the same labels correlate at 0.21 on Qwen3-8B (another
-pole's label: 0.00): they name the context a pole fires in more often than the token (on held-out top firings, the predicted
-peak lands within a token of the true one 25% of the time, elsewhere in the excerpt 39%, and a third go unrecognised), and
-rarely its weak firings ([§8](docs/findings.md#8-describing-neurons)).
-
-![Blind test](docs/figures/14_lens_blind.png)
-
-### 9. Attention sinks and the output's temperature
-
-The final RMSNorm divides each position's vector by its overall size, then scales each dimension by a
-learned weight. That weight is about 1e-4 on two dimensions, so writes there move no prediction
-directly; but those dimensions hold 64% of the final residual's squared length, so they set what
-everything is divided by, and with it how sharp every prediction is. Three L6 neurons fire at up to
-10,752 on the first token, writing onto one of those two dimensions and creating the *attention sink*
-that later heads attend to by default; the trigger is layer 0's MLP output at that position. L16
-neurons create a second sink on the year after a date ("May 7, ⟦2⟧013"), which four L34 neurons clear
-before the output. L35 n9510 + fires on hashes and IDs, where the next token is hard to guess, and
+**9. Attention sinks and the output's temperature.** The final RMSNorm's weight is about 1e-4 on two residual dimensions,
+so writes there move no prediction directly; but those dimensions hold 64% of the final residual's squared length, so they
+set what everything is divided by, and with it how sharp every prediction is. Three L6 neurons fire at up to 10,752 on the
+first token, writing onto one of them and creating the *attention sink* that later heads attend to by default; the trigger
+is layer 0's MLP output at that position. L16 neurons make a second sink on the year after a date ("May 7, ⟦2⟧013"), which
+four L34 neurons clear before the output. L35 n9510 + fires on hashes and IDs, where the next token is hard to guess, and
 raises the output's entropy through this scale: an entropy neuron in the sense of Stolfo et al. (2024)
 ([§9](docs/findings.md#9-attention-sinks-the-outputs-temperature-and-entropy-neurons)).
 
-### 10. Outside labels
+**10. What each head copies and attends to, from the weights.** Qwen3-8B has 33 induction heads, 33 duplicate-token
+heads, 4 previous-token heads and 16 sink heads, and removing any one head costs in-context copying at most 0.07 nats.
+A head's keys and values read best through the S-lens (a head reads what a position holds), its output through the S-lens
+early and the R-lens from L9. Feeding each token's footprint through a head's circuits gives token-by-token maps: the OV map
+says what it copies and suppresses (L26h31 copies quantities; L32h9 suppresses the surnames L34h1 copies) and predicts
+where the attended token ranks in the head's actual output (Spearman +0.51; 0.00 under another head); the QK map finds the
+duplicate-token heads (AUROC 0.96). With an R-lens query against S-lens keys (`qk_self_R`) it finds the late heads that
+look up earlier copies of the token their position is about to say, copy suppression in context (17 heads at L21-L35, AUROC
+0.91) ([§10](docs/findings.md#10-attention-heads-circuits-read-token-by-token)).
 
-The [Neuron Persona Library](https://neuronpersonas.com) labels poles by steering each one while the
-model answers "Who are you?". Judged generously and blind on 360 rows, 34% of its personas clearly
-match the pole's write read, 27% its input read and 40% both together (swapped names: 2-5%), most late
-and least mid-network; weighted by the library's depth mix, 27%, 22% and 34%. Labels from steering one
-prompt disagree most often with where the pole fires (the library's "creator god" pole fires on time
-words), and the library misses what can't be a persona: idiom completers, morphology, everyday
-concepts ([§10](docs/findings.md#10-outside-labels)).
+![Which lens on each side of a head](docs/figures/13_head_lens_sides.png)
 
-![Persona labels judged against each side](docs/figures/15_library_judge.png)
+**11. Late heads write the next token.** At their own top firings, 26% of L28-L35's heads write the next token as their
+OV read predicts, and few before; read from their outputs in context, 32-61% of heads from L21 promote the token after their
+strongest firings ([§11](docs/findings.md#11-attention-heads-what-their-reads-name)).
 
-### 11. Attention heads: what each copies and attends to, from the weights
+![What heads' reads name](docs/figures/14_head_census.png)
 
-Qwen3-8B has 33 induction heads (which continue repeated text: after `A B … A`, they attend to `B` and
-predict it), 33 duplicate-token heads (which attend to earlier copies of the current token), 4
-previous-token heads and 16 sink heads, and removing any one head costs in-context copying at most
-0.07 nats: the work is spread over many heads. A head's keys and values read best through the S-lens (a
-head reads what a position holds, not what it is about to say); its output with the S-lens up to L8 and the
-R-lens from L9, as for neurons. Feeding each vocabulary token's S-lens footprint through a head's
-circuits gives two token-by-token maps. The OV map says what it copies and suppresses (L26h31 copies
-quantities: ` weight | 体重 | strength`; L32h9 suppresses the surnames L34h1 copies), and predicts where
-the attended token ranks in the head's actual output at each firing (Spearman +0.51; 0.00 under
-another head). The QK map finds the duplicate-token heads from the weights (AUROC 0.96), and late
-heads attend to the classes they copy or suppress. With an R-lens query against S-lens keys (`qk_self_R`)
-it finds the late heads that attend to earlier copies of the token their position is about to say; with a
-negative OV map, these are copy suppression in context (17 heads at L21-L35, AUROC 0.91; on Gemma 4, 25
-heads at L24-L47, AUROC 0.88) ([§11](docs/findings.md#11-attention-heads-circuits-read-token-by-token),
-[§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
+**12. What feeds a neuron: the wiring is in the weights, the traffic in the context.** A neuron's write reaches every
+later neuron's input unchanged, so the weights give an edge between every pair of poles. Concept poles are wired from their
+concept (an L14 animals pole from L12's dogs-and-pets pole), and an edge ranks every upstream neuron's actual effect at
+Spearman 0.88. But when a pole fires, a few units drive it, and they are units firing with it: its 64 largest sources
+carry nearly all its activation, its 64 weight edges about a tenth. Heads carry a third (half at L13-L20). Into a head, the
+value and keys come mostly from neurons, and the query a third to a half from earlier heads
+([§12](docs/findings.md#12-what-feeds-a-unit-edges-and-sources)).
 
-![Which lens on each side of a head](docs/figures/16_head_lens_sides.png)
+### IV. Describing units in words
 
-### 12. What heads' reads name, and a label for every head
+**13. Labels from the evidence.** Claude explainers labelled 160 random poles from only their lens reads, only their top
+contexts, or both, never seeing steering. Scored by *detection* (can a fresh model, given the label, pick the pole's
+held-out top firings out from quiet text; AUROC, 0.5 chance), lens-only firing labels score 0.80; scored by whether a judge
+picks the pole's write label out of four from text steered by it, lens-only write labels are picked 65% of the time (95% at
+L28-L35; chance 25%). Contexts lead for firing (0.87) and the lenses for writes (contexts: 54%), and Claude Opus explains
+no better than Sonnet: the bottleneck is the evidence. The catalog's labels come from Claude Haiku on a lean card, the one
+input and one write read the reading plan names for the pole's depth plus its top contexts, for six models at $303 in
+all; blind, they pick a pole's held-out firings out from another pole's at AUROC 0.82-0.88 (another pole's label:
+0.44-0.54). Asked to predict activations token by token, they correlate at 0.21 on Qwen3-8B (another pole's label: 0.00):
+they name the context a pole fires in more often than the token ([§13](docs/findings.md#13-labels-from-the-evidence)).
 
-At their own top firings, 26% of L28-L35's heads write the next token as their OV read predicts, and
-few heads before. Claude Haiku
-labels every head (where it fires, what it attends to, what it writes); checked blind, the firing labels
-tell a head's held-out firings from another head's at AUROC 0.70 (control 0.50), and the write labels
-are picked out of four 54% of the time (79% at L28-L35; chance 25%)
-([§12](docs/findings.md#12-attention-heads-tests-and-labels)).
+![Blind test](docs/figures/15_lens_blind.png)
 
-![What heads' reads name](docs/figures/17_head_census.png)
+**14. Outside labels.** The [Neuron Persona Library](https://neuronpersonas.com) labels poles by steering each one while
+the model answers "Who are you?". Judged generously and blind, 27% of its personas clearly match the pole's write read,
+22% its input read and 34% both together (swapped names: 3-6%), most late and least mid-network. Labels from steering one
+prompt disagree most often with where the pole fires (the library's "creator god" pole fires on time words), and the
+library misses what can't be a persona: idiom completers, morphology, everyday concepts
+([§14](docs/findings.md#14-outside-labels)).
 
-### 13. A second model reads the same way
+![Persona labels judged against each side](docs/figures/16_library_judge.png)
 
-Gemma 4 12B comes from another lab, with another activation, norm layout and attention scheme. Its
-catalog shows the same picture. The R-lens read of a write predicts steering from L11 on (median r
-0.53 at L12-L23, 0.82 at L24-L35, 0.97 at L36-L47), ahead of the logit lens; before L11, pushes at a
-neuron's natural size move the output too little for either lens to predict, though larger pushes
-still raise the tokens the R-lens names. The S-lens read of a neuron's input names its firing token through L13, about the same
-relative depth as Qwen3-8B's L8, and the write promotes the next token from L33. Its R-lens read of a neuron's input direction
-names the exact drivers for 29% of poles, once the read row, a covector, is made a vector by the residual's own scale:
-Gemma 4's residual coordinates differ in scale by up to 1,600×, and read as a vector in the raw basis, as released, it named
-them for 2% ([Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) spotted the junk reads). Claude Haiku labelled every pole and head;
-checked blind, the heads' firing labels hold as Qwen3-8B's do (AUROC 0.71), their write labels are near
-chance, and of the neuron labels only the relabelled poles are checked (AUROC 0.72)
-([§13](docs/findings.md#13-gemma-4-12b-the-text-catalog-in-a-second-model)).
+### V. A second model, three modalities
 
-![Both models by relative depth](docs/figures/18_two_models.png)
+**15. A second model reads the same way.** Gemma 4 12B comes from another lab, with another activation, norm layout and
+attention scheme. The R-lens read of a write predicts steering from L11 on (median r 0.53 at L12-L23, 0.82 at L24-L35,
+0.97 at L36-L47), the S-lens names the firing token through L13, about the same relative depth as Qwen3-8B's L8, and the
+write promotes the next token from L33. Its R-lens input reads name the exact drivers for 29% of poles once the read row, a
+covector, is made a vector by the residual's own scale: Gemma 4's residual coordinates differ in scale by up to 1,600×, and
+read as a Euclidean vector the rows name them for 2%
+([§15](docs/findings.md#15-gemma-4-12b-the-text-catalog-in-a-second-model)).
+
+![Both models by relative depth](docs/figures/17_two_models.png)
 
 <details><summary>Gemma 4's steering and reads by layer</summary>
 
-![Gemma 4: lens reads against steering](docs/figures/19_gemma_steering.png)
+![Gemma 4: lens reads against steering](docs/figures/18_gemma_steering.png)
 
-![Gemma 4: what each read names](docs/figures/20_gemma_census.png)
+![Gemma 4: what each read names](docs/figures/19_gemma_census.png)
 
 </details>
 
-### 14. Images and sound: what drives a neuron
+**16. Images and sound: what drives a neuron.** Gemma 4 has no separate encoder: each 48 × 48-pixel patch or 40 ms of
+audio enters the residual stream through a few norms and one linear map, so the lenses can be fitted on images and sounds
+and a read direction carried back to pixels or samples. Over 49,694 labelled images and 49,703 labelled sounds, a quarter to
+a half of each band's poles have a label that holds on held-out documents (AUROC 0.96-0.97 for images, 0.77-0.91 for
+sound): gratings, checkerboards and writing systems early, objects, scenes and languages later. The lens's patch read
+shows what a neuron's input direction looks like, but raises the neuron only in the first six layers; optimised by
+gradient ascent from the read, a single patch or 40 ms frame drives its neuron through L23
+([§16](docs/findings.md#16-images-and-sound-what-drives-a-neuron)).
 
-Gemma 4 has no separate encoder for images or sound: each 48 × 48-pixel patch or 40 ms of audio
-enters the residual stream through a few norms and one linear map. So the lenses can be fitted on
-images and sounds, and a neuron's read direction can be carried back to pixels or samples. Over
-49,694 labelled images and 49,703 labelled sounds, a quarter to a half of each band's poles have a
-label that holds on held-out documents (AUROC 0.96-0.97 for images, 0.77-0.91 for sound): gratings,
-checkerboards and writing systems early, objects, scenes and languages later. The lens's patch read
-shows what a neuron's input direction looks like, but added to held-out images it raises the neuron
-only in the first six layers. Started from the read and optimised by gradient ascent through the
-model, a single patch or 40 ms frame drives its neuron through L23
-([§14](docs/findings.md#14-images-and-sound-what-drives-a-neuron)).
+![What the image and sound reads are good for](docs/figures/20_media_reads.png)
 
-![What the image and sound reads are good for](docs/figures/21_media_reads.png)
+![The patch each neuron reads, and the patch that drives it](docs/figures/21_media_gallery.png)
 
-![The patch each neuron reads, and the patch that drives it](docs/figures/22_media_gallery.png)
-
-### 15. One concept in text, images and sound
-
-Many of Gemma 4's neurons mean the same thing whatever the input. At L12-L23, 42% of the poles with a
-reliable image label also fire on the label's name in text (5% by chance). 4,382 poles pass every
-text test for their image label (its name fires them, the text S-lens reads it, the text R-lens writes
-it), and 730 for their audio label. 19 pass all of them for both, where independent lists would share
-2.0: places and peoples, with their language
-([§15](docs/findings.md#15-one-concept-in-text-images-and-sound)).
+**17. One concept in text, images and sound.** At L12-L23, 42% of the poles with a reliable image label also fire on the
+label's name in text (5% by chance). 4,382 poles pass every text test for their image label (its name fires them, the text
+S-lens reads it, the text R-lens writes it), and 730 for their audio label. 19 pass all of them for both, where
+independent lists would share 2.0: places and peoples, with their language
+([§17](docs/findings.md#17-one-concept-in-text-images-and-sound)).
 
 | pole | image label | audio label | exact text drivers | R-lens read of its write |
 |---|---|---|---|---|
@@ -408,104 +352,59 @@ it), and 730 for their audio label. 19 pass all of them for both, where independ
 | `L33 n6099 +` | pagoda | Mandarin Chinese | WeChat, Xiaomi, Weibo, Shanghai | Chinese, China, Beijing, 中国 |
 | `L37 n7165 +` | giant panda | Mandarin Chinese | 熊猫 (panda), 四川 (Sichuan), 成都 (Chengdu) | panda, 熊猫, Chengdu |
 
-![One concept in text, images and sound](docs/figures/23_crossmodal.png)
+![One concept in text, images and sound](docs/figures/22_crossmodal.png)
 
-### 16. Heads carry what an image shows into the text
+**18. Heads carry what an image shows into the text.** With an image in the prompt followed by ` a`, Gemma 4 gives the
+image's own label a lower loss than another class's 97% of the time. Early heads attend within the image, from a patch to
+its neighbours; the text reads the image most at L23-L31. Zeroing single heads (L28h6, L29h1, L29h9, L25h2) costs the
+right label more than a wrong one, and from L35 heads write the right class. With a sound, the model prefers the right
+label only 55% of the time, and no head carries it
+([§18](docs/findings.md#18-attention-heads-in-image-and-audio-contexts)).
 
-With an image in the prompt followed by ` a`, Gemma 4 gives the image's own label a lower loss than
-another class's 97% of the time. Early heads attend within the image, from a patch to its neighbours;
-the text reads the image most at L23-L31. Zeroing single heads (L28h6, L29h1, L29h9, L25h2) costs the
-right label more than a wrong one, and from L35 heads write the right class. With a sound, the model
-prefers the right label only 55% of the time, and no head carries it
-([§16](docs/findings.md#16-attention-heads-in-image-and-audio-contexts)).
+![Heads in image and audio contexts](docs/figures/23_heads_media.png)
 
-![Heads in image and audio contexts](docs/figures/24_heads_media.png)
+### VI. Across Qwen3's sizes
 
-### 17. What feeds a neuron: the wiring is in the weights, the traffic is in the context
+**19. Late reads hold with size, and early ones fall.** Nine more Qwen3 models, 0.6B to 14B, post-trained and base, each
+with its own lenses and the same documents, show which reads depend on size. Late ones don't: at every size a late
+write's R-lens read predicts steering at r 0.98-0.99 and promotes what follows the firings for a quarter of poles. Early
+ones do: the S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers
+on, and early writes predict steering less at every step in size (first-quarter r 0.62 at 0.6B, 0.31 at 14B). The bases
+read like their siblings once each pole is held to its own null. Post-training moves every matrix by 5-13% and keeps each
+neuron's directions; its clearest added directions read as questions, hedges and contrast (and `Wait` in the 4B), likely
+the style of the models' reasoning ([§19](docs/findings.md#19-the-qwen3-family-what-changes-with-size)).
 
-What a neuron writes reaches every later neuron's input unchanged, so the weights give an edge between
-every pair of poles: how far one pole's firing pushes a later one. Concept poles are wired from their
-concept (an L14 animals pole from L12's dogs-and-pets pole), and an edge ranks every upstream neuron's
-actual effect at Spearman 0.88. But when a pole fires, a few units drive it, and they are units firing
-with it: its 64 largest sources carry nearly all its activation, its 64 weight edges about a tenth.
-Heads carry a third (half at L13-L20). Into a head, the value and keys come mostly from neurons, and the query a third to a half from
-earlier heads ([§17](docs/findings.md#17-direct-edges-between-neurons)).
+**20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B.** In the 4B and the 0.6B a neuron's index tracks its
+activation (Spearman ρ to −0.76), where every other model's indices are exchangeable (±0.03). Each pair shares its
+attention heads one for one, a linear map fitted on those heads takes the parent's residual to the model's, and through it
+99-100% of the 4B's neurons from L1 to L34 match a parent neuron that keeps their scale and promotes the same tokens. The
+neurons cut were the parent's least active. This is what width pruning by activation leaves, as in Minitron, so finding
+19's five sizes are three lineages. Each neuron's parent is identified for 93% of the 4B's neurons and 85% of the 0.6B's;
+the catalog's `lineage` table holds them
+([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
 
-### 18. What a neuron writes beyond what it reads
+### VII. What the lenses miss
 
-If MLPs mainly amplified what attention brings them, a neuron's write would point along what it reads. [Matthew Khoriaty](https://www.lesswrong.com/users/matthew-khoriaty) questioned
-that, and suggested reading the part of an output orthogonal to its input. Through L14 a write does lean on what it reads, almost all
-of it on the `up` side (cosine 0.35-0.55 at L6-L14, against 0.05-0.20 for the gate), and the lean is gone by L30. But the
-rest of the write carries 84-100% of its steering effect, and what it means can differ: `L21 n1180 −` reads *women* and writes women, wives
-and husbands; with what it reads removed, its write reads parenting, childbirth and family education (育儿, 生育, 家庭教育). Rated blind, the rest of a
-write through L20 is as often unrelated to the pole's read as the same concept, and from L22 usually a related one
-([§18](docs/findings.md#18-what-a-write-adds-beyond-what-it-reads)).
-
-### 19. Across Qwen3's sizes, late reads hold and early ones fall
-
-Nine more Qwen3 models, 0.6B to 14B, post-trained and base, each with its own lenses and the same documents, show which
-reads depend on size. Late ones don't: at every size a late write's R-lens read predicts steering at r 0.98-0.99 and promotes
-what follows the firings for a quarter of poles, and the R-lens names the inputs of a fifth to a third. Early ones do. The
-S-lens names the firing token for 16-25% of mid-network poles in the 28-layer models but 2-8% from 36 layers on (a step
-between lineages too: finding 20), and early writes predict steering less at every step in size (first-quarter r 0.62 at
-0.6B, 0.31 at 14B). Heads' reads fall a little with size too. The bases read like their siblings. Their R-lens input reads seem to trail at every size, but only against a
-null pooled over each layer: through a base's lens about 1% of poles read as frequent function words and match every pole's
-drivers, which raises the bar for all; held to its own null, a pole passes as often in the base (Qwen3-8B and 4B). Post-training
-moves every matrix by 5-13% and keeps each neuron's directions (cosines above 0.99); its clearest added directions read as
-questions, hedges and contrast (and `Wait` in the 4B), likely the style of the models' reasoning
-([§19](docs/findings.md#19-the-qwen3-family-what-changes-with-size)).
-
-### 20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B
-
-In the 4B and the 0.6B a neuron's index tracks its activation (Spearman ρ to −0.76), where every other model's indices
-are exchangeable (±0.03). The 4B's near-silent neurons fill the end of its L1 and L3. Each pair shares its attention heads
-one for one (their weight norms correlate at 0.93-0.98 by layer). A linear map fitted on those heads takes the parent's
-residual to the model's, and through it 99-100% of the 4B's neurons from L1 to L34 match a parent neuron: matched pairs
-keep their activation scale (ρ 0.85-0.95) and promote the same tokens. The order follows the parent neuron's activation,
-and the neurons cut were the parent's least active: at L1-L3, its near-silent ones. This is what width pruning by
-activation leaves, as in Minitron. So finding 19's five sizes are three lineages, and its step from 28 to 36 layers is also a step
-between them. In these two models a range of neuron indices is a slice by activation rank, not a random sample. Each
-neuron's parent can be named. It is identified when the weight match is also what an independent signal picks: the
-correlation of the two neurons' activations over the same text, or the tokens their writes promote. That covers 93% of
-the 4B's neurons (96.5% of those that fire) and 85% of the 0.6B's, with chance agreement under 0.2% a layer. The 4B's
-near-silent neurons match only as a class. The catalog's `lineage` table holds each neuron's parent, or child, and
-neuron-lens.com links the two ([§20](docs/findings.md#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b)).
-
-### 21. The dark sector: what the lens barely reads
-
-At each layer of Qwen3-8B a few directions carry 90% of what the R-lens reads from the layer's neurons: 60-200 of 4,096
-at L0-L3, about 1,900 at L21. The rest, the dark sector, holds 87-95% of the residual early and 71-81% at L4-L15.
-Removing one layer's dark sector from its MLP output moves the model's predictions 300-5,700 times more than the lens
-predicts, and early and in the middle it costs more than removing the bright sector. Removed over a band of layers, it
-breaks something different at each depth. Early, word forms, the kind of document, and the sentences only syntax decides
-("rome", "The mitochondria is not the powerhouse of the cell", object relatives at chance). In the middle, facts and the use
-of context ("the capital of the south is the city of Marseille", comprehension lost on every kind of sentence). Late, the
-pieces that finish a word ("I am Q, a large language model"), with comprehension kept; removing the late bright sector
-instead leaves "the, the, the". Swapping a sector between two prompts shows where their difference lives: which country,
-the answer's language, the next word piece, and even whether the reply is a story or small talk move with the bright
-sector from L4-L12, and the dark part of the difference, most of its energy, changes nothing. In between, the country
-needs the R-lens's top directions and more of the difference besides, and thinking mode at L12 sits in a few directions
-neither lens weights. Ranked by gain without a cut (its loudest direction, the residual's massive-activation offset,
-left out), the R-lens puts what prompts differ in well above chance at every layer: the early dark sector is the lens's
-middle ranks. The readouts span the residual unevenly: early, the R-lens barely reads about half of it and the S-lens
-reads that half, though about 3,000 directions are quieter than a random one to both. That doubly dark sector carries a
-half to two thirds of what removing the dark sector costs and alone gives the middle's wrong facts; the S-lens's bright
-part alone costs almost nothing, and the word forms, the comprehension failures and the missing pieces of words appear
-only with both removed. As sparse frames (Gurnee et al.'s J-space), the S-lens's token
-footprints code the residual's top components through L9 and the R-lens's from L10, naming 北京 at the last position of
-"中国的首都是"; but the R-lens's sparse space holds only a few percent of the variance beyond random and grows into the last
-layers. So the dark sector likely holds what prompts share rather than what they differ in
-([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
+**21. The dark sector.** At each layer of Qwen3-8B a few directions carry 90% of what the R-lens reads from the layer's
+neurons, 60-200 of 4,096 at L0-L3; the rest, the dark sector, holds 87-95% of the residual early and 71-81% at L4-L15.
+Removing one layer's dark sector moves the predictions 300-5,700 times more than the lens predicts, and over a band of
+layers it breaks something different at each depth: early, word forms, the kind of document and the sentences only syntax
+decides; in the middle, facts and the use of context; late, the pieces that finish a word ("I am Q, a large language
+model"). Yet what two prompts differ in (which country, the answer's language, the next word piece, story or small talk)
+moves with the bright sector from L4-L12, and the dark part of the difference changes nothing: the dark sector likely holds
+what prompts share. About 3,000 directions are quieter than chance to both lenses; this doubly dark sector carries a half
+to two thirds of the dark sector's cost, and the named failures appear only with it and the S-lens's bright part removed
+together ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits
 
-- Two models read in depth, and nine more Qwen3 models (the four post-trained ones labelled, the bases not); one lens corpus for text (English-heavy web text), and COCO photos and ESC-50 sounds for
-  Gemma 4's media lenses; lenses averaged over 128-token documents.
-- Activations are bf16 passes over documents of up to 256 tokens; the exact drivers match an fp32 rerun
-  through L9 on Qwen3-8B, and later layers are unchecked.
-- The tests of each read are token-level; labels are written, scored and judged by Claude models, and
-  of Gemma 4's neuron labels only the relabelled poles are checked. Media labels name what a whole image or sound is about.
-- Findings 3 and 4 stand as first measured, with 24 top firings a pole; the catalog now holds 64.
+- Two models read in depth, and nine more Qwen3 models (the four post-trained ones labelled); one lens corpus for text
+  (English-heavy web text), COCO photos and ESC-50 sounds for Gemma 4's media lenses; lenses averaged over 128-token
+  documents.
+- Activations are bf16 passes over documents of up to 256 tokens; the exact drivers match an fp32 rerun through L9 on
+  Qwen3-8B, and later layers are unchecked.
+- The tests of each read are token-level; labels are written, scored and judged by Claude models. Media labels name what
+  a whole image or sound is about.
 - Steering adds a write at every position of neutral text, up to many times its natural size: it measures a direction's
   average effect.
 
@@ -560,13 +459,13 @@ heads = pd.read_parquet(f"{base}/heads/reads.parquet").merge(pd.read_parquet(f"{
 heads.query("layer == 20 and head == 17")[["ov_R_str", "qk_S_str", "duplicate", "contexts"]]
 ```
 
-Browse a local copy with `python -m neuron_lens.catalog show 8 344 +`, `head 20 17` or
-`search 'Bible|圣经'`. Both lenses also load in [Drowse](https://github.com/stdlogits/drowse) (6.0 or
-later): `drowse lens fetch Qwen/Qwen3-8B rs-r` for the R-lens and `rs-s` for the S-lens.
+Browse a local copy with `python -m neuron_lens.catalog show 8 344 +`, `head 20 17` or `search 'Bible|圣经'`. Both lenses
+also load in [Drowse](https://github.com/stdlogits/drowse) (6.0 or later): `drowse lens fetch Qwen/Qwen3-8B rs-r` for the
+R-lens and `rs-s` for the S-lens.
 
-For Gemma 4 12B, with this package installed (`neuron_lens.weights.tensors` reads only the named
-weights from the checkpoint, so no model is loaded), read a neuron's write, then see its image read,
-the images that drive it and an optimised patch:
+For Gemma 4 12B, with this package installed (`neuron_lens.weights.tensors` reads only the named weights from the
+checkpoint, so no model is loaded), read a neuron's write, then see its image read, the images that drive it and an
+optimised patch:
 
 ```python
 import io
@@ -608,46 +507,42 @@ uv pip install -e ".[plots]"     # add the drowse extra (Drowse >= 6.0) to expor
 python -m pytest -q              # estimator tests: brute-force Jacobians
 ```
 
-The pipeline, in run order. `NEURON_LENS_MODEL` picks the model (Qwen3-8B by default;
-`google/gemma-4-12B` for Gemma 4). Runtime artifacts go to `data/` (ignored), compact results to
-`data/summary/` and figures to `docs/figures/`. Costs are Qwen3-8B's unless marked; Gemma 4's lens fits
-take about 1.5× as long.
+The pipeline, in run order. `NEURON_LENS_MODEL` picks the model (Qwen3-8B by default; `google/gemma-4-12B` for Gemma 4).
+Runtime artifacts go to `data/` (ignored), compact results to `data/summary/` and figures to `docs/figures/`. Costs are
+Qwen3-8B's unless marked; Gemma 4's lens fits take about 1.5× as long.
 
 | script | what | cost |
 |---|---|---|
 | `01_lens_corpus.py` | the lens corpus: the first 1,000 rows of DCLM-shuffled at a pinned revision | minutes |
-| `02_fit.py` | fit the R-lens or S-lens (`--lens R\|S`, and for Gemma 4 `--modality image\|audio`); resumable, shardable across GPUs, detachable | ~3 h per text lens on one H100; 45-90 min per media lens |
+| `02_fit.py` | fit the R-lens, S-lens or scale (`--lens R\|S\|scale`, and for Gemma 4 `--modality image\|audio`); resumable, shardable across GPUs, detachable | ~3 h per text lens on one H100; 45-90 min per media lens |
 | `03_token_counts.py` | token counts over the activation corpora, which set the kept tokens | minutes |
 | `04_export_rlens.py` | export an R-lens fit to a Drowse home | minutes |
 | `05_act_corpus.py` | the activation corpora: web (held out from the lens), Chinese, Python, chat | minutes |
 | `06_activations.py` | one pass for every neuron and head: statistics, top firings, attention patterns, position 0 | ~70 min on an RTX 4090 |
 | `07_drivers.py` | every kept token swept through 8 real documents: neuron and head drivers | 12 min (Qwen3-8B), 24 min (Gemma 4) on an H100 |
 | `08_reads.py` | weight-only reads of every pole and head through both lenses | 5-7 min on an H100, ~10 min per side on a Mac |
-| `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$105 for the neurons, under $1 for the heads (Batch API) |
+| `10_labels.py` | a label for every pole and head by Claude Haiku 5.5, and the heads' blind check | ~$53 for Qwen3-8B, ~$90 for Gemma 4 (Batch API) |
 | `16_edges.py` | every pole's strongest direct weight edges | minutes |
-| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives the pole and what fires with it (`sources`); what drives each head through its value, query and key (`heads/sources`) | ~2 h for Gemma 4 on an H100 |
+| `17_firings.py` | one pass over every pole's top firings: the residual, the MLP output and the model's prediction there (`firings`), and what drives each pole and head (`sources`, `heads/sources`) | ~2 h for Gemma 4 on an H100 |
 | `13_media_activations.py` | Gemma 4: every pole's activation over the labelled images and sounds; its exemplars | 25-40 min per modality on an H100, and 220 GB of RAM for the images |
 | `14_media_tables.py` | Gemma 4: the per-layer image and audio tables | ~15 min on an H100 |
 | `15_media_optimised.py` | Gemma 4: the optimised patches and sounds | ~25 min per modality on an H100 |
 | `11_figures.py` | every figure in `docs/figures/` | seconds |
 | `12_release.py` | release the lenses and the catalog on the Hub | |
 
-An Apple-silicon Mac runs everything but the lens fits and the GPU passes, which want a CUDA card (24
-GB is enough for the text passes); `scripts/catalog_box.sh` sets up a GPU machine and runs them in order. `scripts/checks/` holds the analyses behind the findings, each
-named in its findings section (steering and per-context linearization, prediction and suppression, read
-depth, driver precision, the description pilot and the blind tests, sinks and entropy neurons, outside
-labels, heads' ablation, copying, census and lens sides; for Gemma 4, the media lens tests, the
-cross-modal ranks `14_media_tables.py` reads, and the heads in media contexts). The package
-`neuron_lens/` holds the estimator (`transport.py`, the layer maps of every model in `layers.py`, and
-`rules.py` as their test reference), the models' geometry (`arch.py`, `neurons.py`), the readouts
-(`readout.py`, `heads.py`), the firing and source passes (`firings.py`, `sources.py`), lens loading (`lenses.py`), images and sound (`media.py`, `media_sets.py`)
-and the catalog (`catalog.py`).
+An Apple-silicon Mac runs everything but the lens fits and the GPU passes, which want a CUDA card (24 GB is enough for the
+text passes); `scripts/catalog_box.sh` sets up a GPU machine and runs them in order. `scripts/checks/` holds the analyses
+behind the findings, each named in its findings section, and `neuron_lens/` the package: the estimator (`transport.py`,
+every model's layer maps in `layers.py`, `rules.py` as their test reference), each model's geometry and reading plan
+(`arch.py`, `neurons.py`, `metric.py`), the readouts (`readout.py`, `heads.py`), the firing and source passes
+(`firings.py`, `sources.py`), lens loading (`lenses.py`), images and sound (`media.py`, `media_sets.py`) and the catalog
+(`catalog.py`). [AGENTS.md](AGENTS.md) has the working notes.
 
 <details><summary>Gemma 4 12B, in order</summary>
 
 ```bash
 export NEURON_LENS_MODEL=google/gemma-4-12B
-python scripts/02_fit.py --model $NEURON_LENS_MODEL --lens R --docs 1000             # and --lens S
+python scripts/02_fit.py --model $NEURON_LENS_MODEL --lens R --docs 1000             # and --lens S, --lens scale
 python scripts/02_fit.py --model $NEURON_LENS_MODEL --lens S --modality image --docs 1000
 python scripts/02_fit.py --model $NEURON_LENS_MODEL --lens S --modality audio --docs 2000
 python scripts/02_fit.py --model $NEURON_LENS_MODEL --lens R --modality image --docs 512 --dim-batch 512
@@ -675,21 +570,19 @@ python scripts/11_figures.py && python scripts/12_release.py
 ## Related work
 
 - Bills et al., [Language models can explain neurons in language
-  models](https://openaipublic.blob.core.windows.net/neuron-explainer/paper/index.html) (2023): every
-  GPT-2 XL neuron, from activations.
-- Choi et al., [Scaling automatic neuron description](https://transluce.org/neuron-descriptions)
-  (Transluce, 2024): every Llama-3.1-8B-Instruct neuron, both polarities.
+  models](https://openaipublic.blob.core.windows.net/neuron-explainer/paper/index.html) (2023): every GPT-2 XL neuron,
+  from activations.
+- Choi et al., [Scaling automatic neuron description](https://transluce.org/neuron-descriptions) (Transluce, 2024): every
+  Llama-3.1-8B-Instruct neuron, both polarities.
 - Gur-Arieh et al., [Enhancing automated interpretability with output-centric feature
-  descriptions](https://arxiv.org/abs/2501.08319) (2025): descriptions from what a feature writes,
-  combined with what makes it fire.
-- Gurnee et al., [Universal neurons in GPT2 language models](https://arxiv.org/abs/2401.12181) (2024):
-  prediction and suppression neurons; Stolfo et al.,
-  [Confidence regulation neurons in language models](https://arxiv.org/abs/2406.16254) (2024): entropy
-  neurons.
+  descriptions](https://arxiv.org/abs/2501.08319) (2025): descriptions from what a feature writes, combined with what makes
+  it fire.
+- Gurnee et al., [Universal neurons in GPT2 language models](https://arxiv.org/abs/2401.12181) (2024): prediction and
+  suppression neurons; Stolfo et al., [Confidence regulation neurons in language models](https://arxiv.org/abs/2406.16254)
+  (2024): entropy neurons.
 - The lens sources above; [docs/design.md](docs/design.md#related-work) has the full list.
 
 ## License
 
-The code and docs in this repository are [MIT](LICENSE). The lenses and the catalog on the Hugging Face
-Hub are [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); both models are Apache 2.0. Made by
-[@_a9lim](https://x.com/_a9lim) and [@treetowntree](https://x.com/treetowntree) with Claude (Anthropic).
+The code and docs in this repository are [MIT](LICENSE). The lenses and the catalog on the Hugging Face Hub are
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the models are Apache 2.0.

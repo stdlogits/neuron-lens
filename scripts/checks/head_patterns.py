@@ -1,4 +1,4 @@
-"""In-context copying, and which attention heads it rests on (findings §11).
+"""In-context copying, and which attention heads it rests on (findings §10).
 
 The heads' attention patterns (``sink``, ``prev``, ``self``, ``induction``, ``duplicate``) are
 ``06_activations.py``'s, in ``heads/acts``. This check measures what the pipeline does not: how well

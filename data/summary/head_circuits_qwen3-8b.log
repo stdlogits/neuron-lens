@@ -73,7 +73,7 @@ most specific suppressors (largest 8th-lowest −z), by band, and what each writ
   L30h10 19.1 (copy_S_R -0.66, median -0.17):  region |  period | 周期 |  periods |  situation |  moment |  place | 领域
       reads ' region' → writes 步骤 | _loop |  steps |  loops | Loop |  loop | -loop | 循环 ; suppresses  region | region | 地区 |  regions | Region |  Region | .region | _region
 
-column reads quoted in findings §21:
+column reads quoted in findings §10:
   L26h31 reads ' population' → writes 人口 |  population |  statistics | 统计 |  demographics |  demographic |  stats |  statistic ; suppresses  blush | icolor | 颜色 | 色彩 | 色泽 | setColor |  wavelengths | 光泽
   L20h17 reads ' herself' → writes  herself | 她 | 她的 | 她们 | 她在 |  she | 她说 | 因为她 ; suppresses 父子 |  himself | 他自己 |  his | his | 他的 | 和他的 | 了他的
   L20h17 reads ' himself' → writes  himself |  his | 他的 | his | 了他的 | 他自己 | 和他的 | 他对 ; suppresses 她们 | 她的 | 她 | 她在 |  herself | 她说 | 她是 | 娘家

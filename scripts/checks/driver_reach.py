@@ -1,4 +1,4 @@
-"""How close a pole's strongest single-token swap comes to its firings (findings §6, §7). No model.
+"""How close a pole's strongest single-token swap comes to its firings (findings §7, §8). No model.
 
 Per pole that isn't near-silent (``act_top`` under 0.05), ``|drivers_val[0]| / act_top``: the activation of its top exact driver (``07_drivers.py``: one token at one
 position, averaged over 8 documents) as a share of its typical top firing. Medians over each band's poles. Writes
@@ -17,7 +17,7 @@ from neuron_lens.paths import SUMMARY
 
 STEM = arch.stem(MODEL)
 L = arch.text_config(MODEL).num_hidden_layers
-SILENT = 0.05  # act_top under this: near-silent (findings §7)
+SILENT = 0.05  # act_top under this: near-silent (findings §8)
 
 
 def main() -> None:

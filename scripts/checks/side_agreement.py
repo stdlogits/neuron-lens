@@ -1,4 +1,4 @@
-"""Do a pole's weight-only reads match where it fires? Every pole of the catalog, no model (findings §5, §6).
+"""Do a pole's weight-only reads match where it fires? Every pole of the catalog, no model (findings §5, §7).
 
 Each pole's top firings are the catalog's (``acts``: the strongest position in each of its top
 documents, ``06_activations.py``), those with a positive value; at each, the peak token and the token
@@ -49,7 +49,7 @@ from neuron_lens.paths import SUMMARY
 
 STEM = arch.stem(MODEL)
 PAST = 1 / 3
-K = 10  # each list's top 10, as findings §5-§6 define the shares
+K = 10  # each list's top 10, as findings §5 and §7 define the shares
 DRIVERS = 20  # the top 20 exact drivers
 GURNEE_TOP = 0.1  # the top 10% of kurtosis
 READS = ("read_R", "read_S", "read_S_z")

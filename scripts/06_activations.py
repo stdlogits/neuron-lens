@@ -15,14 +15,14 @@ One forward pass per batch of documents, eager attention in bf16, over every doc
   grid, and its top ``TOP`` documents, each with the position it attends to most past the sink
   and the output vector. Also each head's mean attention from those queries to position 0
   (``sink``), the position before (``prev``) and itself (``self``);
-- **QK statistics** for ``08_reads.py`` (findings §11): per head, the mean query after ``q_norm``;
+- **QK statistics** for ``08_reads.py`` (findings §10): per head, the mean query after ``q_norm``;
   the sums giving the true derivative of the input norm's scaling and ``q_norm`` or ``k_norm``
   (Gemma 4: and the weightless ``v_norm``, for the OV reads; GPT-NeoX, without q/k norms: the input norm's own,
   ``in_r`` and ``in_m``) averaged over positions; attention by offset; and the attention each key token receives (from
   queries at 16+, renormalized without the sink, times the number of keys: 1 is uniform). Rows are
   renormalized by their non-sink weights' sum: ``1 − a₀`` rounds to 0 in bf16 where the sink takes
   nearly everything. The released Qwen3-8B and Gemma 4 passes predate this and inflate sink heads' rows,
-  which understates late heads' ``qk_ctx_rho`` slightly (Qwen3-8B: by up to 0.03 in a band; findings §11).
+  which understates late heads' ``qk_ctx_rho`` slightly (Qwen3-8B: by up to 0.03 in a band; findings §10).
 
 Then two small passes: every kept token alone, the first position, where a causal model's
 activations depend on the token alone (``first_max``, ``first_tokens``, ``first_chat`` on the chat
@@ -42,7 +42,7 @@ and ``heads/acts.parquet``, and ``docs.parquet`` (each document's slice and line
 corpus file); a rerun rebuilds them. The heads' ``out_R_z`` reads their firings' outputs through
 the R-lens from the MLP input. ``cur_mode`` and ``next_mode``: the share of a pole's top firings on its
 most common peak token, or before its most common next token; for a head, ``cur_mode`` and ``src_mode``,
-on its most common query token, or attending most to its most common token (findings §7, §12).
+on its most common query token, or attending most to its most common token (findings §8, §11).
 
     python scripts/06_activations.py [--detach] [--docs N]
 """

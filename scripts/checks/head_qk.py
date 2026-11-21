@@ -1,4 +1,4 @@
-"""Which input lens reads what a head attends to (findings §11): ``08_reads.py``'s weight-only QK read
+"""Which input lens reads what a head attends to (findings §10): ``08_reads.py``'s weight-only QK read
 against the attention key tokens receive in context, with the S-lens footprint as the key's input
 beside raw embeddings and the R-lens.
 
@@ -36,7 +36,7 @@ rare and measured on few occurrences, and own and control means are lower than o
 (S at L13-L20: +0.01 against +0.10 on the same full-corpus attention). Compare inputs and targets
 within one document set.
 
-Also the query reads findings §11 quotes: the keys a query token favours, ``Q_vᵀ R̄ K_u`` over
+Also the query reads findings §10 quotes: the keys a query token favours, ``Q_vᵀ R̄ K_u`` over
 ``u`` (``Q_v = A_q W_Q γ₁ X_v / ‖X_v‖``, S input). Needs the activations file (the QK statistics
 and documents); the pass is cached in ``data/heads/<model>-qk-context.pt``. Qwen3-8B only. Summary
 in ``data/summary/head_qk_<model>.{log,json}``.
@@ -65,7 +65,7 @@ BATCH = 16
 MIN_OCC = 10  # key occurrences for a token's in-context attention, as 08_reads.py
 TARGETS = ("key", "far", "next")
 TOP = 8
-EXAMPLES = ((1, 28, " Paris"), (20, 17, " she"), (20, 17, " he"))  # (layer, head, query token), findings §11
+EXAMPLES = ((1, 28, " Paris"), (20, 17, " she"), (20, 17, " he"))  # (layer, head, query token), findings §10
 
 
 def collect(seqs: list[torch.Tensor], dev) -> dict:

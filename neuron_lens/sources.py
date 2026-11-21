@@ -1,4 +1,4 @@
-"""What drives a neuron pole when it fires: an exact split of its activation over its sources (findings §17).
+"""What drives a neuron pole when it fires: an exact split of its activation over its sources (findings §12).
 
 At a firing of a neuron of layer ``M`` at position ``t``, its MLP input is the residual ``x`` there,
 normalized, and ``x`` is a sum: the embedding, every head's write at layers ≤ ``M`` and every neuron's at

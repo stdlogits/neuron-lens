@@ -3,14 +3,14 @@
 The lens rule: ``out`` reads MLP outputs and attention inputs, ``mid`` reads MLP inputs and
 attention outputs. Every read lists the top 64 kept tokens (``catalog.kept``), with a ``_z`` variant
 that z-scores each token's score across the layer's poles or heads, which removes the hub tokens that
-top most raw reads (findings §6).
+top most raw reads (findings §7).
 
 A lens takes vectors or covectors as it was built: the R-lens transports a vector, the S-lens pulls back a
 covector. A read row (what a unit applies to the residual) is a covector, a write a vector, so a read that feeds
 a read row to the R-lens goes through the residual's metric (``neuron_lens.metric``: ``v = s² ⊙ c``,
 ``s² = σ / |γ|``), which keeps the read free of the units each residual coordinate carries; one that sets a vector
 against the S-lens's footprints goes through the lens's polar factor (``metric.polar``: ``w · U ē``, the footprints
-with the lens's stretch removed), which asks which input token would put it there (findings §13).
+with the lens's stretch removed), which asks which input token would put it there (findings §15).
 
 **Neurons** (``neurons/reads/L<layer>.parquet``), no forward pass:
 
@@ -18,23 +18,23 @@ with the lens's stretch removed), which asks which input token would put it ther
   (``_val``: probabilities; the logit lens at the last layer);
 - ``write_S``: the write against the S-lens's footprints at the layer's output, tokens ``v`` by
   ``±w · U (e_v − ē)``, ``K^out_L = (K Kᵀ)^½ U`` (``metric.polar``): the input tokens whose footprint the write
-  imitates (legible to about L8 in Qwen3-8B, where early neurons write back the tokens they detect; §6, §7, §13);
+  imitates (legible to about L8 in Qwen3-8B, where early neurons write back the tokens they detect; §7, §8, §15);
 - ``write_orth_R``, ``write_orth_S``: the same of the write minus its parts along the neuron's gate and up
-  patterns, so that neither row reads it (``neurons.orthogonal_write``), what it adds beyond anything it reads (§18);
+  patterns, so that neither row reads it (``neurons.orthogonal_write``), what it adds beyond anything it reads (§6);
 - ``read_R``: the read covector ``c = â ± b̂`` (gate and up rows times the MLP input norm's weight, each at
   unit length in the metric; the up row alone, ``∓b̂``, for the poles on SiLU's negative lobe, ``acts``'
-  ``neg_lobe`` past a half, §17) as a vector, ``s² ⊙ c`` (the raw rows times the residual's scale), through the
-  R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it drives the pole (§13);
+  ``neg_lobe`` past a half, §7) as a vector, ``s² ⊙ c`` (the raw rows times the residual's scale), through the
+  R-lens from the layer's MLP input (``J^mid_L``): what the residual says when it drives the pole (§15);
 - ``read_S``: the read covector through the S-lens to the MLP input, ``c · K^mid_L (e_v − ē)``:
   input tokens that drive the pole (legible at L0-L8);
 - weights: ``w_norm`` (``‖W_down[:, n]‖``), ``cos_gate_up``, ``cos_write_gate``, ``cos_write_up`` (cosines in the metric
   at the MLP input; the latter two of the pole's write with the gate and up sides of what it reads: positive where it
-  writes toward them; §18), ``null_share`` (the share of the write's squared length in the bottom 1% of right-singular
+  writes toward them; §6), ``null_share`` (the share of the write's squared length in the bottom 1% of right-singular
   directions of ``W_U diag(γ)``, Euclidean as the final norm's rms takes it, where entropy neurons write; Stolfo et al.
   2024), and ``vocab_skew``, ``vocab_kurt`` of ``W_U · norm(w)`` over
   the vocabulary (Gurnee et al. 2024's prediction and suppression neurons).
 
-**Heads** (``heads/reads.parquet``; findings §11): a head reads token ``v`` as its S-lens
+**Heads** (``heads/reads.parquet``; findings §10): a head reads token ``v`` as its S-lens
 footprint at layer ``L − 1``'s output (the centred embedding at L0) and writes into layer ``L``'s
 MLP input (``neuron_lens.heads``).
 
@@ -42,17 +42,17 @@ MLP input (``neuron_lens.heads``).
   in what the head makes the model say when it reads ``v``; the tokens it copies most, and
   ``ov_R_neg`` those it suppresses most. ``ov_S``: the same against the S-lens's footprints at the MLP input
   through its polar factor, as ``write_S``: whether the write makes the residual look as if ``v`` were there (the
-  record through L8; §11, §13).
-  ``ov_R_copy``, ``ov_S_copy``: Elhage et al.'s copying score Σλ/Σ|λ| of each map (§11);
+  record through L8; §10, §15).
+  ``ov_R_copy``, ``ov_S_copy``: Elhage et al.'s copying score Σλ/Σ|λ| of each map (§10);
 - ``qk_S``: the QK map, ``q̃ᵀ R̄ k̃`` with the q/k norms' true derivative averaged over positions (without q/k
   norms, GPT-NeoX: the input norm's, which the scores read as the lenses do) and RoPE averaged over the head's own attention offsets (``06_activations.py``'s statistics),
   footprints at unit length: each key token's z over the vocabulary under the head's mean query,
   what it attends to (``qk_S_neg``: avoids); ``qk_self_S``: each token's z in its own row, where it
   ranks among the keys it favours as a query whose position holds it (its S-lens footprint as the query too),
-  and the scalar ``qk_self_S`` the median of that z over tokens, which finds duplicate-token heads (§11);
+  and the scalar ``qk_self_S`` the median of that z over tokens, which finds duplicate-token heads (§10);
   ``qk_self_R``: the same with the query the R-lens direction at ``L − 1``'s output that promotes the token
   (the covector ``W_U diag(γ_f) J^out_{L−1}`` as a vector in the metric, the position is about to say it), which finds the late heads that look up
-  earlier copies of what is about to be said, with a negative ``ov_R_copy`` the copy suppressors (§11; from L1,
+  earlier copies of what is about to be said, with a negative ``ov_R_copy`` the copy suppressors (§10; from L1,
   empty at L0);
 - ``qk_ctx_rho``: Spearman over tokens between ``qk_S`` and the attention each key token receives
   in context (tokens seen as keys 10+ times); ``qk_ov_rho``: between ``qk_S`` and ``ov_R``'s z,
@@ -154,7 +154,7 @@ def neurons(layers: list[int], dev) -> None:
         put(cols, "write_R", keep[by_sign(r["ids"])], by_sign(r["probs"]))
         put(cols, "write_R_z", keep[by_sign(r["zids"])], by_sign(r["z"]))
         K = K_out[layer].to(dev)
-        PK = metric.polar(K) @ K  # [d, d_in]: the footprints' rotation, U (§13)
+        PK = metric.polar(K) @ K  # [d, d_in]: the footprints' rotation, U (§15)
         sw = wd.T @ PK  # [f, d_in]: each write as a covector on the embeddings
         s = s_tops(sw / sw.norm(dim=1, keepdim=True), emb, SIGNS, TOP)
         for kind, name in (("raw", "write_S"), ("z", "write_S_z")):

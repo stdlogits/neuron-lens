@@ -1,4 +1,4 @@
-"""Attention heads read from their actual outputs at their top firings (findings §11, §12): does a
+"""Attention heads read from their actual outputs at their top firings (findings §10, §11): does a
 head's output promote the token after the firing, or the token it attends to; and do the weight-only
 per-token OV reads predict where the attended token ranks in that output?
 
@@ -7,7 +7,7 @@ Firings are ``06_activations.py``'s: each head's 24 top documents over all 63,99
 the bf16 pass) and the position the head attends to most past the sink. At each firing, the next
 token (after the query) and the attended token, among the kept tokens (``catalog.kept``).
 
-- **next, copy** (§12): each firing's output read through the R-lens's ``mid`` target at its layer
+- **next, copy** (§11): each firing's output read through the R-lens's ``mid`` target at its layer
   (attention writes into the MLP input, where ``mid`` starts; normed and unembedded as ``heads/acts``'
   ``out_R_z``) and through the logit lens; each token's logit z-scored across the layer's 768
   firings. A head's statistic is the mean z of its next (or attended) tokens at its own firings. The
@@ -15,14 +15,14 @@ token (after the query) and the attended token, among the kept tokens (``catalog
   per head); a head's p-value is the share of its layer's mismatched pairs that score as high, and a
   test passes at a false discovery rate of 5% (Benjamini-Hochberg over all 1,152 heads). Heads with
   fewer than 3 usable firings are not scored.
-- **weight-only reads at the firings** (§11): the attended token's z in its own column of the head's
+- **weight-only reads at the firings** (§10): the attended token's z in its own column of the head's
   OV map, under the head and under another head of its layer (the control, one fixed draw per
   head), against its z over the vocabulary in the head's actual output read; Spearman over firings.
   The per-token z: ``S→R`` is ``08_reads.py``'s ``ov_R`` (S-lens footprint in, R-lens ``mid`` out),
   checked against the R-lens and logit-lens reads of the output; against the logit-lens read also
   ``raw`` (embedding in, ``W_U diag(γ_f)`` out, Elhage et al. 2021) and ``S`` (S-lens footprint in,
   ``W_U diag(γ_f)`` out), computed here with ``neuron_lens.heads.own_token_z``.
-- **attend to what they copy** (§11): where the attended token falls among the vocabulary in the
+- **attend to what they copy** (§10): where the attended token falls among the vocabulary in the
   head's own ``ov_R`` per-token z (its percentile, 0.5 by chance), and in the control head's; per
   head the mean over firings, and the share of heads past 0.9 (attend to what they copy) or under
   0.1 (to what they suppress).

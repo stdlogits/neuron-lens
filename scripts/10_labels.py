@@ -7,17 +7,17 @@ raters found most coherent there, blind to the lens (``checks/depth_reads.py``; 
 depth, which also predicts steering, §3). Each shows its first 24 tokens in rank tiers (1-8 ‖ 9-24), variants merged
 (``release×9``, runs of line breaks as ``⏎``), the layer's hub tokens (in 3%+ of its raw top 64s) dropped from raw reads;
 then the tokens the other lens's reads agree on, those both sides share, from the plan's late layer a note on peaked
-(high-kurtosis) writes (§5), a line marking a faint shadow of the other pole (§17, which then drops its input read), the
+(high-kurtosis) writes (§5), a line marking a faint shadow of the other pole (§7, which then drops its input read), the
 pole's firing rate with the corpus slices where it fires at least twice or under half as often, and ``neurons/acts``'
 first 5 top contexts. No strengths or activation scale: a label's confidence is how clearly the card shows one theme.
 The prompt is shared by every model (``scripts/prompts/neurons.md``); a model's own file says what the model is and gives
 its worked examples, and its plan fills the guide to the reads by depth. Labels: ``fires`` and ``writes``, each with a
 confidence, and a note. Thinking is off by default. The first full run (2026-10-29, on the first release's tables and an
 earlier card: up to eight reads of 64 tokens with strength percentiles): 44,244 requests of 10 neurons, $105.41 at batch
-prices with thinking on (effort low), checked blind on 100 poles (``checks/haiku_blind.py``, §8).
+prices with thinking on (effort low), checked blind on 100 poles (``checks/haiku_blind.py``, §13).
 
 **Heads** (``--side heads``): the card per head shows its attention pattern scores, how often it fires, one OV read
-(what it copies and suppresses: through the S-lens early, the R-lens after, as its model's plan says; §11), its QK reads
+(what it copies and suppresses: through the S-lens early, the R-lens after, as its model's plan says; §10), its QK reads
 (what it attends to, the tokens that seek themselves, and from L1 those a query about to say them seeks), its exact
 drivers as the query and as the key, each list to 24 tokens, without layer percentiles, and its first 5 top contexts with the query in ``⟦ ⟧`` and the attended token
 in ``⟪ ⟫``. Labels: ``fires``, ``attends`` and ``writes``. Like the neuron cards, nothing on a card
@@ -36,7 +36,7 @@ nothing is sent to the API without an explicit stage):
 
 - ``cards``: ``cards/L<layer>.jsonl``, one card per neuron or head; ``--flipped``, only the neurons with a pole on SiLU's
   negative lobe (``acts``' ``neg_lobe`` past a half), whose input reads turned round when those poles began to be read
-  the right way (findings §17), for relabelling just those: ``shards`` lands the new labels on the table already there;
+  the right way (findings §7), for relabelling just those: ``shards`` lands the new labels on the table already there;
 - ``pilot``: one batch of ``--n`` random requests; measures tokens (thinking included, with ``--thinking on``) and the parse
   rate and projects the full run's cost into ``state.json``;
 - ``submit``: every request, in batches under the API's limits; refuses unless a pilot at the same thinking setting
@@ -103,9 +103,9 @@ PER_REQUEST = {"neurons": 10, "heads": 8}  # cards per request
 FIELDS = {"neurons": ("fires", "writes"), "heads": ("fires", "attends", "writes")}
 MAX_TOKENS = 12000
 MAX_REQUESTS, MAX_BYTES = 3000, 200_000_000  # per batch, under the API's 100,000 and 256 MB
-SILENT = 0.05  # act_top under this: near-silent (§7, §8)
-SHADOW = 1 / 4  # a pole on the negative lobe under this share of its partner's act_top is a faint shadow of it (§17)
-HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (§6)
+SILENT = 0.05  # act_top under this: near-silent (§8, §13)
+SHADOW = 1 / 4  # a pole on the negative lobe under this share of its partner's act_top is a faint shadow of it (§7)
+HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (§7)
 INPUTS, WRITES = ("read_S", "read_S_z", "read_R", "read_R_z"), ("write_R", "write_R_z", "write_S", "write_S_z")
 SHOW = 24  # tokens a read shows: rank tiers 1-8 ‖ 9-24
 SLICES = ("dclm", "zh", "code", "chat")
@@ -118,7 +118,7 @@ ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])(?:\s.*)?$"), "heads": re.
 # most coherent at that depth, blind to the lens (``checks/depth_reads.py``, two raters a model, 8-16 layers, findings
 # §8); the write read is the R-lens's everywhere, which also predicts steering (§3, §19). Where the input read is the
 # R-lens's but rarely names the contexts' tokens, the line says so: it can name a concept associated with what drives
-# the pole rather than the tokens it fires on. The head plans follow each model's census of head reads (§11, §12, §19).
+# the pole rather than the tokens it fires on. The head plans follow each model's census of head reads (§10, §11, §19).
 S_IN = "the literal tokens that drive the pole, at its position or a few before"
 S_Z_IN = ("the tokens that drive the pole, at its position or a few before, scored against the layer's other neurons: what "
           "is specific to it, often a concept more than a token")

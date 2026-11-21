@@ -1,8 +1,8 @@
 """Figures of the catalog's units, lenses and checks, from ``data/summary``, the released lenses'
 provenance and the catalog, into ``docs/figures/`` (PNG, light), with ``docs/figures/README.md``: each
-figure's caption. Figures 1-17 are Qwen3-8B's (findings §1-§12; 1 and 2 are schematics, no data); 18
-sets Qwen3-8B and Gemma 4 12B side by side, and 19-25 are Gemma 4 12B's: steering, the census, its
-image and sound reads, the cross-modal check and its heads in media contexts (findings §13-§16), from
+figure's caption. Figures 1-16 are Qwen3-8B's (findings §1-§14; 1 and 2 are schematics, no data); 17
+sets Qwen3-8B and Gemma 4 12B side by side, and 18-23 are Gemma 4 12B's: steering, the census, its
+image and sound reads, the cross-modal check and its heads in media contexts (findings §15-§18), from
 ``data/summary`` and Gemma's catalog tables (``data/catalog/gemma-4-12b``: ``neurons/image_optimised``,
 ``neurons/audio_optimised``, ``heads/image``, ``heads/audio`` and the ``read_png`` column of the image tables the gallery
 draws). No image or sound from a dataset is drawn: only lens reads and optimised patterns.
@@ -280,7 +280,7 @@ def _anatomy() -> None:
            "A transformer keeps one vector per token, the residual stream. Each of Qwen3-8B's 36 layers reads it and "
            "adds to it twice: its 32 attention heads move information between positions, then its 12,288 MLP neurons "
            "work on each position on its own.",
-           "schematic; the examples are catalog entries (findings §6, §11)",
+           "schematic; the examples are catalog entries (findings §7, §10)",
            "One layer acting on five positions of \"she heard the owl and\". At \"and\", an attention head's QK "
            "circuit weighs the earlier positions (arc widths) and its OV circuit copies what it reads from \"she\" "
            "into the current position. In the MLP, the same neuron sits at every position; it reads the stream "
@@ -397,7 +397,7 @@ def _lenses() -> None:
            "Each lens maps a direction h at layer L (a neuron's write or read) linearly onto tokens. The R-lens and "
            "S-lens, fitted here, average their Jacobians under RelP rules (norm scales frozen, SwiGLU gate linearised, "
            "half rule on the product) instead of true gradients.",
-           "schematic; docs/design.md (Estimators); findings §1, §3, §6",
+           "schematic; docs/design.md (Estimators); findings §1, §3, §7",
            "The residual stream runs from the input tokens through the embedding `W_E`, layers L0-L35, the final "
            "norm and the unembedding `W_U` to next-token logits. A neuron at layer L reads the MLP input along "
            "`â ± b̂` (one direction per pole) and writes `W_down[:, n]` back. The logit lens reads a direction `h` at "
@@ -469,7 +469,7 @@ def fig_depth_map() -> None:
            "Share of each layer's poles (%) whose read names its target (5% false discovery rate). Input: the firing token, or "
            "the exact drivers. Write: the firing token, the token after a firing, and steering, of 64 random poles a layer "
            "(those that fire). Blank: under 0.5%.",
-           "findings §3, §4, §6, §7; data/summary/reads_at_firings_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
+           "findings §3, §4, §7, §8; data/summary/reads_at_firings_qwen3-8b.json, causal_lens_qwen3-8b.json (steering)",
            f"The S-lens names the firing token for {100 * rows[0]['read_S']:.0f}% of L0's poles and {span('read_S', 1, 8)} at L1-L8. "
            f"The R-lens read of the input direction names exact drivers for {span('read_R', 13, 20)} of L13-L20's poles and "
            f"{span('read_R', 21, 35)} from L21. The R-lens write predicts steering for 94-100% of random poles from L5. The token "
@@ -493,7 +493,7 @@ def fig_lens_reliability() -> None:
     finish(fig, "04_lens_reliability", "The lenses are stable: fits on two halves of the corpus differ by under 6%",
            "Relative difference between the lens fitted on the even and the odd half of the corpus (500 DCLM documents "
            "each), by layer, for each of the four lens targets. Lower is more reliable.",
-           "findings §1, §6; the split-half provenance of the released lenses (stdlogits/rs-lenses)",
+           "findings §1, §7; the split-half provenance of the released lenses (stdlogits/rs-lenses)",
            "Split-half difference of each lens target by layer: the R-lens from each layer's output (reads MLP writes) "
            "and from each MLP input (reads read directions), and the S-lens to each MLP input and to each layer's "
            "output. All stay under 6%; the R-lens is least stable around L7, the S-lens from L16-L17.")
@@ -665,7 +665,7 @@ def fig_side_agreement() -> None:
     finish(fig, "10_side_agreement", "Writes predict the next token late; reads name the firing token early",
            "Mean share of each pole's 64 top firings whose token is in its read's top 10, all 884,736 poles; "
            "control: a random pole's read. Right panel on a log scale, floored at 0.1%.",
-           "findings §5, §6; data/summary/side_agreement_qwen3-8b.json",
+           "findings §5, §7; data/summary/side_agreement_qwen3-8b.json",
            f"Left: prediction rises from L20 and peaks at {pred[peak]:.1%} at L{peak}; suppression overtakes it at L34 "
            "(early layers' writes match the control: hub tokens). Right: the S-lens names the firing token at L0-L8 "
            f"({r['read_S']['mean'][0]:.0%} at L0), with a spike at L8; the R-lens read from the MLP input takes over "
@@ -695,7 +695,7 @@ def fig_drivers() -> None:
     finish(fig, "11_drivers", "The S-lens names a neuron's real input tokens early, the R-lens from L9",
            "Every common token placed in 8 real documents; a pole's exact drivers are the 20 that raise it most. "
            "Share of each weight-only read's top 10 among them; log scale, floored at 0.1%.",
-           "findings §6; data/summary/side_agreement_qwen3-8b.json; neurons/drivers",
+           "findings §7; data/summary/side_agreement_qwen3-8b.json; neurons/drivers",
            f"At L0, {s[0]:.0%} of the S-lens read's top 10 are exact drivers, and {span(s[1:5])} at L1-L4; the R-lens "
            f"read of the input direction leads from L9 ({span(rr[9:13] + rr[22:30])} at L9-L12 and L22-L29). L13-L20 "
            f"is the weakest stretch for every weight-only input read (R-lens {span(rr[13:21])}, S-lens at most "
@@ -730,10 +730,10 @@ def fig_rank_depth() -> None:
     log_ticks(ax)
     legend_above(ax, 2)
     end_labels(ax, items)
-    finish(fig, "13_rank_depth", "A read's signal holds down to rank 64, not just its top tokens",
+    finish(fig, "12_rank_depth", "A read's signal holds down to rank 64, not just its top tokens",
            "How often the token at each rank of a pole's read shows up in its behaviour (the next token for writes, "
            "the firing token for reads), divided by the same for a mismatched pole. Log scale.",
-           "findings §7; data/summary/rank_depth_qwen3-8b.json",
+           "findings §8; data/summary/rank_depth_qwen3-8b.json",
            "Signal fades with rank but ranks 49-64 still run several times above a mismatched pole (L28's write read "
            f"{ratios('write_R', 28)[-1]:.0f}×, L12's read {ratios('read_R', 12)[-1]:.0f}×), which is why the catalog keeps "
            "the top 64 of every read. L4's S-lens ratio is noisy: its mismatched rate is near zero.")
@@ -776,10 +776,10 @@ def fig_lens_blind() -> None:
     handles, labels = axes[0].get_legend_handles_labels()
     axes[0].legend(handles[1:] + handles[:1], labels[1:] + labels[:1], loc="upper left", bbox_to_anchor=(0, -0.2),
                    ncols=5, borderaxespad=0, columnspacing=1.2)
-    finish(fig, "14_lens_blind", "Labels written blind: lens reads predict what a pole promotes, contexts where it fires",
+    finish(fig, "15_lens_blind", "Labels written blind: lens reads predict what a pole promotes, contexts where it fires",
            "160 random poles, 32 a band. Explainers saw lens reads, top contexts or both (Sonnet; Opus for both), "
            "never steering; blind Sonnet scorers tested their labels on held-out firings and on steered text.",
-           "findings §8; data/summary/lens_blind_qwen3-8b.json",
+           "findings §13; data/summary/lens_blind_qwen3-8b.json",
            "Left: mean detection AUROC of each arm's \"fires\" label on 6 held-out top contexts against 6 quiet "
            "positions (half from the same documents): lens reads alone 0.80, contexts 0.87, both 0.89; dashed, "
            "another pole's label (0.58). Right: how often a judge picks the pole's own \"promotes\" label out of four "
@@ -807,11 +807,11 @@ def fig_library() -> None:
     pct(ax)
     ax.set_ylabel("share of persona rows judged a clear match")
     legend_above(ax, len(bars))
-    finish(fig, "15_library_judge", "One persona label in three matches the pole's lens reads; swapped names rarely do",
+    finish(fig, "16_library_judge", "One persona label in three matches the pole's lens reads; swapped names rarely do",
            "The Neuron Persona Library's persona rows (from steering on \"Who are you?\"; jfonsecarivera, after "
            "Sauers): 60 per layer group, judged blind and generously by Claude against the pole's write reads, its "
            "input reads, or both, beside swapped names.",
-           "findings §10; data/summary/library_judge_qwen3-8b.json",
+           "findings §14; data/summary/library_judge_qwen3-8b.json",
            "Share of persona rows whose reads clearly match the name (the concept, a translation, or a strongly "
            "associated thing): 34% from the write side, 27% from the input side and 40% with both shown together, "
            "against 2-5% for swapped names. Matches are most common at L24-L35; the input side is weakest at "
@@ -841,11 +841,11 @@ def fig_head_lens_sides() -> None:
         ax.set_ylim(-0.05, 0.9 if test == "copy" else 0.3)
     axes[0].set_ylabel("Spearman, own head minus control head")
     legend_below(axes[0], 4)
-    finish(fig, "16_head_lens_sides", "Read a head's input with the S-lens; its output with the S-lens early, the R-lens late",
+    finish(fig, "13_head_lens_sides", "Read a head's input with the S-lens; its output with the S-lens early, the R-lens late",
            "Each head's weight-only OV read, checked against what it actually writes at its top firings (23,112 "
            "firings from L1, all documents): with the S-lens or the R-lens on the attended token (input) and on the "
            "head's write (output). Bars: own head minus another head of the layer.",
-           "findings §11; data/summary/head_lens_sides_qwen3-8b.json",
+           "findings §10; data/summary/head_lens_sides_qwen3-8b.json",
            "Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (R-lens input) with the same "
            "output lens in every band, on both tests, except the copy test at L28-L35 with an S-lens output, which "
            "the catalog doesn't use there. On the output side the S-lens leads at L1-L8 (copy +0.44 against +0.39) and "
@@ -868,10 +868,10 @@ def fig_head_census() -> None:
     ax.set_ylabel("share of the layer's 32 heads")
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     band = heads["bands"]
-    finish(fig, "17_head_census", "Late heads' OV reads predict the next token",
+    finish(fig, "14_head_census", "Late heads' OV reads predict the next token",
            "Each head's weight-only OV reads tested at its 64 strongest firings against the layer's other heads (5% false "
            "discovery rate), with the tokens it fires on and attends to, and its attention pattern.",
-           "findings §12; data/summary/reads_at_firings_qwen3-8b.json",
+           "findings §11; data/summary/reads_at_firings_qwen3-8b.json",
            f"`ov_R` (the attended token's column predicts the next token) passes for {100 * band['L28-35']['ov_R']:.0f}% of "
            f"L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a head from its layer.")
 
@@ -913,10 +913,10 @@ def fig_two_models() -> None:
     a.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     qr, gr = at["Qwen3-8B"], at["Gemma 4 12B"]
     first = lambda r: next(i for i, v in enumerate(r) if v >= 0.9)
-    finish(fig, "18_two_models", "In both models, a write's lens read predicts what steering it does",
+    finish(fig, "17_two_models", "In both models, a write's lens read predicts what steering it does",
            "Both models on one depth axis, layer / (layers − 1): 36 layers for Qwen3-8B, 48 for Gemma 4 12B. Median r between "
            "a pole's R-lens write read and its 1× steering effect (dashed: the logit lens).",
-           "findings §13; data/summary/causal_lens_qwen3-8b.json, causal_lens_gemma-4-12b.json",
+           "findings §15; data/summary/causal_lens_qwen3-8b.json, causal_lens_gemma-4-12b.json",
            f"Median r between the R-lens read of a pole's write and its 1× steering effect, against relative depth. In Qwen3-8B "
            f"it predicts steering from L4 ({min(qr[4:9]):.2f}-{max(qr[4:9]):.2f} at L4-L8); in Gemma 4 12B it stays at "
            f"{max(gr[:11]):.2f} or less through L10 (relative depth 0.21), jumps to {gr[11]:.2f} at L11 and reaches 0.9 at "
@@ -929,11 +929,11 @@ def fig_gemma_steering() -> None:
     at = lambda t, layer: t["r_med"][t["layer"].index(layer)]
     lead = [at(s1, layer) - at(lg, layer) for layer in range(11, 31)]
     ctrl = max(abs(v) for t in (s1, aw) for v in t["control_med"])
-    finish(fig, "19_gemma_steering", "Gemma 4 12B: a neuron's write, read through the R-lens, predicts steering from L11",
+    finish(fig, "18_gemma_steering", "Gemma 4 12B: a neuron's write, read through the R-lens, predicts steering from L11",
            "Correlation over the vocabulary between a lens's read of a pole's write (as it reaches the residual, after "
            "the post-feedforward norm) and the measured change in log-probabilities; 24 random neurons a layer, both "
            "poles. Band: the R-lens's interquartile range.",
-           "findings §13; data/summary/causal_lens_gemma-4-12b.json",
+           "findings §15; data/summary/causal_lens_gemma-4-12b.json",
            f"Median r between each lens's write read and the measured effect, by layer, as figure 7 for Qwen3-8B "
            f"(Gemma 4 12B has no J-lens). Left, steering at 1× the pole's typical activation: the R-lens stays at "
            f"{max(s1['r_med'][:11]):.2f} or less through L10, jumps to {at(s1, 11):.2f} at L11, and reaches "
@@ -960,13 +960,13 @@ def fig_gemma_census() -> None:
     ax.set_ylabel("share of the layer's poles")
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     span = lambda k, lo, hi: (100 * min(r[k] for r in rows[lo:hi + 1]), 100 * max(r[k] for r in rows[lo:hi + 1]))
-    finish(fig, "20_gemma_census", "Gemma 4 12B: what each read names, by depth",
+    finish(fig, "19_gemma_census", "Gemma 4 12B: what each read names, by depth",
            "Share of each layer's 30,720 poles whose read names its target, against other poles of the layer, at a 5% false "
            "discovery rate (as figure 3 for Qwen3-8B).",
-           "findings §13; data/summary/reads_at_firings_gemma-4-12b.json",
+           "findings §15; data/summary/reads_at_firings_gemma-4-12b.json",
            "The S-lens read names the firing token for {:.0f}-{:.0f}% of L0-L1's poles, falls to {:.1f}% at L9, and rises again "
            "at L10-L13 ({:.0f}-{:.0f}%), where the S-lens write also names it for {:.0f}-{:.0f}% at L11-L13. The R-lens read of the "
-           "input, made a vector by the residual's metric (§13), names exact drivers for {:.0f}-{:.0f}% of poles at L13-L23 and "
+           "input, made a vector by the residual's metric (§15), names exact drivers for {:.0f}-{:.0f}% of poles at L13-L23 and "
            "{:.0f}-{:.0f}% at L34-L42. The R-lens write promotes the token "
            "after a firing from L32, for {:.0f}-{:.0f}% of poles at L33-L40, falling to {:.0f}-{:.0f}% at L44-L47.".format(
                *span("read_S", 0, 1), 100 * rows[9]["read_S"], *span("read_S", 10, 13), *span("write_S", 11, 13),
@@ -1001,10 +1001,10 @@ def fig_media_reads() -> None:
         return lo if lo == hi else f"{lo}-{hi}"
 
     early = ("L0-5", "L6-11", "L12-23")
-    finish(fig, "21_media_reads", "The S-lens's image read is a projection; an optimised read makes the neuron fire",
+    finish(fig, "20_media_reads", "The S-lens's image read is a projection; an optimised read makes the neuron fire",
            "A pole's read added to 32 held-out images or sounds; its change ranked among its changes under 191 other "
            "poles' reads (1 the most; dashed: 0.5, chance), over a panel of 192 poles. Optimised: gradient ascent from the read.",
-           "findings §14; data/summary/gemma4_media/media_lens.json",
+           "findings §16; data/summary/gemma4_media/media_lens.json",
            "Median rank of a pole's own change by band. Images: the S-lens read moves the pole's read projection "
            "({:.2f}, {:.2f} and {:.2f} at L0-L5, L6-L11 and L12-L23) but raises its activation only at L0-L5 ({:.2f}; "
            "{:.2f} at L6-L11). Sounds: the S-lens read is near chance on both ({} by band). The read optimised from "
@@ -1053,10 +1053,10 @@ def fig_media_gallery() -> None:
         axes[1, i].set_xlabel(p.label if len(p.label) <= 15 else p.label[:14] + "…", fontsize=7, color=INK2)
     axes[0, 0].set_ylabel("S-lens read", fontsize=8)
     axes[1, 0].set_ylabel("optimised", fontsize=8)
-    finish(fig, "22_media_gallery", "The patch each neuron reads, and the patch that drives it",
+    finish(fig, "21_media_gallery", "The patch each neuron reads, and the patch that drives it",
            "Top: the pole's read direction through the image S-lens, back to pixels (a 48 × 48 patch, ±3 sd around "
            "grey). Bottom: the patch optimised from it to raise the pole. Below: the pole's top exemplar label.",
-           "findings §14; neurons/image (read_png), neurons/image_optimised (opt_png)",
+           "findings §16; neurons/image (read_png), neurons/image_optimised (opt_png)",
            "Three poles from each six-layer band from L0 to L23, those with the strongest reliable exemplar labels (one "
            "pole per label) among the poles whose optimised patch raises them on held-out images. The S-lens reads share "
            "one pattern of column streaks from pole to pole, as text reads share hub tokens; the optimised patches, one "
@@ -1085,10 +1085,10 @@ def fig_crossmodal() -> None:
     legend_below(a, 3)
     im, au, tri = j["image"], j["audio"], j["text_image_audio"]["all_three"]
     share = lambda m, k, band: 100 * m[k]["bands"][band][1]
-    finish(fig, "23_crossmodal", "Image labels hold on the text side from L12; sound labels only a little",
+    finish(fig, "22_crossmodal", "Image labels hold on the text side from L12; sound labels only a little",
            "For each pole with a reliable image or audio exemplar label, the rank of that label among the modality's "
            "labels on the text side, three ways; bars: the share of poles at 0.95 or more (dashed: 5%, chance).",
-           "findings §15; data/summary/gemma4_media/crossmodal.json",
+           "findings §17; data/summary/gemma4_media/crossmodal.json",
            f"Of {sum(v[2] for v in im['fire']['bands'].values()):,} poles with an image label, the label's words fire "
            f"the pole for {share(im, 'fire', 'L0-11'):.0f}% at L0-L11 and {share(im, 'fire', 'L12-23'):.0f}% at "
            f"L12-L23 (5% by chance), the text R-lens writes it for up to {share(im, 'r_write', 'L12-23'):.0f}% (L12-L23), the text "
@@ -1132,10 +1132,10 @@ def fig_heads_media() -> None:
     mid = t[(t.layer >= 24) & (t.layer <= 35)]
     aud = next(t.sort_values("audio_read_ratio", ascending=False).itertuples())
     acc = summary(f"head_media_{GEMMA_STEM}.json")["audio"]["accuracy"]
-    finish(fig, "24_heads_media", "Single heads carry what an image shows into the text; for sound, none does",
+    finish(fig, "23_heads_media", "Single heads carry what an image shows into the text; for sound, none does",
            "64 labelled images and 64 sounds (mini-ImageNet, ESC-50), each followed by ' a <label>': attention from the "
            "text after the media to its slots, and each head zeroed in turn (right; dashed: z = 3).",
-           "findings §16; data/summary/head_media_gemma-4-12b.json; heads/image, heads/audio",
+           "findings §18; data/summary/head_media_gemma-4-12b.json; heads/image, heads/audio",
            "Left: attention from the text after the image or sound to its 64 slots, as a multiple of an even spread over "
            "the keys, for the layer's strongest head and its median head. The text reads images most at L23-L31 and L44 "
            f"(up to {t.image_read_ratio.max():.2f} of an even spread) and sounds most at L0-L10 (L{aud.layer}h{aud.head}: "
@@ -1170,13 +1170,13 @@ def main() -> None:
     for stale in OUT.glob("*.png"):  # figures renumbered or retired
         if stale.name not in names:
             stale.unlink()
-    intro = (f"Drawn by `scripts/11_figures.py`. Figures 1-17 are {MODEL}'s: 1 and 2 are schematics, the others draw "
-             "`data/summary/` and the released lenses' provenance. Figure 18 sets "
-             f"it beside {GEMMA}, and 19-24 are Gemma's, from `data/summary/` and its catalog's media and head tables; "
+    intro = (f"Drawn by `scripts/11_figures.py`. Figures 1-16 are {MODEL}'s: 1 and 2 are schematics, the others draw "
+             "`data/summary/` and the released lenses' provenance. Figure 17 sets "
+             f"it beside {GEMMA}, and 18-23 are Gemma's, from `data/summary/` and its catalog's media and head tables; "
              "no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer "
              "names its findings section and source.")
     md = ["# Figures", "", intro, ""]
-    for name, title, caption in CAPTIONS:
+    for name, title, caption in sorted(CAPTIONS):
         md += [f"## {int(name[:2])}. {title}", "", f"![{title}]({name}.png)", "", caption, ""]
     (OUT / "README.md").write_text("\n".join(md))
 

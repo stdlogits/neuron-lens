@@ -1,4 +1,4 @@
-"""Blind interpretation of random poles: how far do the lenses alone go? (findings §8)
+"""Blind interpretation of random poles: how far do the lenses alone go? (findings §13)
 
 A stratified random sample of poles (``PER_BAND`` from distinct neurons in each depth band, ``arch.depth_bands``) is
 described once per arm (``ARMS``: the arm's card kind and its explainers' model):
@@ -14,7 +14,7 @@ described once per arm (``ARMS``: the arm's card kind and its explainers' model)
 Each explainer says what the pole fires on and what it promotes when its write is added. Two tests
 on the model check both labels, the second on a CUDA GPU:
 
-- **firing** (detection, as in §8's description pilot): ``N_POS`` held-out top contexts (top
+- **firing** (detection, as in §13's description pilot): ``N_POS`` held-out top contexts (top
   documents past the first ``N_CONTEXTS``, which no card shows) against quiet positions, both random
   ones (``N_NEG_RAND``, as in the pilot) and ones in the same documents as the positives
   (``N_NEG_SAME``: same topic and genre, so a topic label does not separate them). A scorer who
@@ -89,7 +89,7 @@ def auroc(p: list[float], truth: list[int]) -> float:
 
 BANDS = arch.bands(MODEL)  # the depth bands (arch.depth_bands)
 PER_BAND = 32
-SILENT = 0.05  # act_top under this: no firing test (§7, §8)
+SILENT = 0.05  # act_top under this: no firing test (§8, §13)
 N_SHOW = 12  # tokens per read on a lens card
 N_POS, N_NEG_RAND, N_NEG_SAME = 6, 3, 3
 N_RANDOM_DOCS = 160

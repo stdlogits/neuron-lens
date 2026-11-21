@@ -2,8 +2,8 @@
 
 Every kept token (``catalog.kept``) goes into 8 real documents (4 DCLM, 2 code, 2 chat: the first
 full-length ones of the activation slices) at position 24, in place of the token there, with the
-documents' own 16 tokens after it; results are averaged over the documents (findings §6). Eager
-attention, bf16; an fp32 rerun through L9 kept 98-99% of a pole's top 20 (§6,
+documents' own 16 tokens after it; results are averaged over the documents (findings §7). Eager
+attention, bf16; an fp32 rerun through L9 kept 98-99% of a pole's top 20 (§7,
 ``checks/drivers_precision.py``, which imports this pass's documents, order and reductions). Attention is
 causal, so the first 24 positions don't depend on the token: they run once per document and every pass
 continues from their cache.

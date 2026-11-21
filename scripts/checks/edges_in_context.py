@@ -1,4 +1,4 @@
-"""Do the direct weight edges name what drives a pole when it fires? (findings §17)
+"""Do the direct weight edges name what drives a pole when it fires? (findings §12)
 
 **Poles.** §3's random neurons (``causal_lens.random_neurons``: 32 a layer, seed 0) of layers 1+,
 both poles, at their first ``N_CONTEXTS`` top firings (the ``acts`` table's ``top_doc``, ``top_pos``:

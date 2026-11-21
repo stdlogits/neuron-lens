@@ -1,5 +1,5 @@
 """Attention heads' OV copying scores between their read and write points, against what the heads
-measurably do (findings §11, "an earlier, coarser test").
+measurably do (findings §10, "an earlier, coarser test").
 
 A head ``h`` of layer ``L`` reads layer ``L − 1``'s output and writes into layer ``L``'s MLP input.
 Its token map is ``M[u, v] = A_u · B_v`` (``neuron_lens.heads``): ``B_v = W_V^{kv} γ₁ X_v``, the head
@@ -32,7 +32,7 @@ score past ``CLASS``) and ``head_patterns.py``'s single-head ablation of in-cont
   the most negative and most positive heads under the variant that tracks ablation best;
 - the median z: its Spearman with the S→R score, by class and band, and at the strongest induction
   heads;
-- the column reads §11 quotes (``EXAMPLES``): what a head writes under S→R when it reads one token,
+- the column reads §10 quotes (``EXAMPLES``): what a head writes under S→R when it reads one token,
   the top and bottom of ``M[:, v]``.
 
 R inputs start at L1, so the R→ variants' statistics leave L0 out (raw's, in the bootstrap
@@ -63,7 +63,7 @@ CLASS = 0.3
 HELPS, SUPPRESSES = 0.01, -0.005  # ablation effects on the second copy's loss, nats
 BOOT = 2000
 TOP = 8  # tokens per column read
-EXAMPLES = ((26, 31, " population"), (20, 17, " herself"), (20, 17, " himself"), (19, 7, "Whilst"))  # §11
+EXAMPLES = ((26, 31, " population"), (20, 17, " herself"), (20, 17, " himself"), (19, 7, "Whilst"))  # §10
 
 
 def scores(dev) -> tuple[dict, torch.Tensor, list[str]]:
@@ -187,7 +187,7 @@ def report(copy: dict, median: torch.Tensor, cols: list[str], abl: torch.Tensor)
         q = median[(lay >= lo) & (lay <= hi)].quantile(qs).tolist()
         mz["bands"][f"L{lo}-L{hi}"] = q
         lines.append(f"    L{lo}-L{hi}: " + " / ".join(f"{x:+.2f}" for x in q))
-    lines += ["", "column reads quoted in findings §11 (S→R: what the head writes when it reads the token):"] + cols
+    lines += ["", "column reads quoted in findings §10 (S→R: what the head writes when it reads the token):"] + cols
     table["columns"] = cols
     return lines, table
 

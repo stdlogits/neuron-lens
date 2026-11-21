@@ -1,4 +1,4 @@
-"""What each neuron pole's top firings hold, and what drives them (pipeline stage 17; findings §17, §18).
+"""What each neuron pole's top firings hold, and what drives them (pipeline stage 17; findings §12, §6).
 
 One forward pass over the activation documents (fp32, with TF32 matrix products on CUDA: 3.6 times the speed of
 fp32 products, and top-64 lists 99.9% the same), after ``06_activations.py`` has found the firings, fills two
@@ -15,7 +15,7 @@ the residual at those positions, read through the lenses:
 - ``pred``: the model's own mean logit there, its prediction of what comes next.
 
 The ``_S`` reads set a vector against the S-lens's footprints, through the lens's polar factor, as ``08_reads.py``'s
-``write_S`` does (``neuron_lens.metric.polar``, findings §13).
+``write_S`` does (``neuron_lens.metric.polar``, findings §15).
 
 Each list as in ``reads`` (``_ids``, ``_val``, ``_str``, the top ``TOP``), with a ``_z`` variant: each token's
 score z-scored across the layer's poles that fired (for ``pred``, the logit). ``n_firings`` counts a pole's firings;
@@ -194,7 +194,7 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
             add(f"{site}_R", r["ids"][1], r["probs"][1])
             add(f"{site}_R_z", r["zids"][1], r["z"][1])
             K = K.to(dev)
-            cov = m[site] @ (metric.polar(K) @ K)  # a vector against the footprints' rotation (§13)
+            cov = m[site] @ (metric.polar(K) @ K)  # a vector against the footprints' rotation (§15)
             s = s_tops(cov / cov.norm(dim=1, keepdim=True).clamp_min(1e-9), emb, (1,), TOP)
             for kind, name in (("raw", f"{site}_S"), ("z", f"{site}_S_z")):
                 add(name, s[kind, 1][0], s[kind, 1][1])

@@ -1,5 +1,5 @@
 """The Neuron Persona Library's personas against a pole's reads, judged generously and blind, from
-each side of the pole (findings §10).
+each side of the pole (findings §14).
 
 ``library_crosscheck.py`` counts a persona as read when its name's own first tokens rank high in
 the pole's read: "horse" misses 马, caballo, saddle and cavalry. Here a judge reads the tokens
@@ -10,7 +10,7 @@ catalog, in three conditions (``SIDES``):
   layer-contrastive ones, as ``library_crosscheck.py`` scores them;
 - **input:** what drives it: the R-lens read of its read direction from the layer's MLP input
   (top 10), and the S-lens read of the input tokens behind it, raw (top 10) through L8 and
-  layer-contrastive (top 8) after, as the catalog's bands advise (findings §6);
+  layer-contrastive (top 8) after, as the catalog's bands advise (findings §7);
 - **both:** the four lists together.
 
 Each read is shown twice, once with its own persona's name and once with another sampled row's
@@ -46,7 +46,7 @@ from neuron_lens.paths import DATA, SUMMARY
 JUDGE = DATA / "judge"
 SIDES = ("write", "input", "both")
 BATCH = 120
-S_RAW_THROUGH = 8  # the S-lens read is legible raw through L8, layer-contrastive after (findings §6)
+S_RAW_THROUGH = 8  # the S-lens read is legible raw through L8, layer-contrastive after (findings §7)
 GENERIC = re.compile(r"\b(human|person|people|individual|student|teacher|man|woman|guy|someone|user|assistant)\b", re.I)
 LISTS = {
     "top": "the tokens the neuron's output most promotes",
