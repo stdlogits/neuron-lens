@@ -1,0 +1,240 @@
+10:11:37 sectors: K_out 161 109 60 192 328 423 502 521 518 610 716 817 907 979 1070 1114 1235 1383 1494 1715 1848 1920 2224 2386 2509 2609 2621 2688 2726 2763 2819 2876 2933 3047 3295 3367
+10:11:37 S-lens sectors: K 908 819 701 838 825 847 797 787 767 761 754 731 714 688 673 652 637 605 588 539 496 481 433 375 313 316 293 251 216 200 162 136 105 96 89 59
+10:11:37   their share in the R-lens's bright sector 0.05 0.02 0.02 0.05 0.10 0.13 0.15 0.15 0.18 0.18 0.24 0.29 0.32 0.34 0.38 0.38 0.44 0.49 0.57 0.63 0.67 0.69 0.74 0.73 0.74 0.72 0.68 0.64 0.47 0.52 0.36 0.30 0.17 0.24 0.43 0.78 (random: 0.04 0.03 0.01 0.05 0.08 0.10 0.12 0.13 0.13 0.15 0.17 0.20 0.22 0.24 0.26 0.27 0.30 0.34 0.36 0.42 0.45 0.47 0.54 0.58 0.61 0.64 0.64 0.66 0.67 0.67 0.69 0.70 0.72 0.74 0.80 0.82)
+10:11:37 doubly dark: dims 3027 3168 3335 3066 2943 2826 2797 2788 2811 2725 2626 2548 2475 2429 2353 2330 2224 2108 2014 1842 1752 1695 1439 1335 1274 1171 1182 1157 1154 1133 1115 1084 1058 953 712 670 | s_only 908 819 701 838 825 847 797 787 767 761 754 731 714 688 673 652 637 605 588 539 496 481 433 375 313 316 293 251 216 200 162 136 105 96 89 59
+10:11:37   quieter than chance to both (λ < 1) 3156 3233 3286 3185 3179 3171 3046 3018 3003 2997 2970 2958 2989 2980 2997 2992 2992 3003 3036 3030 3033 2999 2987 2966 2905 2887 2801 2774 2790 2719 2704 2697 2722 2667 2567 2384 | soft count Σ 1/(1+λ) 2865 2974 3027 2948 2947 2948 2835 2809 2804 2802 2782 2773 2800 2796 2806 2806 2799 2804 2805 2781 2758 2698 2638 2562 2489 2458 2379 2347 2340 2283 2253 2229 2231 2179 2105 2033
+10:11:37   dd's share in jd 0.98 0.99 0.99 0.99 0.97 0.96 0.97 0.97 0.98 0.97 0.96 0.95 0.94 0.93 0.92 0.91 0.90 0.88 0.89 0.88 0.87 0.88 0.86 0.86 0.86 0.85 0.86 0.87 0.88 0.88 0.87 0.86 0.85 0.83 0.80 0.83 (random: 0.74 0.77 0.81 0.75 0.72 0.69 0.68 0.68 0.69 0.67 0.64 0.62 0.60 0.59 0.57 0.57 0.54 0.51 0.49 0.45 0.43 0.41 0.35 0.33 0.31 0.29 0.29 0.28 0.28 0.28 0.27 0.26 0.26 0.23 0.17 0.16)
+10:11:50 L 0 raw     occupancy R 9 (3-17) logit 0 (0-8) S 14 (8-24) | R² at 25: R 0.124 logit 0.072 S 0.270 rand 0.085 | pooled: R's picks 0.20 of 8, 0.19 of 25, R² at 64 0.367 (random 0.204)
+10:11:50     raw in R-bright/s_only/dd: residual 0.13/0.32/0.55, R's 25 0.78/0.06/0.16, S's 25 0.09/0.81/0.11, pooled 25 0.20/0.70/0.10
+10:11:57 L 0 centred occupancy R 6 (0-17) logit 0 (0-1) S 11 (5-19) | R² at 25: R 0.100 logit 0.062 S 0.205 rand 0.085 | pooled: R's picks 0.16 of 8, 0.19 of 25, R² at 64 0.300 (random 0.204)
+10:11:57     centred in R-bright/s_only/dd: residual 0.11/0.29/0.60, R's 25 0.73/0.07/0.20, S's 25 0.07/0.81/0.12, pooled 25 0.16/0.72/0.12
+10:12:04 L 1 raw     occupancy R 0 (0-3) logit 0 (0-6) S 11 (4-18) | R² at 25: R 0.061 logit 0.075 S 0.168 rand 0.085 | pooled: R's picks 0.03 of 8, 0.04 of 25, R² at 64 0.246 (random 0.204)
+10:12:04     raw in R-bright/s_only/dd: residual 0.05/0.26/0.69, R's 25 0.65/0.08/0.27, S's 25 0.03/0.84/0.13, pooled 25 0.05/0.82/0.13
+10:12:10 L 1 centred occupancy R 0 (0-0) logit 0 (0-0) S 9 (4-17) | R² at 25: R 0.057 logit 0.066 S 0.153 rand 0.085 | pooled: R's picks 0.01 of 8, 0.02 of 25, R² at 64 0.228 (random 0.204)
+10:12:10     centred in R-bright/s_only/dd: residual 0.05/0.25/0.70, R's 25 0.64/0.08/0.28, S's 25 0.03/0.84/0.13, pooled 25 0.04/0.83/0.13
+10:12:17 L 2 raw     occupancy R 0 (0-5) logit 0 (0-0) S 10 (5-16) | R² at 25: R 0.084 logit 0.065 S 0.172 rand 0.085 | pooled: R's picks 0.01 of 8, 0.04 of 25, R² at 64 0.249 (random 0.204)
+10:12:17     raw in R-bright/s_only/dd: residual 0.05/0.22/0.73, R's 25 0.46/0.13/0.40, S's 25 0.04/0.80/0.16, pooled 25 0.06/0.79/0.16
+10:12:24 L 2 centred occupancy R 0 (0-0) logit 0 (0-0) S 6 (2-13) | R² at 25: R 0.071 logit 0.056 S 0.135 rand 0.085 | pooled: R's picks 0.01 of 8, 0.03 of 25, R² at 64 0.207 (random 0.204)
+10:12:24     centred in R-bright/s_only/dd: residual 0.04/0.20/0.76, R's 25 0.40/0.15/0.45, S's 25 0.03/0.81/0.16, pooled 25 0.04/0.80/0.16
+10:12:24     'The capital of France is': R ['olated', 'otope', ' Yas', '(IS', ' Edmonton', 'ạ'] | S [' is', 'INTEGER', ' firstname', '主義', 'Argentina', 'MHz']
+10:12:24     'def fibonacci(n):\n': R ['個', '自驾', 'abit', '\tA', '保持着', '裟'] | S ['):\n', 'def', 'xCA', '(n', '馈', '洁白']
+10:12:24     'Once upon a time, in a small vil': R ['東', 'stands', 'iples', '||||', ' ACS', '.assertIsNot'] | S [',', '的隱私權', 'ToDevice', '匀', ' branching', 'quiz']
+10:12:24     'Q: What is 17 + 25?\nA:': R ['__\n', ' Parl', ' ACS', '带你', '人人都', 'ğ'] | S [':', ')?\n', '/repos', 'A', '’a', 'AINED']
+10:12:24     '中国的首都是': R ['给自己', 'conscious', '!!!!', '而且还', 'implement', ' DHS'] | S ['都是', '首', '的妻子', '原始', 'aret', ' Dig']
+10:12:24     'Monday, Tuesday, Wednesday,': R [' Thom', '.Has', '_until', ' BEGIN', '衛', '_CHAN'] | S [',', 'Wednesday', '.Department', '.coord', 'Autom', '_ads']
+10:12:24     'The mitochondria is the powerhou': R ['lean', '的缘故', ' PEOPLE', ' reordered', '[W', ' Jorge'] | S [' because', '熠', ' membr', 'tower', 'abinet', '布局']
+10:12:24     '[chat] Explain why the sky is bl': R ['É', ' espera', 'Machine', ' Thom', 'pell', 'IGATION'] | S ['\n\n', 'assistant', '</think>', '只有一个', ' subj', '概括']
+10:12:24     '[chat] Who are you?': R [' UNS', ' Qué', 'itech', 'ikipedia', '_inside', 'Event'] | S ['\n\n', 'assistant', 'Rod', '讀取', '畢竟', ' subj']
+10:12:24     '[chat] Write a haiku about autum': R [' Addiction', '(),\n', ' descon', 'ikipedia', 'shipping', 'OMETRY'] | S ['\n\n', 'assistant', '密碼', ":');\n", ' weg', ' corres']
+10:12:31 L 3 raw     occupancy R 1 (0-7) logit 0 (0-0) S 7 (3-13) | R² at 25: R 0.078 logit 0.072 S 0.141 rand 0.085 | pooled: R's picks 0.08 of 8, 0.12 of 25, R² at 64 0.222 (random 0.204)
+10:12:31     raw in R-bright/s_only/dd: residual 0.10/0.22/0.67, R's 25 0.83/0.04/0.13, S's 25 0.08/0.81/0.11, pooled 25 0.17/0.73/0.10
+10:12:38 L 3 centred occupancy R 0 (0-5) logit 0 (0-0) S 4 (1-9) | R² at 25: R 0.068 logit 0.066 S 0.110 rand 0.085 | pooled: R's picks 0.12 of 8, 0.13 of 25, R² at 64 0.189 (random 0.204)
+10:12:38     centred in R-bright/s_only/dd: residual 0.09/0.21/0.70, R's 25 0.82/0.04/0.14, S's 25 0.06/0.83/0.12, pooled 25 0.14/0.74/0.11
+10:12:45 L 4 raw     occupancy R 9 (5-16) logit 3 (0-20) S 10 (6-15) | R² at 25: R 0.125 logit 0.092 S 0.168 rand 0.085 | pooled: R's picks 0.37 of 8, 0.28 of 25, R² at 64 0.267 (random 0.204)
+10:12:45     raw in R-bright/s_only/dd: residual 0.19/0.21/0.60, R's 25 0.90/0.02/0.07, S's 25 0.22/0.70/0.08, pooled 25 0.43/0.50/0.07
+10:12:51 L 4 centred occupancy R 7 (1-14) logit 0 (0-9) S 5 (2-10) | R² at 25: R 0.096 logit 0.084 S 0.108 rand 0.085 | pooled: R's picks 0.45 of 8, 0.32 of 25, R² at 64 0.209 (random 0.204)
+10:12:51     centred in R-bright/s_only/dd: residual 0.16/0.19/0.65, R's 25 0.89/0.03/0.09, S's 25 0.12/0.77/0.11, pooled 25 0.40/0.51/0.09
+10:12:58 L 5 raw     occupancy R 9 (4-16) logit 1 (0-12) S 9 (4-14) | R² at 25: R 0.120 logit 0.086 S 0.153 rand 0.085 | pooled: R's picks 0.38 of 8, 0.29 of 25, R² at 64 0.254 (random 0.204)
+10:12:58     raw in R-bright/s_only/dd: residual 0.22/0.21/0.58, R's 25 0.92/0.02/0.06, S's 25 0.26/0.67/0.08, pooled 25 0.47/0.47/0.06
+10:13:05 L 5 centred occupancy R 7 (0-14) logit 0 (0-7) S 5 (2-10) | R² at 25: R 0.097 logit 0.081 S 0.101 rand 0.085 | pooled: R's picks 0.45 of 8, 0.33 of 25, R² at 64 0.205 (random 0.204)
+10:13:05     centred in R-bright/s_only/dd: residual 0.19/0.19/0.61, R's 25 0.91/0.02/0.07, S's 25 0.16/0.75/0.09, pooled 25 0.45/0.47/0.07
+10:13:12 L 6 raw     occupancy R 11 (4-19) logit 1 (0-10) S 12 (8-17) | R² at 25: R 0.118 logit 0.081 S 0.210 rand 0.085 | pooled: R's picks 0.25 of 8, 0.28 of 25, R² at 64 0.309 (random 0.204)
+10:13:12     raw in R-bright/s_only/dd: residual 0.23/0.24/0.53, R's 25 0.93/0.02/0.05, S's 25 0.29/0.65/0.05, pooled 25 0.44/0.52/0.05
+10:13:19 L 6 centred occupancy R 8 (1-17) logit 1 (0-7) S 7 (3-14) | R² at 25: R 0.100 logit 0.081 S 0.107 rand 0.085 | pooled: R's picks 0.44 of 8, 0.36 of 25, R² at 64 0.217 (random 0.204)
+10:13:19     centred in R-bright/s_only/dd: residual 0.21/0.19/0.60, R's 25 0.92/0.02/0.06, S's 25 0.19/0.72/0.09, pooled 25 0.50/0.44/0.07
+10:13:19     'The capital of France is': R ['/is', '因为它', 'otope', ' REVIEW', ' GCC', ' Coins'] | S [' is', 'Capital', 'xba', ' Lair', '国情', 'astle']
+10:13:19     'def fibonacci(n):\n': R ['Daniel', '\tit', '：\n', ' sebuah', '.GetName', '了过来'] | S ['def', '):\n', '</think>', '(TreeNode', '威尼斯人', 'airport']
+10:13:19     'Once upon a time, in a small vil': R [' discovers', 'atown', '举行了', 'Protected', 'rieving', '人们对'] | S [',', ' village', '_quick', ' Province', '崁', 'HOLDER']
+10:13:19     'Q: What is 17 + 25?\nA:': R ['生气', ' Parl', 'aptive', ' Portsmouth', '*\n', '首款'] | S ['A', '}.', '<|im_end|>', ' Buddh', '[a', ' diarr']
+10:13:19     '中国的首都是': R [' Cities', '川', '皇冠', '_peak', ' extrad', 'wealth'] | S ['中的', 'ominator', 'ju', ' falls', '快递', '一切都是']
+10:13:19     'Monday, Tuesday, Wednesday,': R [' Undo', '什么样的', '_hour', '---\n', '異', ' astronomers'] | S [',', '</think>', 'Wednesday', 'pons', 'latent', ' baise']
+10:13:19     'The mitochondria is the powerhou': R ['Contains', '就是因为', '的缘故', ' molecule', ' celery', '快樂'] | S [' because', ' secretion', '.Navigate', 'Bank', ' pname', '_rooms']
+10:13:19     '[chat] Explain why the sky is bl': R [' :::', 'textarea', 'Sense', '凡事', ' "":\n', ' oxidation'] | S ['\n\n', '</think>', '.lst', '(comb', 'ircular', 'Dialogue']
+10:13:19     '[chat] Who are you?': R ['Important', '言语', ' VAT', ' Singer', '躺在床上', ' datasource'] | S ['\n\n', '</think>', 'Assistant', '(comb', 'ESC', '_callback']
+10:13:19     '[chat] Write a haiku about autum': R ['abbo', 'Writing', 'ENSOR', ' FIL', '太阳能', '舒适的'] | S ['\n\n', '</think>', ' interpol', '.trailing', 'Building', 'xfd']
+10:13:26 L 7 raw     occupancy R 8 (3-15) logit 9 (0-26) S 11 (7-16) | R² at 25: R 0.102 logit 0.092 S 0.174 rand 0.085 | pooled: R's picks 0.24 of 8, 0.26 of 25, R² at 64 0.270 (random 0.204)
+10:13:26     raw in R-bright/s_only/dd: residual 0.21/0.23/0.57, R's 25 0.93/0.02/0.05, S's 25 0.28/0.67/0.06, pooled 25 0.42/0.53/0.05
+10:13:33 L 7 centred occupancy R 5 (1-12) logit 8 (0-25) S 5 (1-11) | R² at 25: R 0.087 logit 0.092 S 0.095 rand 0.085 | pooled: R's picks 0.43 of 8, 0.34 of 25, R² at 64 0.197 (random 0.204)
+10:13:33     centred in R-bright/s_only/dd: residual 0.19/0.19/0.63, R's 25 0.92/0.02/0.06, S's 25 0.17/0.73/0.09, pooled 25 0.47/0.46/0.07
+10:13:40 L 8 raw     occupancy R 8 (3-15) logit 5 (0-18) S 12 (7-17) | R² at 25: R 0.102 logit 0.089 S 0.173 rand 0.085 | pooled: R's picks 0.25 of 8, 0.26 of 25, R² at 64 0.268 (random 0.204)
+10:13:40     raw in R-bright/s_only/dd: residual 0.22/0.22/0.56, R's 25 0.91/0.02/0.07, S's 25 0.28/0.66/0.06, pooled 25 0.43/0.52/0.05
+10:13:46 L 8 centred occupancy R 6 (1-13) logit 5 (0-17) S 7 (2-13) | R² at 25: R 0.091 logit 0.090 S 0.099 rand 0.085 | pooled: R's picks 0.42 of 8, 0.33 of 25, R² at 64 0.201 (random 0.204)
+10:13:46     centred in R-bright/s_only/dd: residual 0.20/0.18/0.61, R's 25 0.91/0.02/0.07, S's 25 0.21/0.70/0.09, pooled 25 0.49/0.44/0.07
+10:13:53 L 9 raw     occupancy R 6 (2-10) logit 4 (0-17) S 11 (7-16) | R² at 25: R 0.087 logit 0.087 S 0.175 rand 0.085 | pooled: R's picks 0.22 of 8, 0.22 of 25, R² at 64 0.265 (random 0.204)
+10:13:53     raw in R-bright/s_only/dd: residual 0.22/0.23/0.55, R's 25 0.94/0.01/0.05, S's 25 0.29/0.66/0.05, pooled 25 0.41/0.55/0.04
+10:14:00 L 9 centred occupancy R 4 (0-8) logit 5 (0-18) S 5 (1-12) | R² at 25: R 0.076 logit 0.090 S 0.090 rand 0.085 | pooled: R's picks 0.38 of 8, 0.28 of 25, R² at 64 0.186 (random 0.204)
+10:14:00     centred in R-bright/s_only/dd: residual 0.20/0.19/0.62, R's 25 0.94/0.01/0.05, S's 25 0.20/0.71/0.09, pooled 25 0.46/0.47/0.07
+10:14:07 L10 raw     occupancy R 9 (4-17) logit 15 (1-34) S 10 (6-16) | R² at 25: R 0.119 logit 0.097 S 0.174 rand 0.085 | pooled: R's picks 0.38 of 8, 0.36 of 25, R² at 64 0.282 (random 0.204)
+10:14:07     raw in R-bright/s_only/dd: residual 0.26/0.22/0.52, R's 25 0.94/0.01/0.05, S's 25 0.34/0.61/0.04, pooled 25 0.53/0.43/0.04
+10:14:14 L10 centred occupancy R 9 (3-17) logit 17 (2-39) S 6 (2-12) | R² at 25: R 0.106 logit 0.099 S 0.092 rand 0.085 | pooled: R's picks 0.59 of 8, 0.46 of 25, R² at 64 0.211 (random 0.204)
+10:14:14     centred in R-bright/s_only/dd: residual 0.25/0.18/0.57, R's 25 0.93/0.02/0.05, S's 25 0.28/0.65/0.08, pooled 25 0.64/0.30/0.06
+10:14:14     'The capital of France is': R ['城市的', '/is', ' trillion', '首个', 'FILENAME', ' Renault'] | S [' strugg', ' Ts', '室', 'INVALID', 'PasswordField', ' Finance']
+10:14:14     'def fibonacci(n):\n': R ['\tfunction', '():\n', ' converts', ' parentheses', ' Flask', ' xrange'] | S ['def', '.conditions', 'RIEND', '中小企业', '    \n    \n    \n', '__:']
+10:14:14     'Once upon a time, in a small vil': R ['_goto', '____', ' prevailed', '故事', ' Foot', ' villagers'] | S ['Ｂ', ' factory', 'vinces', ' pancreatic', ";',\n", '山西省']
+10:14:14     'Q: What is 17 + 25?\nA:': R ['答', ' multiplication', ' kes', 'ynchronous', ' Robot', ' ain'] | S ['¯', 'します', 'Role', '"]]\n', '/pass', '宇']
+10:14:14     '中国的首都是': R ['北京', '这座城市', ' Hwy', ' nigeria', ' treason', 'atom'] | S ['_detail', 'atri', '首都', 'idable', 'akespeare', '₀']
+10:14:14     'Monday, Tuesday, Wednesday,': R ['星期', 'etc', ' Days', 'ynchronous', 'Thread', '樣'] | S [' Erot', '###', '大大', 'EMAIL', 'stamp', '``\n']
+10:14:14     'The mitochondria is the powerhou': R ['Its', ' WHY', '的缘故', 'rames', ' celery', '因為'] | S ['because', ' stout', '拿着', '病', '_CRYPTO', 'isel']
+10:14:14     '[chat] Explain why the sky is bl': R [' *\\', 'abbo', 'Mus', ' :\n', '_Filter', '换了'] | S ['</think>', '__\n\n', '补', '恼', '澳门', ' WHICH']
+10:14:14     '[chat] Who are you?': R ['中国文化', ' sheet', 'Techn', '万物', '確實', 'abbo'] | S ['</think>', 'Assistant', '\u200b\n\n', ' Luck', ' evolutionary', "(',')\n"]
+10:14:14     '[chat] Write a haiku about autum': R [' *[', ' Ow', 'ymb', 'ormal', ' Vacuum', 'stitute'] | S ['=password', '__\n\n', ' MATLAB', '/\n\n\n\n', ' evolutionary', ' causa']
+10:14:21 L11 raw     occupancy R 9 (4-16) logit 14 (2-31) S 10 (6-15) | R² at 25: R 0.118 logit 0.096 S 0.189 rand 0.085 | pooled: R's picks 0.40 of 8, 0.38 of 25, R² at 64 0.297 (random 0.204)
+10:14:21     raw in R-bright/s_only/dd: residual 0.28/0.22/0.49, R's 25 0.95/0.01/0.04, S's 25 0.36/0.60/0.04, pooled 25 0.54/0.43/0.03
+10:14:27 L11 centred occupancy R 9 (4-17) logit 17 (3-37) S 7 (2-13) | R² at 25: R 0.107 logit 0.099 S 0.093 rand 0.085 | pooled: R's picks 0.59 of 8, 0.47 of 25, R² at 64 0.213 (random 0.204)
+10:14:27     centred in R-bright/s_only/dd: residual 0.27/0.18/0.55, R's 25 0.94/0.01/0.05, S's 25 0.32/0.61/0.07, pooled 25 0.67/0.28/0.05
+10:14:34 L12 raw     occupancy R 7 (3-14) logit 11 (1-25) S 11 (7-17) | R² at 25: R 0.107 logit 0.094 S 0.181 rand 0.085 | pooled: R's picks 0.34 of 8, 0.33 of 25, R² at 64 0.285 (random 0.204)
+10:14:34     raw in R-bright/s_only/dd: residual 0.29/0.22/0.49, R's 25 0.95/0.01/0.04, S's 25 0.37/0.59/0.04, pooled 25 0.52/0.44/0.03
+10:14:41 L12 centred occupancy R 7 (3-14) logit 11 (1-27) S 7 (2-14) | R² at 25: R 0.100 logit 0.095 S 0.094 rand 0.085 | pooled: R's picks 0.52 of 8, 0.42 of 25, R² at 64 0.209 (random 0.204)
+10:14:41     centred in R-bright/s_only/dd: residual 0.28/0.18/0.54, R's 25 0.94/0.01/0.04, S's 25 0.35/0.58/0.07, pooled 25 0.65/0.30/0.05
+10:14:48 L13 raw     occupancy R 6 (2-11) logit 10 (1-21) S 9 (5-13) | R² at 25: R 0.098 logit 0.092 S 0.186 rand 0.085 | pooled: R's picks 0.37 of 8, 0.35 of 25, R² at 64 0.284 (random 0.204)
+10:14:48     raw in R-bright/s_only/dd: residual 0.29/0.22/0.49, R's 25 0.95/0.01/0.04, S's 25 0.35/0.62/0.03, pooled 25 0.50/0.48/0.03
+10:14:55 L13 centred occupancy R 6 (2-11) logit 10 (1-24) S 5 (1-11) | R² at 25: R 0.093 logit 0.093 S 0.085 rand 0.085 | pooled: R's picks 0.54 of 8, 0.44 of 25, R² at 64 0.195 (random 0.204)
+10:14:55     centred in R-bright/s_only/dd: residual 0.28/0.17/0.55, R's 25 0.95/0.01/0.04, S's 25 0.37/0.56/0.07, pooled 25 0.68/0.28/0.05
+10:15:02 L14 raw     occupancy R 5 (2-10) logit 8 (1-19) S 9 (5-14) | R² at 25: R 0.092 logit 0.089 S 0.177 rand 0.085 | pooled: R's picks 0.33 of 8, 0.33 of 25, R² at 64 0.273 (random 0.204)
+10:15:02     raw in R-bright/s_only/dd: residual 0.29/0.22/0.49, R's 25 0.95/0.01/0.03, S's 25 0.37/0.59/0.03, pooled 25 0.50/0.47/0.03
+10:15:09 L14 centred occupancy R 5 (2-10) logit 7 (1-19) S 5 (1-11) | R² at 25: R 0.088 logit 0.089 S 0.086 rand 0.085 | pooled: R's picks 0.49 of 8, 0.41 of 25, R² at 64 0.192 (random 0.204)
+10:15:09     centred in R-bright/s_only/dd: residual 0.28/0.17/0.54, R's 25 0.95/0.01/0.04, S's 25 0.40/0.54/0.06, pooled 25 0.66/0.29/0.04
+10:15:09     'The capital of France is': R ['Correct', ' rap', '习近平', ' getName', ' CITY', 'ocard'] | S ['ortality', 'cerr', 'Validators', '总统', ' doch', 'reso']
+10:15:09     'def fibonacci(n):\n': R ['函数', ' initializes', '\treturn', 'using', '():\n', 'greens'] | S ['限', '\n                    \n', '水准', ' ]).', ' mond', ' tanks']
+10:15:09     'Once upon a time, in a small vil': R ['Story', '_goto', ' Volvo', ' endowed', '人們', '金币'] | S ['+)\\', 'namespace', '----------\n\n', "''\n", 'urrection', '简']
+10:15:09     'Q: What is 17 + 25?\nA:': R [' Fibonacci', ' Immediate', ' Antwort', ' grate', '这话', 'abella'] | S [')):', '.false', ' abrir', 'idents', ' Palace', ' Antwort']
+10:15:09     '中国的首都是': R ['北京', '这座城市', ' varchar', '____', ' monarch', '国防'] | S ['aises', '毛泽东', '驻', 'Dam', '算是', 'asury']
+10:15:09     'Monday, Tuesday, Wednesday,': R [' etc', '星期', 'Days', ' î', '.setName', ' Stripe'] | S ['EMAIL', 'oder', '媒体报道', ' Conce', 'Locked', 'Fall']
+10:15:09     'The mitochondria is the powerhou': R [' mitochond', '____', ' virtue', 'Their', ' maar', '主要原因'] | S ['.level', ' excess', '"But', '()*', '塘', '<D']
+10:15:09     '[chat] Explain why the sky is bl': R ['iteral', ' oci', ' réponse', '如果你', ' ENERGY', 'anyahu'] | S ['%)\n\n', ' dispro', ' almond', '熱', 'PLAN', 'jb']
+10:15:09     '[chat] Who are you?': R ['你好', ' waar', 'ENSITY', ' Initial', 'anyahu', ' Discord'] | S ['))?', ' 😉\n\n', 'ALSE', ' defaultdict', 'wd', ' Loren']
+10:15:09     '[chat] Write a haiku about autum': R [' eclectic', ' Drone', '確實', 'ILER', 'Sentence', 'ollo'] | S ['ivist', ' 😉\n\n', '’.\n\n', ' garbage', ' uploaded', 'め']
+10:15:16 L15 raw     occupancy R 3 (1-7) logit 4 (0-13) S 8 (4-13) | R² at 25: R 0.079 logit 0.082 S 0.162 rand 0.085 | pooled: R's picks 0.31 of 8, 0.30 of 25, R² at 64 0.251 (random 0.204)
+10:15:16     raw in R-bright/s_only/dd: residual 0.27/0.22/0.51, R's 25 0.96/0.01/0.03, S's 25 0.36/0.61/0.04, pooled 25 0.48/0.49/0.03
+10:15:22 L15 centred occupancy R 4 (1-7) logit 4 (0-12) S 3 (0-8) | R² at 25: R 0.076 logit 0.081 S 0.079 rand 0.085 | pooled: R's picks 0.46 of 8, 0.37 of 25, R² at 64 0.175 (random 0.204)
+10:15:22     centred in R-bright/s_only/dd: residual 0.27/0.17/0.56, R's 25 0.96/0.01/0.03, S's 25 0.39/0.54/0.07, pooled 25 0.64/0.32/0.05
+10:15:29 L16 raw     occupancy R 4 (2-8) logit 7 (1-17) S 9 (5-14) | R² at 25: R 0.086 logit 0.088 S 0.163 rand 0.085 | pooled: R's picks 0.34 of 8, 0.34 of 25, R² at 64 0.257 (random 0.204)
+10:15:29     raw in R-bright/s_only/dd: residual 0.31/0.21/0.47, R's 25 0.96/0.01/0.03, S's 25 0.40/0.57/0.03, pooled 25 0.53/0.44/0.03
+10:15:36 L16 centred occupancy R 5 (2-9) logit 6 (1-17) S 4 (0-9) | R² at 25: R 0.084 logit 0.087 S 0.079 rand 0.085 | pooled: R's picks 0.52 of 8, 0.43 of 25, R² at 64 0.182 (random 0.204)
+10:15:36     centred in R-bright/s_only/dd: residual 0.31/0.17/0.52, R's 25 0.96/0.01/0.03, S's 25 0.45/0.49/0.06, pooled 25 0.71/0.25/0.04
+10:15:43 L17 raw     occupancy R 4 (1-6) logit 5 (0-12) S 9 (5-14) | R² at 25: R 0.079 logit 0.082 S 0.184 rand 0.085 | pooled: R's picks 0.31 of 8, 0.32 of 25, R² at 64 0.272 (random 0.204)
+10:15:43     raw in R-bright/s_only/dd: residual 0.33/0.23/0.45, R's 25 0.96/0.01/0.03, S's 25 0.38/0.60/0.03, pooled 25 0.48/0.49/0.02
+10:15:50 L17 centred occupancy R 4 (2-8) logit 4 (0-13) S 4 (1-10) | R² at 25: R 0.080 logit 0.083 S 0.079 rand 0.085 | pooled: R's picks 0.49 of 8, 0.41 of 25, R² at 64 0.178 (random 0.204)
+10:15:50     centred in R-bright/s_only/dd: residual 0.33/0.16/0.51, R's 25 0.96/0.01/0.03, S's 25 0.48/0.46/0.06, pooled 25 0.71/0.25/0.04
+10:15:57 L18 raw     occupancy R 6 (3-10) logit 11 (3-21) S 10 (5-16) | R² at 25: R 0.096 logit 0.094 S 0.192 rand 0.085 | pooled: R's picks 0.35 of 8, 0.39 of 25, R² at 64 0.289 (random 0.204)
+10:15:57     raw in R-bright/s_only/dd: residual 0.39/0.21/0.39, R's 25 0.95/0.01/0.03, S's 25 0.45/0.53/0.02, pooled 25 0.56/0.42/0.02
+10:16:03 L18 centred occupancy R 7 (3-13) logit 10 (2-23) S 5 (1-12) | R² at 25: R 0.098 logit 0.095 S 0.089 rand 0.085 | pooled: R's picks 0.56 of 8, 0.52 of 25, R² at 64 0.199 (random 0.204)
+10:16:03     centred in R-bright/s_only/dd: residual 0.40/0.15/0.45, R's 25 0.95/0.01/0.04, S's 25 0.61/0.35/0.04, pooled 25 0.81/0.16/0.03
+10:16:03     'The capital of France is': R [' ____', ' suburbs', '习近平', ' Mai', '正確', '当之无愧'] | S ['Validators', '总统', '是你', ' Clair', ' beds', '首相']
+10:16:03     'def fibonacci(n):\n': R [' prints', 'iter', '():\n', ' função', '_balance', 'Definition'] | S ['自在', 'GH', 'ę', ']).\n', 'freeze', ' microscope']
+10:16:03     'Once upon a time, in a small vil': R [' Alice', ' inhabitants', '的故事', '__\n', '_goto', '.Agent'] | S ['VEL', 'Ay', '¦', '_critical', ' "),', 'oton']
+10:16:03     'Q: What is 17 + 25?\nA:': R ['回答', ' alphanumeric', '.getFirst', ' tengo', ' {}\n', ' Prompt'] | S ['售后服务', ' lumière', ' ]\r\n', '\\a', 'ABCDE', '\x13']
+10:16:03     '中国的首都是': R ['北京', '这座城市', 'abbrev', ' Jasmine', '????', '正確'] | S ['首都', '赛季', 'paypal', '年后', ' Ky', 'GES']
+10:16:03     'Monday, Tuesday, Wednesday,': R ['依次', ' Days', 'etc', "__',", '倏', ' hexadecimal'] | S ['EGIN', '成都市', 'Locked', ' disclaimer', 'ファ', 'rove']
+10:16:03     'The mitochondria is the powerhou': R ['____', ' mitochond', '主要原因', '它是', ' maar', 'Their'] | S ['=my', ' denn', 'osphere', '奔', '葛', 'ijk']
+10:16:03     '[chat] Explain why the sky is bl': R ['```', 'hammad', '俪', 'ENSITY', 'fds', '介绍了'] | S ['>>\n\n', ' ank', '_MATCH', 'Tuesday', '吉祥', '這樣的']
+10:16:03     '[chat] Who are you?': R [' répond', '您好', '国家安全', ' joking', '胸怀', 'obot'] | S ['>>\n\n', '?</', ' LH', '前后', ' profession', ' biologist']
+10:16:03     '[chat] Write a haiku about autum': R ['<|im_end|>', ' Nova', 'odore', '意见反馈', ':date', 'Sure'] | S ['>>\n\n', '\tsub', ' Antwort', 'Eventually', 'Teacher', ' dun']
+10:16:10 L19 raw     occupancy R 6 (3-10) logit 12 (3-22) S 11 (6-17) | R² at 25: R 0.095 logit 0.096 S 0.200 rand 0.085 | pooled: R's picks 0.32 of 8, 0.38 of 25, R² at 64 0.299 (random 0.204)
+10:16:10     raw in R-bright/s_only/dd: residual 0.42/0.22/0.36, R's 25 0.96/0.01/0.03, S's 25 0.46/0.52/0.02, pooled 25 0.56/0.42/0.02
+10:16:17 L19 centred occupancy R 7 (3-13) logit 12 (3-26) S 6 (1-13) | R² at 25: R 0.098 logit 0.098 S 0.090 rand 0.085 | pooled: R's picks 0.56 of 8, 0.52 of 25, R² at 64 0.202 (random 0.204)
+10:16:17     centred in R-bright/s_only/dd: residual 0.44/0.15/0.41, R's 25 0.96/0.01/0.03, S's 25 0.62/0.34/0.04, pooled 25 0.81/0.16/0.03
+10:16:24 L20 raw     occupancy R 6 (3-11) logit 12 (4-22) S 11 (6-17) | R² at 25: R 0.098 logit 0.097 S 0.219 rand 0.085 | pooled: R's picks 0.34 of 8, 0.41 of 25, R² at 64 0.319 (random 0.204)
+10:16:24     raw in R-bright/s_only/dd: residual 0.45/0.23/0.33, R's 25 0.96/0.01/0.03, S's 25 0.44/0.55/0.02, pooled 25 0.54/0.44/0.02
+10:16:31 L20 centred occupancy R 8 (4-14) logit 15 (4-28) S 6 (1-13) | R² at 25: R 0.104 logit 0.101 S 0.094 rand 0.085 | pooled: R's picks 0.58 of 8, 0.56 of 25, R² at 64 0.210 (random 0.204)
+10:16:31     centred in R-bright/s_only/dd: residual 0.47/0.14/0.38, R's 25 0.96/0.01/0.03, S's 25 0.65/0.31/0.03, pooled 25 0.83/0.14/0.03
+10:16:38 L21 raw     occupancy R 9 (4-16) logit 19 (8-32) S 11 (6-18) | R² at 25: R 0.109 logit 0.107 S 0.201 rand 0.085 | pooled: R's picks 0.38 of 8, 0.47 of 25, R² at 64 0.312 (random 0.204)
+10:16:38     raw in R-bright/s_only/dd: residual 0.48/0.20/0.32, R's 25 0.95/0.01/0.04, S's 25 0.49/0.49/0.02, pooled 25 0.61/0.37/0.02
+10:16:45 L21 centred occupancy R 11 (5-19) logit 22 (9-37) S 7 (2-14) | R² at 25: R 0.115 logit 0.109 S 0.096 rand 0.085 | pooled: R's picks 0.63 of 8, 0.61 of 25, R² at 64 0.223 (random 0.204)
+10:16:45     centred in R-bright/s_only/dd: residual 0.50/0.14/0.36, R's 25 0.95/0.01/0.04, S's 25 0.66/0.31/0.03, pooled 25 0.85/0.12/0.03
+10:16:52 L22 raw     occupancy R 11 (5-18) logit 22 (11-34) S 12 (6-19) | R² at 25: R 0.118 logit 0.113 S 0.201 rand 0.085 | pooled: R's picks 0.41 of 8, 0.48 of 25, R² at 64 0.317 (random 0.204)
+10:16:52     raw in R-bright/s_only/dd: residual 0.55/0.18/0.27, R's 25 0.95/0.01/0.04, S's 25 0.55/0.44/0.01, pooled 25 0.66/0.32/0.02
+10:16:58 L22 centred occupancy R 13 (6-21) logit 25 (11-40) S 8 (2-16) | R² at 25: R 0.123 logit 0.116 S 0.104 rand 0.085 | pooled: R's picks 0.63 of 8, 0.62 of 25, R² at 64 0.237 (random 0.204)
+10:16:58     centred in R-bright/s_only/dd: residual 0.58/0.12/0.30, R's 25 0.95/0.01/0.04, S's 25 0.72/0.25/0.03, pooled 25 0.87/0.10/0.03
+10:16:58     'The capital of France is': R ['____', ' Ans', 'berra', ' wikipedia', '位于', '市长'] | S [' "\',', '首相', '〕', ' democratic', '宿', 'Capital']
+10:16:58     'def fibonacci(n):\n': R ['\tif', '_iter', ' função', '   ', 'staticmethod', 'Returns'] | S [' goalkeeper', 'ongan', 'Pages', '}))\n', ' Dew', 'asu']
+10:16:58     'Once upon a time, in a small vil': R ['有一位', '故事', ' sebuah', ' tranqu', ' arose', ' villagers'] | S ['序', '家乡', '!");\n\n', 'Whenever', '_ub', ' Mons']
+10:16:58     'Q: What is 17 + 25?\nA:': R [' Answer', '合并', '=$((', ' tengo', '__\n', ' Beet'] | S ['...]\n\n', ' Antwort', '[N', '介质', ' zer', ' dak']
+10:16:58     '中国的首都是': R [' city', '北京', '____', '哪一个', '位于', '總統'] | S ['首都', '打印机', 'decess', 'DAL', 'nist', 'CALL']
+10:16:58     'Monday, Tuesday, Wednesday,': R [' etc', '星期', 'Fourth', ' Dawn', '__":\n', '連續'] | S ['}))\n\n', 'EGIN', 'bst', ' PASSWORD', 'locations', 'ascii']
+10:16:58     'The mitochondria is the powerhou': R ['____', ' mitochond', '它是', 'They', ' :-\n', ' sino'] | S ['…)', '积极性', '_CODE', '.now', ' isa', '风暴']
+10:16:58     '[chat] Explain why the sky is bl': R ['原因是', '_In', 'Powered', 'nThe', ' slender', ' kam'] | S [' ank', '?</', '_NORMAL', 'Russia', ' smiled', 'agr']
+10:16:58     '[chat] Who are you?': R ['我是', ' Generally', '✨', ' répond', '"Our', '您好'] | S [" '')\n\n", '什么呢', 'Regarding', '演化', ' Wasser', ' interns']
+10:16:58     '[chat] Write a haiku about autum': R ['<pre', 'kiye', ' eerie', '_POWER', '清晨', ' Accom'] | S [' whispered', ' Ä', 'passes', '_cid', ' Marathon', '>>\n\n']
+10:17:05 L23 raw     occupancy R 13 (7-19) logit 24 (12-35) S 14 (7-21) | R² at 25: R 0.126 logit 0.121 S 0.214 rand 0.084 | pooled: R's picks 0.43 of 8, 0.49 of 25, R² at 64 0.336 (random 0.204)
+10:17:05     raw in R-bright/s_only/dd: residual 0.58/0.18/0.24, R's 25 0.95/0.01/0.04, S's 25 0.55/0.43/0.01, pooled 25 0.67/0.31/0.02
+10:17:12 L23 centred occupancy R 15 (8-23) logit 27 (13-41) S 11 (3-20) | R² at 25: R 0.132 logit 0.125 S 0.122 rand 0.085 | pooled: R's picks 0.61 of 8, 0.61 of 25, R² at 64 0.259 (random 0.204)
+10:17:12     centred in R-bright/s_only/dd: residual 0.61/0.12/0.27, R's 25 0.95/0.01/0.04, S's 25 0.71/0.27/0.02, pooled 25 0.85/0.12/0.03
+10:17:19 L24 raw     occupancy R 12 (7-19) logit 23 (12-33) S 12 (6-19) | R² at 25: R 0.130 logit 0.123 S 0.223 rand 0.084 | pooled: R's picks 0.48 of 8, 0.54 of 25, R² at 64 0.347 (random 0.204)
+10:17:19     raw in R-bright/s_only/dd: residual 0.59/0.17/0.24, R's 25 0.95/0.01/0.04, S's 25 0.51/0.48/0.01, pooled 25 0.64/0.35/0.02
+10:17:26 L24 centred occupancy R 16 (9-25) logit 27 (13-42) S 10 (2-18) | R² at 25: R 0.137 logit 0.129 S 0.117 rand 0.085 | pooled: R's picks 0.65 of 8, 0.66 of 25, R² at 64 0.262 (random 0.204)
+10:17:26     centred in R-bright/s_only/dd: residual 0.63/0.10/0.27, R's 25 0.94/0.01/0.05, S's 25 0.70/0.27/0.03, pooled 25 0.85/0.11/0.03
+10:17:33 L25 raw     occupancy R 12 (6-18) logit 21 (9-31) S 11 (5-19) | R² at 25: R 0.127 logit 0.123 S 0.206 rand 0.085 | pooled: R's picks 0.50 of 8, 0.55 of 25, R² at 64 0.330 (random 0.204)
+10:17:33     raw in R-bright/s_only/dd: residual 0.60/0.17/0.23, R's 25 0.94/0.01/0.04, S's 25 0.51/0.48/0.02, pooled 25 0.64/0.34/0.02
+10:17:40 L25 centred occupancy R 15 (8-24) logit 24 (11-38) S 10 (2-18) | R² at 25: R 0.132 logit 0.128 S 0.114 rand 0.085 | pooled: R's picks 0.65 of 8, 0.65 of 25, R² at 64 0.255 (random 0.204)
+10:17:40     centred in R-bright/s_only/dd: residual 0.63/0.11/0.26, R's 25 0.94/0.01/0.05, S's 25 0.68/0.29/0.03, pooled 25 0.85/0.12/0.03
+10:17:47 L26 raw     occupancy R 13 (7-20) logit 23 (10-35) S 12 (5-19) | R² at 25: R 0.136 logit 0.130 S 0.222 rand 0.085 | pooled: R's picks 0.52 of 8, 0.57 of 25, R² at 64 0.352 (random 0.204)
+10:17:47     raw in R-bright/s_only/dd: residual 0.59/0.18/0.23, R's 25 0.94/0.01/0.05, S's 25 0.47/0.51/0.02, pooled 25 0.62/0.36/0.02
+10:17:53 L26 centred occupancy R 18 (9-28) logit 27 (13-43) S 11 (2-20) | R² at 25: R 0.144 logit 0.137 S 0.122 rand 0.085 | pooled: R's picks 0.66 of 8, 0.67 of 25, R² at 64 0.271 (random 0.204)
+10:17:53     centred in R-bright/s_only/dd: residual 0.63/0.11/0.26, R's 25 0.93/0.01/0.05, S's 25 0.65/0.32/0.03, pooled 25 0.83/0.13/0.04
+10:17:53     'The capital of France is': R ['____', ' France', '位于', ' Ankara', 'leetcode', '.Name'] | S ['总统', '首都', 'lands', ' QtWidgets', 'cers', '.day']
+10:17:53     'def fibonacci(n):\n': R ['\tif', ' """\n', ' fibonacci', '.assertIsNot', "'''", 'Recursive'] | S ['quiz', '气候', '樱', ' Pero', '放下', 'ften']
+10:17:53     'Once upon a time, in a small vil': R [' villagers', '有一位', 'there', ' frogs', '故事', ' sebuah'] | S ['_cells', ' poem', 'Entre', '家乡', '坐落于', 'adays']
+10:17:53     'Q: What is 17 + 25?\nA:': R ['4', '__\r\n', ' Calculation', ' Hmm', '.answer', ' Forty'] | S [' ked', '...]\n\n', ' critic', 'Annual', ' Tao', '鎖']
+10:17:53     '中国的首都是': R ['北京', '____', ' city', '哪个', '什么', ' Located'] | S ['首都', '笼', '会被', 'MainWindow', ' utmost', 'nova']
+10:17:53     'Monday, Tuesday, Wednesday,': R [' Thursday', 'etc', ' quatre', '及', ' Instructor', '_"'] | S ['<?', ' Mondays', '椭', 'escription', 'tract', ' Investor']
+10:17:53     'The mitochondria is the powerhou': R ['它是', ' mitochond', '____', ' they', '_of', '?\n\n'] | S ['因为在', ' WTO', '病', 'osphere', 'jer', ' misconception']
+10:17:53     '[chat] Explain why the sky is bl': R ['The', ' sunlight', '这是因为', '_Color', '_atoms', ' oci'] | S [' рас', '.Question', '.disabled', '-->\n\n', ' permitting', '\\V']
+10:17:53     '[chat] Who are you?': R ['我是', '您好', 'laughs', ' Xiaomi', ' Assistant', '(bot'] | S ['就够了', ' transgender', '-----\n\n', 'Firefox', '?v', 'Lie']
+10:17:53     '[chat] Write a haiku about autum': R [' autumn', '树叶', '秋', ' crimson', '<pre', '凋'] | S [':]\n\n', 'Explanation', 'Ā', '鸣', ' Yuk', 'pcs']
+10:18:00 L27 raw     occupancy R 12 (6-18) logit 19 (8-29) S 12 (6-20) | R² at 25: R 0.133 logit 0.128 S 0.246 rand 0.085 | pooled: R's picks 0.50 of 8, 0.55 of 25, R² at 64 0.374 (random 0.204)
+10:18:00     raw in R-bright/s_only/dd: residual 0.57/0.21/0.23, R's 25 0.94/0.01/0.05, S's 25 0.40/0.59/0.02, pooled 25 0.55/0.43/0.02
+10:18:07 L27 centred occupancy R 17 (9-27) logit 24 (11-39) S 13 (3-23) | R² at 25: R 0.145 logit 0.139 S 0.130 rand 0.085 | pooled: R's picks 0.63 of 8, 0.63 of 25, R² at 64 0.281 (random 0.204)
+10:18:07     centred in R-bright/s_only/dd: residual 0.63/0.11/0.26, R's 25 0.94/0.01/0.05, S's 25 0.59/0.38/0.03, pooled 25 0.80/0.16/0.04
+10:18:14 L28 raw     occupancy R 11 (5-18) logit 18 (7-30) S 13 (6-22) | R² at 25: R 0.136 logit 0.133 S 0.238 rand 0.085 | pooled: R's picks 0.49 of 8, 0.53 of 25, R² at 64 0.371 (random 0.204)
+10:18:14     raw in R-bright/s_only/dd: residual 0.55/0.20/0.25, R's 25 0.94/0.01/0.06, S's 25 0.35/0.62/0.02, pooled 25 0.53/0.44/0.03
+10:18:21 L28 centred occupancy R 15 (7-26) logit 21 (8-37) S 14 (3-24) | R² at 25: R 0.144 logit 0.140 S 0.149 rand 0.085 | pooled: R's picks 0.56 of 8, 0.59 of 25, R² at 64 0.300 (random 0.204)
+10:18:21     centred in R-bright/s_only/dd: residual 0.60/0.13/0.27, R's 25 0.93/0.01/0.06, S's 25 0.44/0.53/0.04, pooled 25 0.69/0.28/0.04
+10:18:28 L29 raw     occupancy R 15 (7-23) logit 23 (9-35) S 11 (4-18) | R² at 25: R 0.156 logit 0.151 S 0.235 rand 0.085 | pooled: R's picks 0.60 of 8, 0.63 of 25, R² at 64 0.384 (random 0.204)
+10:18:28     raw in R-bright/s_only/dd: residual 0.59/0.18/0.23, R's 25 0.93/0.01/0.06, S's 25 0.37/0.61/0.02, pooled 25 0.58/0.39/0.03
+10:18:34 L29 centred occupancy R 21 (10-33) logit 29 (13-46) S 11 (3-21) | R² at 25: R 0.167 logit 0.163 S 0.133 rand 0.085 | pooled: R's picks 0.67 of 8, 0.69 of 25, R² at 64 0.306 (random 0.204)
+10:18:34     centred in R-bright/s_only/dd: residual 0.65/0.10/0.26, R's 25 0.93/0.01/0.06, S's 25 0.51/0.45/0.04, pooled 25 0.77/0.18/0.05
+10:18:42 L30 raw     occupancy R 13 (6-21) logit 19 (7-31) S 14 (6-22) | R² at 25: R 0.153 logit 0.150 S 0.257 rand 0.085 | pooled: R's picks 0.53 of 8, 0.56 of 25, R² at 64 0.402 (random 0.204)
+10:18:42     raw in R-bright/s_only/dd: residual 0.56/0.20/0.25, R's 25 0.93/0.01/0.06, S's 25 0.30/0.66/0.04, pooled 25 0.52/0.45/0.04
+10:18:48 L30 centred occupancy R 18 (9-30) logit 24 (10-41) S 15 (4-25) | R² at 25: R 0.164 logit 0.161 S 0.153 rand 0.085 | pooled: R's picks 0.60 of 8, 0.61 of 25, R² at 64 0.322 (random 0.204)
+10:18:48     centred in R-bright/s_only/dd: residual 0.61/0.11/0.28, R's 25 0.93/0.01/0.07, S's 25 0.39/0.55/0.06, pooled 25 0.69/0.25/0.05
+10:18:48     'The capital of France is': R [' Paris', '____', '位于', '北京', ' surrounded', ' Lyon'] | S ['首都', '成败', 'ITES', 'inx', '_dr', '=?']
+10:18:48     'def fibonacci(n):\n': R ['\tif', '   ', ' fibonacci', ' """\n', 'CACHE', ' resultado'] | S ['oor', 'ften', 'xdd', '挂', '):\\', '肥料']
+10:18:48     'Once upon a time, in a small vil': R [' there', ' lived', '住', ' Farmer', '年轻的', '居住'] | S ['家乡', 'toList', 'uming', '刻', ' nephew', 'itory']
+10:18:48     'Q: What is 17 + 25?\nA:': R [' Let', ' Forty', '首先', 'Adding', '4', ' Calculation'] | S ['})\r\n\r\n', '_CMD', 'À', ' astronauts', ' metabol', ' fps']
+10:18:48     '中国的首都是': R ['北京', '哪里', '____', '石家庄', ' Rome', '哪一个'] | S ['首都', '满了', 'decess', '蛋糕', '屯', '_TR']
+10:18:48     'Monday, Tuesday, Wednesday,': R [' Thursday', '四是', '和', ' *\r\n', 'etc', ' quatre'] | S ['周二', '岩石', '.manage', '\tvirtual', 'Wednesday', '"]),\n']
+10:18:48     'The mitochondria is the powerhou': R [' mitochond', '它', '____', ' it', ' ATP', ' :-\n'] | S [' años', '.By', ' Archbishop', 'Circle', ' fungus', ' vie']
+10:18:48     '[chat] Explain why the sky is bl': R ['The', ' sunlight', '_Color', '这是因为', '蓝天', '  \r\n'] | S [' --------------------------------------------------------------------------\n', '\u200e', ' swallow', '?</', 'cess', '贮']
+10:18:48     '[chat] Who are you?': R ['Hello', '我是', ' Hi', '_good', '您好', '嘿'] | S ['-----\n\n', '=options', ' Qing', '新建', '袖', ' grayscale']
+10:18:48     '[chat] Write a haiku about autum': R [' Leaves', ' crimson', 'AUT', '枫', '叶子', '秋'] | S ['=-=-', 'alten', ' foe', ' warmth', ']\n\n\n\n', ' CCC']
+10:18:55 L31 raw     occupancy R 13 (5-21) logit 18 (7-30) S 13 (5-21) | R² at 25: R 0.155 logit 0.153 S 0.276 rand 0.085 | pooled: R's picks 0.55 of 8, 0.57 of 25, R² at 64 0.422 (random 0.204)
+10:18:55     raw in R-bright/s_only/dd: residual 0.55/0.20/0.25, R's 25 0.93/0.00/0.07, S's 25 0.27/0.68/0.05, pooled 25 0.49/0.47/0.04
+10:19:02 L31 centred occupancy R 19 (9-32) logit 24 (9-40) S 15 (4-26) | R² at 25: R 0.170 logit 0.167 S 0.155 rand 0.085 | pooled: R's picks 0.61 of 8, 0.62 of 25, R² at 64 0.330 (random 0.204)
+10:19:02     centred in R-bright/s_only/dd: residual 0.62/0.10/0.28, R's 25 0.93/0.00/0.07, S's 25 0.36/0.55/0.09, pooled 25 0.68/0.26/0.06
+10:19:09 L32 raw     occupancy R 10 (4-17) logit 14 (5-23) S 16 (8-25) | R² at 25: R 0.141 logit 0.137 S 0.294 rand 0.085 | pooled: R's picks 0.44 of 8, 0.48 of 25, R² at 64 0.429 (random 0.204)
+10:19:09     raw in R-bright/s_only/dd: residual 0.50/0.21/0.29, R's 25 0.93/0.00/0.07, S's 25 0.21/0.70/0.10, pooled 25 0.41/0.53/0.06
+10:19:16 L32 centred occupancy R 15 (6-26) logit 18 (6-33) S 19 (8-30) | R² at 25: R 0.151 logit 0.148 S 0.181 rand 0.085 | pooled: R's picks 0.49 of 8, 0.52 of 25, R² at 64 0.341 (random 0.204)
+10:19:16     centred in R-bright/s_only/dd: residual 0.56/0.11/0.33, R's 25 0.93/0.00/0.07, S's 25 0.24/0.60/0.16, pooled 25 0.55/0.37/0.09
+10:19:23 L33 raw     occupancy R 13 (5-21) logit 18 (8-28) S 11 (5-20) | R² at 25: R 0.155 logit 0.153 S 0.290 rand 0.085 | pooled: R's picks 0.56 of 8, 0.59 of 25, R² at 64 0.432 (random 0.204)
+10:19:23     raw in R-bright/s_only/dd: residual 0.55/0.20/0.25, R's 25 0.93/0.00/0.07, S's 25 0.26/0.66/0.08, pooled 25 0.47/0.48/0.05
+10:19:29 L33 centred occupancy R 22 (10-35) logit 27 (12-44) S 14 (5-25) | R² at 25: R 0.170 logit 0.168 S 0.150 rand 0.085 | pooled: R's picks 0.62 of 8, 0.64 of 25, R² at 64 0.326 (random 0.204)
+10:19:29     centred in R-bright/s_only/dd: residual 0.64/0.07/0.28, R's 25 0.92/0.00/0.07, S's 25 0.34/0.49/0.17, pooled 25 0.68/0.23/0.08
+10:19:36 L34 raw     occupancy R 20 (10-29) logit 24 (13-34) S 9 (4-16) | R² at 25: R 0.176 logit 0.175 S 0.297 rand 0.085 | pooled: R's picks 0.66 of 8, 0.70 of 25, R² at 64 0.446 (random 0.204)
+10:19:36     raw in R-bright/s_only/dd: residual 0.64/0.18/0.18, R's 25 0.93/0.01/0.07, S's 25 0.37/0.58/0.05, pooled 25 0.56/0.41/0.04
+10:19:43 L34 centred occupancy R 36 (18-51) logit 40 (22-56) S 13 (5-23) | R² at 25: R 0.187 logit 0.185 S 0.136 rand 0.085 | pooled: R's picks 0.72 of 8, 0.75 of 25, R² at 64 0.327 (random 0.204)
+10:19:43     centred in R-bright/s_only/dd: residual 0.75/0.05/0.20, R's 25 0.93/0.01/0.07, S's 25 0.56/0.32/0.12, pooled 25 0.81/0.12/0.07
+10:19:50 L35 raw     occupancy R 36 (23-50) logit 36 (23-50) S 9 (4-17) | R² at 25: R 0.209 logit 0.209 S 0.357 rand 0.085 | pooled: R's picks 0.69 of 8, 0.75 of 25, R² at 64 0.513 (random 0.204)
+10:19:50     raw in R-bright/s_only/dd: residual 0.68/0.21/0.11, R's 25 0.90/0.01/0.09, S's 25 0.46/0.52/0.02, pooled 25 0.58/0.39/0.03
+10:19:57 L35 centred occupancy R 51 (34-64) logit 51 (34-64) S 15 (5-26) | R² at 25: R 0.206 logit 0.206 S 0.197 rand 0.085 | pooled: R's picks 0.72 of 8, 0.77 of 25, R² at 64 0.392 (random 0.204)
+10:19:57     centred in R-bright/s_only/dd: residual 0.79/0.07/0.14, R's 25 0.91/0.01/0.08, S's 25 0.66/0.29/0.05, pooled 25 0.76/0.18/0.06
+10:19:57     'The capital of France is': R [' Paris', ' located', '？\n', 'パ', '__,', ' madrid'] | S ['秋天', '我可以', '经济发展', ' Hassan', ' pep', ' "?']
+10:19:57     'def fibonacci(n):\n': R ['    \n', '\tseq', '\tif', '\tcache', ' fibonacci', '\ta'] | S ['oub', "!')\n\n", '.forward', ' +(', "''.", 'fy']
+10:19:57     'Once upon a time, in a small vil': R [' there', ' lived', ' nestled', ' Farmer', ' Elena', ' Xiaomi'] | S ['分布式', '只见', '\twhere', '秋天', '商人', '妈']
+10:19:57     'Q: What is 17 + 25?\nA:': R [' Let', ' Adding', ' Calculation', ' Forty', '__\r\n', ' Alright'] | S [' Approximately', '火焰', 'preter', '训', '_valid', ' Pdf']
+10:19:57     '中国的首都是': R ['北京', '哪个', '？\n', '()",', '上海市', '罗马'] | S ['马云', 'produce', '东部', '转发', '}",\n', 'cow']
+10:19:57     'Monday, Tuesday, Wednesday,': R [' Thursday', '\tand', ' Thur', ' ........', '或', ' și'] | S ['ATIC', ' agosto', ' COD', 'brown', '音乐会', ' Shuffle']
+10:19:57     'The mitochondria is the powerhou': R [' mitochond', ' it', '<|im_start|>', '？\n', ':?', ' THEY'] | S ['г', '汁', ' biochemical', '创造性', 'cfg', 'cep']
+10:19:57     '[chat] Explain why the sky is bl': R ['The', '</think>', '天空', '这是因为', '+")', 'scatter'] | S ['/>\\', '一部分', '彩虹', '转动', ' december', 'Climate']
+10:19:57     '[chat] Who are you?': R ['</think>', 'Hello', 'I', '大家', '!I', '."\r\n'] | S ['foods', '("")\n', ' clearer', 'Samsung', ' Somalia', 'Works']
+10:19:57     '[chat] Write a haiku about autum': R ['Le', ' crimson', 'Golden', 'Sparse', 'Aut', '凋'] | S ['笑意', 'Fox', 'lst', '夏季', '转动', '寒']

@@ -487,9 +487,14 @@ sector from L4-L12, and the dark part of the difference, most of its energy, cha
 needs the R-lens's top directions and more of the difference besides, and thinking mode at L12 sits in a few directions
 neither lens weights. Ranked by gain without a cut (its loudest direction, the residual's massive-activation offset,
 left out), the R-lens puts what prompts differ in well above chance at every layer: the early dark sector is the lens's
-middle ranks. The readouts span the residual unevenly: early, the R-lens barely reads about half of it, the S-lens
-reads that half, so no direction is dark to both, and nothing two prompts differ in sits there. So the dark sector likely holds what prompts share rather
-than what they differ in
+middle ranks. The readouts span the residual unevenly: early, the R-lens barely reads about half of it and the S-lens
+reads that half, though about 3,000 directions are quieter than a random one to both. That doubly dark sector carries a
+half to two thirds of what removing the dark sector costs and alone gives the middle's wrong facts; the S-lens's bright
+part alone costs almost nothing, and the word forms, the comprehension failures and the missing pieces of words appear
+only with both removed. As sparse frames (Gurnee et al.'s J-space), the S-lens's token
+footprints code the residual's top components through L9 and the R-lens's from L10, naming 北京 at the last position of
+"中国的首都是"; but the R-lens's sparse space holds only a few percent of the variance beyond random and grows into the last
+layers. So the dark sector likely holds what prompts share rather than what they differ in
 ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 ### Limits

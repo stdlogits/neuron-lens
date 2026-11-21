@@ -1930,9 +1930,69 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
   at the MLP inputs, are all read by the S-lens, at a median of 6-40% of its second loudest in singular value; no
   direction is dark to both. What two prompts differ in sits inside the R-lens's span there: the rank ladder puts at
   most 0.02 of the gap past rank 2,048 at L0-L8. The factor of 1,000 is a convention; the spectra are continuous.
+- **The doubly dark sector** (`--doubly`): the directions orthogonal to both lenses' bright sectors, 3,030-3,340 at
+  L0-L3, 2,330-2,940 at L4-L15, 1,750-2,220 at L16-L20 and 670-1,700 later. The R-lens's dark sector is it plus
+  `s_only`, the S-lens's bright sector's part outside the R-lens's (908 directions at L0, 761 at L9, 59 at L35). A soft
+  version, the quietest directions of the two Grams summed (each over its gain on a random direction), as many,
+  holds it almost whole (0.96-0.99 of it at L0-L9 and 0.80-0.96 later, against 0.16-0.81 by chance) and ablates the
+  same. 2,960-3,290 directions are quieter than a random one to both lenses at L0-L22 (2,380-2,970 later), so "dark to
+  neither" in the span test holds only at its loose factor of 1,000. In context the residual holds 55-73% of its energy
+  there at L0-L3, 49-60% at L4-L15 and 11-45% later, below its share of dimensions early (74-81% at L0-L3).
+  - **It carries most of what the dark sector's ablation costs, and the S-lens's part almost none.** One layer at a
+    time, removing it costs 0.007-0.031 nats at L1-L15 (the dark sector 0.010-0.042) and `s_only` at most 0.008 at any
+    of L1-L34. Over bands, in nats per token (DCLM / code / Chinese / chat):
+
+    | band | dark sector | doubly dark | `s_only` | random, doubly dark's size |
+    |---|---|---|---|---|
+    | L0 | +1.05 / 2.15 / 2.31 / 0.60 | +0.16 / 0.51 / 0.43 / 0.12 | +0.01-0.04 | +1.92-4.19 |
+    | L1-L8 | +1.41 / 1.76 / 1.12 / 1.02 | +0.72 / 1.22 / 0.66 / 0.58 | +0.03-0.10 | +3.28-4.47 |
+    | L9-L20 | +0.51 / 0.80 / 0.46 / 0.38 | +0.35 / 0.57 / 0.29 / 0.19 | +0.04-0.17 | +0.35-1.22 |
+    | L21-L35 | +0.77 / 0.91 / 1.02 / 0.45 | +0.51 / 0.74 / 0.97 / 0.56 | −0.20 to +0.22 | +0.60-1.71 |
+    | L1-L35 | +3.70 / 8.33 / 4.13 / 3.73 | +2.42 / 5.05 / 2.28 / 2.26 | −0.06 to +0.55 | +5.43-8.77 |
+
+    With `s_only` removed from every MLP output from L1 to L35 the generations stay fluent and almost all right.
+  - **Early, the lenses' quiet directions matter less than random ones.** At L0-L4 a random subspace of the doubly
+    dark sector's dimension costs 9-29 times as much a layer (0.20-2.36 nats against 0.02-0.14), and one of `s_only`'s
+    0.09-0.32 nats against at most 0.013; over L1-L8 such a subspace breaks words ("villagend", "SpainSpain is
+    Beijing") where `s_only` costs 0.03-0.10. From L10 lens and random subspaces cost about the same per unit of energy
+    removed (0.6-0.85 times at L10-L20).
+  - **The dark sector's signature damage needs both parts gone.** The costs don't add: L0's dark sector costs 1.05
+    nats and its two parts 0.16 and 0.01; L1-L8's 1.41 against 0.72 and 0.03. The form errors at L0 ("rome",
+    "Alibabaibaba"), the chat replies turning into reasoning traces at L1-L8, the agrammatic pattern (L0 everywhere:
+    object relatives at 0.52, with the doubly dark sector alone every type at 0.92-1.00), the middle's broad
+    comprehension failure (at most 9% of the margin kept; the doubly dark sector alone keeps 41-93%, as a random
+    subspace of its size does, 31-75%) and the late missing pieces of words ("I am Q", "Earth atmosphere") each appear
+    only with both removed: the doubly dark sector alone at L21-L35 keeps the words whole. What it does alone is the
+    middle's wrong facts ("a city in the south of France", code turned to comments) and early loops (the Chinese
+    prompt repeats its question). At L35 the 59 `s_only` directions alone cost as much as the whole dark sector
+    (0.104 nats against 0.101; 59 random directions 0.012).
+- **The lenses as sparse frames** (`sparse`). Gurnee et al. (2026) define the J-space as the sparse nonnegative
+  combinations of the J-lens's token vectors, a union of cones rather than a subspace (the vectors themselves span the
+  residual, as the R-lens's readout does here). Residuals at 2,048 positions a layer (DCLM and chat, centred, in the
+  metric) are coded greedily with up to 64 nonnegative atoms from the 103,830 kept tokens' R-lens readout rows, the
+  logit lens's, the S-lens's footprints, or random unit vectors. A frame's occupancy is the number of atoms after which
+  it gains less than the random frame does, as theirs is.
+  - **The R-lens's sparse space is small and grows with depth, without a plateau.** Its median occupancy is 0 at
+    L1-L3, 4-9 at L4-L20, 11-22 at L21-L33 and 36-51 at L34-L35. 25 atoms explain at most 0.023 of the variance beyond
+    random at L4-L20, 0.03-0.06 at L21-L28 and 0.07-0.12 later (random: 0.085). The logit lens's frame is no better
+    than random through L6 and close to the R-lens's later. The ceiling is the residual's bright share: the R-lens's
+    25-atom component sits 89-96% in its bright sector from L4, which holds 4-28% of the residual's energy through L15.
+  - **The S-lens's frame takes the early layers, the R-lens's the later ones.** Pooled, the first atom comes from the
+    S-lens's footprints at 94-100% of positions through L5 and from the R-lens's at 67-84% at L10-L17 (45-69% later);
+    of the first 25 the R-lens supplies 2-19% at L0-L3, 28-36% at L4-L9, 37-47% at L10-L17 and 52-77% later. The
+    S-lens's frame beats random by 0.05-0.12 at L0-L2 (occupancy 6-11) and by at most 0.023 at L4-L20. The picks read
+    the same way: at the last position of "中国的首都是" the S-lens's atoms are the prompt's own tokens (都是, 首, 首都)
+    through L6 and the R-lens's are 北京 and 这座城市 ("this city") from L10; after "Monday, Tuesday, Wednesday,", " Days"
+    and 星期 ("weekday") at L10-L18 and " Thursday" from L26; after "The capital of France is", " Paris" first at L30.
+  - **What both leave is the doubly dark sector.** Pooled, 64 atoms explain 0.18-0.22 of the centred residual at
+    L4-L20, as 64 random ones do (0.20), and 0.22-0.39 later. The pooled 25-atom component puts 3-16% of its energy in
+    the doubly dark sector, which holds 54-76% of the residual's at L0-L15.
 - **What this suggests.** What two prompts differ in turns bright by L4-L12, and the dark part of their difference is
   inert, for prompts built alike and for prompts with nothing in common but the template. So the dark sector's
-  ablations likely remove what prompts share rather than what they differ in. Early the
+  ablations likely remove what prompts share rather than what they differ in. That damage is mostly not in the
+  directions neither lens reads: the doubly dark sector alone costs a half to two thirds as much and leaves out most
+  of the named failures, the S-lens's bright part alone costs almost nothing, and only both together give it all, as if
+  what they remove is written into both, or read from both at once (untested). Early the
   dark sector is nearly the whole residual and carries everything; later it may hold the kind of document, position, or
   the residual's scale, which the R-lens's LN rule holds fixed (untested). The one variable found in it by swapping is late
   formatting (the list's comma or new line at L32-L35), in line with the late ablations dropping pieces of words and with
@@ -1940,6 +2000,11 @@ slice. Generations are greedy, 48 tokens, from ten prompts (seven plain, three i
   is a hard line on a graded spectrum: ranked by gain, the lens puts what prompts differ in well above chance at every
   layer, so the early dark sector is the lens's middle ranks more than directions it can't see. Some variables (thinking
   mode at L6-L16, the answer's language at L0-L2) sit in compact directions it doesn't rank.
+  As sparse frames the two lenses split the depth as Gurnee et al.'s sensory and workspace bands do: the S-lens's token
+  footprints code the residual's top components through L9, naming the input, and the R-lens's from L10, a third of the
+  way in, where their workspace begins, naming concepts before the next token. But the R-lens's sparse space here holds
+  a few percent of the variance beyond random and grows into the last layers rather than holding a plateau, and its
+  size is capped by the bright sector's share of the residual.
   Some of the depth profiles resemble aphasic syndromes, the early comprehension pattern most of all, but not closely
   enough to name them after one; other work lesions language models against aphasia batteries (Roll et al. 2026,
   [arXiv:2605.16222](https://arxiv.org/abs/2605.16222)).
@@ -1953,13 +2018,18 @@ setting the model reads again from its own tokens can't move before late layers,
 a sentence as prose or as code (in a comment or a string) found no clean next-token contrast. The middle part's fitted
 directions transfer only for what items share (not word pieces), from halves of 13-51 pairs. The far pairs come from
 16 story requests and 16 small-talk messages. The S-lens's sector uses the footprints with the lens's stretch, not its
-polar factor. The soft weight `g / (g + ḡ)` is one choice; the ranks are by gain averaged over contexts. Compact outputs
-are `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft,span}_qwen3-8b.*`.
+polar factor. The soft weight `g / (g + ḡ)` is one choice; the ranks are by gain averaged over contexts. The doubly
+dark sector rests on the two 90% cuts (its soft version agrees). The sparse coder is greedy with least-squares refits
+(Gurnee et al. use gradient pursuit), its random frame is isotropic in the metric, the R-lens is not their J-lens, and the
+2,048 positions are 32 from each of 64 documents. Compact outputs are
+`data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft,span,sparse}_qwen3-8b.*`, and the doubly dark
+ablations' `dark_sector_{trace,bands,comprehend}_dd_qwen3-8b.*`.
 
 ## Open questions
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
-  residual's scale), and whether Gemma 4's has the same three depths; what L16's large dark write does; a lens for the
+  residual's scale), why its doubly dark and S-lens parts cost far more together than apart, and whether Gemma 4's has
+  the same three depths; what L16's large dark write does; a lens for the
   middle layers' variables that neither lens weights, such as thinking mode at L12 (§21).
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is
   flat from L4 to L17 (§6).
