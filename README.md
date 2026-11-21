@@ -261,15 +261,15 @@ heads, 4 previous-token heads and 16 sink heads, and removing any one head costs
 A head's keys and values read best through the S-lens (a head reads what a position holds), its output through the S-lens
 early and the R-lens from L9. Feeding each token's footprint through a head's circuits gives token-by-token maps: the OV map
 says what it copies and suppresses (L26h31 copies quantities; L32h9 suppresses the surnames L34h1 copies) and predicts
-where the attended token ranks in the head's actual output (Spearman +0.51; 0.00 under another head); the QK map finds the
+where the attended token ranks in the head's actual output (Spearman +0.52; 0.00 under another head); the QK map finds the
 duplicate-token heads (AUROC 0.96). With an R-lens query against S-lens keys (`qk_self_R`) it finds the late heads that
 look up earlier copies of the token their position is about to say, copy suppression in context (17 heads at L21-L35, AUROC
 0.91) ([§10](docs/findings.md#10-attention-heads-circuits-read-token-by-token)).
 
 ![Which lens on each side of a head](docs/figures/13_head_lens_sides.png)
 
-**11. Late heads write the next token.** At their own top firings, 26% of L28-L35's heads write the next token as their
-OV read predicts, and few before; read from their outputs in context, 32-61% of heads from L21 promote the token after their
+**11. Late heads write the next token.** At their own top firings, 16% of the motor band's heads (26% at L28-L35) write
+the next token as their OV read predicts, and few before; read from their outputs in context, 55% of the motor band's heads promote the token after their
 strongest firings ([§11](docs/findings.md#11-attention-heads-what-their-reads-name)).
 
 ![What heads' reads name](docs/figures/14_head_census.png)
@@ -286,10 +286,10 @@ value and keys come mostly from neurons, and the query a third to a half from ea
 
 **13. Labels from the evidence.** Claude explainers labelled 160 random poles from only their lens reads, only their top
 contexts, or both, never seeing steering. Scored by *detection* (can a fresh model, given the label, pick the pole's
-held-out top firings out from quiet text; AUROC, 0.5 chance), lens-only firing labels score 0.80; scored by whether a judge
-picks the pole's write label out of four from text steered by it, lens-only write labels are picked 65% of the time (95% at
-L28-L35; chance 25%). Contexts lead for firing (0.87) and the lenses for writes (contexts: 54%), and Claude Opus explains
-no better than Sonnet: the bottleneck is the evidence. The catalog's labels come from Claude Haiku on a lean card, the one
+held-out top firings out from quiet text; AUROC, 0.5 chance), lens-only firing labels score 0.69; scored by whether a judge
+picks the pole's write label out of four from text steered by it, lens-only write labels are picked 51% of the time (71% in
+the motor band; chance 25%). Contexts lead for firing (0.85) and the lenses for writes (contexts: 41%), both on one card
+do best for writes (59%), and Claude Opus explains no better than Sonnet: the bottleneck is the evidence. The catalog's labels come from Claude Haiku on a lean card, the one
 input and one write read the reading plan names for the pole's depth plus its top contexts, for six models at $303 in
 all; blind, they pick a pole's held-out firings out from another pole's at AUROC 0.82-0.88 (another pole's label:
 0.44-0.54). Asked to predict activations token by token, they correlate at 0.21 on Qwen3-8B (another pole's label: 0.00):
@@ -309,8 +309,8 @@ library misses what can't be a persona: idiom completers, morphology, everyday c
 ### V. A second model, three modalities
 
 **15. A second model reads the same way.** Gemma 4 12B comes from another lab, with another activation, norm layout and
-attention scheme. The R-lens read of a write predicts steering from L11 on (median r 0.53 at L12-L23, 0.82 at L24-L35,
-0.97 at L36-L47), the S-lens names the firing token through L13, about the same relative depth as Qwen3-8B's L8, and the
+attention scheme. The R-lens read of a write predicts steering from L11 on (median r 0.40-0.53 from L11 into its
+association band, 0.67 in its workspace band and 0.96 in motor), the S-lens names the firing token through L13, about the same relative depth as Qwen3-8B's L8, and the
 write promotes the next token from L33. Its R-lens input reads name the exact drivers for 29% of poles once the read row, a
 covector, is made a vector by the residual's own scale: Gemma 4's residual coordinates differ in scale by up to 1,600×, and
 read as a Euclidean vector the rows name them for 2%
@@ -328,8 +328,8 @@ read as a Euclidean vector the rows name them for 2%
 
 **16. Images and sound: what drives a neuron.** Gemma 4 has no separate encoder: each 48 × 48-pixel patch or 40 ms of
 audio enters the residual stream through a few norms and one linear map, so the lenses can be fitted on images and sounds
-and a read direction carried back to pixels or samples. Over 49,694 labelled images and 49,703 labelled sounds, a quarter to
-a half of each band's poles have a label that holds on held-out documents (AUROC 0.96-0.97 for images, 0.77-0.91 for
+and a read direction carried back to pixels or samples. Over 49,694 labelled images and 49,703 labelled sounds, a sixth to
+two fifths of each band's poles have a label that holds on held-out documents (AUROC 0.97 for images, 0.78-0.89 for
 sound): gratings, checkerboards and writing systems early, objects, scenes and languages later. The lens's patch read
 shows what a neuron's input direction looks like, but raises the neuron only in the first six layers; optimised by
 gradient ascent from the read, a single patch or 40 ms frame drives its neuron through L23

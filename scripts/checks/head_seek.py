@@ -22,7 +22,7 @@ left out. A head's
 ``seek`` is its lift on a target minus its lift on ``ctrl``; its ``effect`` the direct effect of its output on the
 target's logit (``W_U diag(γ_f)`` row through the head's write as the residual sees it: ``W_O^h``, for Gemma 4 times
 ``γ_post`` and the post-attention norm's scale at that position; before the final norm's positive scale) minus that
-on ``ctrl``'s, at the same queries. The late groups are the last two bands (Qwen3-8B L21-L35, Gemma 4 L24-L47). The
+on ``ctrl``'s, at the same queries. The late groups are the motor band (Qwen3-8B L21-L35, Gemma 4 L33-L47). The
 pass is cached in ``data/heads/<model>-seek-context.pt``. Summary in ``data/summary/head_seek_<model>.{log,json}``.
 
     python scripts/checks/head_seek.py
@@ -265,7 +265,7 @@ def main() -> None:
         r = row["rho_seek"]
         lines.append(f"  {b}: {r['RS']:+.2f} / {row['rho_seek_control']:+.2f} / {r['SS']:+.2f} / {r['RR']:+.2f}   final "
                      f"{row['rho_seek_final']:+.2f}   seek–effect {row['rho_seek_effect']:+.2f}   RS–effect {row['rho_RS_effect']:+.2f}")
-    lo_late = bands[-2][0]
+    lo_late = bands[-1][0]  # the motor band
     late = slice(lo_late, L)
     top = seek["lens"][late] > seek["lens"][late].quantile(0.8)
     groups = {"seek and suppress": top & (effect["lens"][late] < 0), "seek and boost": top & (effect["lens"][late] > 0)}

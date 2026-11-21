@@ -13,7 +13,7 @@ The output lens says what writing u means:
 - **R:** the write makes the model say u (the R-lens read from L's MLP input);
 - **S:** the write makes the residual look as if u were there (the S-lens footprint read there).
 
-At each of ``06_activations.py``'s head firings (each head's 24 largest outputs, one per document),
+At each of ``06_activations.py``'s head firings (each head's ``K`` largest outputs, one per document; the catalog keeps 64),
 with v the input target and the attended position before the query:
 - **copy:** v's weight-only z in its own column of the map (as ``08_reads.py``'s ``ov_*``), against
   v's z over the vocabulary in the head's actual output read through the output lens. Spearman
@@ -118,7 +118,7 @@ def main() -> None:
     classes = {k: torch.tensor(pat[k]).view(L, H) > v for k, v in CLASSES.items()}
     lay = torch.arange(L)[:, None, None].expand(L, H, K)
     lines = [f"which lens on each side of each head's OV circuit, {MODEL}: per-token reads checked at the census "
-             f"firings (24 per head, {saved['meta']['docs']:,} documents), {int(ok.sum())} firings from L1 whose attended position is "
+             f"firings ({K} per head, {saved['meta']['docs']:,} documents), {int(ok.sum())} firings from L1 whose attended position is "
              "before the query and whose attended token and the token after it are kept. Input S: the target is the "
              "attended token; input R: the token after it. Output: the head's actual output read through the R-lens "
              "or the S-lens from the MLP input. Control: another head of the layer.", "",

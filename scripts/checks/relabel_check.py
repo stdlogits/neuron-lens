@@ -26,6 +26,7 @@ import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
 
+from neuron_lens import arch
 from neuron_lens.catalog import HELD_OUT, MODEL, N_CONTEXTS, context, documents, neuron_table, tokenizer
 from neuron_lens.paths import SUMMARY
 
@@ -73,8 +74,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--poles", choices=("flipped", "all"), default="all")
     ap.add_argument("--old", default=None, help="the dataset's revision holding the earlier labels (none: no such arm)")
+    ap.add_argument("--summary-only", action="store_true", help="re-summarize the saved per-pole scores, no batch")
     args = ap.parse_args()
     stem = labels.NAME
+    if args.summary_only:
+        out = SUMMARY / (f"relabel_check_{stem}.json" if args.poles == "flipped" else f"label_check_{stem}.json")
+        saved = json.loads(out.read_text())
+        saved["summary"] = summarize(saved["poles"])
+        out.write_text(json.dumps(saved, indent=1))
+        print(stem, len(saved["poles"]), "poles:", json.dumps(saved["summary"]), flush=True)
+        return
     by_layer = firing_poles(args.poles == "flipped")
     pool = [(l, r) for l, rows in by_layer.items() for r in rows]
     rng = random.Random(1109)
@@ -123,18 +132,25 @@ def main() -> None:
             if isinstance(p, list) and len(p) == len(mt["truth"]):
                 out[arm] = labels.auroc([float(x) for x in p], mt["truth"])
         per[pid] = out
+    out = SUMMARY / (f"relabel_check_{stem}.json" if args.poles == "flipped" else f"label_check_{stem}.json")
+    summary = summarize(per)
+    out.write_text(json.dumps({"model": MODEL, "batch": batch.id, "scorer": labels.SCORER, "poles_from": args.poles, "old": args.old,
+                               "summary": summary, "poles": per}, indent=1))
+    print(stem, len(per), "poles:", json.dumps(summary), flush=True)
+
+
+def summarize(per: dict) -> dict:
+    """Each arm's mean AUROC with its bootstrap interval, the new labels' lead over the old where both exist, and the new
+    labels by depth band (``arch.depth_bands``)."""
     both = [v for v in per.values() if "new" in v and "old" in v]
     stat = lambda xs: (sum(xs) / len(xs), *labels.boot(xs))
     summary = {arm: stat(xs) for arm in ("new", "old", "control") if (xs := [v[arm] for v in per.values() if arm in v])}
     if both:
         summary["new_minus_old"] = stat([v["new"] - v["old"] for v in both])
         summary["fires_conf"] = {arm: sum(v["conf"][arm] for v in both) / len(both) for arm in ("new", "old")}
-    quarter = lambda layer: min(4 * layer // labels.LAYERS, 3)
-    summary["new_by_quarter"] = {q: stat(xs) for q in range(4) if (xs := [v["new"] for v in per.values() if "new" in v and quarter(v["layer"]) == q])}
-    out = SUMMARY / (f"relabel_check_{stem}.json" if args.poles == "flipped" else f"label_check_{stem}.json")
-    out.write_text(json.dumps({"model": MODEL, "batch": batch.id, "scorer": labels.SCORER, "poles_from": args.poles, "old": args.old,
-                               "summary": summary, "poles": per}, indent=1))
-    print(stem, len(per), "poles:", json.dumps(summary), flush=True)
+    summary["new_by_band"] = {role: stat(xs) for role, (lo, hi) in arch.depth_bands(MODEL).items()
+                              if (xs := [v["new"] for v in per.values() if "new" in v and lo <= v["layer"] <= hi])}
+    return summary
 
 
 if __name__ == "__main__":

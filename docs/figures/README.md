@@ -78,19 +78,19 @@ Signal fades with rank but ranks 49-64 still run several times above a mismatche
 
 ![Read a head's input with the S-lens; its output with the S-lens early, the R-lens late](13_head_lens_sides.png)
 
-Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (R-lens input) with the same output lens in every band, on both tests, except the copy test at L28-L35 with an S-lens output, which the catalog doesn't use there. On the output side the S-lens leads at L1-L8 (copy +0.44 against +0.39) and roughly ties at L13-L20; the R-lens leads at L9-L12 and by far from L21 (+0.65 and +0.80).
+Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (R-lens input) with the same output lens in every band, on both tests. On the output side the S-lens leads in the sensory band (copy +0.49 against +0.26); the R-lens leads from the association band on, narrowly in the workspace band, where the S-lens predicts whole columns better, and by far in motor (+0.74).
 
 ## 14. Late heads' OV reads predict the next token
 
 ![Late heads' OV reads predict the next token](14_head_census.png)
 
-`ov_R` (the attended token's column predicts the next token) passes for 26% of L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a head from its layer.
+`ov_R` (the attended token's column predicts the next token) passes for 16% of the motor band's heads (L21-L35), half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a head from its layer.
 
 ## 15. Labels written blind: lens reads predict what a pole promotes, contexts where it fires
 
 ![Labels written blind: lens reads predict what a pole promotes, contexts where it fires](15_lens_blind.png)
 
-Left: mean detection AUROC of each arm's "fires" label on 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.80, contexts 0.87, both 0.89; dashed, another pole's label (0.58). Right: how often a judge picks the pole's own "promotes" label out of four from its band, from greedy text steered at 0.5-2 nats: lens reads 65% (95% at L28-L35), contexts 54%; dashed, chance. Bars: 95% bootstrap intervals over poles.
+Left: mean detection AUROC of each arm's "fires" label on 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.69, contexts 0.85, both 0.85; dashed, another pole's label. Right: how often a judge picks the pole's own "promotes" label out of four from its band, from greedy text steered at 0.5-2 nats: lens reads 51% (71% at L21-L35), contexts 41%, both 59%; dashed, chance. Bars: 95% bootstrap intervals over poles.
 
 ## 16. One persona label in three matches the pole's lens reads; swapped names rarely do
 
@@ -128,14 +128,14 @@ Median rank of a pole's own change by band. Images: the S-lens read moves the po
 
 Three poles from each six-layer band from L0 to L23, those with the strongest reliable exemplar labels (one pole per label) among the poles whose optimised patch raises them on held-out images. The S-lens reads share one pattern of column streaks from pole to pole, as text reads share hub tokens; the optimised patches, one pattern tiled over all 64 slots and added at 8% of the pixel range, differ by pole. Early labels are primitives (a checkerboard, a grating, scripts by writing system), later ones mostly objects.
 
-## 22. Image labels hold on the text side from L12; sound labels only a little
+## 22. Image labels hold on the text side, most in the motor band; sound labels only a little
 
-![Image labels hold on the text side from L12; sound labels only a little](22_crossmodal.png)
+![Image labels hold on the text side, most in the motor band; sound labels only a little](22_crossmodal.png)
 
-Of 253,785 poles with an image label, the label's words fire the pole for 8% at L0-L11 and 42% at L12-L23 (5% by chance), the text R-lens writes it for up to 19% (L12-L23), the text S-lens reads it for 7-10%. Audio labels pass 6-12% by band and test. 19 of 48,497 poles with both labels pass all three text tests for both (independent lists would share 2.0): places and peoples with their language, such as mosques and Arabic, pagodas and Mandarin, tacos and Spanish.
+Of 253,785 poles with an image label, the label's words fire the pole for 22%, 28%, 41% by band (L0-L19, L20-L32, L33-L47; 5% by chance), the text R-lens writes it for 13%, 12%, 15%, the text S-lens reads it for 7-9%. Audio labels pass 6-10% by band and test. 19 of 48,497 poles with both labels pass all three text tests for both (independent lists would share 2.0): places and peoples with their language, such as mosques and Arabic, pagodas and Mandarin, tacos and Spanish.
 
 ## 23. Single heads carry what an image shows into the text; for sound, none does
 
 ![Single heads carry what an image shows into the text; for sound, none does](23_heads_media.png)
 
-Left: attention from the text after the image or sound to its 64 slots, as a multiple of an even spread over the keys, for the layer's strongest head and its median head. The text reads images most at L23-L31 and L44 (up to 0.96 of an even spread) and sounds most at L0-L10 (L8h5: 1.40 times). Right: zeroing single heads raises the right image label's loss more than a wrong one's, most for L28h6 (z 9.9), L29h1 (z 9.7), L29h9 (z 8.4), L25h2 (z 7.9); 29% of L24-L35's heads exceed z = 3. For sound none does (the largest z is 2.8), and the model ranks a sound's own label above another's only 55% of the time, too weakly to find its carriers.
+Left: attention from the text after the image or sound to its 64 slots, as a multiple of an even spread over the keys, for the layer's strongest head and its median head. The text reads images most at L23-L31 and L44 (up to 0.96 of an even spread) and sounds most at L0-L10 (L8h5: 1.40 times). Right: zeroing single heads raises the right image label's loss more than a wrong one's, most for L28h6 (z 9.9), L29h1 (z 9.7), L29h9 (z 8.4), L25h2 (z 7.9); 33% of the workspace band's heads (L20-L32) exceed z = 3. For sound none does (the largest z is 2.8), and the model ranks a sound's own label above another's only 55% of the time, too weakly to find its carriers.

@@ -31,6 +31,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from neuron_lens import arch
 from neuron_lens.catalog import lobe_signs
 from neuron_lens.neurons import poles
 from neuron_lens.paths import DATA, FITS
@@ -155,7 +156,7 @@ def main():
         print(f"{modality}: {len(res['who'])} neuron poles with a reliable concept label", flush=True)
         for key, nk in (("fire", "null_fire"), ("s_read", "null_s"), ("r_write", "null_r")):
             bands = {}
-            for a_, b_ in ((0, 11), (12, 23), (24, 35), (36, 47)):
+            for a_, b_ in arch.bands(MODEL):
                 sel = (layers >= a_) & (layers <= b_)
                 if sel.any():
                     bands[f"L{a_}-{b_}"] = (round(float(cat[key][sel].median()), 3), round(float((cat[key][sel] >= 0.95).float().mean()), 3),

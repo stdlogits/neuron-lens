@@ -1,19 +1,17 @@
 QK's cross-lens diagonal, Qwen/Qwen3-8B: 35 layers × 32 heads from L1; RS (R-lens query, S-lens key), SS (08_reads.py's qk_self_S, recomputed: max |Δz| 0.000), RR; in context over every 32th activation document (2,000), queries with an earlier copy of the target per layer (mean): lens 153,674, final 194,492, ctrl 432,204
 
 by band: median over heads of each head's median z, RS / SS / RR; median rho(RS, ov_R) over tokens; attention per matching key relative to uniform, mean over heads, lens / final / ctrl
-  L1-8: +0.08 / +0.33 / +0.29   rho_ov +0.01   lift 5.13 / 1.78 / 0.81
-  L9-12: +0.18 / +1.13 / +0.60   rho_ov +0.03   lift 0.77 / 1.18 / 0.79
-  L13-20: +0.22 / +1.33 / +1.71   rho_ov +0.04   lift 1.42 / 1.51 / 0.82
-  L21-27: +0.25 / +1.28 / +1.54   rho_ov +0.03   lift 2.36 / 1.91 / 0.79
-  L28-35: +0.19 / +1.17 / +0.94   rho_ov -0.00   lift 2.73 / 2.12 / 0.77
+  L1-3: +0.06 / +0.26 / +0.29   rho_ov +0.01   lift 7.65 / 2.02 / 0.84
+  L4-8: +0.10 / +0.42 / +0.29   rho_ov +0.01   lift 3.61 / 1.64 / 0.79
+  L9-20: +0.21 / +1.32 / +1.44   rho_ov +0.03   lift 1.20 / 1.40 / 0.81
+  L21-35: +0.23 / +1.24 / +1.23   rho_ov +0.02   lift 2.56 / 2.02 / 0.78
   L1-35: +0.19 / +1.23 / +1.08   rho_ov +0.02   lift 2.68 / 1.75 / 0.80
 
 Spearman across heads with seek (lens target): RS own / RS control head / SS / RR; RS with seek (final target); seek with effect; RS with effect
-  L1-8: -0.15 / -0.12 / -0.15 / +0.07   final -0.01   seek–effect +0.20   RS–effect -0.04
-  L9-12: +0.09 / +0.02 / +0.49 / +0.41   final +0.17   seek–effect +0.48   RS–effect +0.06
-  L13-20: +0.46 / +0.15 / +0.27 / +0.57   final +0.43   seek–effect +0.04   RS–effect +0.01
-  L21-27: +0.33 / +0.11 / +0.09 / +0.21   final +0.33   seek–effect +0.00   RS–effect -0.37
-  L28-35: +0.54 / +0.08 / -0.17 / -0.13   final +0.50   seek–effect +0.05   RS–effect -0.12
+  L1-3: -0.03 / -0.17 / +0.35 / +0.21   final +0.06   seek–effect +0.46   RS–effect -0.16
+  L4-8: -0.18 / -0.10 / -0.40 / +0.01   final -0.01   seek–effect +0.23   RS–effect +0.00
+  L9-20: +0.29 / +0.18 / +0.31 / +0.60   final +0.34   seek–effect +0.21   RS–effect +0.03
+  L21-35: +0.47 / +0.09 / -0.08 / -0.00   final +0.43   seek–effect +0.02   RS–effect -0.23
   L1-35: +0.13 / +0.03 / -0.11 / +0.05   final +0.28   seek–effect +0.16   RS–effect -0.03
 
 L21-35, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score

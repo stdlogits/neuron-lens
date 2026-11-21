@@ -777,13 +777,15 @@ def fig_lens_blind() -> None:
     axes[0].legend(handles[1:] + handles[:1], labels[1:] + labels[:1], loc="upper left", bbox_to_anchor=(0, -0.2),
                    ncols=5, borderaxespad=0, columnspacing=1.2)
     finish(fig, "15_lens_blind", "Labels written blind: lens reads predict what a pole promotes, contexts where it fires",
-           "160 random poles, 32 a band. Explainers saw lens reads, top contexts or both (Sonnet; Opus for both), "
-           "never steering; blind Sonnet scorers tested their labels on held-out firings and on steered text.",
+           f"160 random poles, {160 // len(bands)} a band. Explainers saw lens reads, top contexts or both (Sonnet; Opus "
+           "for both), never steering; blind Sonnet scorers tested their labels on held-out firings and on steered text.",
            "findings §13; data/summary/lens_blind_qwen3-8b.json",
            "Left: mean detection AUROC of each arm's \"fires\" label on 6 held-out top contexts against 6 quiet "
-           "positions (half from the same documents): lens reads alone 0.80, contexts 0.87, both 0.89; dashed, "
-           "another pole's label (0.58). Right: how often a judge picks the pole's own \"promotes\" label out of four "
-           "from its band, from greedy text steered at 0.5-2 nats: lens reads 65% (95% at L28-L35), contexts 54%; "
+           f"positions (half from the same documents): lens reads alone {d['all/lens']['fires_all']:.2f}, contexts "
+           f"{d['all/contexts']['fires_all']:.2f}, both {d['all/both']['fires_all']:.2f}; dashed, another pole's label. "
+           "Right: how often a judge picks the pole's own \"promotes\" label out of four from its band, from greedy text "
+           f"steered at 0.5-2 nats: lens reads {d['all/lens']['writes_top1']:.0%} ({d[bands[-1] + '/lens']['writes_top1']:.0%} "
+           f"at {bands[-1]}), contexts {d['all/contexts']['writes_top1']:.0%}, both {d['all/both']['writes_top1']:.0%}; "
            "dashed, chance. Bars: 95% bootstrap intervals over poles.")
 
 
@@ -820,8 +822,8 @@ def fig_library() -> None:
 
 def fig_head_lens_sides() -> None:
     d = summary(f"head_lens_sides_{STEM}.json")
-    keys = ["L1-8", "L9-12", "L13-20", "L21-27", "L28-35"]
-    names = ["L1-L8", "L9-L12", "L13-L20", "L21-L27", "L28-L35"]
+    keys = [f"L{max(lo, 1)}-{hi}" for lo, hi in BANDS]  # the summary's bands, from L1
+    names = [f"{role}\nL{max(lo, 1)}-L{hi}" for role, (lo, hi) in arch.depth_bands("Qwen/Qwen3-8B").items()]
     brackets = [("S→S", "S-lens in, S-lens out (ov_S)", S_COLOR, 1.0), ("R→S", "R-lens in, S-lens out", S_COLOR, 0.32),
                 ("S→R", "S-lens in, R-lens out (ov_R)", R_COLOR, 1.0), ("R→R", "R-lens in, R-lens out", R_COLOR, 0.32)]
     fig, axes = figure(2, width=9.0, height=4.9, bottom=0.27)
@@ -842,14 +844,14 @@ def fig_head_lens_sides() -> None:
     axes[0].set_ylabel("Spearman, own head minus control head")
     legend_below(axes[0], 4)
     finish(fig, "13_head_lens_sides", "Read a head's input with the S-lens; its output with the S-lens early, the R-lens late",
-           "Each head's weight-only OV read, checked against what it actually writes at its top firings (23,112 "
+           "Each head's weight-only OV read, checked against what it actually writes at its top firings (61,774 "
            "firings from L1, all documents): with the S-lens or the R-lens on the attended token (input) and on the "
            "head's write (output). Bars: own head minus another head of the layer.",
            "findings §10; data/summary/head_lens_sides_qwen3-8b.json",
            "Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (R-lens input) with the same "
-           "output lens in every band, on both tests, except the copy test at L28-L35 with an S-lens output, which "
-           "the catalog doesn't use there. On the output side the S-lens leads at L1-L8 (copy +0.44 against +0.39) and "
-           "roughly ties at L13-L20; the R-lens leads at L9-L12 and by far from L21 (+0.65 and +0.80).")
+           "output lens in every band, on both tests. On the output side the S-lens leads in the sensory band (copy "
+           "+0.49 against +0.26); the R-lens leads from the association band on, narrowly in the workspace band, where "
+           "the S-lens predicts whole columns better, and by far in motor (+0.74).")
 
 
 def fig_head_census() -> None:
@@ -868,12 +870,14 @@ def fig_head_census() -> None:
     ax.set_ylabel("share of the layer's 32 heads")
     ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=0.9)
     band = heads["bands"]
+    motor = f"L{BANDS[-1][0]}-{BANDS[-1][1]}"
     finish(fig, "14_head_census", "Late heads' OV reads predict the next token",
            "Each head's weight-only OV reads tested at its 64 strongest firings against the layer's other heads (5% false "
            "discovery rate), with the tokens it fires on and attends to, and its attention pattern.",
            "findings §11; data/summary/reads_at_firings_qwen3-8b.json",
-           f"`ov_R` (the attended token's column predicts the next token) passes for {100 * band['L28-35']['ov_R']:.0f}% of "
-           f"L28-L35's heads, half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a head from its layer.")
+           f"`ov_R` (the attended token's column predicts the next token) passes for {100 * band[motor]['ov_R']:.0f}% of "
+           f"the motor band's heads ({band_label(motor)}), half at L33; the S-side reads (`ov_S`, `qk_S`) don't separate a "
+           "head from its layer.")
 
 
 # --------------------------------------------------------------------------------------------- Gemma 4 12B
@@ -1085,13 +1089,14 @@ def fig_crossmodal() -> None:
     legend_below(a, 3)
     im, au, tri = j["image"], j["audio"], j["text_image_audio"]["all_three"]
     share = lambda m, k, band: 100 * m[k]["bands"][band][1]
-    finish(fig, "22_crossmodal", "Image labels hold on the text side from L12; sound labels only a little",
+    finish(fig, "22_crossmodal", "Image labels hold on the text side, most in the motor band; sound labels only a little",
            "For each pole with a reliable image or audio exemplar label, the rank of that label among the modality's "
            "labels on the text side, three ways; bars: the share of poles at 0.95 or more (dashed: 5%, chance).",
            "findings §17; data/summary/gemma4_media/crossmodal.json",
            f"Of {sum(v[2] for v in im['fire']['bands'].values()):,} poles with an image label, the label's words fire "
-           f"the pole for {share(im, 'fire', 'L0-11'):.0f}% at L0-L11 and {share(im, 'fire', 'L12-23'):.0f}% at "
-           f"L12-L23 (5% by chance), the text R-lens writes it for up to {share(im, 'r_write', 'L12-23'):.0f}% (L12-L23), the text "
+           "the pole for " + ", ".join(f"{share(im, 'fire', b):.0f}%" for b in im["fire"]["bands"]) + " by band ("
+           + ", ".join(band_label(b) for b in im["fire"]["bands"]) + "; 5% by chance), the text R-lens writes it for "
+           + ", ".join(f"{share(im, 'r_write', b):.0f}%" for b in im["r_write"]["bands"]) + ", the text "
            f"S-lens reads it for {min(v[1] for v in im['s_read']['bands'].values()) * 100:.0f}-"
            f"{max(v[1] for v in im['s_read']['bands'].values()) * 100:.0f}%. Audio labels pass "
            f"{min(min(v[1] for v in au[k]['bands'].values()) for k in ('fire', 's_read', 'r_write')) * 100:.0f}-"
@@ -1129,7 +1134,8 @@ def fig_heads_media() -> None:
     b.set_title("Images: the layer's strongest content carrier")
     b.set_ylabel("z of the right label's extra loss")
     top = t.sort_values("image_content_z", ascending=False).head(4)
-    mid = t[(t.layer >= 24) & (t.layer <= 35)]
+    w_lo, w_hi = arch.depth_bands(GEMMA)["workspace"]
+    mid = t[(t.layer >= w_lo) & (t.layer <= w_hi)]
     aud = next(t.sort_values("audio_read_ratio", ascending=False).itertuples())
     acc = summary(f"head_media_{GEMMA_STEM}.json")["audio"]["accuracy"]
     finish(fig, "23_heads_media", "Single heads carry what an image shows into the text; for sound, none does",
@@ -1142,7 +1148,7 @@ def fig_heads_media() -> None:
            f"{aud.audio_read_ratio:.2f} times). Right: zeroing single heads raises the right image label's loss more than a "
            "wrong one's, most for " + ", ".join(f"L{r.layer}h{r.head} (z {r.image_content_z:.1f})"
                                                  for r in top.itertuples()) +
-           f"; {100 * (mid.image_content_z > 3).mean():.0f}% of L24-L35's heads exceed z = 3. For sound none does "
+           f"; {100 * (mid.image_content_z > 3).mean():.0f}% of the workspace band's heads (L{w_lo}-L{w_hi}) exceed z = 3. For sound none does "
            f"(the largest z is {t.audio_content_z.max():.1f}), and the model ranks a sound's own label above another's "
            f"only {100 * acc:.0f}% of the time, too weakly to find its carriers.")
 

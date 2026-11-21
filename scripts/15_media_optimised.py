@@ -49,16 +49,17 @@ FIT_OFFSET = 1000  # the image S-lens was fitted on COCO val's first 1,000: opti
 
 
 def summarize(modality: str, path=None) -> None:
-    """The release card's numbers for one modality, by band (L0-L11, L12-L23, L24-L35), into
+    """The release card's numbers for one modality, by depth band (``arch.bands``, through the last optimised layer), into
     ``data/summary/media_optimised_<model>.json``: poles, the median held-out gain of the optimised
     read and of the S-lens read, and the shares raising the pole and beating the S-lens read."""
     import pandas as pd
     t = pd.read_parquet(path or catalog_dir() / "neurons" / f"{modality}_optimised.parquet", columns=["layer", "gain", "gain_lens"])
     out_path = SUMMARY / f"media_optimised_{arch.stem(MODEL)}.json"
     out = json.loads(out_path.read_text()) if out_path.exists() else {}
-    out[modality] = {f"L{lo}-L{lo + 11}": {"poles": len(d), "gain": float(d["gain"].median()), "gain_lens": float(d["gain_lens"].median()),
-                                           "raises": float((d["gain"] > 0).mean()), "beats_lens": float((d["gain"] > d["gain_lens"]).mean())}
-                     for lo in (0, 12, 24) for d in [t[(t.layer >= lo) & (t.layer <= lo + 11)]]}
+    last = int(t.layer.max())
+    out[modality] = {f"L{lo}-L{min(hi, last)}": {"poles": len(d), "gain": float(d["gain"].median()), "gain_lens": float(d["gain_lens"].median()),
+                                                 "raises": float((d["gain"] > 0).mean()), "beats_lens": float((d["gain"] > d["gain_lens"]).mean())}
+                     for lo, hi in arch.bands(MODEL) if lo <= last for d in [t[(t.layer >= lo) & (t.layer <= hi)]]}
     out_path.write_text(json.dumps(out, indent=1) + "\n")
 
 

@@ -1,8 +1,7 @@
 the top exact driver's activation over act_top, Qwen/Qwen3-8B: medians over each band's poles that aren't near-silent
 
-L0-8     0.36
-L9-12    0.15
-L13-20   0.09
-L21-27   0.15
-L28-35   0.22
+L0-3     0.66
+L4-8     0.27
+L9-20    0.11
+L21-35   0.19
 L0-35    0.17

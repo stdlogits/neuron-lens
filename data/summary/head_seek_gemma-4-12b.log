@@ -1,27 +1,25 @@
 QK's cross-lens diagonal, google/gemma-4-12B: 47 layers × 16 heads from L1; RS (R-lens query, S-lens key), SS (08_reads.py's qk_self_S, recomputed: max |Δz| 0.000), RR; in context over every 32th activation document (2,000), queries with an earlier copy of the target per layer (mean): lens 51,723, final 202,995, ctrl 431,935
 
 by band: median over heads of each head's median z, RS / SS / RR; median rho(RS, ov_R) over tokens; attention per matching key relative to uniform, mean over heads, lens / final / ctrl
-  L1-11: +0.18 / +2.06 / +0.85   rho_ov +0.02   lift 6.24 / 1.43 / 0.79
-  L12-23: +0.42 / +1.13 / +1.13   rho_ov +0.03   lift 2.70 / 1.32 / 0.89
-  L24-35: +0.51 / +0.77 / +1.84   rho_ov +0.05   lift 2.95 / 1.60 / 1.02
-  L36-47: +0.27 / +0.75 / +1.23   rho_ov -0.01   lift 1.66 / 1.30 / 1.26
+  L1-19: +0.24 / +1.65 / +0.84   rho_ov +0.02   lift 4.71 / 1.40 / 0.79
+  L20-32: +0.47 / +0.89 / +1.91   rho_ov +0.07   lift 3.01 / 1.38 / 1.00
+  L33-47: +0.36 / +0.75 / +1.45   rho_ov -0.01   lift 1.84 / 1.45 / 1.24
   L1-47: +0.34 / +1.13 / +1.22   rho_ov +0.01   lift 3.32 / 1.41 / 0.99
 
 Spearman across heads with seek (lens target): RS own / RS control head / SS / RR; RS with seek (final target); seek with effect; RS with effect
-  L1-11: +0.04 / +0.01 / +0.13 / +0.03   final +0.12   seek–effect +0.06   RS–effect +0.04
-  L12-23: +0.47 / -0.05 / +0.26 / +0.55   final +0.21   seek–effect -0.10   RS–effect -0.14
-  L24-35: +0.51 / -0.05 / +0.07 / +0.44   final +0.60   seek–effect +0.01   RS–effect -0.19
-  L36-47: +0.40 / +0.04 / +0.11 / +0.53   final +0.34   seek–effect +0.28   RS–effect -0.16
+  L1-19: +0.19 / -0.02 / +0.27 / +0.29   final +0.14   seek–effect +0.08   RS–effect -0.03
+  L20-32: +0.50 / -0.04 / -0.01 / +0.48   final +0.46   seek–effect +0.02   RS–effect -0.08
+  L33-47: +0.49 / +0.14 / +0.07 / +0.52   final +0.44   seek–effect +0.22   RS–effect -0.17
   L1-47: +0.27 / +0.01 / +0.14 / +0.28   final +0.24   seek–effect +0.07   RS–effect -0.07
 
-L24-47, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score
-  seek and suppress (25 heads): RS 0.88, SS 0.50, RR 0.70, −ov_R_copy 0.78
-    L24h0, L24h11, L24h12, L25h10, L25h13, L26h13, L27h11, L28h5, L28h11, L29h0, L29h6, L29h12, L29h14, L30h0, L30h4, L31h6, L31h14, L34h13, L35h5, L35h9, L35h10, L41h4, L41h10, L41h13, L41h15
-  seek and boost (52 heads): RS 0.60, SS 0.38, RR 0.71, ov_R_copy 0.67
-  copiers (ov_R_copy > 0.5): 121 heads, median seek final +0.43, lens +1.16; median effect (lens) +0.753
-  suppressors (ov_R_copy < −0.5): 53 heads, median seek final +0.25, lens +1.22; median effect (lens) -0.659
+L33-47, the top 20% of heads by seek (lens), split by the sign of their effect: AUROC of each score
+  seek and suppress (14 heads): RS 0.95, SS 0.46, RR 0.77, −ov_R_copy 0.87
+    L33h1, L33h9, L34h13, L34h14, L35h5, L35h9, L35h10, L36h6, L36h8, L39h10, L41h4, L41h10, L41h13, L41h15
+  seek and boost (34 heads): RS 0.58, SS 0.34, RR 0.65, ov_R_copy 0.70
+  copiers (ov_R_copy > 0.5): 71 heads, median seek final +0.29, lens +0.70; median effect (lens) +0.447
+  suppressors (ov_R_copy < −0.5): 39 heads, median seek final +0.17, lens +0.55; median effect (lens) -0.488
 
-the top 12 heads by RS from L24:
+the top 12 heads by RS from L33:
   L39h10: RS +4.45 SS +1.34 RR +1.30 rho_ov -0.45 ov_R_copy -0.98; seek lens +2.33 final +0.43, effect -0.427
   L46h1: RS +4.41 SS +6.26 RR +1.09 rho_ov -0.77 ov_R_copy -1.00; seek lens +1.22 final -0.14, effect -0.440
   L41h14: RS +3.98 SS +3.68 RR +2.83 rho_ov +0.22 ov_R_copy +0.92; seek lens +16.20 final +10.48, effect +1.584

@@ -4,29 +4,23 @@
   "labels": 2805,
   "labels_scored": 1643,
   "bands": {
-   "L0-L11": {
-    "reliable": 0.34223361545138886,
-    "auroc_heldout": 0.962890625,
-    "text_all_three": 0.002372948388372553,
-    "scored": 50570
-   },
-   "L12-L23": {
-    "reliable": 0.25677083333333334,
-    "auroc_heldout": 0.9736328125,
-    "text_all_three": 0.029826529731595754,
-    "scored": 57935
-   },
-   "L24-L35": {
-    "reliable": 0.38963758680555555,
+   "L0-L19": {
+    "reliable": 0.2840445963541667,
     "auroc_heldout": 0.9677734375,
-    "text_all_three": 0.022291309434143685,
-    "scored": 62401
+    "text_all_three": 0.018650165138065247,
+    "scored": 81447
    },
-   "L36-L47": {
-    "reliable": 0.31925726996527776,
-    "auroc_heldout": 0.97412109375,
-    "text_all_three": 0.013791189565511166,
-    "scored": 82879
+   "L20-L32": {
+    "reliable": 0.4289312900641026,
+    "auroc_heldout": 0.96875,
+    "text_all_three": 0.010430329936434266,
+    "scored": 79288
+   },
+   "L33-L47": {
+    "reliable": 0.2958528645833333,
+    "auroc_heldout": 0.9736328125,
+    "text_all_three": 0.021880709296077376,
+    "scored": 93050
    }
   }
  },
@@ -35,29 +29,23 @@
   "labels": 1167,
   "labels_scored": 981,
   "bands": {
-   "L0-L11": {
-    "reliable": 0.5107855902777778,
-    "auroc_heldout": 0.90869140625,
-    "text_all_three": 0.0006548502575744347,
-    "scored": 45812
+   "L0-L19": {
+    "reliable": 0.37207194010416667,
+    "auroc_heldout": 0.88671875,
+    "text_all_three": 0.002637579552802641,
+    "scored": 58766
    },
-   "L12-L23": {
-    "reliable": 0.21080457899305555,
-    "auroc_heldout": 0.85205078125,
-    "text_all_three": 0.005769429783711063,
-    "scored": 38652
+   "L20-L32": {
+    "reliable": 0.34619140625,
+    "auroc_heldout": 0.833984375,
+    "text_all_three": 0.002978957725881726,
+    "scored": 110777
    },
-   "L24-L35": {
-    "reliable": 0.2961642795138889,
-    "auroc_heldout": 0.81982421875,
-    "text_all_three": 0.0032353098719802883,
-    "scored": 93345
-   },
-   "L36-L47": {
-    "reliable": 0.19256998697916666,
-    "auroc_heldout": 0.77392578125,
-    "text_all_three": 0.002492025518341308,
-    "scored": 70224
+   "L33-L47": {
+    "reliable": 0.1721310763888889,
+    "auroc_heldout": 0.779296875,
+    "text_all_three": 0.003121416740986113,
+    "scored": 78490
    }
   }
  }

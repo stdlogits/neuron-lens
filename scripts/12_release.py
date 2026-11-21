@@ -45,6 +45,7 @@ are, and its tables with ``--tables``.
     NEURON_LENS_MODEL=... python scripts/12_release.py --parts neurons,heads,files --from-branch b [--dry-run]
 """
 import argparse
+import re
 import json
 import os
 import shutil
@@ -335,15 +336,15 @@ def label_check_text(models: list[str]) -> str:
         r = json.loads(path.read_text())
         x, n = r["summary"], n | {len(r["poles"])}
         old = f"{x['old'][0]:.2f}" if "old" in x else "–"
-        quarters = " / ".join(f"{x['new_by_quarter'][str(q)][0]:.2f}" for q in range(4) if str(q) in x["new_by_quarter"])
-        rows.append(f"| {m.split('/')[-1]} | {x['new'][0]:.2f} [{x['new'][1]:.2f}, {x['new'][2]:.2f}] | {x['control'][0]:.2f} | {old} | {quarters} |")
+        bands = " / ".join(f"{x['new_by_band'][r][0]:.2f}" if r in x["new_by_band"] else "–" for r in arch.ROLES)
+        rows.append(f"| {m.split('/')[-1]} | {x['new'][0]:.2f} [{x['new'][1]:.2f}, {x['new'][2]:.2f}] | {x['control'][0]:.2f} | {old} | {bands} |")
     if not rows:
         return ""
     return (f"\nChecked blind by Claude Sonnet 5.5 on {' or '.join(map(str, sorted(n)))} random firing poles a model: given a pole's `fires` "
             "label and 8 contexts, 4 of its held-out top firings (ranks 6-24, off every card) and 4 of another firing pole of its "
             "layer, the scorer's AUROC per pole, for the label, for another pole's label on the same contexts, and for the label a "
             "longer card (every tier of reads, with their strengths) wrote, where one was written:\n\n"
-            "| model | label | another pole's label | longer card's label | label by depth quarter |\n|---|---|---|---|---|\n"
+            "| model | label | another pole's label | longer card's label | label by band: sensory / association / workspace / motor |\n|---|---|---|---|---|\n"
             + "\n".join(rows) + "\n")
 
 
@@ -540,8 +541,8 @@ Measured on the models' neurons and heads (§3, §7, §10, §15, §16):
 
 ![Lens reads against steering](figures/07_steering.png)
 
-- For Gemma 4 12B, from L11: 0.53 at L12-L23, 0.82 at L24-L35 and 0.97 at L36-L47, ahead of the logit
-  lens. Before L11, natural-size pushes are too small for either lens to predict (§15).
+- For Gemma 4 12B, from L11: 0.40-0.53 from L11 into its association band, 0.67 in its workspace band and 0.96 in
+  motor, ahead of the logit lens. Before L11, natural-size pushes are too small for either lens to predict (§15).
 
 ![Gemma 4: lens reads against steering](figures/18_gemma_steering.png)
 
@@ -556,7 +557,7 @@ Measured on the models' neurons and heads (§3, §7, §10, §15, §16):
 ![Which reads name the exact drivers](figures/11_drivers.png)
 
 - **Attention heads:** read a head's keys and values with the S-lens (at real firings it beats the R-lens input
-  in every band, for both circuits, with one exception: copying at L28-L35 read with an S-lens output),
+  in every band, for both circuits),
   and its output with the S-lens through L8 and the R-lens from L9. Late, a head's query reads what its
   position is about to say: with `r-lens/lens.pt` at `L − 1` as the query against S-lens keys, QK's diagonal
   finds the heads that look up earlier copies of the coming token, copy suppressors among them (§10).
@@ -612,36 +613,44 @@ lenses on [COCO 2014](https://cocodataset.org) images (CC BY 4.0, Flickr terms f
 """
 
 
-def band_table(bands: dict, cols: dict, all_name: str) -> str:
-    """A markdown table of band shares from a summary: ``cols`` maps keys to headers."""
+def band_table(bands: dict, cols: dict, all_name: str, model: str) -> str:
+    """A markdown table of band shares from a summary: ``cols`` maps keys to headers; a band the model's reading plan
+    names (``arch.depth_bands``) gets its role."""
+    role = {f"L{lo}-{hi}": f"{r} L{lo}-L{hi}" for r, (lo, hi) in arch.depth_bands(model).items()}
     rows = ["| band | " + " | ".join(cols.values()) + " |", "|---|" + "---|" * len(cols)]
     for band, r in bands.items():
-        rows.append(f"| {'all' if band == all_name else band} | " + " | ".join(pct(r[k]) for k in cols) + " |")
+        rows.append(f"| {'all' if band == all_name else role.get(band, band)} | " + " | ".join(pct(r[k]) for k in cols) + " |")
     return "\n".join(rows)
 
 
 def head_reads_text(j: dict) -> str:
-    """Qwen3-8B's head reads' checks, from ``08_reads.py``'s summary."""
-    b = j["bands"]
+    """Qwen3-8B's head reads' checks, from ``08_reads.py``'s summary, at its first and last bands."""
+    b = {k: v for k, v in j["bands"].items() if k != "L0-35"}
+    first, last = list(b)[0], list(b)[-1]
+    lf, ll = re.sub(r"L(\d+)-(\d+)", r"L\1-L\2", first), re.sub(r"L(\d+)-(\d+)", r"L\1-L\2", last)
     return (f"For Qwen3-8B, `qk_self_S` finds duplicate-token heads at AUROC {j['qk_self_S_auroc']:.2f}. `qk_S` agrees with "
-            f"the attention tokens receive in context (`qk_ctx_rho` past +0.2) for {pct(b['L0-8']['ctx'][2])} of "
-            f"L0-L8's heads (another head's read: {pct(b['L0-8']['ctx'][3])}) and {pct(b['L28-35']['ctx'][2])} "
-            f"of L28-L35's ({pct(b['L28-35']['ctx'][3])}); {pct(b['L28-35']['align'][2])} of L28-L35's heads "
-            f"attend to what they copy (`qk_ov_rho` past +0.2; another head's OV read: {pct(b['L28-35']['align'][3])}).")
+            f"the attention tokens receive in context (`qk_ctx_rho` past +0.2) for {pct(b[first]['ctx'][2])} of "
+            f"{lf}'s heads (another head's read: {pct(b[first]['ctx'][3])}) and {pct(b[last]['ctx'][2])} "
+            f"of {ll}'s ({pct(b[last]['ctx'][3])}); {pct(b[last]['align'][2])} of {ll}'s heads "
+            f"attend to what they copy (`qk_ov_rho` past +0.2; another head's OV read: {pct(b[last]['align'][3])}).")
 
 
 def seek_text(q: dict, g: dict) -> str:
-    """``qk_self_R`` against attention in context, from ``checks/head_seek.py``'s summaries."""
-    qb, gb = q["bands"], g["bands"]
+    """``qk_self_R`` against attention in context, from ``checks/head_seek.py``'s summaries: each model's motor band, and
+    Gemma 4's workspace band beside it."""
+    qb = {k: v for k, v in q["bands"].items() if k != "L1-35"}
+    gb = {k: v for k, v in g["bands"].items() if k != "L1-47"}
+    qm, (gw, gm) = list(qb)[-1], list(gb)[-2:]
+    lab = lambda k: re.sub(r"L(\d+)-(\d+)", r"L\1-L\2", k)
     qs, gs = q["late"]["seek and suppress"], g["late"]["seek and suppress"]
     return (f"A head's median `qk_self_R` tracks how much it attends, in context, to earlier copies of the token its position "
             f"is about to say (the R-lens top-1 at its input; `checks/head_seek.py`, §10): Spearman "
-            f"{qb['L28-35']['rho_seek']['RS']:+.2f} across Qwen3-8B's L28-L35 heads (another head's read "
-            f"{qb['L28-35']['rho_seek_control']:+.2f}, `qk_self_S` {qb['L28-35']['rho_seek']['SS']:+.2f}), and it finds the "
-            f"{qs['heads']} heads of L21-L35 that seek and lower that token's logit, copy suppression, at AUROC {qs['RS']:.2f}. "
-            f"On Gemma 4 the same holds: {gb['L24-35']['rho_seek']['RS']:+.2f} at L24-L35 and "
-            f"{gb['L36-47']['rho_seek']['RS']:+.2f} at L36-L47 (`qk_self_S` {gb['L24-35']['rho_seek']['SS']:+.2f} and "
-            f"{gb['L36-47']['rho_seek']['SS']:+.2f}), AUROC {gs['RS']:.2f} for its {gs['heads']} seek-and-suppress heads (§15).")
+            f"{qb[qm]['rho_seek']['RS']:+.2f} across Qwen3-8B's motor heads, {lab(qm)} (another head's read "
+            f"{qb[qm]['rho_seek_control']:+.2f}, `qk_self_S` {qb[qm]['rho_seek']['SS']:+.2f}), and it finds the "
+            f"{qs['heads']} heads there that seek and lower that token's logit, copy suppression, at AUROC {qs['RS']:.2f}. "
+            f"On Gemma 4 the same holds: {gb[gw]['rho_seek']['RS']:+.2f} in its workspace band ({lab(gw)}) and "
+            f"{gb[gm]['rho_seek']['RS']:+.2f} in motor ({lab(gm)}; `qk_self_S` {gb[gw]['rho_seek']['SS']:+.2f} and "
+            f"{gb[gm]['rho_seek']['SS']:+.2f}), AUROC {gs['RS']:.2f} for its {gs['heads']} seek-and-suppress heads in motor (§15).")
 
 
 def media_table(j: dict) -> str:
@@ -855,11 +864,11 @@ summarized by a token, so these are population results about the reads, and the 
 that misses so narrow a target isn't wrong. Share of each band's poles (token mode: a third of the top firings on one
 token), Qwen3-8B:
 
-{band_table(ql["neurons"]["bands"], neuron_cols, "L0-35")}
+{band_table(ql["neurons"]["bands"], neuron_cols, "L0-35", "Qwen/Qwen3-8B")}
 
 Gemma 4 12B:
 
-{band_table(gl["neurons"]["bands"], neuron_cols, "L0-47")}
+{band_table(gl["neurons"]["bands"], neuron_cols, "L0-47", "google/gemma-4-12B")}
 
 ![Gemma 4: what each read names](figures/19_gemma_census.png)
 
@@ -1100,7 +1109,7 @@ discovery rate over all heads; and the share with an attention pattern score pas
 test. Share of each band's heads, Qwen3-8B:
 
 {band_table(ql["heads"]["bands"], {"ov_R": "`ov_R`", "ov_copy": "`ov_copy`", "ov_S": "`ov_S`", "qk_S": "`qk_S`",
-                                     "pattern": "pattern"}, "L0-35")}
+                                     "pattern": "pattern"}, "L0-35", "Qwen/Qwen3-8B")}
 
 The S-side tests pass for almost no head. S→S copying and the mean query's favourite keys are shared by a
 layer's heads, so at a head's own firings they don't tell it from its neighbours; they remain reads of
@@ -1113,7 +1122,7 @@ Gemma 4 has 16 heads a layer, so a head's mismatched control has 240 pairs, no p
 chance):
 
 {band_table(gl["heads"]["bands"], {"ov_R_p05": "`ov_R`", "ov_copy_p05": "`ov_copy`", "ov_S_p05": "`ov_S`",
-                                     "qk_S_p05": "`qk_S`", "pattern": "pattern"}, "L0-47")}
+                                     "qk_S_p05": "`qk_S`", "pattern": "pattern"}, "L0-47", "google/gemma-4-12B")}
 
 ### `<model>-heads-labels`: a label for every head
 

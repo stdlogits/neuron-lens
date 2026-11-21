@@ -88,7 +88,7 @@ def auroc(p: list[float], truth: list[int]) -> float:
 
 
 BANDS = arch.bands(MODEL)  # the depth bands (arch.depth_bands)
-PER_BAND = 32
+PER_BAND = 40  # 160 poles over the four bands
 SILENT = 0.05  # act_top under this: no firing test (§8, §13)
 N_SHOW = 12  # tokens per read on a lens card
 N_POS, N_NEG_RAND, N_NEG_SAME = 6, 3, 3

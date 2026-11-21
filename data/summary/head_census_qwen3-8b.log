@@ -1,57 +1,49 @@
-attention heads read from their outputs at their top firings, Qwen/Qwen3-8B: 36 × 32 heads, 24 firings each (largest output norm, one per document, positions 16+, over 63,990 documents; 06_activations.py), 27,033 firings whose attended token is kept
+attention heads read from their outputs at their top firings, Qwen/Qwen3-8B: 36 × 32 heads, 64 firings each (largest output norm, one per document, positions 16+, over 63,990 documents; 06_activations.py), 72,205 firings whose attended token is kept
 
 share of heads whose output promotes the next or the attended token: the mean z of those tokens under each firing's output read (R-lens mid or logit lens), z-scored across the layer's firings, at a 5% false discovery rate against the layer's mismatched pairs (BH over all heads)
 
 band       next_mid  next_logit    copy_mid  copy_logit
-L0-8           0.05        0.09        0.14        0.10
-L9-12          0.07        0.08        0.14        0.15
-L13-20         0.04        0.09        0.10        0.11
-L21-27         0.32        0.44        0.38        0.39
-L28-35         0.61        0.64        0.38        0.40
-L0-35          0.23        0.28        0.23        0.23
+L0-3           0.06        0.09        0.12        0.05
+L4-8           0.04        0.11        0.19        0.19
+L9-20          0.07        0.14        0.17        0.16
+L21-35         0.55        0.63        0.42        0.44
+L0-35          0.26        0.34        0.27        0.27
 
 weight-only per-token OV reads at the firings: Spearman over firings between the attended token's z in its own column (under the head / under another head of its layer, the control) and its z over the vocabulary in the head's output read through each lens:
-  raw vs logit  L0-8 +0.34/+0.02  L9-12 +0.11/-0.04  L13-20 +0.10/-0.03  L21-27 +0.52/+0.06  L28-35 +0.66/+0.01  L0-35 +0.40/+0.01
-  S   vs logit  L0-8 +0.35/+0.01  L9-12 +0.25/+0.00  L13-20 +0.18/+0.02  L21-27 +0.66/+0.07  L28-35 +0.72/-0.02  L0-35 +0.49/+0.02
-  S→R vs logit  L0-8 +0.11/-0.01  L9-12 +0.19/-0.02  L13-20 +0.07/+0.04  L21-27 +0.63/+0.01  L28-35 +0.72/-0.03  L0-35 +0.40/+0.00
-  S→R vs mid    L0-8 +0.41/+0.00  L9-12 +0.34/+0.03  L13-20 +0.22/+0.01  L21-27 +0.67/+0.01  L28-35 +0.74/-0.03  L0-35 +0.51/+0.00
+  raw vs logit  L0-3 +0.50/+0.09  L4-8 +0.26/-0.02  L9-20 +0.10/-0.03  L21-35 +0.61/+0.01  L0-35 +0.41/+0.00
+  S   vs logit  L0-3 +0.43/+0.06  L4-8 +0.32/-0.02  L9-20 +0.21/+0.01  L21-35 +0.70/+0.02  L0-35 +0.50/+0.02
+  S→R vs logit  L0-3 +0.07/+0.00  L4-8 +0.14/-0.02  L9-20 +0.10/+0.02  L21-35 +0.69/-0.00  L0-35 +0.40/+0.00
+  S→R vs mid    L0-3 +0.40/+0.05  L4-8 +0.42/-0.00  L9-20 +0.27/+0.00  L21-35 +0.72/-0.01  L0-35 +0.52/+0.00
 
 where the attended token falls in the head's ov_R per-token read (own head / control head): mean percentile over firings, share of firings in the top 1%, share of heads whose mean percentile is past 0.9 (attend to what they copy) or under 0.1 (to what they suppress):
-  L0-8: mean 0.561 / 0.516,  top 1% 0.152 / 0.091,  heads > 0.9 0.108 / 0.047,  heads < 0.1 0.043 / 0.072
-  L9-12: mean 0.513 / 0.465,  top 1% 0.077 / 0.061,  heads > 0.9 0.023 / 0.055,  heads < 0.1 0.031 / 0.023
-  L13-20: mean 0.522 / 0.510,  top 1% 0.082 / 0.052,  heads > 0.9 0.043 / 0.012,  heads < 0.1 0.027 / 0.035
-  L21-27: mean 0.553 / 0.485,  top 1% 0.094 / 0.038,  heads > 0.9 0.045 / 0.013,  heads < 0.1 0.036 / 0.027
-  L28-35: mean 0.612 / 0.515,  top 1% 0.175 / 0.038,  heads > 0.9 0.232 / 0.067,  heads < 0.1 0.067 / 0.028
-  L0-35: mean 0.556 / 0.503,  top 1% 0.121 / 0.057,  heads > 0.9 0.099 / 0.038,  heads < 0.1 0.042 / 0.039
+  L0-3: mean 0.554 / 0.516,  top 1% 0.168 / 0.106,  heads > 0.9 0.100 / 0.067,  heads < 0.1 0.058 / 0.092
+  L4-8: mean 0.568 / 0.513,  top 1% 0.156 / 0.078,  heads > 0.9 0.075 / 0.025,  heads < 0.1 0.025 / 0.062
+  L9-20: mean 0.516 / 0.493,  top 1% 0.077 / 0.054,  heads > 0.9 0.026 / 0.016,  heads < 0.1 0.018 / 0.029
+  L21-35: mean 0.587 / 0.502,  top 1% 0.138 / 0.041,  heads > 0.9 0.132 / 0.031,  heads < 0.1 0.050 / 0.019
+  L0-35: mean 0.557 / 0.502,  top 1% 0.123 / 0.057,  heads > 0.9 0.085 / 0.029,  heads < 0.1 0.037 / 0.036
 
 strongest heads per band (next and copy through the R-lens mid read), with heads/acts' out_R_z:
-  L2h31 next_mid z 3.09: istr | naire | oque | tero | ql | nement | rition | ematic
-  L6h6 next_mid z 2.71:  ​​ |  示 |  的 | َا |  示例 |  解 |  初始化 |  名
-  L1h0 next_mid z 1.99: 豕 | 穿越 | 午后 | _expected | 如下 | 情形 | IFS | .desc
-  L6h11 copy_mid z 5.62: /legal |  legalize | 合法 | 法律 |  creditor |  lobbyist | ruptcy |  attorney
-  L1h0 copy_mid z 3.83: 豕 | 穿越 | 午后 | _expected | 如下 | 情形 | IFS | .desc
-  L0h15 copy_mid z 3.82:  spokesman |  MPEG |  ® | 磬 | 养老金 | restore | 出售 |  spokeswoman
-  L9h31 next_mid z 2.24: eer | een | ene | stein | ematic | ern | ths | 儿
-  L12h18 next_mid z 1.45:  cosm |  orbital |  cosmic |  metall |  neutron |  relativ |  deut |  nuclei
-  L10h25 next_mid z 1.40: (size | (line |  ● | \( | ('\ |  goggles | (x | ::-
-  L11h15 copy_mid z 4.15: 在床上 | 熬夜 | 半夜 | 夜间 | 睡眠 | 枕头 | 睡觉 | 孕妇
-  L11h7 copy_mid z 3.18: 年的 |  año |  années | .year | _ROOT | 全年 |  Floors |  dirname
-  L11h17 copy_mid z 2.50: 自行 | 中小型 |  Cbd | orses |  ihnen |  drawback | 大多数 | .quick
-  L20h27 next_mid z 2.56: َ | ِ | َا |  的 |  对 | ّ |  是 |  控
-  L19h18 next_mid z 2.23: ！⏎⏎ | 。⏎⏎ | !.⏎⏎ | >.⏎⏎ | /.⏎⏎ | %.⏎⏎ | ♪⏎⏎ | .");⏎⏎
-  L17h10 next_mid z 2.07:  acknow |  &⏎ |  =⏎ |  disap | &⏎ |  &&⏎ |  +⏎ |  !=⏎
-  L17h8 copy_mid z 2.57: 					   |                          |                           |                       |                               |                      |                         |                       
-  L20h27 copy_mid z 2.53: َ | ِ | َا |  的 |  对 | ّ |  是 |  控
-  L13h25 copy_mid z 2.41: 为代表的 |  yourselves |  oneself | 之类 | 譬如 | 那样的 | Than | 为例
-  L23h27 next_mid z 6.69: ?;⏎ | .? | ?;⏎⏎ | ? | ?. | ]? | }? | ?).
-  L27h27 next_mid z 6.44: ;. | ; | ;! | .; |  {}; | ;// | ;&# |  [];
-  L27h2 next_mid z 4.86: {}, | %, | ++, | !, | &, | *, | $, | _,
-  L27h27 copy_mid z 8.50: ;. | ; | ;! | .; |  {}; | ;// | ;&# |  [];
-  L26h18 copy_mid z 7.72:  streamed | .stream | dition | _STREAM | _stream |  flowing | 流 | ometown
-  L26h31 copy_mid z 7.71:  strength |  password |  passwords | .password | -password | (password | strength | Password
-  L32h6 next_mid z 14.81: based |  based | _based | 基于 | Based |  Based | -based | -Based
-  L31h20 next_mid z 13.23: 更加 | 更好地 | 更好 |  greater | 愈加 | 更好的 |  better | 更高
-  L31h7 next_mid z 12.74: 等方式 | 的方式 |  manner | 方式 | 这种方式 | 等形式 | 方式进行 | 的形式
-  L32h0 copy_mid z 17.20: 航行 | 船 | Road |  road | 船舶 | 码头 | 船只 | road
-  L32h6 copy_mid z 16.60: based |  based | _based | 基于 | Based |  Based | -based | -Based
-  L31h15 copy_mid z 16.16: 压缩 |  compress | .compress | compress | 抹 |  compression |  gzip | _compress
+  L2h31 next_mid z 3.17: istr | naire | oque | ql | ematic | nement | acin | rition
+  L1h0 next_mid z 1.79: 豕 | 如下 | 情形 | 午后 | _expected | .desc | 请注意 | 穿越
+  L2h22 next_mid z 1.21:  (_) | 加以 | ,␍⏎ | 大约 |  [],␍⏎ |  [␍⏎ |  {␍⏎ | 长达
+  L1h0 copy_mid z 3.87: 豕 | 如下 | 情形 | 午后 | _expected | .desc | 请注意 | 穿越
+  L2h31 copy_mid z 3.17: istr | naire | oque | ql | ematic | nement | acin | rition
+  L0h15 copy_mid z 2.09: BOTTOM | 磬 | OTION | restore | AYER | FOUND | PLAY | 箴
+  L6h6 next_mid z 2.44:  ​​ |  示 | َا |  的 |  如 |  解 |  方 |  初始化
+  L5h11 next_mid z 1.27:  图 | で | の |  在 | _we |  设 |  关 | 在哪
+  L6h5 next_mid z 1.14:  Mint |  Viking |  Pit |  Shock |  Multip |  Pack |  Bom |  Sphere
+  L6h11 copy_mid z 5.69: 律师 | 法律顾问 | 税务 | 法律 | /legal | 律师事务 | 纳税 |  documentos
+  L6h21 copy_mid z 3.92: 跟你 | 把你 | 为你 | 对你 | 是你 | 你的 | 你们 |  YOUR
+  L7h21 copy_mid z 3.37: 几乎是 | 几乎没有 | 几乎 | Almost | almost | 幾乎 | _almost |  Almost
+  L17h10 next_mid z 2.78:  acknow |  disap |  &⏎ | 之所 |  =⏎ | 　　 |            |  &&⏎
+  L9h31 next_mid z 2.31: eer | een | ene | ature | stein | ematic | ern | lijke
+  L20h27 next_mid z 2.02:  的 |  对 |  控 |  是 | َا |  解 |  设 |  类
+  L11h15 copy_mid z 4.92: 熬夜 | 夜间 | 夜 | 深夜 | 晚 | 半夜 | 夜晚 | 夜里
+  L11h17 copy_mid z 3.20: 大多数 | 中小型 | 自行 | +self | 较小 | arters | 己 | れて
+  L11h7 copy_mid z 3.12: _ROOT | 词语 | 首都 | :String | _TER |  GetString | 	root | (Direction
+  L33h11 next_mid z 14.41: _validate |  validating | validate |  validate |  Validate | .Validate | .validate | Validate
+  L32h6 next_mid z 14.19: _by | byname | by | .by | _BY | By | .By |  By
+  L33h16 next_mid z 14.04:  require | require | Require |  Require | requires | (require | (required | .require
+  L30h25 copy_mid z 19.89: .Standard | 的标准 | 标准化 | _STANDARD | 標準 | _standard | 标准 |  Standard
+  L32h0 copy_mid z 19.50: 航行 |  sailing | 船舶 | 船只 | 船 |  boats |  boat | 一艘
+  L31h15 copy_mid z 17.99: 砍 | 削 | 抹 |  wipe | 清除 |  erase | 切除 | .cut
