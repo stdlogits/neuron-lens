@@ -237,7 +237,7 @@ def score(args) -> None:
     scored = ~saved["lens_mean"][:, :, 1].isnan()  # [P, 2]: fired at MIN_FIRINGS+ top firings
     in_layers = lambda lo, hi: torch.tensor([lo <= l <= hi for l, _ in picks])[:, None] & scored
     row = lambda sel: {k: t[sel].nanmedian().item() for k, t in cols.items()} | {"poles": int(sel.sum())}
-    bands = [(lo, hi) for lo, hi in arch.bands(L) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
+    bands = [(lo, hi) for lo, hi in arch.bands(MODEL) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
     table = {f"L{lo}-{hi}": row(in_layers(lo, hi)) for lo, hi in bands}
     layers = {layer: row(in_layers(layer, layer)) for layer in sorted(done)}
     dn = saved["dnext_abl"] - saved["dnext_lin"]

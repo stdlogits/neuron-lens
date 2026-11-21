@@ -41,7 +41,7 @@ def main() -> None:
     picks = {(int(l), int(n)): i for i, (l, n) in enumerate(causal["picks"])}
     keep = kept()
     table, lines = {}, [f"firing reads, {MODEL}: top {k} tokens; matched (control: the next pole), medians over poles with firings", ""]
-    for lo, hi in arch.bands(L):
+    for lo, hi in arch.bands(MODEL):
         acc = {}
         for l in range(lo, hi + 1):
             fr = pq.read_table(neuron_table("firings", l), columns=[f"{s}_ids" for s in SITES] + ["n_firings"])

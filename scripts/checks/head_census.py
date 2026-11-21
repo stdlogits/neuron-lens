@@ -129,7 +129,7 @@ def main() -> None:
         print(f"L{l}: next_mid {stat['next_mid'][l].nanmean():+.2f}  copy_mid {stat['copy_mid'][l].nanmean():+.2f}", flush=True)
 
     q = {t: bh(pval[t].flatten()).view(L, H) for t in TESTS}
-    bands = arch.bands(L) + [(0, L - 1)]
+    bands = arch.bands(MODEL) + [(0, L - 1)]
     lay = torch.arange(L)[:, None, None].expand(L, H, K)
     ok_att = fired & (k_att >= 0)
     lines = [(f"attention heads read from their outputs at their top firings, {MODEL}: {L} × {H} heads, {K} firings each "
@@ -172,7 +172,7 @@ def main() -> None:
 
     reads = pq.read_table(head_table("acts"), columns=["out_R_z_str"]).column("out_R_z_str").to_pylist()
     lines += ["", "strongest heads per band (next and copy through the R-lens mid read), with heads/acts' out_R_z:"]
-    for lo, hi in arch.bands(L):
+    for lo, hi in arch.bands(MODEL):
         for t in ("next_mid", "copy_mid"):
             s = stat[t][lo:hi + 1].nan_to_num(-1e9).flatten()
             for i in s.topk(3).indices.tolist():

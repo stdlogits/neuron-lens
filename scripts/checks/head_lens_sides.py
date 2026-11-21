@@ -34,6 +34,7 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoConfig
 
+from neuron_lens import arch
 from neuron_lens.catalog import MODEL, acts_path, head_table, kept, kept_index
 from neuron_lens.lenses import load_fits
 from neuron_lens.paths import FITS, SUMMARY
@@ -45,7 +46,7 @@ ACTS = acts_path()
 CLASSES = {"prev": 0.5, "induction": 0.3, "duplicate": 0.3, "sink": 0.9}
 R_FIT, S_FIT = "r-qwen3-8b-L36-dclm", "s-qwen3-8b-L36-dclm"
 VARIANTS = ("S→S", "S→R", "R→S", "R→R")
-BANDS = [(1, 8), (9, 12), (13, 20), (21, 27), (28, 35), (1, 35)]
+BANDS = [(max(lo, 1), hi) for lo, hi in arch.bands(MODEL)] + [(1, arch.text_config(MODEL).num_hidden_layers - 1)]  # from L1
 
 
 def main() -> None:

@@ -28,6 +28,7 @@ from matplotlib.colors import to_rgb
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Rectangle
 from matplotlib.path import Path
 
+from neuron_lens import arch
 from neuron_lens.catalog import catalog_dir, head_table
 from neuron_lens.paths import DATA, SUMMARY
 
@@ -41,7 +42,7 @@ SLOT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250
 SURFACE, INK, INK2, MUTED, GRID, BASE = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 R_COLOR, S_COLOR = SLOT[0], SLOT[2]  # the R-lens and the S-lens, in every figure
 HEAD_COLOR, NEURON_COLOR = SLOT[6], SLOT[1]  # the anatomy schematic's two units
-BANDS = [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]  # the catalog's depth bands
+BANDS = arch.bands("Qwen/Qwen3-8B")  # the depth bands (arch.depth_bands)
 MATH = {"mathtext.fontset": "custom", "mathtext.rm": "Helvetica Neue", "mathtext.it": "Helvetica Neue:italic",
         "mathtext.bf": "Helvetica Neue:bold"}
 
@@ -740,7 +741,7 @@ def fig_rank_depth() -> None:
 
 def fig_lens_blind() -> None:
     d = summary(f"lens_blind_{STEM}.json")
-    bands = [band_name(lo, hi) for lo, hi in BANDS]
+    bands = list(dict.fromkeys(k.split("/")[0] for k in d if "/" in k and not k.startswith("all/")))  # as it was run
     x = list(range(len(bands)))
     fig, axes = figure(2, width=9.0)
     arms = [a for a in (("lens", "lens reads only", 0), ("contexts", "top contexts only", 1),

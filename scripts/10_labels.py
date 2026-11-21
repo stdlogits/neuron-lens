@@ -2,7 +2,7 @@
 contexts: the catalog's ``labels`` tables (pipeline stage 10).
 
 **Neurons** (``--side neurons``): the evidence card per neuron (both poles) shows, for each pole, one input read and one
-write read of ``neurons/reads``, the ones its model's reading plan (``PLANS``) picks for the neuron's layer: the read
+write read of ``neurons/reads``, the ones its model's reading plan (``arch.PLANS``) picks for the neuron's layer: the read
 raters found most coherent there, blind to the lens (``checks/depth_reads.py``; the write read is the R-lens's at every
 depth, which also predicts steering, §3). Each shows its first 24 tokens in rank tiers (1-8 ‖ 9-24), variants merged
 (``release×9``, runs of line breaks as ``⏎``), the layer's hub tokens (in 3%+ of its raw top 64s) dropped from raw reads;
@@ -114,7 +114,7 @@ READ = {"read_S": "in·S", "read_S_z": "in·S z", "read_R": "in·R", "read_R_z":
 ID = {"neurons": re.compile(r"^L(\d+) n(\d+) ([+−-])(?:\s.*)?$"), "heads": re.compile(r"^L(\d+)[hH](\d+)(?:\s.*)?$")}
 # The reading plan, per model: by depth, (last layer, the read a card shows, the prompt's line on it), for the input
 # and the write side of a neuron, and of a head (its OV read); the layer from which a
-# peaked write gets its note (§5); and the bands of the head check. A card shows one read a side: the one raters found
+# peaked write gets its note (§5); its depths are `arch.PLANS`. A card shows one read a side: the one raters found
 # most coherent at that depth, blind to the lens (``checks/depth_reads.py``, two raters a model, 8-16 layers, findings
 # §8); the write read is the R-lens's everywhere, which also predicts steering (§3, §19). Where the input read is the
 # R-lens's but rarely names the contexts' tokens, the line says so: it can name a concept associated with what drives
@@ -135,47 +135,36 @@ H_LATE = ("OV·R most often names what late heads copy, and 'seeks what it is ab
           "negative copying score, copy suppression")
 
 
-def qwen_plan(layers: int, s_last: int, assoc_last: int, write_edge: int, late: int, heads_early: int, heads_late: int,
-              s_read: str = "read_S") -> dict:
-    """A Qwen3 size's plan from its depths: the S-lens input read through ``s_last``, the R-lens's after (with the
-    association line through ``assoc_last``); early writes before ``write_edge``, next-word writes from ``late``; heads'
-    OV·S through ``heads_early``, the late line from ``heads_late``."""
-    last = layers - 1
-    ins = [(s_last, s_read, S_Z_IN if s_read.endswith("_z") else S_IN)] + ([(assoc_last, "read_R", R_ASSOC)] if assoc_last > s_last else []) + [(last, "read_R", R_IN)]
-    outs = ([(write_edge - 1, "write_R", W_EARLY)] if write_edge > 0 else []) + [(late - 1, "write_R", W_MID), (last, "write_R", W_LATE)]
-    heads = [(heads_early, "ov_S", H_EARLY), (heads_late - 1, "ov_R", H_MID), (last, "ov_R", H_LATE)]
-    return {"in": ins, "out": outs, "heads": heads, "late": late, "check_bands": tuple(arch.bands(layers))}
+def reading_plan(model_id: str) -> dict | None:
+    """The model's reading plan as the prompts use it, from its depths (``arch.PLANS``): by depth, (last layer, the
+    read a card shows, the prompt's line on it) for the input side, the write side and the heads (their OV read), and the
+    layer from which a peaked write gets its note. None for a model without a plan."""
+    p = arch.plan(model_id)
+    if p is None:
+        return None
+    last = p.layers - 1
+    s_line = S_Z_IN if p.s_read.endswith("_z") else S_IN
+    ins = (([(p.s_last, p.s_read, s_line)] if p.s_last >= 0 else [])
+           + ([(p.assoc_last, "read_R", R_ASSOC)] if p.assoc_last > p.s_last else []) + [(last, "read_R", R_IN)])
+    outs = (([(p.write_edge - 1, "write_R", W_EARLY_OF.get(NAME, W_EARLY))] if p.write_edge > 0 else [])
+            + [(p.late - 1, "write_R", W_MID), (last, "write_R", W_LATE)])
+    heads = [(p.heads_early, p.heads_early_read, H_EARLY_OF.get(NAME, H_EARLY)), (p.heads_late - 1, "ov_R", H_MID),
+             (last, "ov_R", H_LATE)]
+    if NAME == "qwen3-8b":  # finer head lines, at its S-lens input edge and its next-word edge
+        heads = [(p.s_last, "ov_S", H_EARLY + ", and the QK reads track real attention best at layer 0"),
+                 (p.heads_early, "ov_S", "OV·S is still the better write read, though OV·R carries signal from about layer 4"),
+                 (p.late - 1, "ov_R", H_MID + "; under the head's average query the QK reads say little about these heads"),
+                 (p.heads_late - 1, "ov_R", H_MID + "; some heads already seek what they are about to say"),
+                 (last, "ov_R", "late heads often attend to what they copy; " + H_LATE)]
+    return {"in": ins, "out": outs, "heads": heads, "late": p.late}
 
 
-PLANS = {
-    "qwen3-0.6b": qwen_plan(28, s_last=5, assoc_last=8, write_edge=0, late=16, heads_early=3, heads_late=20),
-    "qwen3-1.7b": qwen_plan(28, s_last=9, assoc_last=18, write_edge=0, late=16, heads_early=3, heads_late=20),
-    "qwen3-4b": qwen_plan(36, s_last=5, assoc_last=8, write_edge=3, late=21, heads_early=4, heads_late=26, s_read="read_S_z"),
-    "qwen3-14b": qwen_plan(40, s_last=8, assoc_last=11, write_edge=7, late=23, heads_early=4, heads_late=28),
-    "qwen3-8b": qwen_plan(36, s_last=3, assoc_last=8, write_edge=4, late=21, heads_early=8, heads_late=28) | {
-        "heads": [
-            (3, "ov_S", H_EARLY + ", and the QK reads track real attention best at layer 0"),
-            (8, "ov_S", "OV·S is still the better write read, though OV·R carries signal from about layer 4"),
-            (20, "ov_R", H_MID + "; under the head's average query the QK reads say little about these heads"),
-            (27, "ov_R", H_MID + "; some heads already seek what they are about to say"),
-            (35, "ov_R", "late heads often attend to what they copy; " + H_LATE),
-        ]},
-    "gemma-4-12b": {
-        "in": [(19, "read_R", R_ASSOC), (47, "read_R", R_IN)],
-        "out": [(10, "write_R", "what its push would make the model say; at these layers a push at its natural size barely "
-                                 "moves the output, and steering doesn't follow the read"),
-                (32, "write_R", W_MID), (47, "write_R", W_LATE)],
-        "heads": [
-            (13, "ov_R", "early heads often attend by token identity or position: the pattern scores and the contexts show it best"),
-            (32, "ov_R", H_MID),
-            (47, "ov_R", H_LATE),
-        ],
-        "late": 33,
-        "check_bands": ((0, 4), (5, 13), (14, 32), (33, 47)),
-    },
-}
-PLAN = PLANS.get(NAME)  # None for a model without a reading plan: its cards are refused
-BANDS = PLAN["check_bands"] if PLAN else ()
+W_EARLY_OF = {"gemma-4-12b": "what its push would make the model say; at these layers a push at its natural size barely "
+                             "moves the output, and steering doesn't follow the read"}
+H_EARLY_OF = {"gemma-4-12b": "early heads often attend by token identity or position: the pattern scores and the contexts "
+                             "show it best"}
+PLAN = reading_plan(MODEL)  # None for a model without a reading plan: its cards are refused
+BANDS = tuple(arch.bands(MODEL)) if PLAN else ()  # the head check's bands (arch.depth_bands)
 CHECK_PER_BAND = 20
 CHECK_SHOWN = 4  # held-out firings per head in a firing check
 
@@ -209,7 +198,7 @@ def system_prompt(side: str) -> str:
     """The shared prompt with the model's parts filled in: its own file (``PROMPT``) up to ``## Worked examples`` says
     what the model is, the rest is its worked examples; the depth guide comes from its plan."""
     if PLAN is None:
-        raise SystemExit(f"no reading plan for {NAME} in PLANS")
+        raise SystemExit(f"no reading plan for {NAME} in arch.PLANS")
     about, mark, examples = PROMPT[side].read_text().partition("## Worked examples")
     return (TEMPLATE[side].read_text().replace("{about}", about.strip()).replace("{depths}", depth_table(side))
             .replace("{examples}", (mark + examples).strip()))

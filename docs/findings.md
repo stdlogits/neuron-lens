@@ -12,9 +12,11 @@ test against them says whether a read names that target, not whether the read is
 
 **Terms.** A *pole* is one sign of a neuron's activation (SwiGLU activations take both), written
 `L8 n344 +`. Its *write* is `±W_down[:, n]`, its *read direction* `â ± b̂` (the gate and up rows).
-Its *top firings* are its strongest position in each of its 64 top documents (its 24 top documents in §3 and §4). The *bands* are L0-L8,
-L9-L12, L13-L20, L21-L27 and L28-L35 for Qwen3-8B, and Gemma 4 12B's quarters L0-L11, L12-L23,
-L24-L35 and L36-L47. A *mismatched control* scores another unit of the same layer on this unit's
+Its *top firings* are its strongest position in each of its 64 top documents (its 24 top documents in §3 and §4). The *bands* are cut from each model's reading
+plan (§8, `arch.depth_bands`): sensory, association, workspace and motor, for Qwen3-8B L0-L3, L4-L8, L9-L20 and L21-L35,
+for Gemma 4 12B L0-L19, L20-L32 and L33-L47 (no sensory band). Sections written before 2026-11-21 used Qwen3-8B's
+earlier five (L0-L8, L9-L12, L13-L20, L21-L27, L28-L35) and Gemma 4's quarters (L0-L11, …, L36-L47), and name the
+ranges they used. A *mismatched control* scores another unit of the same layer on this unit's
 tokens. *Kept tokens* are the tokens seen 5+ times in the activation corpora, without byte-fallback
 pieces (103,830 for Qwen3-8B, 123,774 for Gemma 4); every token read covers them.
 
@@ -596,7 +598,7 @@ model: 4 of a pole's held-out firings (ranks 6-24) against 4 of another flipped 
 The new labels are at least as good, likely a little better on Qwen3-8B, and no more confident (firing confidence 0.21 against 0.24 on
 Qwen3-8B, 0.25 for both on Gemma 4). Every other pole keeps its first label.
 
-**The reading plans** (2026-11-15; `checks/depth_reads.py`, `10_labels.py`'s `PLANS`). For the labels of the Qwen3 family
+**The reading plans** (2026-11-15; `checks/depth_reads.py`, `arch.PLANS`). For the labels of the Qwen3 family
 (§19) and the relabel of Qwen3-8B and Gemma 4 after the residual's metric (§13), a card shows one input read and one write read a
 pole, 24 tokens each, without strengths: confidence is how clearly the card shows one theme. Which read, at each depth, was set
 by reading. For each model, 15-16 layers spread over the depth and around its transitions, 8 random firing poles a layer, the
@@ -605,6 +607,16 @@ coherence (0-2) and, for input reads, whether it agrees with the pole's five con
 0.83-0.90 over 1,024 lists a model, the same score for 80-87%. The plans take the most coherent read: the S-lens input read in
 the first layers (Qwen3-0.6B L0-L5, 1.7B L0-L9, 4B L0-L5 through its z read, 8B L0-L3, 14B L0-L8, none in Gemma 4), the R-lens
 input read after, and the R-lens write read everywhere, which also predicts steering (§3, §19).
+- **The plans cut the depth bands** (2026-11-21; `arch.PLANS`, `arch.depth_bands`, `data/summary/depth.json`), which the
+  summaries, the label checks and the site share. Sensory: the S-lens input read. Association: the R-lens input read
+  with the line that it often names an associated concept. Workspace: the R-lens input read without it. Motor: from
+  the plans' next-word line, Qwen3-8B's L21 (§7's last rows; its writes name the next token from about L23) at the same
+  relative depth in the other sizes and Gemma 4's L33 (§13); motor holds where it starts first, so Qwen3-1.7B (association line to L18, next-word writes from L16)
+  has no workspace band. Qwen3-0.6B L0-L5, L6-L8, L9-L15, L16-L27; 1.7B L0-L9, L10-L15, L16-L27; 4B L0-L5, L6-L8,
+  L9-L20, L21-L35; 8B L0-L3, L4-L8, L9-L20, L21-L35; 14B L0-L8, L9-L11, L12-L22, L23-L39; Gemma 4 L0-L19, L20-L32,
+  L33-L47. Only the input edges were rated, each to within a rated layer or two; the early-write line (where steering
+  follows the write read less closely, §3) and the head lines (the head census) were not. Where the firing census differs (in·S names Qwen3-8B's firing token more often than in·R through L8,
+  §7), the bands follow coherence.
 - **Coherent is not the same as matching the contexts.** Gemma 4's R-lens input read rates 1.0-1.9 at L0-L18 but agrees with
   the contexts for 0-38% of poles there. Its themes are each pole's own (another pole of the layer shares under 1% of its
   first 24 tokens): British spellings or Spanish names on poles that fire on punctuation and possessives. A read can name what

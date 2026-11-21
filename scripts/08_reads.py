@@ -106,7 +106,7 @@ TOKEN_Z = DATA / "heads" / f"{STEM}-token-z.pt"
 NULL_SHARE = 0.01  # the bottom 1% of W_U diag(γ)'s singular directions
 MIN_OCC = 10  # key occurrences for a token's in-context attention
 CHUNK = 2048
-BANDS = tuple(arch.bands(arch.text_config(MODEL).num_hidden_layers, MODEL))  # Qwen3-8B's five, else quarters
+BANDS = tuple(arch.bands(MODEL))  # the reading plan's bands (arch.depth_bands)
 CAP = softcap(MODEL)
 SIGNS, CENTRE = arch.signs(MODEL), arch.centred(MODEL)  # the poles; a LayerNorm's centring (the final norm's too)
 

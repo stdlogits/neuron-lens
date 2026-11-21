@@ -29,7 +29,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   (DeltaNet's derivative, the sparse MLP's experts), with `layers.py`'s torch passes as their
   reference; `rules.py` states the same rules as autograd patches, by operation, and is the test
   reference; `arch.py` holds each model's geometry (head layouts, weight
-  names, token counts, which fits are of record) and `neurons.py` its neurons' read and write
+  names, token counts, which fits are of record) and its reading plan and depth bands and `neurons.py` its neurons' read and write
   directions (`poles`: in the residual's metric); `metric.py` the residual's metric, which turns a covector into a
   vector and back (`02_fit.py --lens scale`); `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
   maps; `lenses.py` loads fits, released lenses and Drowse lenses; `media.py` builds Gemma's image and
@@ -179,7 +179,7 @@ by `scripts/12_release.py`, one card per repo covering both models.
   post-feedforward norm's scale held constant, `layer_scalar` `s`); its read rows are scaled by the
   pre-feedforward norm. Logits pass a softcap (`30 · tanh(x / 30)`), which R-lens probabilities
   include. Every document starts with `<bos>` (the sink): statistics start at position 1. Its bands
-  are quarters (L0-L11, …, L36-L47). With 16 heads a layer, head tests can't pass BH, so
+  are its plan's, L0-L19, L20-L32 and L33-L47 (quarters before 2026-11-21). With 16 heads a layer, head tests can't pass BH, so
   `checks/reads_at_firings.py` reports uncorrected p too (findings §13). Design.md's Gemma section has the rest.
 - **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a
   `−` pole, read and described separately. From weights, a pole's read direction is `â ± b̂`: the
@@ -189,16 +189,18 @@ by `scripts/12_release.py`, one card per repo covering both models.
 - **Scale.** A lens read is scale-free (RMSNorm), so its probabilities describe a direction, not an
   effect. Effect sizes need the activation scale (`act_top`); don't rank neurons by lens
   probability across layers.
-- **Which side, which depth** (findings §6, §7, for Qwen3-8B; Gemma 4 has the same shape at its own
-  depths, its `read_R` from L11, §13). Input side: the S-lens read at L0-L7 (raw at L0-L4, naming literal tokens), both
-  lenses at L8, the R-lens `mid` read from L9 (`read_S_z` as a concept-level second view), and at
-  L13-L20 the R-lens read with exact drivers and activations beside it. Write side: the
-  S-lens (`write_S`) through L8, where early neurons write back the tokens they detect; the R-lens,
-  legible from about L4. Heads: OV `ov_S` through L8, `ov_R` from L9; QK `qk_S` throughout (uninformative
-  at L13-L20), and its diagonal as `qk_self_S` through L20 (duplicate-token heads) and `qk_self_R` late (L28-L35, mixed
-  at L21-L27; Gemma 4 from L24; findings §11, §13). These bands are a prior: weigh a unit's sides by its reads,
-  contexts and drivers together. Don't force a word reading where a side is uninformative, and say which side a
-  description rests on.
+- **Which side, which depth** (findings §8). `arch.PLANS` holds each model's reading plan: which input, write and head
+  read a label card shows at each depth. Its input edges were rated blind for coherence (`checks/depth_reads.py`), the
+  write read is the R-lens's everywhere, and the head lines follow the head census (§11, §12). The same edges cut the
+  depth bands every summary, label check and the site use (`arch.depth_bands`; `data/summary/depth.json`, rewritten by
+  `python -m neuron_lens.arch` after a change to `PLANS`): sensory while the input read is the S-lens's, association while
+  the R-lens's carries the line that it often names an associated concept, workspace, and motor from where writes often
+  name the next word. Qwen3-8B: L0-L3, L4-L8, L9-L20, L21-L35; Gemma 4 has no sensory band; a base model takes its
+  post-trained model's plan, and a model without one quarters. QK, outside the plans: `qk_S` throughout (uninformative
+  at L13-L20), its diagonal as `qk_self_S` through L20 (duplicate-token heads) and `qk_self_R` late (L28-L35, mixed at
+  L21-L27; Gemma 4 from L24; findings §11, §13). The plan is a prior, and it follows coherence where the firing census
+  differs (§7: in·S names Qwen3-8B's firing token more often through L8): weigh a unit's sides by its reads, contexts and
+  drivers together. Don't force a word reading where a side is uninformative, and say which side a description rests on.
 - **Firings are a sample, not a ground truth.** A top firing is one context, summarized by a token. Where a read and a
   firing's token differ, that alone doesn't make the read wrong: the causal test of a write is steering (§3), a pole's firings
   need not predict each other (§4), and an R-lens read reads forward. `checks/reads_at_firings.py` counts how often each read

@@ -209,7 +209,7 @@ def main() -> None:
              f"next, far ({n_seen['next, far']:,}: the same attention by the token after the key)"), "",
              ("Spearman over tokens between the read and the attention received, mean over heads (own / control head), and "
              "the share of heads past +0.2 (own / control):")]
-    bands = arch.bands(L) + [(0, L - 1)]
+    bands = arch.bands(MODEL) + [(0, L - 1)]
     table = {"context": {}, "layers": {}, "queries": queries, "tokens": n_seen, "qk_S_max_diff": diff}
     for name in targets:
         for v in variants:
@@ -227,7 +227,7 @@ def main() -> None:
     lines += ["", "S vs key (all), by layer: " + " ".join(f"L{l} {x:+.2f}" for l, x in enumerate(table["layers"]))]
     reads = pq.read_table(head_table("reads"), columns=["qk_S_str"]).column("qk_S_str").to_pylist()
     lines += ["", "heads best read by S vs key (all), by band, with heads/reads' qk_S:"]
-    for lo, hi in arch.bands(L):
+    for lo, hi in arch.bands(MODEL):
         s = own[lo:hi + 1].nan_to_num(-9).flatten()
         for i in s.topk(3).indices.tolist():
             lines.append(f"  L{lo + i // H}h{i % H} {s[i]:+.2f}: {reads[(lo + i // H) * H + i % H]}")

@@ -240,7 +240,7 @@ def main() -> None:
     other = (torch.arange(H)[None, :] + torch.randint(1, H, (L, H), generator=torch.Generator().manual_seed(0))) % H
     sp = lambda a, b: spearman(a.flatten(), b.flatten())
 
-    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(L)]
+    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(MODEL)]
     lines = [(f"QK's cross-lens diagonal, {MODEL}: {L - 1} layers × {H} heads from L1; RS (R-lens query, S-lens key), "
               f"SS (08_reads.py's qk_self_S, recomputed: max |Δz| {diff:.3f}), RR; in context over every {EVERY}th activation "
               f"document ({len(docs):,}), queries with an earlier copy of the target per layer (mean): "

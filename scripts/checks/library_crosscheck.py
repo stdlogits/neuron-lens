@@ -30,6 +30,7 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoTokenizer
 
+from neuron_lens import arch
 from neuron_lens.catalog import neuron_table
 from neuron_lens.lenses import load_lens
 from neuron_lens.paths import DATA, LIBRARY, SUMMARY
@@ -39,7 +40,7 @@ from neuron_lens.weights import down_proj, readout_names, tensors
 MODEL = "Qwen/Qwen3-8B"
 STOP = {"the", "of", "and", "old", "year", "years", "with", "from", "for", "who", "one", "your", "you"}
 GROUPS = [(0, 5), (6, 11), (12, 17), (18, 23), (24, 29), (30, 35)]
-BANDS = [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
+BANDS = arch.bands(MODEL)  # the depth bands (arch.depth_bands)
 FDR = 0.05  # reads_at_firings.py's
 UNITS = DATA / "checks" / "reads_at_firings-qwen3-8b.pt"  # its per-pole q-values
 

@@ -1,6 +1,6 @@
 """Blind interpretation of random poles: how far do the lenses alone go? (findings §8)
 
-A stratified random sample of poles (``PER_BAND`` from distinct neurons in each of §7's bands) is
+A stratified random sample of poles (``PER_BAND`` from distinct neurons in each depth band, ``arch.depth_bands``) is
 described once per arm (``ARMS``: the arm's card kind and its explainers' model):
 
 - **lens:** the weight-only reads of the lenses of record and nothing else: the R-lens and S-lens
@@ -61,6 +61,7 @@ from statistics import mean, median
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from neuron_lens import arch
 from neuron_lens.catalog import (
     MODEL,
     HELD_OUT,
@@ -86,7 +87,7 @@ def auroc(p: list[float], truth: list[int]) -> float:
     return mean((a > b) + 0.5 * (a == b) for a in pos for b in neg)
 
 
-BANDS = [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
+BANDS = arch.bands(MODEL)  # the depth bands (arch.depth_bands)
 PER_BAND = 32
 SILENT = 0.05  # act_top under this: no firing test (§7, §8)
 N_SHOW = 12  # tokens per read on a lens card

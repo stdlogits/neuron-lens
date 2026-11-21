@@ -106,7 +106,7 @@ def bands() -> tuple[list[str], dict]:
         before, ok = column(fr, "before_R_z_ids").long(), torch.from_numpy(fr["n_firings"].to_numpy().copy()) > 0
         per[layer] = (shared(read, before)[ok].mean().item(), shared(read, before[pair(g)])[ok].mean().item())
     table, lines = {}, [f"the catalog's read_R_z top 64 in before_R_z's [another pole], {MODEL}, mean over layers"]
-    for lo, hi in tuple(arch.bands(L)) + ((0, L - 1),):
+    for lo, hi in tuple(arch.bands(MODEL)) + ((0, L - 1),):
         rows = [per[l] for l in range(lo, hi + 1)]
         table[f"L{lo}-{hi}"] = {"agree": sum(r[0] for r in rows) / len(rows), "control": sum(r[1] for r in rows) / len(rows)}
         lines.append(f"L{lo}-{hi}".ljust(9) + f"{table[f'L{lo}-{hi}']['agree']:.3f} [{table[f'L{lo}-{hi}']['control']:.3f}]")

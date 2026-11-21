@@ -147,7 +147,7 @@ def report(copy: dict, median: torch.Tensor, cols: list[str], abl: torch.Tensor)
                "spearman_ablation_minus_raw": [diff.mean().item(), diff.quantile(0.025).item(), diff.quantile(0.975).item()],
                "auroc_helps": auroc(c[ok], abl[ok] > HELPS), "auroc_suppresses": auroc(-c[ok], abl[ok] < SUPPRESSES),
                "bands": {}}
-        for lo, hi in arch.bands(L):
+        for lo, hi in arch.bands(MODEL):
             b = ok & (lay >= lo) & (lay <= hi)
             row["bands"][f"L{lo}-L{hi}"] = {"spearman_ablation": spearman(c[b], abl[b]), "auroc_induction": auroc(c[b], pi[b]),
                                             "auroc_duplicate": auroc(c[b], pd[b])}
@@ -159,7 +159,7 @@ def report(copy: dict, median: torch.Tensor, cols: list[str], abl: torch.Tensor)
                      f"                         {row['spearman_ablation']:+.2f} ({d[0]:+.2f} [{d[1]:+.2f}, {d[2]:+.2f}])"
                      f"                  {row['auroc_helps']:.2f}         {row['auroc_suppresses']:.2f}")
     lines += ["", "by band: Spearman with ablation / AUROC induction / AUROC duplicate"]
-    for lo, hi in arch.bands(L):
+    for lo, hi in arch.bands(MODEL):
         k = f"L{lo}-L{hi}"
         lines.append(f"  {k}: " + "   ".join(f"{v} {table[v]['bands'][k]['spearman_ablation']:+.2f}/"
                                              f"{table[v]['bands'][k]['auroc_induction']:.2f}/"
@@ -183,7 +183,7 @@ def report(copy: dict, median: torch.Tensor, cols: list[str], abl: torch.Tensor)
               + ", ".join(f"{k} {x:+.2f}" for k, x in mz["classes"].items()),
               "  the strongest induction heads: " + ", ".join(f"{h} {x:+.2f}" for h, x in mz["strongest_induction"]),
               "  by band (5% / 50% / 95% of heads):"]
-    for lo, hi in arch.bands(L):
+    for lo, hi in arch.bands(MODEL):
         q = median[(lay >= lo) & (lay <= hi)].quantile(qs).tolist()
         mz["bands"][f"L{lo}-L{hi}"] = q
         lines.append(f"    L{lo}-L{hi}: " + " / ".join(f"{x:+.2f}" for x in q))

@@ -282,7 +282,7 @@ def main() -> None:
     pat = pq.read_table(pat_path, columns=["sink", "prev", "induction", "duplicate"]).to_pydict() if pat_path.exists() else None
     if pat and abl_path.exists():
         pat["ablate_copy"] = torch.load(abl_path, weights_only=False)["ablate_copy"].flatten().tolist()
-    bands = arch.bands(L)
+    bands = arch.bands(MODEL)
     hl = lambda i: f"L{i // H}h{i % H}"  # noqa: E731
     lines = [f"attention heads in image and audio contexts, {MODEL}: {L} × {H} heads; per modality N labelled documents in "
              "media.PROMPT, each followed by ' a <label>' (its own, and another class's)"]

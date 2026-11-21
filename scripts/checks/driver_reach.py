@@ -28,7 +28,7 @@ def main() -> None:
         quiet = act < SILENT
         per.append((top / act.clamp_min(1e-3))[~quiet])
     table, lines = {}, [f"the top exact driver's activation over act_top, {MODEL}: medians over each band's poles that aren't near-silent", ""]
-    for lo, hi in tuple(arch.bands(L)) + ((0, L - 1),):
+    for lo, hi in tuple(arch.bands(MODEL)) + ((0, L - 1),):
         table[f"L{lo}-{hi}"] = torch.cat(per[lo:hi + 1]).median().item()
         lines.append(f"L{lo}-{hi}".ljust(9) + f"{table[f'L{lo}-{hi}']:.2f}")
     text = "\n".join(lines)

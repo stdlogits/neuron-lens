@@ -37,7 +37,7 @@ def main() -> None:
     args = ap.parse_args()
     L = arch.text_config(MODEL).num_hidden_layers
     rows, table = [f"relations, {MODEL}: of each pole's top {args.k} driven-by sources, the share also in its top {args.k} wired-to / fires-with / either (control: the next pole's lists); medians over poles with a firing", ""], {}
-    for lo, hi in arch.bands(L) + [(0, L - 1)]:
+    for lo, hi in arch.bands(MODEL) + [(0, L - 1)]:
         lo = max(lo, 1)
         acc = {k: [] for k in ("w", "f", "either", "w_c", "f_c")}
         for l in range(lo, hi + 1):

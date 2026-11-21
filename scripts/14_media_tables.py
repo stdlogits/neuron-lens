@@ -130,7 +130,7 @@ def summarize(base=None) -> None:
         labels = pd.read_parquet(f"{base}/media/{m}_docs.parquet", columns=["labels"])["labels"]
         per = labels.str.split(" | ", regex=False).explode().value_counts()
         out[m] = {"documents": len(labels), "labels": len(per), "labels_scored": int((per >= 8).sum()), "bands": {}}
-        for lo, hi in arch.bands(arch.text_config(MODEL).num_hidden_layers):
+        for lo, hi in arch.bands(MODEL):
             t = pd.concat([pd.read_parquet(f"{base}/neurons/{m}/L{layer:02d}.parquet", columns=["sig", "stable", "auroc_heldout", *ranks])
                            for layer in range(lo, hi + 1)])
             scored = t[ranks[0]].notna()

@@ -257,7 +257,7 @@ def score(args) -> None:
         r = {k: pole[k][sel].nanmedian().item() for k in cols} | {"poles": int(sel.sum())}
         r["gate_neg"] = saved["gate_neg"][sel].nanmean().item()
         return r | {"err": pole["err"][sel].max().item() if sel.any() else float("nan")}
-    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(L, MODEL) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
+    bands = [(max(lo, 1), hi) for lo, hi in arch.bands(MODEL) + [(0, L - 1)] if any(lo <= l <= hi for l in done)]
     table = {f"L{lo}-{hi}": row(in_layers(lo, hi)) for lo, hi in bands}
     layers = {layer: row(in_layers(layer, layer)) for layer in done}
     lines = [f"direct edges in context, {MODEL}: {saved['meta']}, layers {done}",

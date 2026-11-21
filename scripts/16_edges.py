@@ -169,7 +169,7 @@ def summary(ins: list, outs: list, rms: torch.Tensor, mlp_scale: torch.Tensor, p
              "gap: median layer gap; pos: share of strongest in-edges that drive the pole; hubs: share of the band's "
              "in-list entries held by the 1% most-listed sources; out-: the same for out-lists)"]
     table = {}
-    for lo, hi in arch.bands(L, MODEL) + [(0, L - 1)]:
+    for lo, hi in arch.bands(MODEL) + [(0, L - 1)]:
         cat = lambda lists, i, a=lo, b=hi: torch.cat([lists[m][i] for m in range(max(a, 0), b + 1)])
         s_in, id_in, p_in, c_in = (cat(ins, i) for i in range(4))
         s_out, id_out = cat(outs, 0), cat(outs, 1)

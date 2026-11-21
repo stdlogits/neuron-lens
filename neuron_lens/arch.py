@@ -22,13 +22,15 @@ scale out.
 ``lens_means(model_id, ...)`` loads the lens means the checks read: from fit files (``02_fit.py``)
 when present, else the released lenses on the Hub (``stdlogits/rs-lenses``, ``12_release.py``).
 """
+import dataclasses
 import functools
+import json
 from dataclasses import dataclass
 
 import torch
 from transformers import AutoConfig
 
-from neuron_lens.paths import DATA, FITS
+from neuron_lens.paths import DATA, FITS, SUMMARY
 from neuron_lens.rules import attention, is_centred, norm_eps
 from neuron_lens.weights import tensors
 
@@ -282,13 +284,81 @@ def logits(lm, hidden: torch.Tensor) -> torch.Tensor:
     return torch.tanh(x / cap) * cap if cap else x
 
 
-def bands(n_layers: int, model_id: str | None = None) -> list[tuple[int, int]]:
-    """Layer bands for the summaries: Qwen3-8B's (36 layers, which Qwen3-4B shares), else quarters (always for
-    GPT-NeoX: Pythia-12B has 36 layers too)."""
-    if n_layers == 36 and not (model_id and is_neox(model_id)):
-        return [(0, 8), (9, 12), (13, 20), (21, 27), (28, 35)]
-    q = n_layers // 4
-    return [(i * q, (i + 1) * q - 1 if i < 3 else n_layers - 1) for i in range(4)]
+# ---------------------------------------------------------------- depth: the reading plans and the bands
+
+@dataclass(frozen=True)
+class Plan:
+    """A model's reading plan (findings §8): which read a label card shows at each depth, and where its prompt's
+    lines change. The input edges were set by reading: two raters of different lineages rated each weight read's
+    coherence, blind to the lens, at 15-16 layers of each model (``checks/depth_reads.py``), and the plan takes the most
+    coherent. The write read is the R-lens's at every depth (it also predicts steering, §3, §19). The head lines follow
+    each model's census of head reads (§11, §12, §19); the next-word edge is Qwen3-8B's L21 at the same relative depth
+    in the other Qwen3 sizes, and Gemma 4's L33 (§13). ``10_labels.py`` writes the lines; the depth bands (``bands``)
+    and the site's are cut from the same edges."""
+    layers: int
+    s_last: int  # the input read is the S-lens's through this layer (-1: at no depth)
+    assoc_last: int  # then the R-lens's, with the line that it often names an associated concept, through this layer
+    write_edge: int  # writes before this layer get the line that steering follows them less closely (0: none)
+    late: int  # writes from this layer often name the next word, and a peaked write gets its note (§5)
+    heads_early: int  # the early heads' line through this layer, their OV read ``heads_early_read``'s
+    heads_late: int  # the late heads' line from this layer
+    s_read: str = "read_S"  # the S-lens input read: plain, or its z read (Qwen3-4B)
+    heads_early_read: str = "ov_S"
+
+
+PLANS = {
+    "qwen3-0.6b": Plan(28, s_last=5, assoc_last=8, write_edge=0, late=16, heads_early=3, heads_late=20),
+    "qwen3-1.7b": Plan(28, s_last=9, assoc_last=18, write_edge=0, late=16, heads_early=3, heads_late=20),
+    "qwen3-4b": Plan(36, s_last=5, assoc_last=8, write_edge=3, late=21, heads_early=4, heads_late=26, s_read="read_S_z"),
+    "qwen3-8b": Plan(36, s_last=3, assoc_last=8, write_edge=4, late=21, heads_early=8, heads_late=28),
+    "qwen3-14b": Plan(40, s_last=8, assoc_last=11, write_edge=7, late=23, heads_early=4, heads_late=28),
+    "gemma-4-12b": Plan(48, s_last=-1, assoc_last=19, write_edge=11, late=33, heads_early=13, heads_late=33,
+                        heads_early_read="ov_R"),
+}
+ROLES = ("sensory", "association", "workspace", "motor")
+
+
+def plan(model_id: str) -> Plan | None:
+    """The model's reading plan; a base model takes its post-trained model's (§19: the same neurons, close reads)."""
+    return PLANS.get(stem(model_id).removesuffix("-base"))
+
+
+def depth_bands(model_id: str) -> dict[str, tuple[int, int]]:
+    """The model's depth bands, ``{role: (first, last)}``, cut from its reading plan at the edges where a card's read or
+    its line changes: sensory while the input read is the S-lens's, association while the R-lens's carries the
+    association line, workspace after, and motor from where writes often name the next word. Motor holds where it
+    starts first (Qwen3-1.7B's association line runs to L18 and its next-word writes from L16: no workspace band); a
+    model without an S-lens input read (Gemma 4) has no sensory band. A model without a plan (Pythia, Qwen3-32B, Qwen3.5)
+    gets quarters, named by their layers."""
+    p = plan(model_id)
+    if p is None:
+        n = text_config(model_id).num_hidden_layers
+        q = n // 4
+        return {f"L{lo}-L{hi}": (lo, hi) for lo, hi in ((i * q, (i + 1) * q - 1 if i < 3 else n - 1) for i in range(4))}
+    role = lambda L: ("motor" if L >= p.late else "sensory" if L <= p.s_last else "association" if L <= p.assoc_last
+                      else "workspace")
+    out: dict[str, tuple[int, int]] = {}
+    for L in range(p.layers):
+        out[role(L)] = (out.get(role(L), (L, L))[0], L)
+    assert list(out) == [r for r in ROLES if r in out], f"{model_id}: bands out of order"
+    return out
+
+
+def bands(model_id: str) -> list[tuple[int, int]]:
+    """The model's depth bands, ``[(first, last)]`` in depth order (``depth_bands``), for the summaries."""
+    return list(depth_bands(model_id).values())
+
+
+def write_depth(path=None) -> None:
+    """Every plan and its bands as JSON (``data/summary/depth.json``), for what reads them outside Python: the site's
+    catalog build and its words for each band. Rerun after changing ``PLANS``: ``python -m neuron_lens.arch``."""
+    out = {m: {"plan": dataclasses.asdict(p),
+               "bands": [{"role": r, "first": a, "last": b} for r, (a, b) in depth_bands(m).items()]}
+           for m, p in PLANS.items()}
+    path = path or SUMMARY / "depth.json"
+    path.write_text(json.dumps(out, indent=1) + "\n")
+    print(f"{path}: " + "; ".join(f"{m} " + " ".join(f"{b['role']} L{b['first']}-{b['last']}" for b in v["bands"])
+                                  for m, v in out.items()))
 
 
 # ---------------------------------------------------------------- the pipeline's Gemma path
@@ -430,3 +500,7 @@ def fits(model_id: str) -> tuple[str, str]:
     else, where they are not on this machine, the released lenses (``hub``)."""
     names = tuple(f"{lens}-{stem(model_id)}-L{text_config(model_id).num_hidden_layers}-dclm" for lens in "rs")
     return names if all((FITS / f"{x}.pt").exists() for x in names) else ("hub", "hub")
+
+
+if __name__ == "__main__":
+    write_depth()

@@ -1,5 +1,5 @@
 """Which weight read names a pole's theme at each depth, read by eye: the evidence, beside the census of
-``checks/reads_at_firings.py``, for the labeller's reading plans (``10_labels.py``'s ``PLANS``: which input read and which
+``checks/reads_at_firings.py``, for the labeller's reading plans (``arch.PLANS``: which input read and which
 write read a card shows at each depth, and what its prompt says about them).
 
 ``deck``: for ``N_LAYERS`` layers spread over the model's depth, ``PER_LAYER`` random poles each that fire (``act_top`` at
