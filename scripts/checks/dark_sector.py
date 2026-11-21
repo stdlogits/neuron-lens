@@ -9,12 +9,18 @@ writes (at the MLP input: over the gate and up rows as vectors, ``s ⊙ c``). Th
 the metric. A sector of a vector is its part in the sector, mapped back to raw coordinates. The S-lens's sectors
 (``patch``: ``s_bright``, ``s_dark``) take the same rule to the input side: the Gram of the token footprints at each
 output, ``K_L ē`` (the S-lens's map from the embedding, on the kept tokens' embeddings, centred), as whitened vectors, in
-place of the readout's.
+place of the readout's. The **doubly dark** sector (``dd``) is orthogonal to both bright sectors; the R-lens's dark
+sector is it plus ``s_only``, the S-lens's bright sector's part outside the R-lens's (its directions within about 6° of the
+R-lens's bright sector dropped). ``jd`` is the soft version of ``dd``: of the two whitened Grams, each over its gain on a
+random direction (its loudest direction left out), summed, the quietest directions, as many as ``dd`` has (an eigenvalue
+``λ`` of the sum is both lenses' gains along it over a random direction's, added; under 1, quieter than chance to both).
 
 **Ablation.** One sector of the MLP output, over a band of layers, at positions ≥ 1, replaced by its mean over the
 positions of held-out DCLM documents (the first position, the sink, keeps its output). Controls: random subspaces of the
 dark and bright dimensions (``rand_d``, ``rand_b``; random orthonormal bases in the metric) and the whole MLP output
-(``mlp``).
+(``mlp``). With ``--doubly``, ``trace``, ``bands`` and ``comprehend`` ablate ``dark``, ``dd``, ``s_only`` and ``jd``
+instead, against random subspaces of ``dd``'s and ``s_only``'s dimensions (``rand_dd``, ``rand_so``), and write
+``<part>_dd`` summaries.
 
 Parts:
 
@@ -74,6 +80,17 @@ Parts:
 - ``span``: whether the lenses' readouts span the residual, in fp64: the R-lens readout's numerical rank at each output
   and MLP input, the S-lens footprints' at each output, and which factor sets the bottom (the unembedding, the final
   norm, the lens's Jacobian).
+- ``sparse``: the lenses' token vectors as sparse frames, the J-space's shape (Gurnee et al. 2026). At each layer's
+  output, residuals at 2,048 positions (DCLM and chat documents, from position 16), raw and centred, whitened, are
+  decomposed greedily into nonnegative combinations of up to ``SPARSE_K`` unit vectors (``pursuit``: the atom most
+  correlated with the remainder joins, the coefficients are refitted by least squares on the support, negative ones
+  dropped) from four frames over the kept tokens: the R-lens's readout rows (``s ⊙ c``), the logit lens's (the
+  unembedding rows, ``J = I``), the S-lens's footprints (``K_L ē / s``) and random unit vectors. A frame's occupancy at a
+  position is the number of atoms after which its marginal gain in variance explained falls below the random frame's;
+  its excess is its variance explained over the random frame's. The R-lens's and the S-lens's frames are also pooled
+  (against two random frames pooled): which lens the picks come from, and what both leave. The sparse components'
+  energy in the R-lens's bright sector, ``s_only`` and ``dd``, beside the residual's own; and the atoms picked at the
+  last position of ``bands``' ten prompts.
 
 Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
 
@@ -85,6 +102,8 @@ Outputs: ``data/summary/dark_sector_<part>_<model>.json`` and ``.log``.
     python scripts/checks/dark_sector.py far
     python scripts/checks/dark_sector.py soft
     python scripts/checks/dark_sector.py span
+    python scripts/checks/dark_sector.py sparse
+    python scripts/checks/dark_sector.py trace --doubly   # also bands, comprehend
 """
 import argparse
 import json
@@ -108,6 +127,7 @@ FIRST = 16  # positions scored from here (the lenses' sink cut, transport.SKIP_F
 T = 128
 STEM = arch.stem(MODEL)
 SECTORS = ("dark", "bright", "rand_d", "rand_b", "mlp")
+DOUBLY = ("dark", "dd", "s_only", "jd", "rand_dd", "rand_so")  # ``--doubly``'s sectors
 BANDS = {"L0": range(1), "L1-8": range(1, 9), "L9-20": range(9, 21), "L21-35": range(21, 36), "L1-35": range(1, 36)}
 LOG = []
 
@@ -123,14 +143,17 @@ def save(part: str, res: dict) -> None:
     (SUMMARY / f"dark_sector_{part}_{STEM}.log").write_text("\n".join(LOG) + "\n")
 
 
-def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool = False) -> dict:
+def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool = False, dd: bool = False) -> dict:
     """``s`` (the metric's √s² per layer), ``V`` (bright bases, whitened, fp16), ``K``, ``R`` (random ``K``-dim bases) at
     each layer's output; with ``mid`` the same at the MLP input (``s_mid``, ``V_mid``, ``K_mid``, ``R_mid``), plus the raw
     readout Grams ``GM`` at each output (for ``trace``'s loudness table), and ``J_out`` (CPU); with ``s_lens`` the
     S-lens's bright sector at each output (``VS``, ``KS``, ``RS``); with ``keep`` (and ``s_lens``) each output's top
     ``keep`` directions of the R-lens (``VRt``), the S-lens (``VSt``) and their average (``VMt``: the mean of the two
     whitened Grams, each scaled to unit trace), and a random ``keep``-dim basis (``Rt``); with ``full`` every direction
-    of the R-lens's readout at each output (``VF``, by gain) and their gains (``gain``)."""
+    of the R-lens's readout at each output (``VF``, by gain) and their gains (``gain``); with ``dd`` (and ``s_lens``) the
+    doubly dark sector's basis (``D``), ``s_only``'s (``SO``), ``jd``'s (``JB``), random bases of the first two's
+    dimensions (``RD``, ``RSO``) and the joint spectrum's summary (``joint``), the S-lens's bright bases and the random
+    bright ones dropped."""
     nm = arch.names(MODEL)
     n = arch.text_config(MODEL).num_hidden_layers
     head = tensors(MODEL, [nm["unembed"], nm["norm"]])
@@ -156,7 +179,7 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool =
     lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=parts)
     gen = torch.Generator(device=DEV).manual_seed(0)
     out = {k: [] for k in ("s", "V", "K", "R", "s_mid", "V_mid", "K_mid", "R_mid", "GM", "VS", "KS", "RS", "overlap",
-                           "VRt", "VSt", "VMt", "Rt", "VF", "gain")}
+                           "VRt", "VSt", "VMt", "Rt", "VF", "gain", "D", "SO", "JB", "RD", "RSO", "joint")}
 
     def top(Gr, s, X):
         gain, V = torch.linalg.eigh(s[:, None] * Gr * s[None, :])
@@ -192,6 +215,29 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool =
                 out["VMt"].append(VM[:, :keep].half().contiguous())
                 out["Rt"].append(torch.linalg.qr(torch.randn(d, keep, device=DEV, generator=gen))[0].half())
                 del wr, ws, VM
+            if dd:
+                Vb, Sb = V.float(), VS.float()
+                Q, sv, _ = torch.linalg.svd(Sb - Vb @ (Vb.T @ Sb), full_matrices=False)
+                SO = Q[:, sv > 0.1]  # S-bright outside R-bright, its directions within ~6° of R-bright dropped
+                U = torch.cat([Vb, SO], 1)
+                D = torch.linalg.qr(torch.cat([U, torch.randn(d, d - U.shape[1], device=DEV, generator=gen)], 1))[0]
+                D = D[:, U.shape[1]:]
+                kD = D.shape[1]
+                wr, ws = s[:, None] * Gr * s[None, :], s[:, None] * GS * s[None, :]
+                gr, gs = torch.linalg.eigvalsh(wr), torch.linalg.eigvalsh(ws)
+                lam, W = torch.linalg.eigh(wr / ((gr.sum() - gr[-1]) / (d - 1)) + ws / ((gs.sum() - gs[-1]) / (d - 1)))
+                JB = W[:, :kD]
+                out["joint"].append({
+                    "K_SO": SO.shape[1], "K_D": kD, "below_1": int((lam < 1).sum()), "below_0.1": int((lam < 0.1).sum()),
+                    "soft_dd": (1 / (1 + lam.clamp_min(0))).sum().item(),
+                    "lam_quantiles": torch.quantile(lam, torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9], device=DEV)).tolist(),
+                    "hard_in_soft": (D.T @ JB).pow(2).sum().item() / kD, "chance": kD / d})
+                out["D"].append(D.half().contiguous()), out["SO"].append(SO.half().contiguous())
+                out["JB"].append(JB.half().contiguous())
+                out["RD"].append(torch.linalg.qr(torch.randn(d, kD, device=DEV, generator=gen))[0].half())
+                out["RSO"].append(torch.linalg.qr(torch.randn(d, SO.shape[1], device=DEV, generator=gen))[0].half())
+                out["VS"][-1] = out["RS"][-1] = out["R"][-1] = None  # not used with ``dd``: GPU memory
+                del Vb, Sb, Q, U, D, wr, ws, W, JB
             del Kl, GS
         if mid:
             out["GM"].append(Gr)
@@ -210,6 +256,13 @@ def sectors(mid: bool = False, s_lens: bool = False, keep: int = 0, full: bool =
         log("S-lens sectors: K " + " ".join(map(str, out["KS"])))
         log("  their share in the R-lens's bright sector " + " ".join(f"{x:.2f}" for x in out["overlap"])
             + " (random: " + " ".join(f"{k / d:.2f}" for k in out["K"]) + ")")
+    if dd:
+        j = out["joint"]
+        log("doubly dark: dims " + " ".join(str(x["K_D"]) for x in j) + " | s_only " + " ".join(str(x["K_SO"]) for x in j))
+        log("  quieter than chance to both (λ < 1) " + " ".join(str(x["below_1"]) for x in j) + " | soft count Σ 1/(1+λ) "
+            + " ".join(f"{x['soft_dd']:.0f}" for x in j))
+        log("  dd's share in jd " + " ".join(f"{x['hard_in_soft']:.2f}" for x in j) + " (random: "
+            + " ".join(f"{x['chance']:.2f}" for x in j) + ")")
     return out
 
 
@@ -249,7 +302,8 @@ def model_and_means(sec: dict, extra_hooks=None):
 
 
 SPLIT = {"bright": ("V", True), "dark": ("V", False), "rand_b": ("R", True), "rand_d": ("R", False),
-         "s_bright": ("VS", True), "s_dark": ("VS", False), "rand_sb": ("RS", True), "rand_sd": ("RS", False)}
+         "s_bright": ("VS", True), "s_dark": ("VS", False), "rand_sb": ("RS", True), "rand_sd": ("RS", False),
+         "dd": ("D", True), "s_only": ("SO", True), "jd": ("JB", True), "rand_dd": ("RD", True), "rand_so": ("RSO", True)}
 
 
 def part(x: torch.Tensor, M: int, sector: str, sec: dict) -> torch.Tensor:
@@ -276,12 +330,14 @@ def ablated(out: torch.Tensor, M: int, sector: str, sec: dict, mean: torch.Tenso
 
 # ------------------------------------------------------------------------------------------------------- trace
 
-def trace(n_docs: int, batch: int) -> None:
-    sec = sectors(mid=True)
+def trace(n_docs: int, batch: int, doubly: bool = False) -> None:
+    sec = sectors(mid=True, s_lens=doubly, dd=doubly)
+    modes = DOUBLY if doubly else SECTORS
     nL, d = len(sec["K"]), sec["s"][0].shape[0]
     # loudness of each layer's sectors to each later layer's lens
     rel_dark = torch.full((nL, nL), float("nan"))
     rel_bright = torch.full((nL, nL), float("nan"))
+    rel_dd = torch.full((nL, nL), float("nan"))
     for L in range(nL):
         s, Vb, K = sec["s"][L], sec["V"][L].float(), sec["K"][L]
         for M in range(L, nL):
@@ -291,6 +347,9 @@ def trace(n_docs: int, batch: int) -> None:
             trA, trB = A.trace(), ((A @ Vb) * Vb).sum()
             rel_dark[L, M] = ((trA - trB) / (d - K) / (trA / (d - 1))).item()
             rel_bright[L, M] = (trB / K / (trA / (d - 1))).item()
+            if doubly:
+                Dd = sec["D"][L].float()
+                rel_dd[L, M] = (((A @ Dd) * Dd).sum() / Dd.shape[1] / (trA / (d - 1))).item()
     del sec["GM"]
     torch.cuda.empty_cache()
     tok, model, means = model_and_means(sec)
@@ -307,14 +366,15 @@ def trace(n_docs: int, batch: int) -> None:
         return (xw.half() @ V).float().pow(2).sum(-1), xw.pow(2).sum(-1)
 
     Z = lambda *sh: torch.zeros(*sh, device=DEV, dtype=torch.float64)
-    cen = {k: {"tot": Z(nL), "bright": Z(nL), "sum_w": Z(nL, d), "sum_b": [Z(K) for K in sec["K"]], "sq_w": Z(nL, d)}
-           for k in ("h", "a", "m")}
+    cen = {k: {"tot": Z(nL), "bright": Z(nL), "sum_w": Z(nL, d), "sum_b": [Z(K) for K in sec["K"]], "sq_w": Z(nL, d),
+               "dd": Z(nL), "sum_dd": [Z(x.shape[1]) for x in sec["D"]]} for k in ("h", "a", "m")}
     drive = {"dark": Z(nL), "rand": Z(nL), "n": Z(nL), "x_dark": Z(nL), "x": Z(nL)}
     act_sq = Z(nL, f)
     st = {m: {"nll": Z(nL), "kl": Z(nL), "kl_pred": Z(nL), "inj": Z(nL), "inj_dark": Z(nL), "dh": Z(nL, nL),
-              "dh_bright": Z(nL, nL), "da": Z(nL, nL), "dm": Z(nL, nL)} for m in SECTORS}
-    listen = {m: torch.zeros(nL, nL, f, device=DEV) for m in ("dark", "bright")}
-    pos_dnll = {m: torch.zeros(nL, len(docs), T - 1 - FIRST) for m in ("dark", "bright")}
+              "dh_bright": Z(nL, nL), "da": Z(nL, nL), "dm": Z(nL, nL)} for m in modes}
+    named = [m for m in ("dark", "bright", "dd") if m in modes]  # sectors whose listeners and tokens are kept
+    listen = {m: torch.zeros(nL, nL, f, device=DEV) for m in named}
+    pos_dnll = {m: torch.zeros(nL, len(docs), T - 1 - FIRST) for m in named}
     nll_clean, n_pos = Z(1), 0
     S = {"clean": True, "L": None, "mode": None}
     cache = {}
@@ -420,10 +480,14 @@ def trace(n_docs: int, batch: int) -> None:
                     c["sum_w"][M] += xw.sum(0).double()
                     c["sum_b"][M] += (xw.half() @ sV[M]).float().sum(0).double()
                     c["sq_w"][M] += xw.pow(2).sum(0).double()
+                    if doubly:
+                        cd = (xw.half() @ sec["D"][M]).float()
+                        c["dd"][M] += cd.pow(2).sum().double()
+                        c["sum_dd"][M] += cd.sum(0).double()
             S["clean"] = False
             for L in range(nL):
                 JL = sec["J_out"][L].to(DEV, torch.bfloat16) if L < sec["J_out"].shape[0] else None
-                for mode in SECTORS:
+                for mode in modes:
                     S["L"], S["mode"] = L, mode
                     lp = model(input_ids=ids, use_cache=False).logits[:, v].float().log_softmax(-1)
                     nll = -lp.gather(-1, tgt[..., None])[..., 0]
@@ -445,6 +509,8 @@ def trace(n_docs: int, batch: int) -> None:
     res = {"K_out": sec["K"], "K_mid": sec["K_mid"], "n_positions": n, "nll_clean": nll_clean.item() / n,
            "loud_dark": rel_dark.tolist(), "loud_bright": rel_bright.tolist(), "census": {}, "drive": {}, "single": {},
            "listeners": {}, "tokens": {}}
+    if doubly:
+        res |= {"loud_dd": rel_dd.tolist(), "joint": sec["joint"]}
     for M in range(nL):
         row = {}
         for k, c in cen.items():
@@ -454,6 +520,10 @@ def trace(n_docs: int, batch: int) -> None:
             diag = (q * (1 - sV[M].double().pow(2).sum(1))).sum().item() / q.sum().item()
             row[k] = {"dark": 1 - br / tot, "dark_centred": 1 - (br - mb.pow(2).sum().item()) / (tot - mw.pow(2).sum().item()),
                       "dark_dims": 1 - sec["K"][M] / d, "diag_null": diag}
+            if doubly:
+                dd_, md = c["dd"][M].item() / n, c["sum_dd"][M] / n
+                row[k] |= {"dd": dd_ / tot, "dd_centred": (dd_ - md.pow(2).sum().item()) / (tot - mw.pow(2).sum().item()),
+                           "dd_dims": sec["D"][M].shape[1] / d}
         res["census"][M] = row
         nd = max(drive["n"][M].item(), 1)
         res["drive"][M] = {"dark": drive["dark"][M].item() / nd, "rand": drive["rand"][M].item() / nd,
@@ -469,7 +539,7 @@ def trace(n_docs: int, batch: int) -> None:
     sd = (act_sq / n).sqrt().float().clamp_min(1e-6)
     tg = docs[:, FIRST + 1:T].flatten().numpy()
     ids_, inv, cnt = np.unique(tg, return_inverse=True, return_counts=True)
-    for mode in ("dark", "bright"):
+    for mode in named:
         res["listeners"][mode], res["tokens"][mode] = {}, {}
         for L in range(nL):
             z = listen[mode][L] / n / sd
@@ -480,7 +550,12 @@ def trace(n_docs: int, batch: int) -> None:
             mean = np.bincount(inv, pos_dnll[mode][L].flatten().numpy()) / cnt
             o = np.argsort(-np.where(cnt >= 15, mean, -np.inf))[:12]
             res["tokens"][mode][L] = [[tok.decode([int(ids_[i])]), float(mean[i]), int(cnt[i])] for i in o]
-    save("trace", res)
+    for mode in modes:
+        r = res["single"][mode]
+        log(f"{mode:7s} ΔNLL " + " ".join(f"{x:+.3f}" for x in r["dnll"]))
+        log(f"{'':7s} KL   " + " ".join(f"{x:.3f}" for x in r["kl"]) + " | lens-predicted "
+            + " ".join(f"{x:.1e}" for x in r["kl_pred"][::5]))
+    save("trace_dd" if doubly else "trace", res)
     log("TRACE DONE")
 
 
@@ -492,8 +567,8 @@ PROMPTS = ["The capital of France is", "def fibonacci(n):\n", "Once upon a time,
 CHAT = ["Explain why the sky is blue in two sentences.", "Who are you?", "Write a haiku about autumn."]
 
 
-def bands(n_eval: int, new: int, batch: int) -> None:
-    sec = sectors()
+def bands(n_eval: int, new: int, batch: int, doubly: bool = False) -> None:
+    sec = sectors(s_lens=doubly, dd=doubly)
     tok, model, means = model_and_means(sec)
     evals = {k: torch.tensor(lens_docs(act_file(k), tok, n_eval, T, T, full=True)) for k in ("dclm", "code", "zh", "chat")}
     S = {"sector": None, "band": None}
@@ -511,8 +586,12 @@ def bands(n_eval: int, new: int, batch: int) -> None:
         x = tok.apply_chat_template([{"role": "user", "content": c}], add_generation_prompt=True, enable_thinking=False,
                                     return_tensors="pt")
         prompts.append(x if isinstance(x, torch.Tensor) else x["input_ids"])
-    conds = [("clean", None)] + [(m, b) for b in ("L0", "L1-8", "L9-20", "L21-35", "L1-35") for m in ("dark", "bright")] \
-        + [("rand_d", "L1-35"), ("rand_b", "L1-35"), ("mlp", "L1-35"), ("mlp", "L9-20")]
+    if doubly:
+        conds = [("clean", None)] + [(m, b) for b in BANDS for m in ("dark", "dd", "s_only", "rand_dd")] \
+            + [("jd", "L1-8"), ("jd", "L9-20"), ("jd", "L1-35"), ("rand_so", "L1-8"), ("rand_so", "L1-35")]
+    else:
+        conds = [("clean", None)] + [(m, b) for b in BANDS for m in ("dark", "bright")] \
+            + [("rand_d", "L1-35"), ("rand_b", "L1-35"), ("mlp", "L1-35"), ("mlp", "L9-20")]
     clean_lp = {}
     res = {"K_out": sec["K"], "prompts": PROMPTS + [f"[chat] {c}" for c in CHAT], "conds": []}
     with torch.inference_mode():
@@ -539,7 +618,7 @@ def bands(n_eval: int, new: int, batch: int) -> None:
             res["conds"].append(row)
             log(f"{sector:6s} {band or '':6s} | NLL " + " ".join(f"{k} {v['nll']:.3f}" for k, v in row["slices"].items())
                 + f" | {row['gen'][0][:60]!r}")
-            save("bands", res)
+            save("bands_dd" if doubly else "bands", res)
     for h in hooks:
         h.remove()
     log("BANDS DONE")
@@ -591,8 +670,8 @@ def items(n: int) -> list[dict]:
     return out
 
 
-def comprehend(n_items: int, batch: int) -> None:
-    sec = sectors()
+def comprehend(n_items: int, batch: int, doubly: bool = False) -> None:
+    sec = sectors(s_lens=doubly, dd=doubly)
     tok, model, means = model_and_means(sec)
     idA, idB = (tok(x).input_ids for x in (" A", " B"))
     assert len(idA) == len(idB) == 1
@@ -620,8 +699,8 @@ def comprehend(n_items: int, batch: int) -> None:
         return h
 
     hooks = [lay.mlp.register_forward_hook(hook(M)) for M, lay in enumerate(model.model.layers)]
-    conds = [("clean", None, None)] + [(s, b, sc) for b in ("L0", "L1-8", "L9-20", "L21-35") for s in SECTORS
-                                       for sc in ("encode", "answer", "all")]
+    conds = [("clean", None, None)] + [(s, b, sc) for b in ("L0", "L1-8", "L9-20", "L21-35")
+                                       for s in (DOUBLY if doubly else SECTORS) for sc in ("encode", "answer", "all")]
     res = {"n_items": n_items, "examples": [its[i]["text"] for i in (0, 6 * n_items, 10 * n_items)], "conds": []}
     clean = None
     with torch.inference_mode():
@@ -649,7 +728,7 @@ def comprehend(n_items: int, batch: int) -> None:
             log(f"{sector:6s} {band or '':6s} {scope or '':6s} | " + " ".join(
                 f"{k.replace('_rev', 'R').replace('_nonrev', 'N')} {t['item_acc']:.2f}({t['kept']:+.2f})"
                 for k, t in row["types"].items()))
-            save("comprehend", res)
+            save("comprehend_dd" if doubly else "comprehend", res)
     for h in hooks:
         h.remove()
     log("COMPREHEND DONE")
@@ -749,6 +828,201 @@ def span() -> None:
                 f"directions: S reads {j['R_quiet_read_by_S'] or 0:.2f} of them, median {j['R_quiet_S_median'] or 0:.1e} | "
                 f"dark to both {j['dark_both']}, raw top8 {j['dark_both_raw_top8'][:4]} share {j['dark_both_raw_top8_share']:.2f}")
     save("span", res)
+
+
+# ------------------------------------------------------------------------------------------------------- sparse
+
+SPARSE_K = 64  # atoms per position
+SPARSE_AT = (1, 4, 8, 16, 25, 32, 64)  # steps reported
+SPARSE_SHOW = (2, 6, 10, 14, 18, 22, 26, 30, 35)  # layers whose picks at the prompts' last positions are logged
+
+
+def pursuit(x: torch.Tensor, F: torch.Tensor, kmax: int, at=()) -> dict:
+    """Greedy nonnegative sparse coding of rows ``x`` ``[P, d]`` over unit atoms ``F`` ``[N, d]`` (fp16): at each step
+    the atom most positively correlated with the remainder joins the support (once), and the coefficients are refitted
+    by least squares on the support, negative ones dropped (up to four rounds). Returns the variance explained after each
+    step (``r2`` ``[P, kmax]``), the picks (``idx``), which are still active (``act``), the final coefficients and the
+    reconstructions after the steps in ``at``."""
+    P, d = x.shape
+    xx = x.pow(2).sum(1).clamp_min(1e-12)
+    A = torch.zeros(P, kmax, d, device=DEV)
+    G = torch.zeros(P, kmax, kmax, device=DEV)
+    b = torch.zeros(P, kmax, device=DEV)
+    idx = torch.zeros(P, kmax, dtype=torch.long, device=DEV)
+    act = torch.zeros(P, kmax, dtype=torch.bool, device=DEV)
+    r2 = torch.zeros(P, kmax, device=DEV)
+    eye = torch.eye(kmax, device=DEV)
+    r, recs = x, {}
+    for k in range(kmax):
+        c = r.half() @ F.T
+        if k:
+            c.scatter_(1, idx[:, :k], float("-inf"))
+        v, j = c.max(1)
+        del c
+        idx[:, k], A[:, k], act[:, k] = j, F[j].float(), v > 0
+        g = torch.einsum("pkd,pd->pk", A[:, :k + 1], A[:, k])
+        G[:, k, :k + 1], G[:, :k + 1, k] = g, g
+        b[:, k] = (x * A[:, k]).sum(1)
+        m, I = act[:, :k + 1].clone(), eye[:k + 1, :k + 1]
+        for _ in range(4):
+            Gm = torch.where(m[:, :, None] & m[:, None, :], G[:, :k + 1, :k + 1], I) + 1e-5 * I
+            coef = torch.linalg.solve(Gm, b[:, :k + 1] * m)
+            neg = m & (coef < 0)
+            if not neg.any():
+                break
+            m &= ~neg
+        act[:, :k + 1] = m
+        coef = coef.clamp_min(0) * m
+        rec = torch.einsum("pk,pkd->pd", coef, A[:, :k + 1])
+        r = x - rec
+        r2[:, k] = 1 - r.pow(2).sum(1) / xx
+        if k + 1 in at:
+            recs[k + 1] = rec
+    return {"r2": r2, "idx": idx, "act": act, "coef": coef, "rec": recs}
+
+
+def sparse(n_docs: int, n_chat: int, per_doc: int) -> None:
+    from transformers import AutoModelForCausalLM
+    sec = sectors(s_lens=True, dd=True)
+    for k in ("R", "VS", "RS", "RD", "RSO", "JB"):
+        sec[k] = None
+    torch.cuda.empty_cache()
+    tok = tokenizer()
+    model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval()
+    layers = model.model.layers
+    nL, d = len(layers), sec["s"][0].shape[0]
+    rng = torch.Generator().manual_seed(0)
+    docs = torch.cat([torch.tensor(lens_docs(act_file(k), tok, n, T, T, full=True))
+                      for k, n in (("dclm", n_docs), ("chat", n_chat))])
+    pos = torch.stack([torch.randperm(T - FIRST, generator=rng)[:per_doc] + FIRST for _ in range(len(docs))])
+    prompts = [tok(x, return_tensors="pt").input_ids for x in PROMPTS]
+    for c in CHAT:
+        x = tok.apply_chat_template([{"role": "user", "content": c}], add_generation_prompt=True, enable_thinking=False,
+                                    return_tensors="pt")
+        prompts.append(x if isinstance(x, torch.Tensor) else x["input_ids"])
+    H = [[] for _ in range(nL)]
+    at = {"pos": None}
+
+    def hook(M):
+        def h(mod, args, out):
+            hs = out[0] if isinstance(out, tuple) else out
+            H[M].append(hs[torch.arange(hs.shape[0], device=DEV)[:, None], at["pos"]].reshape(-1, d).half())
+        return h
+
+    hooks = [lay.register_forward_hook(hook(M)) for M, lay in enumerate(layers)]
+    with torch.inference_mode():
+        for b0 in range(0, len(docs), 4):
+            at["pos"] = pos[b0:b0 + 4].to(DEV)
+            model(input_ids=docs[b0:b0 + 4].to(DEV), use_cache=False)
+        for x in prompts:
+            at["pos"] = torch.tensor([[x.shape[1] - 1]], device=DEV)
+            model(input_ids=x.to(DEV), use_cache=False)
+    for h in hooks:
+        h.remove()
+    H = [torch.cat(x) for x in H]
+    P = pos.numel()
+    del model
+    torch.cuda.empty_cache()
+
+    nm = arch.names(MODEL)
+    kid = kept()
+    head = tensors(MODEL, [nm["unembed"], nm["norm"], nm["embed"]])
+    gamma = head[nm["norm"]].float().to(DEV)
+    wu = head[nm["unembed"]][kid].to(DEV).float()
+    C = ((wu - wu.mean(0)) * gamma).half()
+    we = head[nm["embed"]][kid].to(DEV).float()
+    E = (we - we.mean(0)).half()
+    del wu, we, head
+    lm = arch.lens_means(MODEL, *arch.fits(MODEL), parts=("J_out", "K_out"))
+    N = len(kid)
+    names = [tok.decode([int(i)]) for i in kid]
+    gen = torch.Generator(device=DEV).manual_seed(1)
+
+    def frame(X, M=None, scale=None, div=None):
+        """Unit rows of ``X M`` (fp32 in chunks), times ``scale`` or over ``div``, as fp16."""
+        out = torch.empty(N, d, device=DEV, dtype=torch.float16)
+        for i in range(0, N, 16384):
+            y = X[i:i + 16384].float()
+            y = y @ M if M is not None else y
+            y = y * scale if scale is not None else y / div if div is not None else y
+            out[i:i + 16384] = (y / y.norm(dim=1, keepdim=True).clamp_min(1e-12)).half()
+        return out
+
+    rand = [frame(torch.randn(N, d, device=DEV, generator=gen)) for _ in range(2)]
+    pct = lambda v: [torch.quantile(v.float(), q).item() for q in (0.1, 0.25, 0.5, 0.75, 0.9)]
+    res = {"n_positions": P, "n_atoms": N, "K": SPARSE_K, "prompts": PROMPTS + [f"[chat] {c}" for c in CHAT], "layers": []}
+    for L in range(nL):
+        s = sec["s"][L]
+        X = H[L].float() / s
+        mu = X[:P].mean(0)
+        J = lm["J_out"][L].to(DEV).float() if L < lm["J_out"].shape[0] else None
+        Kl = lm["K_out"][L].to(DEV).float()
+        frames = {"R": frame(C, J, scale=s), "logit": frame(C, scale=s), "S": frame(E, Kl.T, div=s), "rand": rand[0]}
+        bases = {"bright": sec["V"][L], "s_only": sec["SO"][L], "dd": sec["D"][L]}
+
+        def shares(y, bases=bases):
+            e = {k: (y.half() @ B).float().pow(2).sum().item() for k, B in bases.items()}
+            tot = sum(e.values())
+            return {k: v / tot for k, v in e.items()}
+
+        row = {"L": L}
+        for var, Xv in (("raw", X), ("centred", X - mu)):
+            x = Xv[:P]
+            out = {nm_: pursuit(x, F_, SPARSE_K, at=(25,)) for nm_, F_ in frames.items()}
+            dr = torch.diff(out["rand"]["r2"], dim=1, prepend=torch.zeros(P, 1, device=DEV))
+            v_ = {"residual_shares": shares(x)}
+            for nm_, o in out.items():
+                r2 = o["r2"]
+                v_[nm_] = {"r2": [r2[:, k - 1].mean().item() for k in SPARSE_AT],
+                           "excess": [(r2[:, k - 1] - out["rand"]["r2"][:, k - 1]).mean().item() for k in SPARSE_AT]}
+                if nm_ != "rand":
+                    below = torch.diff(r2, dim=1, prepend=torch.zeros(P, 1, device=DEV)) < dr
+                    occ = torch.where(below.any(1), below.float().argmax(1), SPARSE_K)
+                    med = int(occ.float().median().item())
+                    v_[nm_] |= {"occupancy": pct(occ), "excess_at_occupancy": (
+                        (r2[:, med - 1] - out["rand"]["r2"][:, med - 1]).mean().item() if med else 0.0),
+                        "component_shares": shares(o["rec"][25])}
+            un = pursuit(x, torch.cat([frames["R"], frames["S"]]), SPARSE_K, at=(25,))
+            ur = pursuit(x, torch.cat(rand), SPARSE_K)
+            ua, ufr = un["act"], un["act"] & (un["idx"] < N)
+            v_["union"] = {"R_share": {k: (ufr[:, :k].sum() / ua[:, :k].sum().clamp_min(1)).item() for k in (1, 8, 25, 64)},
+                           "r2": [un["r2"][:, k - 1].mean().item() for k in SPARSE_AT],
+                           "rand_r2": [ur["r2"][:, k - 1].mean().item() for k in SPARSE_AT],
+                           "component_shares": shares(un["rec"][25])}
+            del un, ur, ua, ufr
+            # the prompts' last positions
+            xp = Xv[P:]
+            v_["prompts"] = {}
+            for nm_, F_ in (("R", frames["R"]), ("logit", frames["logit"]), ("S", frames["S"]),
+                            ("union", torch.cat([frames["R"], frames["S"]]))):
+                o = pursuit(xp, F_, 16)
+                picks = []
+                for i in range(len(xp)):
+                    a = o["coef"][i] * xp[i].norm().reciprocal()
+                    order = a.argsort(descending=True)[:8]
+                    picks.append([[("R:" if nm_ == "union" and int(o["idx"][i, k]) < N else "S:" if nm_ == "union" else "")
+                                   + names[int(o["idx"][i, k]) % N], round(a[k].item(), 3)] for k in order if a[k] > 0])
+                v_["prompts"][nm_] = {"picks": picks, "r2_16": o["r2"][:, -1].tolist()}
+            row[var] = v_
+            q = lambda o: f"{o['occupancy'][2]:.0f} ({o['occupancy'][0]:.0f}-{o['occupancy'][4]:.0f})"
+            i25 = SPARSE_AT.index(25)
+            log(f"L{L:2d} {var:7s} occupancy R {q(v_['R'])} logit {q(v_['logit'])} S {q(v_['S'])} | R² at 25: R "
+                f"{v_['R']['r2'][i25]:.3f} logit {v_['logit']['r2'][i25]:.3f} S {v_['S']['r2'][i25]:.3f} rand "
+                f"{v_['rand']['r2'][i25]:.3f} | pooled: R's picks {v_['union']['R_share'][8]:.2f} of 8, "
+                f"{v_['union']['R_share'][25]:.2f} of 25, R² at 64 {v_['union']['r2'][-1]:.3f} (random "
+                f"{v_['union']['rand_r2'][-1]:.3f})")
+            sh = lambda d_: "/".join(f"{d_[k]:.2f}" for k in ("bright", "s_only", "dd"))
+            log(f"    {var} in R-bright/s_only/dd: residual {sh(v_['residual_shares'])}, R's 25 {sh(v_['R']['component_shares'])}, "
+                f"S's 25 {sh(v_['S']['component_shares'])}, pooled 25 {sh(v_['union']['component_shares'])}")
+            if var == "centred" and L in SPARSE_SHOW:
+                for i, pr in enumerate(res["prompts"]):
+                    log(f"    {pr[:32]!r}: R {[w for w, _ in v_['prompts']['R']['picks'][i][:6]]} | S "
+                        f"{[w for w, _ in v_['prompts']['S']['picks'][i][:6]]}")
+        res["layers"].append(row)
+        del frames, X, J, Kl
+        torch.cuda.empty_cache()
+        save("sparse", res)
+    log("SPARSE DONE")
 
 
 # ------------------------------------------------------------------------------------------------------- patch
@@ -1523,7 +1797,8 @@ def patch(n_words: int, n_frame: int, batch: int, new: int, which: str = "patch"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far", "soft", "span"))
+    ap.add_argument("part", choices=("trace", "bands", "comprehend", "patch", "middle", "far", "soft", "span", "sparse"))
+    ap.add_argument("--doubly", action="store_true", help="trace, bands, comprehend: the doubly dark sectors")
     ap.add_argument("--docs", type=int, default=64, help="trace: scored DCLM documents")
     ap.add_argument("--eval-docs", type=int, default=32, help="bands: documents per slice")
     ap.add_argument("--new-tokens", type=int, default=48, help="bands: generated tokens")
@@ -1533,13 +1808,15 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=4)
     a = ap.parse_args()
     if a.part == "trace":
-        trace(a.docs, a.batch)
+        trace(a.docs, a.batch, a.doubly)
     elif a.part == "bands":
-        bands(a.eval_docs, a.new_tokens, a.batch)
+        bands(a.eval_docs, a.new_tokens, a.batch, a.doubly)
     elif a.part == "comprehend":
-        comprehend(a.items, 64)
+        comprehend(a.items, 64, a.doubly)
     elif a.part == "span":
         span()
+    elif a.part == "sparse":
+        sparse(48, 16, 32)
     else:
         patch(a.words, a.frames, 32, 20, which=a.part)
 
