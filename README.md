@@ -397,6 +397,18 @@ what prompts share. About 3,000 directions are quieter than chance to both lense
 to two thirds of the dark sector's cost, and the named failures appear only with it and the S-lens's bright part removed
 together ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
+**22. Coordinate sectors.** In Qwen3-8B and Gemma 4, as Briggs (2026) found in a larger Gemma, the R-lens reads the
+residual mostly off a block of its raw coordinates: the top 11% carry 0.74-0.97 of the readout through the middle layers,
+against 0.17-0.33 for the best 11% of a random basis, and the layers' writes avoid them. Single coordinates are not units,
+though: inside the block the features are rotated, and the sparse directions found there name the current token. Where
+the R-lens's block meets the S-lens's lies a persistent core of 190-365 coordinates; with the norm coordinates, which the
+norms divide out, and the rest, d, the residual splits into five sectors. Removing the core at L8-L12 adds 3 nats a token
+and dissolves the text into function words, while keeping only the core costs 0.6 at L11-L17. The two cross at L21, and
+late the prediction moves into d, spread over its coordinates. §21's doubly dark sector avoids the core and spreads over
+d. The layout is set by per-coordinate scales, the residual's in Qwen and the norms' weights in Gemma: the units' rows
+read and write the sectors near chance, and the few that lean on one are sink, duplicate-token and spelling units
+([§22](docs/findings.md#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read)).
+
 ### Limits
 
 - Two models read in depth, and nine more Qwen3 models (the four post-trained ones labelled); one lens corpus for text

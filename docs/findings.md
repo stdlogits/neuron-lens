@@ -28,6 +28,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | **VI. Across Qwen3's sizes** | [§19](#19-the-qwen3-family-what-changes-with-size) | late reads hold while early ones fall with size; bases read like their siblings; what post-training changed |
 | | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B and 0.6B are width-pruned from the 8B and 1.7B: three lineages, not five sizes |
 | **VII. What the lenses miss** | [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the dark sector matters 300-5,700 times more than the lens predicts; what prompts differ in turns bright, and the rest is inert |
+| | [§22](#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read) | the R-lens reads a block of raw coordinates that the writes avoid; where it meets the S-lens's, a core carries each position's token through mid-depth, and late the prediction moves into the rest |
 
 Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
 (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in `data/summary/`, and figures are drawn by
@@ -1658,7 +1659,8 @@ the same), and neuron-lens.com links each neuron to its counterpart.
 
 ## VII. What the lenses miss
 
-What lies outside the R-lens's reads, and what removing it breaks (§21).
+What lies outside the R-lens's reads and what removing it breaks (§21), and how the residual's raw coordinates divide
+what the two lenses read (§22).
 
 ### §21. The dark sector: what the R-lens barely reads
 
@@ -1862,12 +1864,180 @@ not their J-lens. Compact outputs are
 `data/summary/dark_sector_{trace,bands,comprehend,patch,middle,far,soft,span,sparse}_qwen3-8b.*`, and the doubly dark
 ablations' `dark_sector_{trace,bands,comprehend}_dd_qwen3-8b.*`.
 
+### §22. Coordinate sectors: where the residual keeps what the lenses read
+
+**Setup** (`checks/sectors.py`: Qwen3-8B and Gemma 4 12B in bf16 on Apple silicon, statistics in fp32; the lenses of
+record). Briggs (2026, [1](https://www.lesswrong.com/posts/7cmQGtJu4nXsi6pPu/an-attempt-at-top-down-interpretability),
+[2](https://www.lesswrong.com/posts/SH7AnKDAiFFsNDWkq/j-lens-preferentially-reads-from-coordinate-aligned)) finds that in
+Gemma-4-31B-base about 600 small, stable raw coordinates of the residual, and 530 more after two thirds of the depth, carry
+80-95% of a J-lens readout. This section asks the same of both models and both lenses. On 96 DCLM documents (positions 1+;
+the sinks' positions, §9, out of the statistics), each coordinate of a layer's output gets its signed share of the R-lens
+readout (`Σ_t h_i (A h)_i / Σ_t hᵀ A h`, `A = Jᵀ W̄ᵀ W̄ J`, `W̄` the kept unembedding times the final norm's weight: the
+shares sum to one and need no metric), its S-lens token share (the squared correlation over positions with the current
+token's footprint `K ē`), its persistence (the correlation of the standardised coordinate two or four layers on) and its
+write shielding (how little the layer's MLP and attention write there, against the residual's scale; from the weights).
+With R and S the top 11% of coordinates by readout and by token share, five *sectors* follow: c = R∩S (the *core*),
+r = R∖S, s = S∖R, d = the rest, and n, the *norm coordinates*: those with more than their fair share of the residual's
+energy that the next layer's input norm reads at under 1/1000 of it, with the sinks' massive coordinates. n is never
+ablated. To ablate a set is to put its coordinates at their means over 64 other documents, at every position but the
+first; 64 more documents are scored (positions 16-126).
+
+**The readout sits on a block of coordinates, and writes avoid it.** Picked on half the documents and scored on the other,
+the top 11% of coordinates carry 0.74-0.84 of the R-lens readout at Qwen3-8B's L8-L20 and 0.82-0.97 at Gemma 4's L12-L28,
+against about 0.1 for random coordinates and 0.17-0.33 for the best 11% of a random basis: the block belongs to the
+coordinates, not to any subspace a rotation would find as well. Toward the output it loosens (0.52-0.62 at Qwen's L28-L35,
+0.34-0.46 at Gemma's L40-L44).
+- **It persists, and writes avoid it.** The core keeps its content four layers on at 0.90-0.95 through Qwen's L8-L28,
+  where d keeps 0.30-0.67; the weights write to the top 11% at 0.08-0.19 of their size elsewhere, against the residual's
+  scale (Qwen's L8-L28; Gemma's L12-L28, 0.02-0.35).
+- **The two models build it two ways.** Qwen3-8B makes it loud: there the residual's variance is 4-8 times the rest's,
+  the weights write there at ordinary size (MLP rows 0.6-0.9 times) and the final norm weighs it like any coordinate
+  (0.87-1.2 times). Gemma 4 at L28 makes it quiet, as Briggs's model does: a fifth of the rest's variance, writes cut
+  66-fold by the post-norms, a final norm weighing it 37 times as much (at L20 it is loud, 19 times the variance).
+
+**Inside the block the units are rotated** (Qwen's L8, L14, L22; Gemma's L12, L20, L28). A single coordinate is no unit:
+its activation is Gaussian (kurtosis 3.1-3.4) and its top firings share a token barely more than a random rotation of
+the block's coordinates does (median 0.09-0.19 against 0.06-0.12). The readout leans on the coordinates only in part:
+the block's top 10% of coordinates carry 0.28-0.59 of its readout, a random basis 0.15-0.27 and the block's own
+eigenbasis 0.81-1.0. Its units are sparse directions across many coordinates. ICA sources fitted on half the documents
+have kurtosis 4.3-11.8 on the other half (90th percentile 13-46), their top firings share a token (90th percentile
+0.50-0.97), and 90% of a source's weight takes 172-198 of the block's 422-450 coordinates, as for a random direction
+(187-202). They are features of the current token (and, of, in, digits, months, countries, byte-fallback pieces), the
+S-lens names a source's firing token at every depth tested (90th percentile 0.77-1.00), past the L8 where §7's reads
+fade, and the R-lens read names what follows (in: the, various; and: others, alike; a month: times of day). Neurons are
+no more aligned with coordinates: the kurtosis of a write or gate row over coordinates is 3.03-3.28 against 3.00 after a
+rotation, and rebuilding a write's R-lens read to cosine 0.5 takes 128-256 coordinates in Qwen and 16-64 in Gemma (a
+random basis, 512-2,048).
+
+**The two lenses meet in a persistent core; the norm coordinates are a kind apart.**
+- **The core.** c is 290-365 coordinates at Qwen's L4-L20 and 190-235 at Gemma's L12-L28. Against either lens's top 11%
+  alone it carries more of the current token (a lens-free token share of 0.23-0.34 against R's 0.12-0.24 at Qwen's
+  L8-L20, 0.51-0.62 against 0.16-0.27 at Gemma's L16-L24) and it is mostly the most persistent coordinates (Jaccard
+  0.58-0.78 with as many of them at Qwen's L4-L20 and 0.68-0.81 at Gemma's L12-L24; chance 0.04).
+- **Lines.** The readout share is one heavy tail with no valley, so the core's size is a choice. Write shielding has
+  valleys, in two depth ranges per model, and they cut two groups: Qwen's L0-L11 (179 coordinates) and L23-L35 (286),
+  Gemma's L0-L33 (157, 151-152 of them in the core at L16-L24) and L36-L41 (525). Gemma's first group plays the part
+  of Briggs's 279 persistent coordinates, and both late groups that of his 530.
+- **The norm coordinates.** In Qwen the next layer's input norm reads them at 10⁻³·⁵-10⁻¹⁰ of their share of the energy
+  (10⁻⁷·⁵ at the median layer), and every other coordinate with more than its fair share at 10⁻²·⁶ or more. In Gemma 4
+  the line is as clear from L13 (10⁻³·⁶-10⁻⁶·³ against 10⁻²·⁹ or more), while at L0-L5 and L9-L12 the read share runs on
+  through it. Qwen's n is mostly coordinate 1838, one of the two dimensions that set the output's temperature (§9): it
+  holds 0.25-0.55 of the residual's energy at L8-L32, and counting the sinks' positions, where the other (2276) is
+  huge, 0.76-0.98 at L16-L28. Gemma's, mostly coordinate 1750, holds 0.53-0.94 at L12-L36.
+- **Depth.** Gemma's core forms at L11-L12, with its norm coordinate. An early block (the top 11% carry 0.90-1.03 of the
+  readout at L0-L7) gives way at L8-L10 (0.43-0.64), and through L4-L10 nothing in the core persists four layers
+  (0.01-0.17); at L12 the top 11% carry 0.97 and the core persists at 0.88. Qwen's core runs the whole depth, largest at
+  L8 (365 coordinates) and 127 at L35, while r and s grow from 85 to 323 each as the two lenses' top coordinates part.
+
+**Against §21's sectors** (`unions`, Qwen3-8B at L4, L8, L14, L22, L28). The coordinate sectors and §21's sectors in the
+eigenbasis cut the same residual two ways. Early, §21's R-bright sector is centred on the core: at L4-L8 half its weight
+(0.51-0.55) lies on the core's 7-9% of the coordinates, and a core coordinate's axis lies 0.62-0.89 in it through L22. The
+doubly dark sector avoids the core (0.01-0.03 of its weight) and spreads over d: it holds three quarters of d's axes at
+L4-L8 (0.74-0.76) and 0.30 at L28, where d's axes have turned R-bright (0.03 of them at L4, 0.67 at L28). The eigenbasis
+has no core of its own: the R-bright and S-bright sectors overlap (their closest directions at cosine 0.80-0.98), and what
+is S-bright outside R-bright, like s, costs almost nothing to remove.
+
+**What each sector does** (`unions`, `depth`). Loss added when a set of the residual's coordinates is put at its mean, in
+nats a token (clean: 2.72):
+
+| removed | L4 | L8 | L14 | L22 | L28 |
+|---|---|---|---|---|---|
+| c (234-365 coordinates) | +1.12 | +3.05 | +2.99 | +0.68 | +0.23 |
+| r, s, or both | ≤ 0.02 | ≤ 0.01 | ≤ 0.04 | ≤ 0.06 | 0.02-0.21 |
+| d (3,428-3,556) | +0.60 | +1.11 | +0.39 | +0.39 | +0.93 |
+| r+s+d (only c and n kept) | +1.32 | +1.26 | +0.56 | +1.10 | +2.91 |
+| c+d | +6.74 | +6.67 | +5.45 | +3.59 | +2.70 |
+| random coordinates, as many as c / as d | 0.00 / 5.37 | 0.02 / 5.24 | 0.02 / 5.27 | 0.02 / 4.72 | 0.01 / 4.52 |
+| §21's R-bright sector | +1.36 | +2.84 | +5.86 | +5.70 | +3.49 |
+| §21's dark sector | +1.18 | +0.56 | +0.14 | +0.07 | +0.36 |
+| §21's doubly dark sector | +0.36 | +0.23 | +0.08 | +0.03 | +0.12 |
+
+- **The core carries each position's own prediction, d what later positions read.** Removed at one position (100) alone,
+  the core costs that position about what removing it everywhere does through L11 (2.89 against 3.08 at L11), and d at
+  most 0.11 through L20 (0.31-1.11 everywhere). d is 85% of the coordinates, the cheap ones: as many random coordinates
+  cost five times as much.
+- **r and s are redundant with the core.** Alone or together they cost at most 0.06 through L22, but either adds to the
+  core's cost (c+r 1.50-3.89, c+s 1.17-3.86 at L4-L22), and r+s+d costs more than d.
+- **Across the depth** (every layer): removing the core costs most at L8-L12 (3.0-3.2) and at most 0.17 from L29; keeping
+  only the core costs least at L11-L17 (0.56-0.64) and 5.76 at L35. The two cross at L21, where the motor band begins
+  (§8). Removing d costs least at L18-L20 (0.31) and grows to 2.70 at L35, and by L34 it costs a position as much removed
+  there alone (1.70 against 1.72): late, d carries the position's own prediction.
+- **Rollouts** (greedy, 64 tokens; 30 prompts at seven layers). Without the core at L8-L14 the text dissolves into
+  function words, punctuation and blank lines ("is be the the the"); from L28 it reads as clean. With only the core kept it
+  stays fluent and on topic at L8-L14, facts slipping at L4-L8 (Neil Armstrong "became the first person to win the Nobel
+  Prize in mathematics") and mostly right at L14, and from L28 it collapses ("the the the"). Without d the text holds its
+  form through L28, losing facts from L22 ("The Eiffel Tower was built in 1888"), and at L34 falls into lists of
+  numbers. Removing d at L8-L14, or keeping only the core at L2-L14, repeats §21's early and middle damage: chat answers
+  turn into reasoning traces ("Okay, let's see", in 6-10 of 10 chat prompts, none without the core), and at L8-L14 "Who
+  are you?" loses the model's name.
+
+**Late, the prediction moves into d** (`late`, Qwen3-8B at L20-L35). Qwen's late shielded group (L23-L35, 286 coordinates,
+138 of them outside its early group) plays the part of Briggs's 530, but lies in c, r and s (all but 11-20 of its
+coordinates at L24-L35) and holds little of the late prediction. Its ICA sources (48, at L30) are current-token features
+whose R-lens read names a kind of next word ("I": have, actually, really; "to": get, create, make; "In": the, various; a
+paragraph break: The, There, First), and the true next token at 0.21-0.46 of their top firings for six of the twelve most
+kurtotic. Read through the R-lens with one part kept and the rest at its means, d alone gives the next token a median rank
+of 6, 2 and 2 at L32, L34 and L35 (the full residual 3, 1 and 1; c, r and s together 5, 6 and 13; the late group 18, 34
+and 63; as many random coordinates 118-181). Removing the late group there costs 0.39-0.66 nats, d 1.20-2.70, and as many
+random coordinates of d at most 0.01.
+- **d's late readout is dense.** d holds 0.34-0.43 of the readout at L28-L35, its top 256 coordinates by readout share
+  0.04-0.05 and its top 256 readout directions 0.15-0.18. Those directions are near-Gaussian (kurtosis 3.2-4.2 for six of
+  eight) and read as broad kinds of continuation: after a paragraph break, the openers The, Author, This; digits; shops and
+  stores; court cases.
+
+**Neurons and heads** (`units`, weights only). A unit's read is the share of its activation energy that its rows draw
+from each sector of its input, and its write the share of its energy on each sector in the σ frame (for n, raw). Chance is
+what a row with equal weight on every coordinate would give, after the norm's weight and the residual's scale.
+- **The core's place is set by the norms and the scale, not by the rows.** Neurons read c at a median 0.84 of chance in
+  Qwen (0.70 in Gemma from L12) and d at 1.05 (1.08), and write to c at 0.65 (0.60) and to d at 1.01. Heads' query, key and
+  value rows draw on c at 0.85, 1.03 and 0.55 of chance (0.70, 0.94, 0.61), and their outputs write there at 0.73 (0.62).
+  The rows' lean away from the core is a factor of about two thirds; the rest of the shielding is the residual's scale in
+  Qwen and the norms' weights in Gemma, the two routes above.
+- **Few units lean on one sector.** Three of Qwen's 442,368 neurons put half their write on c, and one of Gemma's
+  737,280. Those that stand out write or read the norm coordinates, read the core, or key on it. §9's date-digit neurons
+  at L16 (n1875, n2271, n1756) put almost all of their raw write on the sinks' dimension 2276 (n1875 0.99), and 2,511
+  neurons at L1 half of theirs on n, most of it on 1838 (a median 0.80). In Gemma 4 n's share of the energy goes from
+  0.06 at L10 to 0.74 at L12, as coordinate 1750 joins it and the core forms; there 233 neurons at L11 put half their
+  raw write on n, and L12-L13's heads a median 0.26-0.30. Qwen's neurons at L1-L2 draw a median 0.64-0.68 of their read
+  from n, twice chance, and at L6-L7 they split in two: half read it at a median 0.44, above chance, the other half at
+  0.003, a hundredth of it. The core's readers at L18-L23 (76-254 neurons a layer with half their read on c, where
+  chance is 0.16-0.29) are letter and spelling units (the "Co" or "Ca" that starts a place name), and the read share on
+  c follows how often a pole's top firings share one token (ρ 0.30 at L18-L26); no sector share follows the label
+  confidences (|ρ| ≤ 0.21). The heads keyed most on the core are sink and duplicate-token heads (Qwen's L11 h8-h11, one
+  key head with 0.72 of its key on c, 2.7 times chance; Gemma's L16 h12-h13, 0.64, 2.2 times; duplicate scores up to
+  0.74 and 0.89), and over the middle layers a head's key share on c follows its sink score (ρ 0.27-0.30).
+
+**What this suggests.** In both models the residual keeps its parts on separate coordinates while the units within each
+part are rotated. n holds the scale the norms divide out. The core holds what the current token is, persistent and
+shielded from the writes, and through mid-depth each position's own prediction rests on it. d is where the layers write
+and what later positions read through the middle layers, and late it is where the prediction is built, densely and off
+the coordinates. The layout lives in per-coordinate quantities, the residual's scale and the norms' weights, while the
+units' rows are near chance across the sectors and their features rotated within them. Per-coordinate gains and a
+per-coordinate optimiser would make such a layout cheap: they scale and update each coordinate on its own, so which
+coordinates a part sits on is a choice training can make, while what the part holds, set by the data, has no reason to
+align with them (speculation). §21's dark sector is mostly d through mid-depth (the doubly dark sector avoids the core,
+the R-bright sector is centred on it early), but the two cuts weigh d differently: removed as coordinates it costs
+1.7-13 times §21's doubly dark sector, whose cut leaves out the parts of d the lens reads, more of them with depth.
+Briggs's three blocks map onto these with one change: the core and Gemma 4's first group play his quiet and persistent
+blocks, but in Qwen the late shielded group carries forward-reading token features while the late prediction sits in d.
+
+**Limits.** Two models and one corpus: 96 DCLM documents of 128 tokens define the sectors, 64 give the means and 64 are
+scored. The 11% cuts are hard lines on graded measures (write shielding has valleys to cut the groups, the readout share
+none). The ablations, rollouts and late tests are Qwen3-8B's, one layer at a time and to the mean, with one greedy rollout
+a prompt. The S side is the current token's footprint, not the S-lens's reads of earlier tokens. The unit measures are
+from the weights. The ICA sources (96 in the block, 48 in the late group) are fitted on half the documents. Compact
+outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*` and
+`data/summary/sectors_{unions,depth,late}_qwen3-8b.*`.
+
 ## Open questions
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
   residual's scale), why its doubly dark and S-lens parts cost far more together than apart, and whether Gemma 4's has
   the same three depths; what L16's large dark write does; a lens for the middle layers' variables that neither lens
   weights, such as thinking mode at L12 (§21).
+- Whether the heads keyed on the core match on it in context; whether Qwen3-8B's early neurons that read the norm
+  coordinates use them as a bias or to find the sinks, and why at L6-L7 half of them cancel them; whether Gemma 4's late
+  prediction also moves into d, and how §21's sectors sit on its coordinates (§22).
 - Why the S-lens read of input directions falls after L8, when the linear share of a token's effect is flat from L4 to
   L17 (§7).
 - What L2-L3 compute at position 0 (§2), and what duplicate-token heads write (§10).
