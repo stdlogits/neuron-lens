@@ -1,0 +1,27 @@
+live neurons with rates: 420798
+corr 1-cos(write) vs |log rate ratio|: -0.037   vs |log act_top ratio|: -0.058
+  sensory: corr rate 0.059, act_top -0.010;  median |log rate ratio| 0.133, q99 1.44
+  association: corr rate -0.013, act_top -0.038;  median |log rate ratio| 0.108, q99 1.10
+  workspace: corr rate -0.100, act_top -0.117;  median |log rate ratio| 0.129, q99 1.11
+  motor: corr rate 0.020, act_top -0.030;  median |log rate ratio| 0.117, q99 0.82
+median |log rate ratio|: top 1% movers 0.175  below-median movers 0.118
+L23/10625 cos 0.9965  write_R+: 老化 | 删 |  killers | .pair |  elimin
+   Δ: '就诊' ' Vaccine' '病情' 'در' '效力' ' incons' ' Nursing' 'ef'  ||  ' roadside' 'apolis' '烹' '_driver' 'ucch' ' parach' '_city' ' reshape'
+L23/977 cos 0.9964  write_R+: (),⏎ | privation | orts | .US | 鸳
+   Δ: '院士' '渔船' ' bacter' ' 用户' '(model' '.addListener' '渔民' 'avn'  ||  ' irony' ' ironically' ' ironic' ' parody' ' blatantly' 'core' ' showcasing' '😂'
+L29/9098 cos 0.9968  write_R+: 鸠 | oso | ouri | 咔 | otos
+   Δ: ':",' ',"' '"W' ',W' ':param' ' affirmation' ":'" '","'  ||  'bright' '虽' '光线' 'Unicode' '(...' 'omething' '涟' '紫外'
+L29/9662 cos 0.9966  write_R+: -ng |  Ng |  tik | 招 |  star
+   Δ: '.\r\n\r\n' ':\r\n\r\n' ';\r\n\r\n' '：\n\n' '};\n\n' '再到' '():\n\n' '!.'  ||  'didn' ' EACH' ' Choice' 'choice' '-choice' 'POSITION' ' choice' 'URAL'
+L32/3525 cos 0.9964  write_R+: 联 | utex | 益 | 呜 | 申
+   Δ: '特色' '整改' '「' ' enclave' ':key' '特殊的' ' issues' '补充'  ||  '的时间' ' time' ' but' ' Nothing' '没有' '但' 'ехать' '的时间里'
+L32/38 cos 0.9960  write_R+:  store | manager | store | _MANAGER | _manager
+   Δ: '“That' '大家都在' '“So' '-disabled' '’:' '来这里' ',’’' '‘s'  ||  ' even' ' these' ' 是否' ' its' ' but' '\n\n' '是否' '对应的'
+L34/5085 cos 0.9968  write_R+: 梯 |  hind | 委 | _OWNER | 荪
+   Δ: '是' '存在着' '比' '?\n\n' 'something' '去找' ' finding' ' something'  ||  ' unravel' '深' ' roots' '反复' '瑾' ' Cover' '\troot' '把这些'
+L34/1178 cos 0.9967  write_R+: ub | UB |  ub | ubs | уб
+   Δ: '减' ' consecutive' ' minus' ' under' ' check' '比如' ' subtraction' '減'  ||  '部分' ' sequence' '部份' ' Sequence' '\tstring' 'Sequence' ' Since' 'Since'
+L35/10144 cos 0.9973  write_R+:  нам | 大家 | arn | ARN |  nam
+   Δ: '我' '但' '上' '——' '.' '!' '我的' '光'  ||  ' нам' '繼續' '員工' '這裡' '大家可以' ' Continue' ' employees' '一家人'
+L35/5354 cos 0.9974  write_R+: 竟是 |  asserting | 依法 | (manager | 一般人
+   Δ: '：\n\n' ' :\n\n' ' ).\n\n' ':\n\n' ' ):\n\n' ' (\n\n' '():\n\n' ':\n\n\n'  ||  ' exact' ' next' '...,' 'should' ' should' '...' ' doesn' ' sequence'

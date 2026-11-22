@@ -1,0 +1,447 @@
+
+######## top rotation, whole model
+
+L35/9346+ (motor)  write cos 0.9738 (9.2× layer median), |w| ×1.023, read row cos 0.9931 (gate 0.9942, up 0.9935); Δ∥w -0.02, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'Line-end carriage returns (␍⏎) and Qwen chat turn starts' (0.30); writes 'Code tokens: productName, moduleName, templates' (0.20)
+  act_top 384.0 → 1224.0;  rate 0.61‰ → 1.02‰;  chat rate 0.14‰ → 2.29‰
+  peak  base: 'CALE'×10 | 'im'×9 | 'rop'×7 | ' rob'×4 | 'ul'×3
+        post: 'im'×14 | '<|im_start|>'×10 | ' rob'×3 | ' mo'×2 | '.db'×2
+  drivers base: Dot | ย | Carb | Soul | Za | כ
+          post: <|im_end|> | robat | zew | ntag | 墣 | </think>
+  read_R  base: 電話及 | 本服務 | 使用網路 | 所提供之 | ึง | 的隱私權
+          post: 。</ | ."␍⏎ | /interfaces | *</ | ...␍⏎ | ).␍⏎
+  write_R base: configFile | ousing | bytesRead | uzzi | oooooooo | loquent
+          post: productName | <|im_start|> | 旖 | 产品经理 | 三位一体 | CLUDING
+  Δwrite (z vs layer writes): '”\n' '"]\n' '`\r\n' '}"\n' '）\n' '"}\n' '\tThe' '”\n\n'   || other end: ' join' '把' ' pretty' ' basically' ' extra' ' cross'
+  Δwrite (z vs layer Δs):     '"]\n' '`\n' '    \t' '}")\n' ' }\n' '")\n' '"}\n' '}}\n'
+  Δread_R (z):                '˦' '˒' '˨' 'idunt' '々' 'ー' 'led' '.Adam'   || other end: '...\r\n' ' ...\r\n' ' *\r\n' '...\n\n\n\n\n\n' '))\r\n' '),\r\n'
+
+L2/9385+ (sensory)  write cos 0.9769 (10.2× layer median), |w| ×1.012, read row cos 0.9883 (gate 0.9946, up 0.9837); Δ∥w -0.05, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires "the 'BY' in news-article bylines before a name ('BY LINE')" (0.65); writes 'code operators and symbols: !=, ==, *,⏎, /proto' (0.20)
+  act_top 1.0 → 1.5;  rate 0.61‰ → 0.84‰;  chat rate 0.26‰ → 0.54‰
+  peak  base: 'LINE'×22 | ' witnessed'×10 | '和发展'×9 | 'itness'×8 | ' much'×4
+        post: 'LINE'×22 | ' cover'×6 | '和发展'×4 | '简单'×3 | '牌'×3
+  drivers base: witnessed | 和发展 | 支球队 | 见证 | 主打 | 与发展
+          post: 和发展 | 简单 | Bundesliga | 支球队 | 和个人 | 与发展
+  read_S  base: booth | 一同 | ик | ild | zich | 重要的
+          post: booth | 一同 | zich | ик | lines | ild
+  write_R base: enderror | DXVECTOR | /XMLSchema | 确 | ，⏎ | 疾病
+          post: 确 | !=⏎ | vertex | 事故 | 一秒 | ==⏎
+  Δwrite (z vs layer writes): 'ǐ' 'SSION' '峭' 'Traversal' '扛' '操作系统' '背部' '跨度'   || other end: '诱人' '_ETH' "=\\'" '基本原则' '蜡' '_secret'
+  Δwrite (z vs layer Δs):     '動作' 'SSION' ' "@"' '机型' 'ǐ' ' SCSI' ' (),\n' 'gear'
+  Δread_R (z):                ' HDF' '/style' 'TextEdit' '/select' ' EFI' 'Mage' '择' ' Plex'   || other end: '硝' '镍' '.reply' '.char' '.count' '.transport'
+
+L35/10493- (motor)  write cos 0.9789 (7.4× layer median), |w| ×0.980, read row cos 0.9926 (gate 0.9917, up 0.9934); Δ∥w -0.20, Δ in layer's top-4 ΔW dirs 0.05
+  label: fires 'unicode escapes and odd byte fragments in text' (0.30); writes 'capitalized technical adjectives (Competitive, Essential, Extended)' (0.20)
+  act_top 134.0 → 117.0;  rate 0.11‰ → 0.11‰;  chat rate 0.04‰ → 0.04‰
+  peak  base: ' without'×5 | ' �'×4 | '0'×3 | ' �'×3 | " '"×3
+        post: ' �'×4 | ':'×3 | ' and'×3 | ' in'×3 | '\\x'×2
+  drivers base: corres | gover | illus | lear | _ti | (Web
+          post: illus | upside | gover | catast | corres | atmos
+  read_R  base: .shtml | /fast | /contact | /null | itional | 人选
+          post: .shtml | itional | 买房 | /fast | (or | 隐身
+  write_R base: .return | Competitive | Anderson | -Un | Represent | Detection
+          post: Competitive | -Un | .return | arium | Whole | Essential
+  Δwrite (z vs layer writes): ' **' ' [' '*' ' *' '\xa0' '…' '...' '\xad'   || other end: ' LET' '让我们' ' lets' ' let' ' letting' ' Lets'
+  Δwrite (z vs layer Δs):     '\xad' '\xa0\xa0' ' ·' '\xa0\xa0\xa0\xa0' ' {\n' '&nbsp' '\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0' '\u3000'
+  Δread_R (z):                ' compute' ' WB' ' π' ' permutations' ' checker' 'Wait' ' backtrack' ' XOR'   || other end: "*'" ' *\n\n\n' "'\n\n\n" '.analysis' '))\n\n\n' ':\n\n\n'
+
+L35/1106+ (motor)  write cos 0.9817 (6.4× layer median), |w| ×1.007, read row cos 0.9574 (gate 0.9803, up 0.9835); Δ∥w -0.06, Δ in layer's top-4 ΔW dirs 0.02
+  label: fires 'single capital letters after a dot in code and references' (0.50); writes 'method names after a dot: .Equals, .Replace, .Trim' (0.70)
+  act_top 185.0 → 101.5;  rate 5.48‰ → 1.49‰;  chat rate 4.63‰ → 1.38‰
+  peak  base: '2'×8 | '3'×7 | '4'×3 | ' M'×3 | ' No'×2
+        post: '2'×5 | ' self'×5 | '3'×3 | '.E'×2 | ' No'×2
+  drivers base: .EntityFrameworkCore | Www | .Utils | .Utilities | .Std | .utils
+          post: .EntityFrameworkCore | Www | .Utils | DbContext | www | RegexOptions
+  read_R  base: .S | .P | .D | .M | .T | .C
+          post: .S | .P | . | .D | .T | .A
+  write_R base: .Equals | .Length | .Replace | .Rem | .Format | .Require
+          post: .Equals | .Disabled | .Format | .Replace | .Length | .Trim
+  Δwrite (z vs layer writes): ' regardless' ',' ' and' ' và' ',and' '\tand' ' и' ',\\'   || other end: '?)\n' '？\n' '?\r\n' ')?\n' '?")\n' '?"\n'
+  Δwrite (z vs layer Δs):     ' regardless' ',\\' ' và' ',b' '(),' ',s' ',and' ',c'
+  Δread_R (z):                '---------\n\n' ' ()\n\n' '{}.' 'xFB' "('')." ' ().' '♪\n\n' '_BS'   || other end: ',\r\n' ',_' ',**' ',<' ',name' ',*'
+
+L15/1576+ (workspace)  write cos 0.9819 (4.7× layer median), |w| ×0.993, read row cos 0.9944 (gate 0.9928, up 0.9965); Δ∥w -0.13, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires 'numbers and years in citations (1997, 1998, dates and times)' (0.40); writes 'PP/PB abbreviations and distinct or specific terms' (0.30)
+  act_top 2.4 → 2.2;  rate 0.32‰ → 0.75‰;  chat rate 0.27‰ → 0.70‰
+  peak  base: ','×34 | ' at'×17 | '9'×5 | '0'×2 | ' '×1
+        post: ','×31 | ' at'×8 | '9'×4 | ' '×3 | '0'×3
+  drivers base: surpr | apr | spr | compr | Spr | apro
+          post: apro | surpr | appro | Spr | compr | sopr
+  read_R  base: proper | OUN | URN | proceeded | FH | ROME
+          post: proper | progression | proper | properly | plain | promoted
+  write_R base: PP | PB | RP | centage | behalf | indic
+          post: PP | PB | PMC | distinct | centage | quets
+  Δwrite (z vs layer writes): '_uploaded' 'eos' 'icopter' 'GROUND' '-maker' '背着' 'flate' '-upload'   || other end: '(channel' ' Oaks' '[channel' '/Math' '增加值' '渠'
+  Δwrite (z vs layer Δs):     '_uploaded' 'icopter' 'eos' 'GROUND' '-upload' '-maker' '背着' 'celand'
+  Δread_R (z):                'otional' 'рат' 'ulk' ' Lump' 'if' 'rat' 'ivalent' 'val'   || other end: '跳舞' '婚礼' '.score' '_finish' '乐队' '_THEME'
+
+L13/9914+ (workspace)  write cos 0.9837 (4.4× layer median), |w| ×1.004, read row cos 0.9953 (gate 0.9920, up 0.9975); Δ∥w -0.07, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'word-internal fragments inside names and words (West-ly, Guoq-ion-g)' (0.30); writes 'word-ending fragments that complete a word (-tion, -ed, -ly)' (0.40)
+  act_top 3.0 → 3.1;  rate 7.15‰ → 6.84‰;  chat rate 2.55‰ → 2.51‰
+  peak  base: 'ion'×10 | 'ow'×6 | 'are'×5 | 'ay'×5 | 'ter'×4
+        post: 'ion'×8 | 'ot'×7 | 'ly'×6 | 'ow'×6 | 'ter'×4
+  drivers base: Franç | GORITH | ッ | afore | 加之 | もの
+          post: Franç | GORITH | diseñ | ッ | afore | chter
+  read_R  base: eer | space | tor | ded | ted | ness
+          post: …⏎⏎ | eer | ness | e | ␍⏎␍⏎␍⏎ | system
+  write_R base: tor | ded | ted | lah | tre | tim
+          post: lah | ded | tor | ted | ments | tim
+  Δwrite (z vs layer writes): '\tre' '噢' ' typo' 'aster' ' Michaels' '?page' '{T' '?"\n'   || other end: '会产生' 'iParam' '会对' '广州市' 'lund' '心仪'
+  Δwrite (z vs layer Δs):     '\tre' '噢' 'aster' '体制改革' ' Michaels' ' typo' 'quisition' 'fern'
+  Δread_R (z):                ' selenium' 'Р' '!--' ' Р' ' К' ' ker' ' Alert' ' Rac'   || other end: '情怀' '希望通过' 'iazza' 'uang' 'bucket' 'DSL'
+
+L33/411+ (motor)  write cos 0.9838 (4.6× layer median), |w| ×0.996, read row cos 0.9970 (gate 0.9942, up 0.9964); Δ∥w -0.11, Δ in layer's top-4 ΔW dirs 0.08
+  label: fires 'year digits inside dates (20-1-3, 20-0-7) and Chinese-encoded byte fragments' (0.55); writes 'bold markdown and emphasis punctuation (**, ,**) before clauses' (0.30)
+  act_top 145.0 → 140.0;  rate 4.40‰ → 5.15‰;  chat rate 0.83‰ → 1.29‰
+  peak  base: '0'×24 | '1'×24 | '9'×9 | '5'×5 | 'O'×1
+        post: '1'×37 | '0'×17 | '5'×5 | '9'×4 | 'O'×1
+  drivers base: เ | ス | スト | フィ | 마 | パ
+          post: ス | フィ | スト | \xc | เ | ア
+  read_R  base: 非 | 修理 | 租 | 起 | 顶 | 渐
+          post: 非 | 催化 | 静态 | 租 | 拓 | 渐
+  write_R base: ** | means | the | ** | both | conf
+          post: ** | ** | means | **( | **, | expecting
+  Δwrite (z vs layer writes): ' *\r\n' '每一个' ' 方法' '说到' '清楚' '定义' '别人' '这是一个'   || other end: ',but' 'Now' ' eiusmod' 'Perhaps' '.Now' ' pamph'
+  Δwrite (z vs layer Δs):     '说到' '出去' ' 方法' '(fc' ' *\r\n' '清楚' '思维方式' '别人'
+  Δread_R (z):                '?>' '>(' '?(' '.Then' ',name' '嗎' '.Input' '.name'   || other end: ' RX' ' leuk' 'hed' '体质' ' butterfly' ' VX'
+
+L35/7139- (motor)  write cos 0.9840 (5.6× layer median), |w| ×0.993, read row cos 0.9913 (gate 0.9934, up 0.9933); Δ∥w -0.13, Δ in layer's top-4 ΔW dirs 0.03
+  label: fires 'question marks before a line break or close' (0.60); writes 'word fragments after a question mark, unclear' (0.15)
+  act_top 63.2 → 66.0;  rate 3.57‰ → 2.86‰;  chat rate 6.04‰ → 6.12‰
+  peak  base: ' Inc'×3 | ' right'×3 | '.S'×2 | ' is'×2 | 'C'×1
+        post: ' Inc'×4 | '.S'×2 | '.P'×2 | 'a'×2 | ' here'×2
+  drivers base: WHAT | ?? | WHY | 是什么呢 | 什麼 | ?,?,
+          post: WHAT | 是什么 | HOW | 是什么呢 | 什麼 | WHY
+  read_R  base: ?␍⏎ | ？⏎ | ?⏎⏎ | ?⏎ | )?⏎ | )?⏎⏎
+          post: ？⏎ | ?␍⏎ | ?⏎⏎ | )?⏎ | ?⏎ | )?⏎⏎
+  write_R base: 什 | ?? | Beans | ungle | ? | 是怎样
+          post: 什 | uche | ungle | Beans | ?? | plat
+  Δwrite (z vs layer writes): ' .\n\n' '。\n\n' ').\n\n' '].\n\n' '.\n\n' ' ).\n\n' '/.\n\n' '".\n\n'   || other end: '?”' ' ?\n' '?"' '?"\n' '?\r\n' '?’'
+  Δwrite (z vs layer Δs):     '.\n\n\n' '.\n\n\n\n' ').\n\n' ' .\n\n' '].\n\n' '.\n\n\n\n\n\n' '.\n\n\n\n\n' '.)\n\n'
+  Δread_R (z):                ' !\n\n' ' \n        \n' ' \n    \n' ' !\n' ' \n \n' ' **\n' ' …\n\n' ' )\n\n\n'   || other end: ' (>' '/cm' '.sqrt' '总数' ' (--' ' (~'
+
+L14/1523- (workspace)  write cos 0.9841 (4.2× layer median), |w| ×0.995, read row cos 0.9969 (gate 0.9975, up 0.9970); Δ∥w -0.12, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'Chinese text where a character breaks into a fragment or garbled glyph' (0.35); writes 'closing quotes and ellipses after sentence ends' (0.50)
+  act_top 6.7 → 5.6;  rate 0.84‰ → 0.80‰;  chat rate 1.40‰ → 1.12‰
+  peak  base: '無'×4 | '�'×3 | '�'×3 | '�'×2 | '�'×2
+        post: '�'×2 | '�'×2 | '�'×2 | ' m'×2 | 's'×2
+  drivers base: Covid | covid | COVID | Phoenix | _story | phoenix
+          post: Covid | covid | Phoenix | COVID | Phoenix | _story
+  read_R  base: s | sar | "):␍⏎ | sip | cé | née
+          post: s | "):␍⏎ | ":␍⏎ | cé | "),␍⏎ | sus
+  write_R base: ...",⏎ | …”⏎⏎ | ？” | ...',⏎ | ?”⏎⏎ | ”⏎
+          post: …”⏎⏎ | ...",⏎ | …” | ..."⏎⏎ | …"⏎⏎ | ..."⏎⏎
+  Δwrite (z vs layer writes): 'inging' 'away' ' Lowell' 'cur' '随意' 'tempt' 'ign' ' apost'   || other end: ' DataType' '横向' '全都' ' Pagination' '少数' "['_"
+  Δwrite (z vs layer Δs):     ' Lowell' 'inging' 'away' '随意' 'tempt' ' apost' 'ок' 'TEE'
+  Δread_R (z):                '.\n\n' '\t\t\n\n' ' requires' ' congr' '()\n\n' ' =' '\n\t\n' ' equals'   || other end: '_Test' 'egin' '战术' '提取' '策划' '挽'
+
+L32/3613+ (motor)  write cos 0.9843 (4.1× layer median), |w| ×1.010, read row cos 0.9965 (gate 0.9953, up 0.9969); Δ∥w -0.03, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires "year digits after '20' in dates" (0.60); writes 'image, texture and map-related tokens (图片, 纹理, 地图)' (0.20)
+  act_top 75.0 → 80.5;  rate 3.93‰ → 4.01‰;  chat rate 2.50‰ → 2.34‰
+  peak  base: '0'×24 | '9'×6 | ' Ger'×6 | '2'×5 | 'evin'×2
+        post: '0'×35 | '9'×5 | '2'×5 | ' Ger'×5 | ' '×4
+  drivers base: Cre | Sc | Kr | Kre | Cr | Sl
+          post: \uff | \xa | Cre | \xc | ന | recip
+  read_R  base: 電話及 | 葡京 | 使用網路 | 本服務 | 租 | 不
+          post: .chars | .vertex | 租 | \P | xEB | 郑
+  write_R base: 伊斯兰 | 图片 | 小麦 | 开元 | 网格 | 眼球
+          post: hann | 图片 | 伊斯兰 | 网格 | 壁画 | cuckold
+  Δwrite (z vs layer writes): '</think>' '<|im_end|>' '<|im_start|>' 'ness' ' ב' '<think>' '.");\n\n' '✅'   || other end: ' \n' '――' '──' '                 \n' ' **\n' ' ...\n'
+  Δwrite (z vs layer Δs):     '</think>' '\t\t\t\t\t  ' '_callable' 'ness' '杨幂' 'iosity' 'pped' '_sidebar'
+  Δread_R (z):                '\tD' '\tB' ' Essay' '\tR' ' Issue' '\tC' "'''\n" '\tF'   || other end: '=head' '=headers' ')=' '..\n\n\n\n' '…but' ' […]\n\n'
+
+######## top rotation in the sensory band (vs its layer's median)
+
+L3/6570+ (sensory)  write cos 0.9843 (5.8× layer median), |w| ×1.004, read row cos 0.9889 (gate 0.9901, up 0.9883); Δ∥w -0.07, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires 'Chinese text on mystery and crime (偵探, 監獄) and miscellaneous word-piece splits' (0.35); writes 'plural/British-spelling nouns and -our, -re endings (colours, centres, metres)' (0.40)
+  act_top 0.7 → 0.8;  rate 1.94‰ → 2.76‰;  chat rate 0.93‰ → 1.39‰
+  peak  base: '偵'×13 | '色'×6 | 'n'×5 | '喂'×5 | ' going'×4
+        post: '偵'×12 | '監'×8 | '還'×7 | '色'×4 | ' going'×3
+  drivers base: 粳 | ʾ | molto | 还以为 | 偵 | 喂
+          post: 还以为 | 粳 | 偵 | ʾ | 还挺 | 缴
+  read_S  base: help | 花椒 | hypoth | 新浪 | 胰 | 回去
+          post: help | airl | ْ | 花椒 | 晚上 | 胰
+  write_R base: ⏎ | ..."⏎ | ...⏎ | '⏎ | '⏎ | ageing
+          post: ⏎ | centres | ...⏎ | ...⏎ | colour | centre
+  Δwrite (z vs layer writes): 'Coordinate' 'Blockchain' '专心' '用心' '_tid' 'Flexible' '微信' '积极推动'   || other end: ' Balt' ' =",' '反倒' '违' ' shader' ' Albany'
+  Δwrite (z vs layer Δs):     'Coordinate' 'WhatsApp' '专心' 'Blockchain' '用心' '_tid' '积极推动' '微信'
+  Δread_R (z):                '电视' '很高' '寒假' 'MOV' '走在' 'LogFile' '气氛' '专家'   || other end: '所提供之' '/util' 'aneously' ' utilizing' '已然' ' DUI'
+
+L3/3572+ (sensory)  write cos 0.9860 (5.2× layer median), |w| ×0.997, read row cos 0.9949 (gate 0.9961, up 0.9953); Δ∥w -0.10, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'fragments inside formal or structured text (purpose, ASF, ironic.common)' (0.30); writes 'Chinese adverbs and verbs of effect (更, 确保, 满足, 效率)' (0.40)
+  act_top 3.1 → 3.0;  rate 0.35‰ → 0.42‰;  chat rate 0.25‰ → 0.40‰
+  peak  base: ' ASF'×5 | ' import'×3 | '.i'×2 | '迅'×2 | ' ansible'×2
+        post: ' ASF'×3 | '.i'×3 | '一身'×2 | '.utils'×2 | '深化'×2
+  drivers base: 後來 | 后来 | 之一 | 偿 | 活动中 | 性和
+          post: 原因之一 | 偿 | 尝 | 後來 | 后来 | 活动中
+  read_S  base: [S | [d | incred | Sid | Untitled | [D
+          post: incred | Sid | 霓 | [S | Untitled | [d
+  write_R base: 不 | 投 | 最 | DXVECTOR | 整 | 葡京
+          post: 整 | 字符串 | 投 | lines | 不 | 最
+  Δwrite (z vs layer writes): '_GLOBAL' '_AUTH' ' NRF' '_CORE' ' CORE' '_LOGGER' ' Kavanaugh' ' Gü'   || other end: '-sizing' '降幅' '居室' '_literals' '_pix' '_consts'
+  Δwrite (z vs layer Δs):     ' NRF' '_GLOBAL' '_AUTH' 'ński' ' Kavanaugh' '_LOGGER' 'ków' 'doğan'
+  Δread_R (z):                '本地' '深化' 'CHK' '便利' '延伸' '潜在' '相关' '稳'   || other end: '.ping' '.apple' '这个游戏' '/sn' '/octet' '/head'
+
+L2/1391- (sensory)  write cos 0.9862 (6.1× layer median), |w| ×0.998, read row cos 0.9955 (gate 0.9980, up 0.9941); Δ∥w -0.10, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires "words right after an adjective or noun in a list, e.g. 'sl|ats', 'mean', 'refined'" (0.20); writes 'hedging adverbs and modal words: possibly, probably, perhaps, then' (0.60)
+  act_top 1.0 → 1.1;  rate 4.41‰ → 4.26‰;  chat rate 3.83‰ → 4.35‰
+  peak  base: '全年'×7 | '日下午'×5 | ' unheard'×5 | 'ats'×4 | '�'×4
+        post: ' mean'×14 | 'ats'×6 | '全年'×6 | 'es'×3 | 'par'×3
+  drivers base: 去年同期 | unheard | 圻 | hatch | 年上半年 | ButtonDown
+          post: 去年同期 | 年开始 | 得天 | 全年 | venir | 年下半年
+  read_S  base: Independent | Clear | Gram | Score | sac | Submit
+          post: Clear | Gram | sac | Independent | Mile | Clear
+  write_R base: the | more | being | not | a | one
+          post: the | being | " | more | not | a
+  Δwrite (z vs layer writes): '产值' '总产值' 'JKLM' '成立以来' '干部队伍' '预备' '不同程度' ' appropriations'   || other end: '泄' '结果显示' '技术' '机械' '晚' '基本信息'
+  Δwrite (z vs layer Δs):     '产值' '/register' ' appropriations' '成立以来' '层出不穷' '总产值' ' orientations' 'JKLM'
+  Δread_R (z):                '\tfunc' 'idges' '俄' '_ARG' '商店' 'onda' '凝' '的关键'   || other end: '对我' ' Blessed' '呐' '造血' '_PROVID' '.rx'
+
+L3/6320+ (sensory)  write cos 0.9885 (4.3× layer median), |w| ×0.988, read row cos 0.9950 (gate 0.9947, up 0.9943); Δ∥w -0.15, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires 'Chinese 风水 (feng shui) and random mid-word/name tokens in mixed text' (0.30); writes 'contrast and sequencing words: then, instead, while, yet, prior' (0.30)
+  act_top 1.2 → 1.6;  rate 1.37‰ → 2.05‰;  chat rate 1.72‰ → 3.27‰
+  peak  base: '1'×13 | '0'×6 | '水'×2 | ' Fabric'×2 | ' Council'×2
+        post: '水'×3 | ' Council'×3 | '鐵'×3 | ' fabric'×3 | 'UTC'×2
+  drivers base: ッ | 腸 | 東 | ṣ | 氦 | 髓
+          post: ッ | 礼仪 | ṣ | %i | 舐 | 锉
+  read_S  base: 罐 | wap | 巢 | 交汇 | 用餐 | ITV
+          post: 供水 | 周边 | 罐 | wap | 棋牌 | ]-
+  write_R base: '\xa0' | and | ' ' | in | to | (
+          post: ( | and | in | to | the | a
+  Δwrite (z vs layer writes): '-quarter' 'ships' '_rating' '-sized' 'imating' 'shipping' 'ные' '-threatening'   || other end: ',),\n' ' nodeName' '(codec' ' ""),\n' ' Invoke' ' Codec'
+  Δwrite (z vs layer Δs):     '_rating' 'ships' ' downright' 'shipping' 'razy' ' Convenient' 'Expense' '-hit'
+  Δread_R (z):                '连忙' ' ayuda' ' emits' '闻言' 'urring' '悠闲' ' furnished' ' aider'   || other end: '%A' '/archive' '*</' '."\r\n' '."<' '_SENT'
+
+######## top rotation in the association band (vs its layer's median)
+
+L6/9336- (association)  write cos 0.9878 (4.3× layer median), |w| ×0.996, read row cos 0.9989 (gate 0.9994, up 0.9973); Δ∥w -0.11, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires "'Find' and 'you' before contact/search phrases" (0.20); writes 'plain nouns and symbols in list items (human, family, #, *)' (0.20)
+  act_top 8.2 → 7.6;  rate 0.40‰ → 0.84‰;  chat rate 0.91‰ → 0.42‰
+  peak  base: '<|im_start|>'×8 | ' a'×6 | '<|im_end|>'×6 | ' better'×5 | ' io'×4
+        post: '1'×26 | '2'×12 | ' a'×6 | ' better'×5 | ' us'×3
+  drivers base: TripAdvisor | detained | .ModelForm | cedar | Cedar | panicked
+          post: detained | 护身符 | aggravated | 名列前茅 | 把持 | panicked
+  read_R  base: 黑色 | 衣服 | 投 | 電話及 | 水 | 空
+          post: initialised | 星星 | 妹妹 | 石头 | 黑色 | 名字
+  write_R base: ( | ' ' | * | [ | -- | -
+          post: ( | * | ' ' | [ | ... | ,
+  Δwrite (z vs layer writes): 'edList' 'ableObject' 'xBD' 'owan' '/stats' 'reon' 'edBy' '客服'   || other end: ' Dual' '.Process' ' Motor' '_BYTE' ' Machinery' ' Racing'
+  Δwrite (z vs layer Δs):     'owan' 'ableObject' '/stats' 'olkien' '客服' 'reon' 'xBD' '_argument'
+  Δread_R (z):                ' with' ' and' ' ' ' or' ' from' ' as' ' of' ' for'   || other end: '辩护' '体现出' '利用' '采纳' 'ThanOrEqualTo' '而'
+
+L7/8341- (association)  write cos 0.9899 (3.6× layer median), |w| ×0.973, read row cos 0.9953 (gate 0.9947, up 0.9962); Δ∥w -0.26, Δ in layer's top-4 ΔW dirs 0.04
+  label: fires 'date and number separators inside digits (2012-5, 22/03)' (0.35); writes 'math and coding terms (数学, 几何, 计算)' (0.30)
+  act_top 7.4 → 7.7;  rate 7.36‰ → 13.07‰;  chat rate 3.32‰ → 7.24‰
+  peak  base: '/'×21 | '.'×8 | '\n\n'×8 | '-'×7 | ','×6
+        post: '/'×14 | '-'×10 | '.'×6 | '2'×5 | '\n'×3
+  drivers base: '\t\t\t  ' | ("// | ############################################################################ | ######################################################################## | '\t\t\t\t   ' | '\t\t\t\t\t  '
+          post: ________________________________________________________________ | '\t\t\t  ' | multiline | '\t\t\t\t\t  ' | Albany | DDD
+  read_R  base: ⏎ | ⏎⏎ | ⏎ | ' ' | and | ,
+          post: ⏎ | ⏎⏎ | ⏎ | ...⏎⏎ | , | …⏎⏎
+  write_R base: 葡京 | iParam | DXVECTOR | 限 | /XMLSchema | 電話及
+          post: 数学 | xAC | xfe | xfc | startIndex | -syntax
+  Δwrite (z vs layer writes): '\tformat' '/forms' '/layouts' '/messages' '不方便' '方便' ' resultList' '\tvertex'   || other end: ' passes' ' parameter' ' har' ' parameters' ' id' ' ind'
+  Δwrite (z vs layer Δs):     '\tformat' '/forms' '/messages' '不方便' '多彩' '/layouts' ' resultList' '方便'
+  Δread_R (z):                ' attempting' ' identifying' ' assuming' ' effectively' ' relying' ' within' ' regardless' ' allowing'   || other end: '文化' 'platz' 'ullah' 'ensis' '演员' 'uje'
+
+L4/3712- (association)  write cos 0.9902 (3.5× layer median), |w| ×0.994, read row cos 0.9969 (gate 0.9980, up 0.9965); Δ∥w -0.11, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires 'email addresses and closing brackets in code/lists' (0.30); writes 'closing brackets and tags like )</ and ),' (0.35)
+  act_top 3.0 → 2.6;  rate 0.20‰ → 0.22‰;  chat rate 0.07‰ → 0.06‰
+  peak  base: '.com'×39 | '.org'×19 | 'sss'×2 | 'ा'×1 | 'locks'×1
+        post: '.com'×33 | '.org'×17 | 'sss'×2 | 'blogs'×2 | ' Stadt'×1
+  drivers base: Stadt | sizei | preds | COLORS | rests | Clubs
+          post: Stadt | sizei | COLORS | fea | .projects | CTS
+  read_R  base: )⏎⏎⏎ | ).⏎⏎⏎ | );⏎⏎⏎ | ⏎ | ⏎ | ⏎
+          post: )⏎⏎⏎ | );⏎⏎⏎ | )L | [])⏎ | }⏎⏎⏎ | ())⏎⏎⏎
+  write_R base: 人都 | ⏎ | ities | !"⏎ | broader | (",")⏎
+          post: 人都 | ities | !"⏎ | ."⏎ | --------------------------------------------------------------------------⏎ | tempts
+  Δwrite (z vs layer writes): 'iya' 'xDF' 'iola' 'oS' 'iOS' 'sparse' 'yms' 'yun'   || other end: ' Williamson' '淄' ' Rut' ' Dame' ' Ses' ' bile'
+  Δwrite (z vs layer Δs):     'iya' 'iOS' 'xDF' 'yun' 'iola' 'oS' 'yms' 'ié'
+  Δread_R (z):                '发言' '协定' '倾向' '力求' 'annis' 'Bien' '交替' '特别是在'   || other end: '一夜' '<ul' ' anytime' ' Uncle' ' unconscious' ' nowhere'
+
+L4/7805- (association)  write cos 0.9903 (3.5× layer median), |w| ×0.994, read row cos 0.9940 (gate 0.9948, up 0.9952); Δ∥w -0.11, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'closing quotation marks after sentence-final punctuation' (0.60); writes 'closing quotes and line breaks after dialogue' (0.60)
+  act_top 2.0 → 1.9;  rate 0.77‰ → 0.89‰;  chat rate 0.41‰ → 0.56‰
+  peak  base: '1'×10 | '2'×5 | '0'×3 | '_'×3 | '_n'×2
+        post: '1'×6 | '_'×3 | '2'×3 | '0'×3 | 'Node'×2
+  drivers base: =UTF | 장 | gaz | iomanip | ITHER | welding
+          post: =UTF | ILog | _DGRAM | 장 | ITHER | iT
+  read_R  base: DXVECTOR | 葡京 | 整 | 指数 | 与 | 裁
+          post: edList | ：⏎ | operands | 整 | startIndex | 确保
+  write_R base: ？” | 。” | ”。 | ！” | ”， | .”⏎
+          post: ？” | ."␍⏎ | 。” | ?"⏎ | .”⏎ | ”。
+  Δwrite (z vs layer writes): '--------------------------------------------------------------------------\n' 'annie' '============\n' 'ItemId' 'Dll' '("#{' '----------------------------------------------------------------------------' '%%\n'   || other end: '地中' '多地' ' niż' '的基础' '-translate' '_far'
+  Δwrite (z vs layer Δs):     '--------------------------------------------------------------------------\n' 'ItemId' 'annie' 'Dll' '("#{' '============\n' '_Internal' 'ItemCount'
+  Δread_R (z):                '心血管' '研究生' 'iOS' 'AAP' 'Pinterest' ' dispensaries' 'MAT' 'sanitize'   || other end: ' decides' ' Deliver' ' chooses' ' agrees' '目の' ' arrival'
+
+L4/2468- (association)  write cos 0.9905 (3.4× layer median), |w| ×0.994, read row cos 0.9967 (gate 0.9968, up 0.9969); Δ∥w -0.12, Δ in layer's top-4 ΔW dirs 0.00
+  label: fires "word after 'some', 'sudden', 'interrupt' in English phrases" (0.20); writes 'function-word continuations (up, out, back, only, once, still)' (0.30)
+  act_top 4.5 → 3.2;  rate 0.18‰ → 0.61‰;  chat rate 0.35‰ → 0.36‰
+  peak  base: '<|im_start|>'×45 | '<|im_end|>'×5 | ' some'×1 | '高兴'×1 | ' Slate'×1
+        post: ' también'×7 | '_tests'×2 | ' Larger'×2 | ' stainless'×2 | '報'×2
+  drivers base: 听得 | 更低 | 审理 | 他自己 | evidently | 月下旬
+          post: NOWLED | Secondly | 听得 | Dodge | IVES | striped
+  read_R  base: 虽 | 限 | 确 | 然 | 仍 | 光阴
+          post: 反之 | 确 | msgs | funcs | 老人 | 替
+  write_R base: the | in | '\xa0' | and | ' ' | a
+          post: and | the | in | , | a | ' '
+  Δwrite (z vs layer writes): "('[" "(('" "==='" '-One' "('{" '_secure' "('/" "=='"   || other end: ' retries' 'imers' '感人' 'gable' 'STALL' ' bcrypt'
+  Δwrite (z vs layer Δs):     "('[" "(('" "('{" "('/" '_secure' '一向' "('<" "==='"
+  Δread_R (z):                '肾脏' 'Languages' '语言' '传统的' ' Lesb' '专题' '_LANGUAGE' '(Language'   || other end: 'abama' ' shooter' ']])' 'udget' ' precinct' ' stunt'
+
+######## top rotation in the workspace band (vs its layer's median)
+
+L15/7218- (workspace)  write cos 0.9847 (4.0× layer median), |w| ×0.992, read row cos 0.9945 (gate 0.9931, up 0.9966); Δ∥w -0.13, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'citation years and numbers inside parentheses' (0.40); writes 'unclear: letter fragments and sworn' (0.10)
+  act_top 3.4 → 3.2;  rate 0.12‰ → 0.20‰;  chat rate 0.04‰ → 0.09‰
+  peak  base: '0'×28 | '9'×15 | ','×6 | '4'×3 | 'F'×2
+        post: '0'×30 | '9'×13 | ','×7 | 'System'×2 | 'F'×1
+  drivers base: 江北 | incarn | acad | 江苏 | acad | 岌
+          post: Accom | ак | acad | Anc | accom | Acad
+  read_R  base: **⏎ | DFS | MF | MOVED | Fx | CTS
+          post: …”⏎⏎ | ’.⏎⏎ | …” | “… | =” | **⏎
+  write_R base: &C | 驹 | &B | kB | 但不限于 | knees
+          post: &C | sworn | /AP | ypse | 自由贸易 | 但不限于
+  Δwrite (z vs layer writes): '虽然' '虽然是' '很明显' 'ISR' '内部' 'CCC' '还不' '原始'   || other end: ' statuses' ' threads' 'endars' ' strands' ' nightly' ' yol'
+  Δwrite (z vs layer Δs):     '虽然' '很明显' '虽然是' '内部' 'ISR' 'CCC' '原始' '(Vertex'
+  Δread_R (z):                '技术水平' 'ardware' '\tselected' 'ensity' 'ybrid' '\toutput' 'etch' '选拔'   || other end: ' paj' ' distressed' ' Browns' ' crumbling' ' burglary' ' courthouse'
+
+L9/9132- (workspace)  write cos 0.9861 (4.4× layer median), |w| ×0.998, read row cos 0.9960 (gate 0.9959, up 0.9966); Δ∥w -0.10, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires 'paragraph breaks after quotes and punctuation in prose' (0.35); writes 'unclear: architecture and parenthesized fragments' (0.15)
+  act_top 29.2 → 29.6;  rate 0.13‰ → 0.11‰;  chat rate 0.00‰ → 0.00‰
+  peak  base: ',\n'×37 | "',\n"×9 | '),\n'×4 | ' "\n'×3 | '\n'×3
+        post: ',\n'×41 | "',\n"×8 | '),\n'×3 | ')\n'×2 | ' "\n'×2
+  drivers base: ([⏎ | ({⏎ | {⏎ | ((⏎ | ({⏎ | |⏎
+          post: ([⏎ | [⏎ | ({⏎ | /**⏎ | {⏎ | ((⏎
+  read_R  base: »⏎⏎ | ​​ | ”⏎⏎ | »⏎⏎ | […]⏎⏎ | …”⏎⏎
+          post: ​​ | »⏎⏎ | […]⏎⏎ | …”⏎⏎ | ”⏎⏎ | –⏎⏎
+  write_R base: itecture | ...', | ''⏎ | ...' | ...'⏎ | illery
+          post: itecture | ...', | validity | illery | buildings | TestMethod
+  Δwrite (z vs layer writes): 'rai' 'dge' "==='" '")\r\n' '())\r\n' 'dle' '_kw' "(),'"   || other end: ' ^\n' ' (\n' ' Balls' ' havoc' ' \\\\\n' ' {\n'
+  Δwrite (z vs layer Δs):     'rai' 'dge' '_kw' "==='" 'ROME' '拼音' "(),'" "('*',"
+  Δread_R (z):                '(if' '(before' 'evity' ' +/-' '(s' '(RE' ':' ' timeframe'   || other end: '_surface' 'langs' '.Transform' '_tex' '.namespace' '_codec'
+
+######## most shrunk write
+
+L23/2696- (motor)  write cos 0.9882 (3.1× layer median), |w| ×0.949, read row cos 0.9969 (gate 0.9977, up 0.9929); Δ∥w -0.39, Δ in layer's top-4 ΔW dirs 0.07
+  label: fires 'question marks, and commas or sentence ends after a question' (0.50); writes 'sentence-end punctuation after a closed quote or question (.⏎⏎, .")' (0.50)
+  act_top 30.5 → 27.6;  rate 0.46‰ → 0.41‰;  chat rate 0.59‰ → 0.47‰
+  peak  base: ','×25 | ' right'×7 | '?'×4 | ' That'×2 | ' Vocal'×2
+        post: ','×25 | '?'×6 | ' right'×2 | ' Know'×2 | 'ent'×1
+  drivers base: 还记得 | 可以用 | 你知道 | remember | 我可以 | 听说过
+          post: 还记得 | remember | 可以用 | 有必要 | huh | disappointed
+  read_R  base: ?⏎⏎ | ?⏎ | ? | ?␍⏎ | ?"⏎⏎ | ?"
+          post: ?⏎⏎ | ?⏎ | ? | ？⏎ | ？ | )?⏎⏎
+  write_R base: .⏎⏎⏎ | .⏎⏎⏎⏎ | .</ | (unittest | ."⏎⏎⏎ | ...⏎⏎⏎
+          post: .⏎⏎⏎ | .⏎⏎⏎⏎ | ).⏎⏎⏎ | ."⏎⏎⏎ | .⏎⏎⏎⏎ | ⏎⏎⏎
+  Δwrite (z vs layer writes): '?' '؟' ')?' '？' '?)' '()?' '}?' ']?'   || other end: '）\n' " ''}\n" '米' ' ..."\n' '的方法' "__':\n"
+  Δwrite (z vs layer Δs):     '?' ')?' '))?' '؟' ']?' '()?' '嗎' '}?'
+  Δread_R (z):                ',but' ' But' ' Perhaps' ' BUT' 'but' ' However' ' Probably' ' Since'   || other end: '/");\n' '\')"\n' "/')\n" ')?\n' '})"\n' ")'\n"
+
+L35/438+ (motor)  write cos 0.9902 (3.5× layer median), |w| ×0.961, read row cos 0.9935 (gate 0.9948, up 0.9915); Δ∥w -0.34, Δ in layer's top-4 ΔW dirs 0.16
+  label: fires 'commas and list separators' (0.60); writes 'commas, especially in code and lists' (0.60)
+  act_top 208.0 → 200.0;  rate 0.17‰ → 0.24‰;  chat rate 0.06‰ → 0.01‰
+  peak  base: ' space'×15 | ' object'×8 | ' submissions'×5 | ' example'×3 | ' East'×3
+        post: ' space'×13 | ' use'×8 | ' file'×8 | ' session'×8 | ' East'×3
+  drivers base: Wednesday | Tuesday | Thursday | Saturday | Monday | Friday
+          post: Wednesday | WASHINGTON | Sorry | Thursday | Tuesday | Saturday
+  read_R  base: , | ， | comma | ,/ | ,+ | ،
+          post: , | comma | ， | (%) | ، | 单单
+  write_R base: ， | , | ، | ,</ | ，⏎ | ,⏎
+          post: ,</ | ، | ， | ,** | ,', | ，⏎
+  Δwrite (z vs layer writes): '的話' '的话' '…”\n\n' ' →\n\n' '这样的话' '?”\n\n' '…"\n\n' '话说'   || other end: '，' ',' '،' ' ,' ',\n' '、'
+  Δwrite (z vs layer Δs):     '的話' '的话' '话说' '話' '角度来看' '的人来说' '对我们' '这样的话'
+  Δread_R (z):                ']</' '>\r\n' '*</' '<P' ' ]]\n' ' ()\n\n' '’\n\n' ']<'   || other end: '请问' '是什么呢' '_YES' '_IMM' "'use" "'?"
+
+L29/11060+ (motor)  write cos 0.9933 (2.0× layer median), |w| ×0.963, read row cos 0.9979 (gate 0.9976, up 0.9955); Δ∥w -0.36, Δ in layer's top-4 ΔW dirs 0.03
+  label: fires 'question marks ending a question, especially before a line break or quote' (0.70); writes 'closing punctuation: periods, parentheses and quotes after a sentence' (0.50)
+  act_top 49.8 → 52.2;  rate 0.11‰ → 0.12‰;  chat rate 0.06‰ → 0.07‰
+  peak  base: '分享'×21 | ' right'×3 | ' burst'×3 | ' password'×3 | ' you'×2
+        post: ' right'×16 | ' password'×5 | ' site'×2 | ' anyone'×2 | ' help'×2
+  drivers base: WHAT | atters | WHAT | ions | address | rections
+          post: WHAT | WHAT | 是什么呢 | ("/ | ("/ | suppl
+  read_R  base: ?⏎⏎ | ?⏎ | ? | ?␍⏎ | ?⏎⏎⏎ | ？
+          post: ?⏎⏎ | ?⏎ | ? | ？ | ？⏎ | ?"⏎⏎
+  write_R base: .,⏎ | .",⏎ | .)⏎⏎⏎⏎ | .). | {}). | .".
+          post: ).⏎⏎⏎ | .)⏎⏎⏎⏎ | .,⏎ | ).⏎⏎⏎⏎ | ."⏎⏎⏎ | .",⏎
+  Δwrite (z vs layer writes): '?\n' '؟' '?' '？' '？\n' ')?' ' ?\n' '?)'   || other end: '…”\n\n' '…”' '.’\n\n' ".'''\n" "...'" '.”\n\n'
+  Δwrite (z vs layer Δs):     '؟' ')?' '？' '?)' '?\r\n' ']?' '"?' '()?'
+  Δread_R (z):                ' ()\n\n' ' ,\n\n' ' ...\n\n\n\n' ' []\n\n' ' .\n\n\n\n' '  \n\n' '",\n\n' ' [];\n\n'   || other end: '?\r\n' '?’' '？”' '?)\n' ')?\n' '?")\n'
+
+######## most amplified write
+
+L35/12276+ (motor)  write cos 0.9906 (3.3× layer median), |w| ×1.052, read row cos 0.9906 (gate 0.9915, up 0.9981); Δ∥w +0.28, Δ in layer's top-4 ΔW dirs 0.03
+  label: fires 'tokens immediately before an equals sign in code' (0.50); writes "'=' and assignment operators" (0.70)
+  act_top 40.2 → 43.0;  rate 5.73‰ → 0.47‰;  chat rate 0.90‰ → 0.04‰
+  peak  base: ' classifiers'×7 | ' type'×6 | ' fields'×4 | '_data'×3 | ']'×2
+        post: '__'×29 | ' type'×6 | ']'×4 | ' language'×4 | ' classifiers'×4
+  drivers base: (z | WHICH | (loc | (which | Di | (head
+          post: Agr | Af | VARIABLES | tri | PARTIC | .variables
+  read_R  base: = | = | flat | further | the | super
+          post: = | = | flat | the | further | close
+  write_R base: = | =⏎ | =⏎⏎ | =", | =( | =$
+          post: = | =⏎ | =⏎⏎ | =", | =$ | ='
+  Δwrite (z vs layer writes): ' =' 'ًا' ' =\n' ' =\n\n' ' =",' ' ="' 'List' '"),'   || other end: '=' '=\n\n' '<=' '=(' '=s' '=\n'
+  Δwrite (z vs layer Δs):     'ًا' ' =\n' ' =' ' bath' '_list' 'List' '"),' '"]'
+  Δread_R (z):                '=\\"' ' _(' '_[' '/{{' ' (\r\n' '=(\n' '――' "='',\n"   || other end: ' computed' ' calculated' ' compute' '):\n\n' ' violet' ' here'
+
+L35/5000- (motor)  write cos 0.9928 (2.5× layer median), |w| ×1.039, read row cos 0.9967 (gate 0.9952, up 0.9974); Δ∥w +0.25, Δ in layer's top-4 ΔW dirs 0.03
+  label: fires 'stray broken-character tokens mid-sentence in Chinese/Big5 text' (0.30); writes 'unclear; weak mix of word-start fragments' (0.10)
+  act_top 80.0 → 77.5;  rate 0.27‰ → 0.10‰;  chat rate 0.23‰ → 0.13‰
+  peak  base: ','×27 | ' �'×18 | ' �'×3 | '�'×3 | ' �'×2
+        post: ' �'×22 | ','×16 | '�'×5 | ' �'×3 | '.'×3
+  drivers base: 然而 | ])); | ]); | ); | _CANNOT | });
+          post: photoc | <c | assass | 是一個 | +c | telesc
+  read_R  base: however | however | 然而 | However | However | HOWEVER
+          post: however | however | 然而 | However | However | HOWEVER
+  write_R base: sin | 且 | sinon | 本身就 | sino | ooo
+          post: 且 | 本身就 | sino | sin | ooo | sinon
+  Δwrite (z vs layer writes): 'But' ' But' 'Alternatively' ' BUT' '-but' '_but' ' alternatively' '.But'   || other end: ' however' ' However' 'However' 'however' '然而' ' jedoch'
+  Δwrite (z vs layer Δs):     'But' ' But' 'Alternatively' ' alternatively' ' And' ' Butler' '-but' 'And'
+  Δread_R (z):                '不过' '不過' ' MER' ' NK' ' KK' ' KR' ' KA' ' Uns'   || other end: 'Therefore' 'Then' 'Which' 'Calcul' 'Seen' 'But'
+
+L34/3478- (motor)  write cos 0.9933 (2.1× layer median), |w| ×1.038, read row cos 0.9966 (gate 0.9946, up 0.9976); Δ∥w +0.25, Δ in layer's top-4 ΔW dirs 0.06
+  label: fires "'possible' and 'only/always' qualifiers in English sentences" (0.40); writes 'unclear: 要好好, 干嘛, 特价, 愧' (0.10)
+  act_top 60.0 → 45.2;  rate 0.30‰ → 0.27‰;  chat rate 0.21‰ → 0.18‰
+  peak  base: ' as'×22 | ' made'×7 | ' it'×5 | ' best'×4 | ' be'×3
+        post: ' as'×13 | ' it'×12 | ' if'×9 | ' best'×5 | ' be'×3
+  drivers base: whenever | Whenever | wherever | Whenever | One | FOREIGN
+          post: whenever | wherever | .Le | unp | datap | contro
+  read_R  base: possible | possible | Possible | Possible | posible | _possible
+          post: possible | possible | Possible | Possible | posible | _possible
+  write_R base: 孰 | 要好好 | anked | iscrim | bery | omatic
+          post: 要好好 | 干嘛 | 孰 | 要是 | ocl | bery
+  Δwrite (z vs layer writes): '因此' ' therefore' ' suppose' '因而' '所以我们' '我们需要' '我们会' 'Therefore'   || other end: ' possible' 'possible' ' Possible' 'Possible' ' posible' '_possible'
+  Δwrite (z vs layer Δs):     '我们会' '因而' '所以我们' '首先要' 'faf' '我们需要' '我们知道' ' suppose'
+  Δread_R (z):                ' acceptable' 'Potential' '某种' '潛' 'offers' '-available' 'anticipated' 'acceptable'   || other end: '应该怎么' '需要注意' '问题' '这个问题' '怎么' '题目'
+
+L35/10474+ (motor)  write cos 0.9941 (2.1× layer median), |w| ×1.027, read row cos 0.9973 (gate 0.9962, up 0.9985); Δ∥w +0.18, Δ in layer's top-4 ΔW dirs 0.02
+  label: fires "comma before a relative 'which' clause" (0.60); writes "'what'/'qual' question-word completions" (0.40)
+  act_top 64.5 → 44.8;  rate 1.33‰ → 0.83‰;  chat rate 1.19‰ → 0.80‰
+  peak  base: ' in'×44 | ' at'×6 | ','×4 | ' decide'×3 | ' from'×2
+        post: ','×53 | ' in'×5 | ' decide'×3 | '�'×1 | ' element'×1
+  drivers base: ”), | 下列 | الي | อ | decide | conglomer
+          post: الل | corres | smugg | simult | amalg | absor
+  read_R  base: which | which | 哪 | WHICH | Which | 哪个
+          post: which | which | 哪 | WHICH | Which | Which
+  write_R base: 本人 | 以下是 | 月以来 | iry | 尤其 | Qual
+          post: 本人 | 以下是 | iry | 有多 | dass | 就这么
+  Δwrite (z vs layer writes): 'that' '\tthat' ' أن' ' that' ' dass' ' Because' ' что' 'Wait'   || other end: ' Which' 'Which' ' which' 'which' ' WHICH' '.which'
+  Δwrite (z vs layer Δs):     ' أن' 'that' ' dass' 'WS' ' что' 'Option' 'option' '借'
+  Δread_R (z):                ' Microsystems' ' impaired' ' cramped' ' housed' ' Kraft' ' migraine' ' clustered' '_mul'   || other end: '是否有' '能不能' '能否' '如果有' '既然' '_Return'
+
+L35/7138- (motor)  write cos 0.9944 (2.0× layer median), |w| ×1.026, read row cos 0.9936 (gate 0.9953, up 0.9984); Δ∥w +0.18, Δ in layer's top-4 ΔW dirs 0.01
+  label: fires "'made' and the phrase 'it' in conditional or instruction text" (0.30); writes "'it' and 它 as pronoun predictor" (0.65)
+  act_top 75.5 → 59.8;  rate 0.16‰ → 0.20‰;  chat rate 0.11‰ → 0.15‰
+  peak  base: ' state'×23 | ','×6 | ' redistribute'×4 | ' but'×3 | 'Show'×2
+        post: ' state'×22 | ' make'×10 | ' redistribute'×10 | ','×7 | ':'×2
+  drivers base: recogn | DEFIN | Exc | recogn | Exped | dispar
+          post: DEFIN | incapac | dispar | recogn | repet | _LEAVE
+  read_R  base: it | it | It | the | and | (
+          post: it | it | , | It | and | the
+  write_R base: 它 | it | 它可以 | It | It | it
+          post: 它 | it | It | It | 它可以 | it
+  Δwrite (z vs layer writes): '它' '_it' '\tit' 'It' ' it' '-it' '(it' '\tIt'   || other end: ' ¬' ' S' ' dp' ' aren' '或许' '也许'
+  Δwrite (z vs layer Δs):     '它' '_it' '-it' '(it' 'It' '.it' '\tit' ' it'
+  Δread_R (z):                '\tThis' '\tUse' ')\\\n' '\tnot' '>This' '_Not' '必需' '––'   || other end: ' microseconds' ' USS' ' elapsed' '.sqrt' ' pairwise' ' LET'
