@@ -9,7 +9,7 @@ described once per arm (``ARMS``: the arm's card kind and its explainers' model)
 - **contexts:** the pole's top ``N_CONTEXTS`` contexts and firing rates, with no lens read (the
   reference: what activations alone give on the same poles);
 - **both** and **opus:** both on one card, explained by Sonnet and by Opus (how far an explainer
-  blind to steering gets). Scorers and judges are Sonnet in every arm.
+  blind to steering gets). Scorers and judges are Sonnet at maximum effort in every arm.
 
 Each explainer says what the pole fires on and what it promotes when its write is added. Two tests
 on the model check both labels, the second on a CUDA GPU:

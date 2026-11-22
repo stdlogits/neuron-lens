@@ -7,8 +7,9 @@ contexts can come from the same documents as the firing ones.
 
 For each context, give the probability that the pole fires on the marked token, judging only from
 the label. If the label describes a concept or situation, use the context around the token, not
-just the token itself. If the label gives no basis to separate them, give probabilities near 0.5
-rather than guessing confidently.
+just the token itself. Only the order of your probabilities within a task is scored, so rank the contexts
+even when the label fits them only loosely: a weak hunch still carries information, and equal
+probabilities carry none.
 
 Output exactly one JSON object per task, one per line (JSON Lines), and nothing else:
 

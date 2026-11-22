@@ -12,8 +12,9 @@ depth.
 
 Compare the steered text with the unsteered: what words, topics, languages, styles or behaviours
 appear or grow with the dose? Give each description a probability that it is the one written for
-this neuron (they sum to 1). If none fits, or the change is generic (degeneration with no
-content), spread the probability evenly rather than guess.
+this neuron (they sum to 1). Only the order of the four is scored, so rank them even when
+the change fits them only loosely: a weak hunch still carries information, and equal
+probabilities carry none.
 
 Output exactly one JSON object per task, one per line (JSON Lines), and nothing else:
 

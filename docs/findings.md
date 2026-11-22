@@ -19,7 +19,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§10](#10-attention-heads-circuits-read-token-by-token) | a head's input reads with the S-lens; what each head copies and attends to, from the weights |
 | | [§11](#11-attention-heads-what-their-reads-name) | late heads write the next token; S-side reads are shared across a layer's heads |
 | | [§12](#12-what-feeds-a-unit-edges-and-sources) | weight edges rank every source's effect (ρ 0.88) but name a tenth of what drives a pole: co-firing does |
-| **IV. Describing units in words** | [§13](#13-labels-from-the-evidence) | labels from the lenses alone: AUROC 0.69 for firing and for writes; the catalog's labels, 0.82-0.88 on six models |
+| **IV. Describing units in words** | [§13](#13-labels-from-the-evidence) | labels from the lenses alone: AUROC 0.75 for firing, 0.76 for writes; the catalog's labels, 0.82-0.88 on six models |
 | | [§14](#14-outside-labels) | steering-labelled personas against the catalog's reads, from both sides |
 | **V. A second model, three modalities** | [§15](#15-gemma-4-12b-the-text-catalog-in-a-second-model) | Gemma 4 12B reads like Qwen3-8B; a read that turns a covector into a vector needs the residual's metric |
 | | [§16](#16-images-and-sound-what-drives-a-neuron) | labelled images and sounds name what Gemma's neurons respond to; lens reads are projections, optimised ones drive the neuron |
@@ -958,43 +958,46 @@ n6934 + " upon" in "Once upon a time", L26 n4061 − the word before "suicide".
 **The blind test** (`checks/lens_blind.py`): 160 random poles, 40 per band, explainers that never see steering, in four
 arms: **lens** (only the eight weight-only reads, plain and `_z`, 12 tokens each), **contexts** (only the top 5 contexts,
 activation scale and rates), **both** on one card, with Claude Sonnet 5.5 and with Opus 5.5; scorers and judges are
-Sonnet. Six held-out firings against six quiet positions, three from random documents and three from the firings' own
+Sonnet 5.5 at maximum effort, told that only the order of their probabilities is scored, so a weak hunch still counts.
+Six held-out firings against six quiet positions, three from random documents and three from the firings' own
 documents. 18 sampled poles are near-silent (most at L1-L2) and have no firing test.
 
 | band | fires AUROC: lens / contexts / both / Opus | writes AUROC: lens / contexts / both / Opus |
 |---|---|---|
-| sensory L0-L3 (22 firing) | 0.78 / 0.97 / 0.97 / 0.97 | 0.65 / 0.64 / 0.60 / 0.70 |
-| association L4-L8 | 0.70 / 0.93 / 0.93 / 0.92 | 0.66 / 0.65 / 0.73 / 0.62 |
-| workspace L9-L20 | 0.64 / 0.78 / 0.80 / 0.80 | 0.62 / 0.56 / 0.70 / 0.66 |
-| motor L21-L35 | 0.69 / 0.78 / 0.77 / 0.83 | 0.82 / 0.65 / 0.87 / 0.81 |
-| all | 0.69 / 0.85 / 0.85 / 0.87 | 0.69 / 0.62 / 0.73 / 0.70 |
+| sensory L0-L3 (22 firing) | 0.82 / 0.97 / 0.96 / 0.98 | 0.65 / 0.61 / 0.70 / 0.69 |
+| association L4-L8 | 0.73 / 0.93 / 0.92 / 0.92 | 0.78 / 0.66 / 0.79 / 0.76 |
+| workspace L9-L20 | 0.73 / 0.82 / 0.84 / 0.85 | 0.74 / 0.55 / 0.77 / 0.70 |
+| motor L21-L35 | 0.75 / 0.81 / 0.84 / 0.85 | 0.87 / 0.72 / 0.90 / 0.85 |
+| all | 0.75 / 0.87 / 0.88 / 0.89 | 0.76 / 0.63 / 0.79 / 0.75 |
 
-Controls: another pole's firing label scores 0.54-0.59; writes chance is 0.5.
+Controls: another pole's firing label scores 0.52-0.58 over all bands; in the sensory band one written from contexts
+scores 0.66-0.78 (one written from the lenses, 0.52). Writes chance is 0.5.
 
 ![Random poles read blind](figures/15_lens_blind.png)
 
-- **From the lenses alone, labels beat chance on both tests:** firing labels at AUROC 0.69 (33% of labels at 0.8 or more,
-  against 7% of controls), write labels at 0.69.
-- **Scored on firings, contexts lead the lenses for where a pole fires** (0.85 against 0.69), as evidence made of firings
-  should, in every band and most in the sensory band (0.97 against 0.78), whose poles are token detectors.
-  Same-document negatives cost both arms about 0.04, so neither's labels are mostly topic labels.
-- **For what it promotes, the lenses beat contexts** (0.69 against 0.62), most in the motor band (0.82 against 0.65),
-  where strongly steered text has 20% more of its tokens in the pole's own R-lens top 64 than unsteered text (other poles'
-  reads: no change). Earlier the two are close (0.62-0.66 against 0.56-0.65), and steering often degenerates the text
-  (§7: early meaning is input-side).
-- **Combining helps writes, not firing:** both sources on one card score 0.85 for firing, as contexts alone, and 0.73 for
-  writes, more than either alone (0.87 in the motor band).
-- **Opus explains no better than Sonnet** (0.87 against 0.85 for firing, 0.70 against 0.73 for writes), which suggests the
+- **From the lenses alone, labels beat chance on both tests:** firing labels at AUROC 0.75 (46% of labels at 0.8 or more,
+  against 14% of controls), write labels at 0.76.
+- **Scored on firings, contexts lead the lenses for where a pole fires** (0.87 against 0.75), as evidence made of firings
+  should, in every band and most in the sensory band (0.97 against 0.82), whose poles are token detectors; over their
+  controls the two are about level there (contexts +0.24, lenses +0.30). Same-document negatives cost both arms about 0.06
+  against random ones, so neither's labels are mostly topic labels.
+- **For what it promotes, the lenses beat contexts** (0.76 against 0.63) from the association band on, most in the
+  workspace (0.74 against 0.55) and motor bands (0.87 against 0.72); in the motor band strongly steered text has 20% more
+  of its tokens in the pole's own R-lens top 64 than unsteered text (other poles' reads: no change). In the sensory band
+  the two are close (0.65 against 0.61), and steering often degenerates the text (§7: early meaning is input-side).
+- **Combining helps writes, not firing:** both sources on one card score 0.88 for firing, about as contexts alone, and
+  0.79 for writes, more than either alone (0.90 in the motor band).
+- **Opus explains no better than Sonnet** (0.89 against 0.88 for firing, 0.75 against 0.79 for writes), which suggests the
   bottleneck is the evidence, not the explainer. On 100 more random poles, Claude Haiku 5.5 matches Sonnet when the card
   has contexts (firing AUROC 0.82 against 0.83; `checks/haiku_blind.py`) and trails it from the lenses alone (0.71 with
   the reads chosen by depth).
 - **Where the sides differ:** format and fragment detectors whose reads name something else. L34 n7339 − fires on a
   word-initial W (W|inters), its read direction names GPUs (Nvidia, Radeon), and its write is 再 (again): three sides that
   don't agree, and no test here says which describes the pole.
-- **Confidence ranks:** lens firing labels at confidence 0.7 or more score 0.83, below 0.4 0.62 (with contexts and lenses
-  on one card, 0.93 and 0.72).
-- **20% of firing poles defeat every arm**, 24 of 28 at L9-L35: code identifiers and punctuation, word fragments and
-  digits, and positions just before a predictable word, whose held-out firings vary in surface form.
+- **Confidence ranks:** lens firing labels at confidence 0.7 or more score 0.89, below 0.4 0.70 (with contexts and lenses
+  on one card, 0.94 and 0.76).
+- **14% of firing poles defeat every arm**, 16 of 20 at L9-L35: code identifiers and punctuation, word and name
+  fragments and digits, and positions just before a predictable word, whose held-out firings vary in surface form.
 
 **The catalog's labels** (`10_labels.py`). Claude Haiku 5.5 (Batch API, effort low, no thinking, 10 neurons a request)
 labels every pole and head of Qwen3-0.6B, 1.7B, 4B, 8B and 14B and Gemma 4 12B: 4,968,448 poles and 5,568 heads for $303
@@ -1070,7 +1073,9 @@ same excerpts: the catalog's label, the longer card's, and another firing pole's
 **Limits.** Positives come from the high-activation regime (top documents only; the simulation adds weak firings).
 40 poles a band is about ±13 points (100 poles for the Haiku test, ±20). Steering is amplified past natural firing (a median 10-19×
 in the blind test), in bf16. Explainers, scorers and judges are all Claude models, in separate instances, and the
-explainers' prompt carried the depth priors. The pilot's held-out sets were not kept. Gemma 4's neuron labels are checked
+explainers' prompt carried the depth priors. The scores depend on the scorer's setting: at default effort, told to give
+probabilities near 0.5 where a label gives no basis, the same scorers gave every context one probability on 31% of lens
+tasks, and lens firing labels scored 0.69 (contexts 0.85). The pilot's held-out sets were not kept. Gemma 4's neuron labels are checked
 for firing only.
 
 ### §14. Outside labels

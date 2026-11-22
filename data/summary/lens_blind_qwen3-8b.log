@@ -3,35 +3,35 @@ fires: AUROC of the scorer's probabilities on held-out top contexts against quie
 writes: the AUROC of the pole's own label against the three other labels of its band and arm that the judge saw beside it (chance 0.5), the judge's probability on the own label (chance 0.25) and top-1 accuracy; means with 95% bootstrap intervals over poles
 
 all
-  lens     fires  n 142  all 0.69 [0.66, 0.73] (control 0.54)  rand 0.71 (0.54)  same 0.67 (0.53)  holds 0.33 (0.07)
-  lens     writes n 160  AUROC 0.69 [0.64, 0.73] (chance 0.5)  p(own) 0.41 [0.37, 0.45]  top-1 0.51 [0.45, 0.59]  (chance 0.25)
-  lens     firing poles, fires holds and writes top-1: both 0.18, either 0.61, neither 0.39
-  contexts fires  n 142  all 0.85 [0.82, 0.88] (control 0.59)  rand 0.87 (0.60)  same 0.83 (0.58)  holds 0.68 (0.19)
-  contexts writes n 160  AUROC 0.62 [0.57, 0.68] (chance 0.5)  p(own) 0.36 [0.32, 0.39]  top-1 0.41 [0.35, 0.48]  (chance 0.25)
-  contexts firing poles, fires holds and writes top-1: both 0.29, either 0.74, neither 0.26
-  both     fires  n 142  all 0.85 [0.83, 0.88] (control 0.56)  rand 0.87 (0.55)  same 0.83 (0.56)  holds 0.70 (0.13)
-  both     writes n 160  AUROC 0.73 [0.67, 0.78] (chance 0.5)  p(own) 0.44 [0.40, 0.48]  top-1 0.59 [0.51, 0.66]  (chance 0.25)
-  both     firing poles, fires holds and writes top-1: both 0.39, either 0.88, neither 0.12
-  opus     fires  n 142  all 0.87 [0.84, 0.89] (control 0.58)  rand 0.90 (0.59)  same 0.84 (0.58)  holds 0.72 (0.17)
-  opus     writes n 160  AUROC 0.70 [0.65, 0.75] (chance 0.5)  p(own) 0.44 [0.40, 0.48]  top-1 0.52 [0.45, 0.59]  (chance 0.25)
-  opus     firing poles, fires holds and writes top-1: both 0.38, either 0.82, neither 0.18
+  lens     fires  n 142  all 0.75 [0.72, 0.79] (control 0.52)  rand 0.78 (0.53)  same 0.72 (0.51)  holds 0.46 (0.14)
+  lens     writes n 160  AUROC 0.76 [0.71, 0.81] (chance 0.5)  p(own) 0.47 [0.43, 0.51]  top-1 0.59 [0.52, 0.67]  (chance 0.25)
+  lens     firing poles, fires holds and writes top-1: both 0.30, either 0.77, neither 0.23
+  contexts fires  n 142  all 0.87 [0.84, 0.90] (control 0.57)  rand 0.91 (0.58)  same 0.84 (0.56)  holds 0.75 (0.25)
+  contexts writes n 160  AUROC 0.63 [0.58, 0.69] (chance 0.5)  p(own) 0.37 [0.33, 0.41]  top-1 0.42 [0.34, 0.50]  (chance 0.25)
+  contexts firing poles, fires holds and writes top-1: both 0.37, either 0.80, neither 0.20
+  both     fires  n 142  all 0.88 [0.86, 0.91] (control 0.58)  rand 0.91 (0.58)  same 0.85 (0.58)  holds 0.75 (0.30)
+  both     writes n 160  AUROC 0.79 [0.74, 0.83] (chance 0.5)  p(own) 0.48 [0.43, 0.52]  top-1 0.62 [0.54, 0.69]  (chance 0.25)
+  both     firing poles, fires holds and writes top-1: both 0.48, either 0.89, neither 0.11
+  opus     fires  n 142  all 0.89 [0.87, 0.91] (control 0.57)  rand 0.92 (0.57)  same 0.86 (0.56)  holds 0.75 (0.25)
+  opus     writes n 160  AUROC 0.75 [0.70, 0.80] (chance 0.5)  p(own) 0.47 [0.43, 0.51]  top-1 0.59 [0.52, 0.67]  (chance 0.25)
+  opus     firing poles, fires holds and writes top-1: both 0.47, either 0.90, neither 0.10
   doses, median multiple of act_top (firing poles): 0.5 nats 9.7×, 1 nats 13.7×, 2 nats 19.1×
   judge-free, light: steered tokens in the R top 64, over unsteered: own +0.016, other poles' +0.005; own > other 0.55 (ties half; chance 0.5)
   judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.033, other poles' +0.008; own > other 0.59 (ties half; chance 0.5)
   judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.080, other poles' +0.021; own > other 0.64 (ties half; chance 0.5)
 
 L0-L3
-  lens     fires  n  22  all 0.78 [0.67, 0.88] (control 0.61)  rand 0.79 (0.61)  same 0.76 (0.62)  holds 0.55 (0.18)
-  lens     writes n  40  AUROC 0.65 [0.55, 0.74] (chance 0.5)  p(own) 0.35 [0.29, 0.42]  top-1 0.40 [0.27, 0.55]  (chance 0.25)
-  lens     firing poles, fires holds and writes top-1: both 0.27, either 0.64, neither 0.36
-  contexts fires  n  22  all 0.97 [0.93, 0.99] (control 0.75)  rand 0.97 (0.78)  same 0.96 (0.72)  holds 0.95 (0.45)
-  contexts writes n  40  AUROC 0.64 [0.53, 0.74] (chance 0.5)  p(own) 0.34 [0.28, 0.42]  top-1 0.40 [0.28, 0.52]  (chance 0.25)
-  contexts firing poles, fires holds and writes top-1: both 0.36, either 0.95, neither 0.05
-  both     fires  n  22  all 0.97 [0.94, 0.99] (control 0.66)  rand 0.98 (0.67)  same 0.96 (0.66)  holds 0.95 (0.32)
-  both     writes n  40  AUROC 0.60 [0.48, 0.72] (chance 0.5)  p(own) 0.36 [0.28, 0.44]  top-1 0.46 [0.31, 0.62]  (chance 0.25)
-  both     firing poles, fires holds and writes top-1: both 0.41, either 0.95, neither 0.05
-  opus     fires  n  22  all 0.97 [0.95, 1.00] (control 0.74)  rand 0.98 (0.76)  same 0.97 (0.72)  holds 0.95 (0.50)
-  opus     writes n  40  AUROC 0.70 [0.61, 0.79] (chance 0.5)  p(own) 0.39 [0.32, 0.47]  top-1 0.50 [0.36, 0.64]  (chance 0.25)
+  lens     fires  n  22  all 0.82 [0.71, 0.91] (control 0.52)  rand 0.88 (0.55)  same 0.75 (0.49)  holds 0.64 (0.27)
+  lens     writes n  40  AUROC 0.65 [0.54, 0.76] (chance 0.5)  p(own) 0.38 [0.30, 0.46]  top-1 0.44 [0.29, 0.59]  (chance 0.25)
+  lens     firing poles, fires holds and writes top-1: both 0.32, either 0.82, neither 0.18
+  contexts fires  n  22  all 0.97 [0.94, 0.99] (control 0.73)  rand 0.98 (0.77)  same 0.96 (0.69)  holds 0.95 (0.50)
+  contexts writes n  40  AUROC 0.61 [0.50, 0.72] (chance 0.5)  p(own) 0.35 [0.28, 0.43]  top-1 0.39 [0.25, 0.54]  (chance 0.25)
+  contexts firing poles, fires holds and writes top-1: both 0.45, either 0.95, neither 0.05
+  both     fires  n  22  all 0.96 [0.92, 0.99] (control 0.78)  rand 0.97 (0.80)  same 0.95 (0.75)  holds 0.91 (0.59)
+  both     writes n  40  AUROC 0.70 [0.57, 0.80] (chance 0.5)  p(own) 0.39 [0.32, 0.47]  top-1 0.54 [0.39, 0.70]  (chance 0.25)
+  both     firing poles, fires holds and writes top-1: both 0.45, either 0.91, neither 0.09
+  opus     fires  n  22  all 0.98 [0.95, 1.00] (control 0.66)  rand 0.99 (0.69)  same 0.97 (0.64)  holds 0.95 (0.50)
+  opus     writes n  40  AUROC 0.69 [0.59, 0.79] (chance 0.5)  p(own) 0.38 [0.30, 0.46]  top-1 0.44 [0.29, 0.59]  (chance 0.25)
   opus     firing poles, fires holds and writes top-1: both 0.50, either 1.00, neither 0.00
   doses, median multiple of act_top (firing poles): 0.5 nats 7.56×, 1 nats 9.64×, 2 nats 11.7×
   judge-free, light: steered tokens in the R top 64, over unsteered: own +0.019, other poles' +0.016; own > other 0.46 (ties half; chance 0.5)
@@ -39,80 +39,80 @@ L0-L3
   judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.086, other poles' +0.070; own > other 0.47 (ties half; chance 0.5)
 
 L4-L8
-  lens     fires  n  40  all 0.70 [0.62, 0.77] (control 0.55)  rand 0.71 (0.56)  same 0.69 (0.54)  holds 0.38 (0.12)
-  lens     writes n  40  AUROC 0.66 [0.57, 0.75] (chance 0.5)  p(own) 0.38 [0.31, 0.46]  top-1 0.47 [0.33, 0.61]  (chance 0.25)
-  lens     firing poles, fires holds and writes top-1: both 0.20, either 0.57, neither 0.42
-  contexts fires  n  40  all 0.93 [0.90, 0.95] (control 0.61)  rand 0.94 (0.61)  same 0.91 (0.62)  holds 0.88 (0.28)
-  contexts writes n  40  AUROC 0.65 [0.56, 0.74] (chance 0.5)  p(own) 0.40 [0.32, 0.49]  top-1 0.44 [0.31, 0.57]  (chance 0.25)
-  contexts firing poles, fires holds and writes top-1: both 0.30, either 0.93, neither 0.07
-  both     fires  n  40  all 0.93 [0.90, 0.96] (control 0.54)  rand 0.95 (0.54)  same 0.92 (0.55)  holds 0.90 (0.15)
-  both     writes n  40  AUROC 0.73 [0.64, 0.83] (chance 0.5)  p(own) 0.43 [0.35, 0.51]  top-1 0.55 [0.41, 0.68]  (chance 0.25)
-  both     firing poles, fires holds and writes top-1: both 0.42, either 0.95, neither 0.05
-  opus     fires  n  40  all 0.92 [0.87, 0.96] (control 0.61)  rand 0.94 (0.62)  same 0.90 (0.60)  holds 0.82 (0.23)
-  opus     writes n  40  AUROC 0.62 [0.52, 0.72] (chance 0.5)  p(own) 0.42 [0.33, 0.50]  top-1 0.44 [0.30, 0.57]  (chance 0.25)
-  opus     firing poles, fires holds and writes top-1: both 0.38, either 0.82, neither 0.17
+  lens     fires  n  40  all 0.73 [0.66, 0.80] (control 0.50)  rand 0.72 (0.51)  same 0.75 (0.48)  holds 0.50 (0.15)
+  lens     writes n  40  AUROC 0.78 [0.68, 0.87] (chance 0.5)  p(own) 0.44 [0.36, 0.52]  top-1 0.57 [0.42, 0.72]  (chance 0.25)
+  lens     firing poles, fires holds and writes top-1: both 0.35, either 0.70, neither 0.30
+  contexts fires  n  40  all 0.93 [0.86, 0.97] (control 0.59)  rand 0.95 (0.60)  same 0.91 (0.58)  holds 0.93 (0.33)
+  contexts writes n  40  AUROC 0.66 [0.54, 0.77] (chance 0.5)  p(own) 0.42 [0.33, 0.52]  top-1 0.51 [0.36, 0.66]  (chance 0.25)
+  contexts firing poles, fires holds and writes top-1: both 0.45, either 0.97, neither 0.03
+  both     fires  n  40  all 0.92 [0.88, 0.96] (control 0.63)  rand 0.94 (0.64)  same 0.91 (0.63)  holds 0.85 (0.40)
+  both     writes n  40  AUROC 0.79 [0.70, 0.86] (chance 0.5)  p(own) 0.45 [0.37, 0.53]  top-1 0.54 [0.39, 0.69]  (chance 0.25)
+  both     firing poles, fires holds and writes top-1: both 0.45, either 0.93, neither 0.07
+  opus     fires  n  40  all 0.92 [0.88, 0.96] (control 0.60)  rand 0.95 (0.60)  same 0.90 (0.60)  holds 0.85 (0.35)
+  opus     writes n  40  AUROC 0.76 [0.66, 0.85] (chance 0.5)  p(own) 0.47 [0.39, 0.56]  top-1 0.56 [0.41, 0.71]  (chance 0.25)
+  opus     firing poles, fires holds and writes top-1: both 0.50, either 0.90, neither 0.10
   doses, median multiple of act_top (firing poles): 0.5 nats 4.93×, 1 nats 6.23×, 2 nats 9.04×
   judge-free, light: steered tokens in the R top 64, over unsteered: own -0.000, other poles' +0.001; own > other 0.57 (ties half; chance 0.5)
   judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.008, other poles' +0.001; own > other 0.55 (ties half; chance 0.5)
   judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.026, other poles' +0.012; own > other 0.57 (ties half; chance 0.5)
 
 L9-L20
-  lens     fires  n  40  all 0.64 [0.58, 0.70] (control 0.52)  rand 0.66 (0.52)  same 0.62 (0.52)  holds 0.25 (0.03)
-  lens     writes n  40  AUROC 0.62 [0.50, 0.73] (chance 0.5)  p(own) 0.35 [0.30, 0.42]  top-1 0.48 [0.34, 0.62]  (chance 0.25)
-  lens     firing poles, fires holds and writes top-1: both 0.10, either 0.57, neither 0.42
-  contexts fires  n  40  all 0.78 [0.72, 0.84] (control 0.52)  rand 0.81 (0.53)  same 0.75 (0.51)  holds 0.53 (0.05)
-  contexts writes n  40  AUROC 0.56 [0.45, 0.67] (chance 0.5)  p(own) 0.32 [0.26, 0.38]  top-1 0.34 [0.22, 0.48]  (chance 0.25)
-  contexts firing poles, fires holds and writes top-1: both 0.20, either 0.60, neither 0.40
-  both     fires  n  40  all 0.80 [0.74, 0.85] (control 0.53)  rand 0.83 (0.52)  same 0.76 (0.54)  holds 0.57 (0.05)
-  both     writes n  40  AUROC 0.70 [0.58, 0.81] (chance 0.5)  p(own) 0.39 [0.33, 0.46]  top-1 0.57 [0.43, 0.71]  (chance 0.25)
-  both     firing poles, fires holds and writes top-1: both 0.30, either 0.80, neither 0.20
-  opus     fires  n  40  all 0.80 [0.74, 0.86] (control 0.52)  rand 0.84 (0.52)  same 0.76 (0.51)  holds 0.57 (0.05)
-  opus     writes n  40  AUROC 0.66 [0.55, 0.76] (chance 0.5)  p(own) 0.37 [0.31, 0.44]  top-1 0.48 [0.34, 0.62]  (chance 0.25)
-  opus     firing poles, fires holds and writes top-1: both 0.28, either 0.72, neither 0.28
+  lens     fires  n  40  all 0.73 [0.67, 0.79] (control 0.49)  rand 0.77 (0.49)  same 0.69 (0.49)  holds 0.38 (0.10)
+  lens     writes n  40  AUROC 0.74 [0.62, 0.85] (chance 0.5)  p(own) 0.44 [0.37, 0.52]  top-1 0.61 [0.46, 0.76]  (chance 0.25)
+  lens     firing poles, fires holds and writes top-1: both 0.20, either 0.78, neither 0.23
+  contexts fires  n  40  all 0.82 [0.77, 0.88] (control 0.46)  rand 0.87 (0.46)  same 0.78 (0.45)  holds 0.65 (0.12)
+  contexts writes n  40  AUROC 0.55 [0.43, 0.66] (chance 0.5)  p(own) 0.33 [0.27, 0.40]  top-1 0.30 [0.17, 0.44]  (chance 0.25)
+  contexts firing poles, fires holds and writes top-1: both 0.25, either 0.68, neither 0.33
+  both     fires  n  40  all 0.84 [0.79, 0.89] (control 0.45)  rand 0.89 (0.43)  same 0.79 (0.48)  holds 0.62 (0.10)
+  both     writes n  40  AUROC 0.77 [0.65, 0.88] (chance 0.5)  p(own) 0.45 [0.37, 0.53]  top-1 0.65 [0.50, 0.80]  (chance 0.25)
+  both     firing poles, fires holds and writes top-1: both 0.42, either 0.85, neither 0.15
+  opus     fires  n  40  all 0.85 [0.79, 0.90] (control 0.48)  rand 0.88 (0.48)  same 0.82 (0.47)  holds 0.65 (0.07)
+  opus     writes n  40  AUROC 0.70 [0.58, 0.82] (chance 0.5)  p(own) 0.40 [0.33, 0.47]  top-1 0.60 [0.45, 0.75]  (chance 0.25)
+  opus     firing poles, fires holds and writes top-1: both 0.38, either 0.88, neither 0.12
   doses, median multiple of act_top (firing poles): 0.5 nats 12.4×, 1 nats 15.8×, 2 nats 23.4×
   judge-free, light: steered tokens in the R top 64, over unsteered: own +0.001, other poles' +0.002; own > other 0.47 (ties half; chance 0.5)
   judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.007, other poles' +0.001; own > other 0.54 (ties half; chance 0.5)
   judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.008, other poles' +0.001; own > other 0.56 (ties half; chance 0.5)
 
 L21-L35
-  lens     fires  n  40  all 0.69 [0.64, 0.75] (control 0.49)  rand 0.73 (0.49)  same 0.66 (0.50)  holds 0.25 (0.00)
-  lens     writes n  40  AUROC 0.82 [0.74, 0.89] (chance 0.5)  p(own) 0.55 [0.47, 0.63]  top-1 0.71 [0.59, 0.82]  (chance 0.25)
-  lens     firing poles, fires holds and writes top-1: both 0.20, either 0.68, neither 0.33
-  contexts fires  n  40  all 0.78 [0.73, 0.84] (control 0.56)  rand 0.81 (0.56)  same 0.76 (0.55)  holds 0.47 (0.10)
-  contexts writes n  40  AUROC 0.65 [0.54, 0.76] (chance 0.5)  p(own) 0.37 [0.29, 0.44]  top-1 0.47 [0.33, 0.62]  (chance 0.25)
-  contexts firing poles, fires holds and writes top-1: both 0.33, either 0.57, neither 0.42
-  both     fires  n  40  all 0.77 [0.72, 0.83] (control 0.53)  rand 0.79 (0.54)  same 0.75 (0.53)  holds 0.50 (0.07)
-  both     writes n  40  AUROC 0.87 [0.78, 0.95] (chance 0.5)  p(own) 0.58 [0.49, 0.68]  top-1 0.78 [0.64, 0.90]  (chance 0.25)
-  both     firing poles, fires holds and writes top-1: both 0.42, either 0.85, neither 0.15
-  opus     fires  n  40  all 0.83 [0.78, 0.87] (control 0.54)  rand 0.86 (0.54)  same 0.80 (0.54)  holds 0.62 (0.05)
-  opus     writes n  40  AUROC 0.81 [0.73, 0.88] (chance 0.5)  p(own) 0.57 [0.48, 0.67]  top-1 0.67 [0.53, 0.80]  (chance 0.25)
-  opus     firing poles, fires holds and writes top-1: both 0.42, either 0.82, neither 0.17
+  lens     fires  n  40  all 0.75 [0.70, 0.81] (control 0.55)  rand 0.79 (0.56)  same 0.72 (0.55)  holds 0.42 (0.10)
+  lens     writes n  40  AUROC 0.87 [0.78, 0.94] (chance 0.5)  p(own) 0.62 [0.53, 0.71]  top-1 0.72 [0.60, 0.85]  (chance 0.25)
+  lens     firing poles, fires holds and writes top-1: both 0.33, either 0.82, neither 0.17
+  contexts fires  n  40  all 0.81 [0.76, 0.87] (control 0.58)  rand 0.87 (0.59)  same 0.76 (0.57)  holds 0.57 (0.17)
+  contexts writes n  40  AUROC 0.72 [0.62, 0.81] (chance 0.5)  p(own) 0.39 [0.32, 0.46]  top-1 0.47 [0.31, 0.61]  (chance 0.25)
+  contexts firing poles, fires holds and writes top-1: both 0.35, either 0.65, neither 0.35
+  both     fires  n  40  all 0.84 [0.79, 0.89] (control 0.55)  rand 0.88 (0.56)  same 0.80 (0.54)  holds 0.70 (0.23)
+  both     writes n  40  AUROC 0.90 [0.83, 0.95] (chance 0.5)  p(own) 0.62 [0.53, 0.71]  top-1 0.75 [0.60, 0.88]  (chance 0.25)
+  both     firing poles, fires holds and writes top-1: both 0.57, either 0.88, neither 0.12
+  opus     fires  n  40  all 0.85 [0.81, 0.89] (control 0.57)  rand 0.88 (0.57)  same 0.82 (0.56)  holds 0.62 (0.20)
+  opus     writes n  40  AUROC 0.85 [0.75, 0.94] (chance 0.5)  p(own) 0.62 [0.53, 0.72]  top-1 0.78 [0.65, 0.90]  (chance 0.25)
+  opus     firing poles, fires holds and writes top-1: both 0.53, either 0.88, neither 0.12
   doses, median multiple of act_top (firing poles): 0.5 nats 11.1×, 1 nats 15.8×, 2 nats 23.5×
   judge-free, light: steered tokens in the R top 64, over unsteered: own +0.042, other poles' -0.000; own > other 0.69 (ties half; chance 0.5)
   judge-free, moderate: steered tokens in the R top 64, over unsteered: own +0.087, other poles' -0.000; own > other 0.80 (ties half; chance 0.5)
   judge-free, strong: steered tokens in the R top 64, over unsteered: own +0.201, other poles' -0.000; own > other 0.94 (ties half; chance 0.5)
 
 by the explainer's confidence (all bands)
-  lens     fires  confidence 0.0-0.4: n  61, matched_all 0.62
-  lens     fires  confidence 0.4-0.7: n  62, matched_all 0.72
-  lens     fires  confidence 0.7-1.0: n  19, matched_all 0.83
-  lens     writes confidence 0.0-0.4: n  66, p_true 0.32
-  lens     writes confidence 0.4-0.7: n  59, p_true 0.38
-  lens     writes confidence 0.7-1.0: n  35, p_true 0.61
-  contexts fires  confidence 0.0-0.4: n  43, matched_all 0.76
-  contexts fires  confidence 0.4-0.7: n  67, matched_all 0.88
-  contexts fires  confidence 0.7-1.0: n  32, matched_all 0.92
-  contexts writes confidence 0.0-0.4: n 127, p_true 0.33
+  lens     fires  confidence 0.0-0.4: n  61, matched_all 0.70
+  lens     fires  confidence 0.4-0.7: n  62, matched_all 0.76
+  lens     fires  confidence 0.7-1.0: n  19, matched_all 0.89
+  lens     writes confidence 0.0-0.4: n  66, p_true 0.37
+  lens     writes confidence 0.4-0.7: n  59, p_true 0.45
+  lens     writes confidence 0.7-1.0: n  35, p_true 0.69
+  contexts fires  confidence 0.0-0.4: n  43, matched_all 0.75
+  contexts fires  confidence 0.4-0.7: n  67, matched_all 0.91
+  contexts fires  confidence 0.7-1.0: n  32, matched_all 0.94
+  contexts writes confidence 0.0-0.4: n 127, p_true 0.35
   contexts writes confidence 0.4-0.7: n  33, p_true 0.46
-  both     fires  confidence 0.0-0.4: n  27, matched_all 0.72
-  both     fires  confidence 0.4-0.7: n  58, matched_all 0.85
-  both     fires  confidence 0.7-1.0: n  57, matched_all 0.93
-  both     writes confidence 0.0-0.4: n  99, p_true 0.34
-  both     writes confidence 0.4-0.7: n  42, p_true 0.51
-  both     writes confidence 0.7-1.0: n  19, p_true 0.83
-  opus     fires  confidence 0.0-0.4: n  20, matched_all 0.68
-  opus     fires  confidence 0.4-0.7: n  57, matched_all 0.86
-  opus     fires  confidence 0.7-1.0: n  65, matched_all 0.94
-  opus     writes confidence 0.0-0.4: n  95, p_true 0.34
-  opus     writes confidence 0.4-0.7: n  45, p_true 0.50
-  opus     writes confidence 0.7-1.0: n  20, p_true 0.78
+  both     fires  confidence 0.0-0.4: n  27, matched_all 0.76
+  both     fires  confidence 0.4-0.7: n  58, matched_all 0.88
+  both     fires  confidence 0.7-1.0: n  57, matched_all 0.94
+  both     writes confidence 0.0-0.4: n  99, p_true 0.37
+  both     writes confidence 0.4-0.7: n  42, p_true 0.56
+  both     writes confidence 0.7-1.0: n  19, p_true 0.86
+  opus     fires  confidence 0.0-0.4: n  20, matched_all 0.73
+  opus     fires  confidence 0.4-0.7: n  57, matched_all 0.88
+  opus     fires  confidence 0.7-1.0: n  65, matched_all 0.95
+  opus     writes confidence 0.0-0.4: n  95, p_true 0.37
+  opus     writes confidence 0.4-0.7: n  45, p_true 0.54
+  opus     writes confidence 0.7-1.0: n  20, p_true 0.79
