@@ -1,6 +1,7 @@
 """Figures of the catalog's units, lenses and checks, from ``data/summary``, the released lenses'
 provenance and the catalog, into ``docs/figures/`` (PNG, light), with ``docs/figures/README.md``: each
-figure's caption. Figures 1-16 are Qwen3-8B's (findings §1-§14; 1 and 2 are schematics, no data); 17
+figure's caption. They are drawn in Ledger (``PAPER`` to ``LATE`` below; its Wix Madefor faces, at static weights, in
+``scripts/fonts``). Figures 1-16 are Qwen3-8B's (findings §1-§14; 1 and 2 are schematics, no data); 17
 sets Qwen3-8B and Gemma 4 12B side by side, and 18-23 are Gemma 4 12B's: steering, the census, its
 image and sound reads, the cross-modal check and its heads in media contexts (findings §15-§18), from
 ``data/summary`` and Gemma's catalog tables (``data/catalog/gemma-4-12b``: ``neurons/image_optimised``,
@@ -14,7 +15,9 @@ import argparse
 import io
 import json
 import math
+import pathlib
 import re
+import textwrap
 
 import matplotlib
 import numpy as np
@@ -23,6 +26,7 @@ import torch
 from PIL import Image
 
 matplotlib.use("Agg")
+import matplotlib.font_manager
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgb
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Rectangle
@@ -37,26 +41,74 @@ STEM = "qwen3-8b"
 OUT = DATA.parent / "docs" / "figures"
 RELEASE = DATA / "release" / STEM
 GEMMA, GEMMA_STEM, GEMMA_LAYERS = "google/gemma-4-12B", "gemma-4-12b", 48  # figures 18-25
-# The data-viz reference palette (validated, light mode): categorical slots in order, chrome and ink.
-SLOT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-SURFACE, INK, INK2, MUTED, GRID, BASE = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-R_COLOR, S_COLOR = SLOT[0], SLOT[2]  # the R-lens and the S-lens, in every figure
-HEAD_COLOR, NEURON_COLOR = SLOT[6], SLOT[1]  # the anatomy schematic's two units
+
+
+def _oklab(color) -> np.ndarray:
+    lin = np.array([c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in to_rgb(color)])
+    lms = np.cbrt(np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
+                            [0.0883024619, 0.2817188376, 0.6299787005]]) @ lin)
+    return np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099],
+                     [0.0259040371, 0.7827717662, -0.8086757660]]) @ lms
+
+
+def _from_oklab(lab) -> tuple:
+    lms = np.linalg.solve(np.array([[0.2104542553, 0.7936177850, -0.0040720468],
+                                    [1.9779984951, -2.4285922050, 0.4505937099],
+                                    [0.0259040371, 0.7827717662, -0.8086757660]]), lab) ** 3
+    lin = np.linalg.solve(np.array([[0.4122214708, 0.5363325363, 0.0514459929],
+                                    [0.2119034982, 0.6806995451, 0.1073969566],
+                                    [0.0883024619, 0.2817188376, 0.6299787005]]), lms)
+    return tuple(float(np.clip(12.92 * c if c <= 0.0031308 else 1.055 * max(c, 0) ** (1 / 2.4) - 0.055, 0, 1))
+                 for c in lin)
+
+
+def mix(a, b, share: float) -> tuple:
+    """CSS ``color-mix(in oklch, a share, b)``, as Ledger mixes its tints: lightness, chroma and hue apart."""
+    (la, ca, ha), (lb, cb, hb) = [(lab[0], math.hypot(lab[1], lab[2]), math.atan2(lab[2], lab[1]))
+                                  for lab in (_oklab(a), _oklab(b))]
+    if ca < 0.02:  # a neutral has no hue to carry: take the other's
+        ha = hb
+    if cb < 0.02:
+        hb = ha
+    dh = (hb - ha + math.pi) % (2 * math.pi) - math.pi
+    t = 1 - share
+    L, C, H = la + (lb - la) * t, ca + (cb - ca) * t, ha + dh * t
+    return _from_oklab(np.array([L, C * math.cos(H), C * math.sin(H)]))
+
+
+# Ledger, Standard Logits' design language (github.com/stdlogits/ledger, DESIGN.md): white paper, two washes, three
+# inks and one accent, the depth ramp from violet (layer 0) to cyan (the last layer); no lines around anything, and
+# the accent fills but never colours text. Categorical slots in order: the ramp's two ends and two inks (checked with
+# the data-viz validator: colour-blind ΔE 12 or more, normal vision 17.8 or more, contrast 3:1 or more on paper).
+PAPER, WASH, WASH2 = "#ffffff", "#f4f5f7", "#ebedf1"
+INK, INK2, INK3 = "#0e1117", "#464f61", "#636b7d"
+DEEP, LATE = "#6a4fe0", "#0b87ad"
+SLOT = [LATE, INK, DEEP, INK2]
+SURFACE, MUTED, GRID = PAPER, INK3, PAPER  # the page; references and sources; the grid, a gap in a panel's wash
+BASE = mix(INK3, PAPER, 0.4)  # a schematic's residual stream and zero lines
+R_COLOR, S_COLOR = LATE, DEEP  # the R-lens reads toward the output, the S-lens back to the input
+HEAD_COLOR, NEURON_COLOR = DEEP, LATE  # the anatomy schematic's two units
 BANDS = arch.bands("Qwen/Qwen3-8B")  # the depth bands (arch.depth_bands)
-MATH = {"mathtext.fontset": "custom", "mathtext.rm": "Helvetica Neue", "mathtext.it": "Helvetica Neue:italic",
-        "mathtext.bf": "Helvetica Neue:bold"}
+FONTS = pathlib.Path(__file__).parent / "fonts"  # Ledger's Wix Madefor faces at static weights (SIL Open Font License)
+for _f in sorted(FONTS.glob("*.ttf")):
+    matplotlib.font_manager.fontManager.addfont(str(_f))
+TEXT = ["Wix Madefor Text", "Arial Unicode MS", "DejaVu Sans"]  # a list, so glyphs it lacks (CJK, arrows) fall back
+DISPLAY = ["Wix Madefor Display"] + TEXT[1:]  # titles
+MATH = {"mathtext.fontset": "custom", "mathtext.rm": "Wix Madefor Text", "mathtext.it": "Wix Madefor Text:italic",
+        "mathtext.bf": "Wix Madefor Text:bold"}
 
 plt.rcParams.update({
-    "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
-    "font.family": ["Helvetica Neue", "Arial Unicode MS", "DejaVu Sans"],  # a list, so glyphs fall back
-    "font.size": 9, "axes.titlesize": 10, "axes.titleweight": "bold", "axes.titlelocation": "left",
-    "axes.titlecolor": INK, "axes.labelcolor": INK2, "axes.labelsize": 9, "text.color": INK,
-    "axes.edgecolor": BASE, "axes.linewidth": 0.8, "axes.spines.top": False, "axes.spines.right": False,
-    "axes.grid": True, "axes.grid.axis": "y", "grid.color": GRID, "grid.linewidth": 0.6,
+    "figure.facecolor": PAPER, "axes.facecolor": WASH, "savefig.facecolor": PAPER,
+    "font.family": TEXT, "font.size": 9, "axes.titlesize": 10, "axes.titleweight": 600,
+    "axes.titlelocation": "left", "axes.titlecolor": INK, "axes.labelcolor": INK2, "axes.labelsize": 9,
+    "text.color": INK, "axes.edgecolor": WASH, "axes.linewidth": 0, "axes.spines.top": False,
+    "axes.spines.right": False, "axes.spines.left": False, "axes.spines.bottom": False,
+    "axes.grid": True, "axes.grid.axis": "y", "grid.color": GRID, "grid.linewidth": 1.0,
     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2, "ytick.labelcolor": INK2,
     "xtick.labelsize": 8, "ytick.labelsize": 8, "xtick.major.size": 0, "ytick.major.size": 0,
+    "xtick.major.pad": 5, "ytick.major.pad": 5, "axes.titlepad": 8,
     "lines.linewidth": 1.6, "lines.solid_capstyle": "round", "legend.frameon": False, "legend.fontsize": 8,
-    "legend.labelcolor": INK2, "axes.axisbelow": True,
+    "legend.labelcolor": INK2, "axes.axisbelow": True, "hatch.color": PAPER,
 })
 CAPTIONS = []
 
@@ -70,7 +122,7 @@ def figure(ncols: int = 1, width: float = 8.0, height: float | None = None, top:
     """One row of panels. Two-panel figures carry their legends below the panels."""
     height = height or (4.4 if ncols == 1 else 5.0)
     fig, axes = plt.subplots(1, ncols, figsize=(width, height), dpi=100, squeeze=False)
-    fig.subplots_adjust(left=0.08, right=0.86 if ncols == 1 else 0.92, top=top or (0.78 if ncols == 1 else 0.75),
+    fig.subplots_adjust(left=0.08, right=0.86 if ncols == 1 else 0.92, top=top or (0.78 if ncols == 1 else 0.735),
                         bottom=bottom or (0.17 if ncols == 1 else 0.31), wspace=0.32)
     return fig, list(axes[0])
 
@@ -79,8 +131,8 @@ def legend_above(ax, ncols: int) -> None:
     ax.legend(loc="lower left", bbox_to_anchor=(0, 1.02), ncols=ncols, borderaxespad=0, columnspacing=1.6)
 
 
-def legend_below(ax, ncols: int = 2) -> None:
-    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.2), ncols=ncols, borderaxespad=0, columnspacing=1.2)
+def legend_below(ax, ncols: int = 2, y: float = -0.2) -> None:
+    ax.legend(loc="upper left", bbox_to_anchor=(0, y), ncols=ncols, borderaxespad=0, columnspacing=1.2)
 
 
 def log_ticks(ax, percent: bool = False) -> None:
@@ -90,11 +142,32 @@ def log_ticks(ax, percent: bool = False) -> None:
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
 
+def fit(fig, text: str, width: float, **font) -> str:
+    """``text`` broken between words so no line is wider than ``width`` pixels in ``font``."""
+    r = fig.canvas.get_renderer()
+    probe = fig.text(0, 0, "", **font)
+    lines, cur = [], ""
+    for word in text.split(" "):
+        probe.set_text(f"{cur} {word}".strip())
+        if cur and probe.get_window_extent(r).width > width:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = f"{cur} {word}".strip()
+    probe.remove()
+    return "\n".join(lines + [cur])
+
+
 def finish(fig, name: str, title: str, subtitle: str, source: str, caption: str) -> None:
-    """Title and subtitle at the top left, the source at the bottom left; save and record the caption."""
-    fig.text(0.01, 0.955, title, fontsize=12.5, fontweight="bold", color=INK, va="top")
-    fig.text(0.01, 0.885, subtitle, fontsize=9, color=INK2, va="top", wrap=True)
-    fig.text(0.01, 0.015, source, fontsize=7.5, color=MUTED, va="bottom")
+    """Title and subtitle at the top left, the source at the bottom left; save and record the caption. Titles (the
+    figure's and its panels') are set in Ledger's display face, the rest in its text face."""
+    for ax in fig.axes:
+        ax.title.set_fontfamily(DISPLAY)
+    width = fig.get_figwidth() * fig.dpi * 0.98
+    fig.text(0.01, 0.955, fit(fig, title, width, fontsize=12.5, fontweight=600, family=DISPLAY), fontsize=12.5,
+             fontweight=600, family=DISPLAY, color=INK, va="top")
+    fig.text(0.01, 0.885, fit(fig, subtitle, width, fontsize=9), fontsize=9, color=INK2, va="top", linespacing=1.25)
+    fig.text(0.01, 0.015, source, fontsize=7.5, fontweight=500, color=MUTED, va="bottom")
     fig.savefig(OUT / f"{name}.png", dpi=200, bbox_inches="tight", pad_inches=0.15)
     plt.close(fig)
     CAPTIONS.append((name, title, caption))
@@ -120,11 +193,13 @@ def end_labels(ax, items: list[tuple[float, float, str]], gap_px: float = 11) ->
 def series(ax, x, y, slot: int | None, label: str, end: bool = True, **kw):
     """One line: a categorical slot, or the muted reference (``slot=None``), with an end dot."""
     color = MUTED if slot is None else SLOT[slot]
+    if slot is None:
+        kw.setdefault("ls", (0, (3, 2)))  # a reference is dashed as well as grey
     xs = [a for a, b in zip(x, y) if not math.isnan(b)]
     ys = [b for b in y if not math.isnan(b)]
     ax.plot(xs, ys, color=color, label=label, lw=1.2 if slot is None else 1.6, zorder=2 if slot is None else 3, **kw)
     if end:
-        ax.plot(xs[-1:], ys[-1:], "o", color=color, ms=4.5, mec=SURFACE, mew=1.2, zorder=4)
+        ax.plot(xs[-1:], ys[-1:], "o", color=color, ms=4.5, mec=WASH, mew=1.2, zorder=4)
     return xs[-1], ys[-1]
 
 
@@ -140,8 +215,8 @@ def pct(ax) -> None:
 
 
 def tint(color: str, t: float) -> tuple:
-    """``color`` mixed into the surface: 0 is the surface, 1 the full color."""
-    return tuple(s + (c - s) * t for c, s in zip(to_rgb(color), to_rgb(SURFACE)))
+    """``color`` mixed into the paper, as Ledger mixes its tints (in oklch): 0 is the paper, 1 the full color."""
+    return mix(color, PAPER, t)
 
 
 def ink_on(rgb) -> str:
@@ -169,7 +244,7 @@ def schematic(w_in: float, h_in: float, top: float):
     return fig, ax
 
 
-def box(ax, x, y, w, h, text="", size=9.0, ec=BASE, lw=0.9, weight="normal", fc=SURFACE, color=INK, z=3):
+def box(ax, x, y, w, h, text="", size=9.0, ec="none", lw=0, weight="normal", fc=WASH, color=INK, z=3):
     ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h, boxstyle="round,pad=0,rounding_size=0.9",
                                 fc=fc, ec=ec, lw=lw, zorder=z))
     if text:
@@ -191,18 +266,17 @@ def _anatomy() -> None:
     top_y = mlp[1] + 3.4
 
     # The layer: two sublayers in one box; the residual stream runs up through both at every position.
-    box(ax, 50.0, (att[0] + mlp[1]) / 2, 97.0, mlp[1] - att[0] + 2.0, ec=BASE, lw=0.9, z=0)
     for (lo, hi), name in ((att, "attention"), (mlp, "MLP")):
         ax.add_patch(FancyBboxPatch((2.5, lo), 95.0, hi - lo, boxstyle="round,pad=0,rounding_size=0.7",
-                                    fc="#f4f3ee", ec="none", zorder=0))
+                                    fc=WASH, ec="none", zorder=0))
         ax.text(4.4, (lo + hi) / 2, name, rotation=90, ha="center", va="center", fontsize=8.5, color=INK2,
-                fontweight="bold")
-    ax.text(1.5, mlp[1] + 2.0, "one layer", ha="left", va="baseline", fontsize=9, color=INK, fontweight="bold")
+                fontweight=600)
+    ax.text(1.5, mlp[1] + 2.0, "one layer", ha="left", va="baseline", fontsize=9, color=INK, fontweight=600)
     for x, w in zip(xs, words):
         ax.plot([x, x], [tok_y + 2.3, top_y], color=BASE, lw=3.2, zorder=1, solid_capstyle="butt")
         ax.add_patch(FancyArrowPatch((x, top_y - 0.2), (x, top_y + 1.4), arrowstyle="-|>", mutation_scale=11,
                                      color=BASE, lw=0, zorder=1))
-        box(ax, x, tok_y, 8.6, 4.6, w, 9.5, z=3)
+        box(ax, x, tok_y, 8.6, 4.6, w, 9.5, fc=WASH, z=3)
     ax.text(xs[-1] + 5.6, tok_y, "input tokens; above each,\nits residual stream", ha="left", va="center",
             fontsize=8, color=MUTED, style="italic", linespacing=1.2)
     ax.text(xs[-1] + 1.8, top_y + 0.5, "to the next layer", ha="left", va="center", fontsize=8, color=MUTED,
@@ -218,33 +292,32 @@ def _anatomy() -> None:
         strong = wt > 0.5
         ax.add_patch(FancyArrowPatch(path=path, arrowstyle="-|>" if strong else "-", mutation_scale=13,
                                      color=HEAD_COLOR, lw=0.7 + 4.0 * wt, alpha=1.0 if strong else 0.45, zorder=2))
-        ax.add_patch(Circle((x, base), 0.55 + 1.1 * wt ** 0.5, fc=HEAD_COLOR, ec=SURFACE, lw=0.8,
+        ax.add_patch(Circle((x, base), 0.55 + 1.1 * wt ** 0.5, fc=HEAD_COLOR, ec=WASH, lw=0.8,
                             alpha=1.0 if strong else 0.55, zorder=3))
-    box(ax, q, hy, 6.6, 3.4, "head", 8.5, ec=HEAD_COLOR, lw=1.4, color=HEAD_COLOR, weight="bold", z=4)
+    box(ax, q, hy, 6.6, 3.4, "head", 8.5, fc=tint(HEAD_COLOR, 0.22), color=INK, weight=600, z=4)
     ax.text((xs[0] + q) / 2 - 3, base + 7.6, "QK: which positions to read from (here, mostly “she”)",
-            ha="center", va="bottom", fontsize=8.5, color=HEAD_COLOR, zorder=4,
-            bbox={"boxstyle": "square,pad=0.1", "fc": "#f4f3ee", "ec": "none"})
+            ha="center", va="bottom", fontsize=8.5, color=INK2, zorder=4,
+            bbox={"boxstyle": "square,pad=0.1", "fc": WASH, "ec": "none"})
     ax.text(q + 4.6, hy, "OV: what to copy from there\ninto this position (“she”)", ha="left", va="center",
-            fontsize=8.5, color=HEAD_COLOR, linespacing=1.25)
+            fontsize=8.5, color=INK2, linespacing=1.25)
 
     # The MLP neuron: the same neuron at every position, firing only at "owl".
     ny, nr = (mlp[0] + mlp[1]) / 2 + 0.9, 2.0
     for x, w in zip(xs, words):
         fire = w == "owl"
         cx = x + 5.2
-        ax.add_patch(Circle((cx, ny), nr, fc=SURFACE, ec=NEURON_COLOR if fire else BASE, lw=1.6 if fire else 0.9,
-                            zorder=3))
+        ax.add_patch(Circle((cx, ny), nr, fc=tint(NEURON_COLOR, 0.22) if fire else PAPER, ec="none", zorder=3))
         ax.text(cx, ny, "n", ha="center", va="center", fontsize=9.5, style="italic", zorder=4,
-                color=NEURON_COLOR if fire else MUTED, fontweight="bold" if fire else "normal")
+                color=INK if fire else MUTED, fontweight=600 if fire else "normal")
         ax.text(cx, ny - nr - 0.8, "fires: +" if fire else "≈ 0", ha="center", va="top", fontsize=8 if fire else 7.5,
-                color=NEURON_COLOR if fire else MUTED, fontweight="bold" if fire else "normal")
+                color=INK if fire else MUTED, fontweight=600 if fire else "normal")
         if fire:
             ax.add_patch(FancyArrowPatch((x + 0.5, ny - 2.6), (cx - nr - 0.1, ny - 0.7), arrowstyle="-|>",
                                          mutation_scale=9, color=NEURON_COLOR, lw=1.2, zorder=2))
             ax.add_patch(FancyArrowPatch((cx - nr - 0.1, ny + 0.7), (x + 0.5, ny + 2.6), arrowstyle="-|>",
                                          mutation_scale=9, color=NEURON_COLOR, lw=2.2, zorder=2))
-            ax.text(x - 0.9, ny + 2.4, "writes", ha="right", va="center", fontsize=8, color=NEURON_COLOR)
-            ax.text(x - 0.9, ny - 2.4, "reads", ha="right", va="center", fontsize=8, color=NEURON_COLOR)
+            ax.text(x - 0.9, ny + 2.4, "writes", ha="right", va="center", fontsize=8, color=INK2)
+            ax.text(x - 0.9, ny - 2.4, "reads", ha="right", va="center", fontsize=8, color=INK2)
 
     # Below: each unit's mechanism, an example, and what the catalog records about it.
     ty, lh = 22.4, 2.3
@@ -265,12 +338,13 @@ def _anatomy() -> None:
              "pole", (("fires", "top contexts and activation statistics over 15M positions"),
                       ("reads", "what drives it: lens reads of its read direction; exact drivers"),
                       ("writes", "what it pushes toward: lens reads of its write")))):
-        ax.text(x0, ty, head, ha="left", va="baseline", fontsize=9.5, color=color, fontweight="bold")
+        ax.add_patch(Circle((x0 + 0.75, ty + 0.75), 0.75, fc=color, ec="none"))  # the unit's colour fills, never its text
+        ax.text(x0 + 2.4, ty, head, ha="left", va="baseline", fontsize=9.5, color=INK, fontweight=600)
         for i, line in enumerate(lines):
             ax.text(x0, ty - 2.9 - i * lh, line, ha="left", va="baseline", fontsize=8.5, color=INK2)
         cy = ty - 2.9 - len(lines) * lh - 1.6
         ax.text(x0, cy, f"The catalog records, for each {unit}:", ha="left", va="baseline", fontsize=8.5, color=INK,
-                fontweight="bold")
+                fontweight=600)
         for i, (side, how) in enumerate(rows):
             y = cy - (i + 1) * lh
             ax.text(x0, y, side, ha="left", va="baseline", fontsize=8.5, color=INK)
@@ -298,7 +372,7 @@ def fig_lenses() -> None:
 
 def _lenses() -> None:
     fig, ax = schematic(9.0, 6.95, 0.80)
-    R_, J_, S_, LOGIT, K_ = R_COLOR, SLOT[1], S_COLOR, SLOT[3], SLOT[4]
+    R_, J_, S_, LOGIT, K_ = R_COLOR, INK, S_COLOR, INK3, INK2
 
     def route(points, color, lw=1.8, ls="-", head=True, radius=1.6):
         """A polyline with rounded corners and an arrowhead at its end."""
@@ -317,7 +391,7 @@ def _lenses() -> None:
     def label(x, y, name, gloss, ha="left"):
         """A path's name (bold) over a short gloss, the gloss's baseline at ``y``."""
         ax.text(x, y, gloss, ha=ha, va="baseline", fontsize=8.5, color=INK2)
-        ax.text(x, y + 2.1, name, ha=ha, va="baseline", fontsize=9.5, color=INK, fontweight="bold")
+        ax.text(x, y + 2.1, name, ha=ha, va="baseline", fontsize=9.5, color=INK, fontweight=600)
 
     # The residual stream, left to right.
     S = 31.45
@@ -332,7 +406,7 @@ def _lenses() -> None:
     for x in ((xs["L0"] + xs["Lm"]) / 2, (xs["Lp"] + xs["L35"]) / 2):
         ax.text(x, S, "···", ha="center", va="center", fontsize=10, color=INK2, zorder=4,
                 bbox={"boxstyle": "square,pad=0.15", "fc": SURFACE, "ec": "none"})
-    box(ax, xs["L"], S, 8.0, 10.0, "layer L", 9, ec=INK, lw=1.3, weight="bold")
+    box(ax, xs["L"], S, 8.0, 10.0, "layer L", 9, fc=WASH2, weight=600)
     box(ax, xs["norm"], S, 6.0, 8.0, "final\nnorm", 8)
     box(ax, xs["WU"], S, 5.5, 8.0, "$W_U$", 10)
     box(ax, xs["out"], S, 11.0, 8.0, "next-token\nlogits", 8.5)
@@ -357,7 +431,7 @@ def _lenses() -> None:
 
     # One neuron at layer L, below the stream: reads the MLP input, writes back.
     ny, nr = 19.45, 2.3
-    ax.add_patch(Circle((xs["L"], ny), nr, fc=SURFACE, ec=INK, lw=1.3, zorder=3))
+    ax.add_patch(Circle((xs["L"], ny), nr, fc=WASH2, ec="none", zorder=3))
     ax.text(xs["L"], ny, "n", ha="center", va="center", fontsize=10, color=INK, style="italic", zorder=4)
     ax.add_patch(FancyArrowPatch((37.6, S - 5.1), (38.6, ny + 1.9), arrowstyle="-|>", mutation_scale=10,
                                  color=INK2, lw=1.3, zorder=2))
@@ -372,7 +446,7 @@ def _lenses() -> None:
     # Two keys along the bottom: the lenses' formulas, and the neuron's three sides.
     ky, dy = 12.65, 2.45
     ax.text(1.0, ky + 1.0, "Lens: read of a direction h at layer L", ha="left", va="baseline", fontsize=8.5,
-            color=INK, fontweight="bold")
+            color=INK, fontweight=600)
     for i, (color, name, formula, note, ls) in enumerate((
             (LOGIT, "logit", r"$W_U\, \mathrm{norm}(h)$", r"no Jacobian ($J_L = I$)", (0, (4, 2.2))),
             (J_, "J-lens", r"$W_U\, \mathrm{norm}(J_L\, h)$", "true gradients (Gurnee et al. 2026)", "-"),
@@ -385,7 +459,7 @@ def _lenses() -> None:
         ax.text(10.5, y, formula, ha="left", va="baseline", fontsize=8.5, color=INK)
         ax.text(22.5, y, note, ha="left", va="baseline", fontsize=8.5, color=INK2)
     ax.text(56.0, ky + 1.0, "One pole of a neuron, three sides", ha="left", va="baseline", fontsize=8.5,
-            color=INK, fontweight="bold")
+            color=INK, fontweight=600)
     for i, (side, how) in enumerate((("writes", r"R-lens and S-lens of $W_{\rm down}[:, n]$"),
                                      ("reads", r"R-lens (from the MLP input) and S-lens of $\hat{a} \pm \hat{b}$"),
                                      ("fires", "activations over 15M positions; exact token drivers"))):
@@ -429,6 +503,7 @@ def fig_depth_map() -> None:
     span = lambda k, lo, hi: f"{100 * min(r[k] for r in rows[lo:hi + 1]):.0f}-{100 * max(r[k] for r in rows[lo:hi + 1]):.0f}%"
     fig = plt.figure(figsize=(10.0, 5.9), dpi=100)
     ax = fig.add_axes((0.265, 0.1, 0.725, 0.69))
+    ax.set_facecolor(PAPER)
     ax.grid(False)
     for s in ax.spines.values():
         s.set_visible(False)
@@ -438,7 +513,7 @@ def fig_depth_map() -> None:
         if gi:
             y += gap
         ax.text(-0.35, y + 0.1, gname, transform=ax.get_yaxis_transform(), ha="left", va="bottom", fontsize=9,
-                fontweight="bold", color=INK)
+                fontweight=600, color=INK)
         y += 0.22
         for key, gloss, vals, color in items:
             for layer, v in enumerate(vals):
@@ -446,10 +521,10 @@ def fig_depth_map() -> None:
                 fill = tint(color, 0.06 + 0.94 * t)
                 ax.add_patch(Rectangle((layer - 0.5, y), 1, cell, fc=fill, ec=SURFACE, lw=1.0))
                 if v >= 0.005:
-                    ax.text(layer, y + cell / 2, f"{100 * v:.0f}", ha="center", va="center", fontsize=6.6,
-                            color=ink_on(fill))
+                    ax.text(layer, y + cell / 2, f"{100 * v:.0f}", ha="center", va="center",
+                            fontsize=6.6 if v < 0.995 else 5.6, color=ink_on(fill))
             ax.text(-0.35, y + cell * 0.36, key, transform=ax.get_yaxis_transform(), ha="left", va="center",
-                    fontsize=8.5, color=INK, fontweight="bold")
+                    fontsize=8.5, color=INK, fontweight=600)
             ax.text(-0.35, y + cell * 0.36 + 0.42, gloss, transform=ax.get_yaxis_transform(), ha="left", va="center",
                     fontsize=7.5, color=INK2)
             ticks.append(y + cell / 2)
@@ -463,7 +538,7 @@ def fig_depth_map() -> None:
     for lo, hi in BANDS:  # the depth bands, along the top, with a rule between them
         ax.text((lo + hi) / 2, -0.38, band_name(lo, hi), ha="center", va="bottom", fontsize=8, color=INK2)
         if lo:
-            ax.plot([lo - 0.5] * 2, [-0.6, y + 0.05], color=INK2, lw=0.9, zorder=5)
+            ax.plot([lo - 0.5] * 2, [-0.1, y + 0.05], color=PAPER, lw=4.0, zorder=5)
     assert n_rows == len(ticks)
     finish(fig, "03_depth_map", "What each read names, by depth: inputs early through the S-lens, writes through the R-lens",
            "Share of each layer's poles (%) whose read names its target (5% false discovery rate). Input: the firing token, or "
@@ -533,7 +608,7 @@ def fig_activations() -> None:
     a.set_title("Typical top activation (act_top)")
     a.set_ylabel("median over the layer's poles")
     series(b, x, [r[5] for r in rows], 1, "quiet: act_top under 0.05")
-    series(b, x, [r[6] for r in rows], 6, "fires harder at the first position than anywhere else")
+    series(b, x, [r[6] for r in rows], 3, "fires harder at the first position than anywhere else")
     b.set_title("Early layers' odd populations")
     b.set_ylim(0, 1)
     b.set_ylabel("share of the layer's poles")
@@ -602,9 +677,9 @@ def fig_amplified() -> None:
     ax.set_ylabel("share of poles")
     ax.legend(loc="center right")
     finish(fig, "08_amplified_vs_in_context", "Steering confirms nearly every write read; the token after one firing rarely does",
-           "Blue: of 64 random poles a layer (those that fire), the share whose R-lens write read predicts their own 1× "
+           "Amplified: of 64 random poles a layer (those that fire), the share whose R-lens write read predicts their own 1× "
            "steering effect. "
-           "Orange: of all poles, the share whose write promotes the token after their top firings, net of chance.",
+           "In context: of all poles, the share whose write promotes the token after their top firings, net of chance.",
            "findings §4; data/summary/causal_lens_qwen3-8b.json (steering), reads_at_firings_qwen3-8b.json (in context)",
            "From L5, 94-100% of random poles' writes predict their steering effect; before L22, at most 4% of poles "
            "promote what follows their own firings, rising to 31-32% at L28-L29. The same reads pass one test and not the "
@@ -642,7 +717,7 @@ def fig_context_linearity() -> None:
 
 def fig_side_agreement() -> None:
     r = summary(f"side_agreement_{STEM}.json")["reads"]
-    fig, (a, b) = figure(2)
+    fig, (a, b) = figure(2, height=5.4, bottom=0.36)
     for k, label, slot in (("write_R", "write promotes the next token", 0), ("suppress_R", "write suppresses it", 1)):
         series(a, r[k]["layer"], r[k]["mean"], slot, label)
     series(a, r["write_R"]["layer"], r["write_R"]["control_mean"], None, "control: a random pole's read", end=False)
@@ -657,7 +732,7 @@ def fig_side_agreement() -> None:
     for ax in (a, b):
         layer_axis(ax)
         pct(ax)
-        legend_below(ax)
+        legend_below(ax, 1)
     log_ticks(b, percent=True)
     a.set_ylabel("share of top firings in the read's top 10")
     pred = r["write_R"]["mean"]
@@ -717,7 +792,7 @@ def fig_rank_depth() -> None:
     fig, (ax,) = figure(top=0.68)
     items = []
     for key, layer, label, slot in pick:
-        items.append(series(ax, mid, ratios(key, layer), slot, label, marker="o", ms=3.5, mec=SURFACE)
+        items.append(series(ax, mid, ratios(key, layer), slot, label, marker="o", ms=3.5, mec=WASH)
                      + (label.split(",")[0],))
     ax.axhline(1, color=MUTED, lw=1.0, zorder=1)
     ax.annotate("chance (a mismatched pole)", (64, 1), xytext=(-4, 4), textcoords="offset points", ha="right",
@@ -833,7 +908,7 @@ def fig_head_lens_sides() -> None:
         for i, (k, label, color, t) in enumerate(brackets):
             vals = [d[test][k][b][0] - d[test][k][b][1] for b in keys]
             xs = [g + (i - 1.5) * w + (0.04 if i >= 2 else -0.04) for g in range(len(keys))]
-            ax.bar(xs, vals, width=w - 0.02, color=tint(color, t), label=label, edgecolor=color if t < 1 else "none",
+            ax.bar(xs, vals, width=w - 0.02, color=tint(color, t), label=label, edgecolor="none",
                    linewidth=0.8)
         ax.axhline(0, color=BASE, lw=0.8, zorder=1)
         ax.set_xticks(range(len(keys)), names)
@@ -842,7 +917,7 @@ def fig_head_lens_sides() -> None:
         ax.set_title(title)
         ax.set_ylim(-0.05, 0.9 if test == "copy" else 0.3)
     axes[0].set_ylabel("Spearman, own head minus control head")
-    legend_below(axes[0], 4)
+    legend_below(axes[0], 4, y=-0.27)
     finish(fig, "13_head_lens_sides", "Read a head's input with the S-lens; its output with the S-lens early, the R-lens late",
            "Each head's weight-only OV read, checked against what it actually writes at its top firings (61,774 "
            "firings from L1, all documents): with the S-lens or the R-lens on the attended token (input) and on the "
@@ -901,7 +976,7 @@ def fig_two_models() -> None:
     """Qwen3-8B and Gemma 4 12B on one axis of relative depth: steering against the R-lens."""
     fig, (a,) = figure()
     at = {}
-    for name, stem, record, slot in (("Qwen3-8B", STEM, "R:dclm", 6), ("Gemma 4 12B", GEMMA_STEM, "hub", 1)):
+    for name, stem, record, slot in (("Qwen3-8B", STEM, "R:dclm", 1), ("Gemma 4 12B", GEMMA_STEM, "hub", 2)):
         steer = summary(f"causal_lens_{stem}.json")["targets"]["steer 1x"]
         last = len(summary(f"reads_at_firings_{stem}.json")["neurons"]["layers"]) - 1
         depth = lambda layers, last=last: [layer / last for layer in layers]
@@ -989,7 +1064,7 @@ def fig_media_reads() -> None:
         bands = list(B["matched_proj"]["bands"])
         for i, (k, label, color, t) in enumerate(bars):
             ax.bar([g + (i - 1) * w for g in range(len(bands))], [B[k]["bands"][b] for b in bands], w * 0.9,
-                   color=tint(color, t), edgecolor=color if t < 1 else "none", linewidth=0.8, label=label)
+                   color=tint(color, t), edgecolor="none", linewidth=0.8, label=label)
         ax.axhline(0.5, color=MUTED, lw=0.9, ls=(0, (3, 3)), zorder=1)
         ax.set_xticks(range(len(bands)), [band_label(b) for b in bands])
         ax.set_xlim(-0.55, len(bands) - 0.45)
@@ -1112,7 +1187,7 @@ def fig_heads_media() -> None:
                     for m in ("image", "audio"))
     t = image.merge(audio, on=keys)
     fig, (a, b) = figure(2)
-    colors = {"image": 6, "audio": 1}
+    colors = {"image": 2, "audio": 0}
     for mod, slot in colors.items():
         g = t.groupby("layer")[f"{mod}_read_ratio"]
         layers = list(g.max().index)
@@ -1180,7 +1255,9 @@ def main() -> None:
              "`data/summary/` and the released lenses' provenance. Figure 17 sets "
              f"it beside {GEMMA}, and 18-23 are Gemma's, from `data/summary/` and its catalog's media and head tables; "
              "no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer "
-             "names its findings section and source.")
+             "names its findings section and source. They are drawn in [Ledger](https://github.com/stdlogits/ledger), "
+             "the design of neuron-lens.com: the depth ramp's violet (layer 0) and cyan (the last layer) mark the "
+             "S-lens and the R-lens, which read toward the input and toward the output.")
     md = ["# Figures", "", intro, ""]
     for name, title, caption in sorted(CAPTIONS):
         md += [f"## {int(name[:2])}. {title}", "", f"![{title}]({name}.png)", "", caption, ""]

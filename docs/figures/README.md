@@ -1,6 +1,6 @@
 # Figures
 
-Drawn by `scripts/11_figures.py`. Figures 1-16 are Qwen/Qwen3-8B's: 1 and 2 are schematics, the others draw `data/summary/` and the released lenses' provenance. Figure 17 sets it beside google/gemma-4-12B, and 18-23 are Gemma's, from `data/summary/` and its catalog's media and head tables; no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer names its findings section and source.
+Drawn by `scripts/11_figures.py`. Figures 1-16 are Qwen/Qwen3-8B's: 1 and 2 are schematics, the others draw `data/summary/` and the released lenses' provenance. Figure 17 sets it beside google/gemma-4-12B, and 18-23 are Gemma's, from `data/summary/` and its catalog's media and head tables; no image or sound from a dataset is drawn, only lens reads and optimised patterns. Each figure's footer names its findings section and source. They are drawn in [Ledger](https://github.com/stdlogits/ledger), the design of neuron-lens.com: the depth ramp's violet (layer 0) and cyan (the last layer) mark the S-lens and the R-lens, which read toward the input and toward the output.
 
 ## 1. What attention heads and MLP neurons do
 
@@ -90,7 +90,7 @@ Margins over a control head, by band. Solid bars (S-lens input) beat pale ones (
 
 ![Labels written blind: lens reads predict what a pole promotes, contexts where it fires](15_lens_blind.png)
 
-Both sides scored by AUROC (chance 0.5), against different negatives. Left: each arm's "fires" label, scoring 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.69, contexts 0.85, both 0.85; dashed, another pole's label. Right: a judge reads greedy text steered at 0.5-2 nats and weighs the pole's own "promotes" label against three others from its band: lens reads 0.69 (0.82 at L21-L35), contexts 0.62, both 0.73. Bars: 95% bootstrap intervals over poles.
+Both sides scored by AUROC (chance 0.5), against different negatives. Left: each arm's "fires" label, scoring 6 held-out top contexts against 6 quiet positions (half from the same documents): lens reads alone 0.75, contexts 0.87, both 0.88; dashed, another pole's label. Right: a judge reads greedy text steered at 0.5-2 nats and weighs the pole's own "promotes" label against three others from its band: lens reads 0.76 (0.87 at L21-L35), contexts 0.63, both 0.79. Bars: 95% bootstrap intervals over poles.
 
 ## 16. One persona label in three matches the pole's lens reads; swapped names rarely do
 
