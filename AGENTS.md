@@ -58,8 +58,17 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   the half rule; scalar weights, DeltaNet's mixing matrix, the router and the shared expert's gate,
   keep their true derivative, as softmax attention's do); design.md's Qwen3.5 section lists how this
   differs from the published R-lens. Fits use 512-token
-  documents (`--seq-len 512 --full-length`) so the DeltaNet memories fill. Not yet in the catalog
-  pipeline (`arch.py`, `neurons.py`, the tables).
+  documents (`--seq-len 512 --full-length`) so the DeltaNet memories fill (`arch.seq_tag`: their fits are `-T512`). In
+  the catalog a DeltaNet layer's heads are its value heads, mixing through `A` (`o = A v`, `layers.delta_pattern`): 06
+  reads `|A|` as their attention pattern, 08 their OV and QK maps through the convolution's summed taps and their own
+  `beta_S` and `decay_S` reads, 17 splits their value channel (design.md's Qwen3.5 section). The Triton kernels take
+  heads of powers of two (`kernels.supports`); Olmo Hybrid's run the torch passes.
+- **OLMo (in progress):** `layers.py` and the stages cover OLMo 2 and 3 (norms on the sublayers' outputs only, so each
+  sublayer reads the residual itself: `anatomy`'s third layout; q/k norms over the whole projection, one rsqrt a
+  position; OLMo 3's sliding windows and per-type RoPE with YaRN), OLMoE (64 experts, top 8, the router's weights not
+  renormalised, so their derivative runs through every expert's logit: `MoE.p_all`) and Olmo Hybrid (DeltaNet layers
+  with separate projections and `β` up to 2, NoPE attention layers in OLMo's layout). Tested on tiny models
+  (`test_olmo.py`) and OLMo-2-0425-1B through every stage on smoke fits; no fits of record yet.
 - **Pythia (in progress):** `layers.py` covers GPT-NeoX (LayerNorms, which keep their centring under
   the LN rule; the fused QKV with biases; RoPE on a quarter of each head; the ungated GELU MLP,
   identity rule; parallel blocks, where `mid` is the layer's input, so `mid[L]` = `out[L − 1]`).
