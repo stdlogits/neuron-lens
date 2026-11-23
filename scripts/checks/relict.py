@@ -36,7 +36,7 @@ import secondary_modes as sm  # noqa: E402
 STEM = arch.stem(MODEL)
 OUT = DATA / "relict" / STEM
 DEV = "cuda" if torch.cuda.is_available() else "mps"
-BATCH = 32
+BATCH, CTX_BATCH = (64, 256) if torch.cuda.is_available() else (32, 32)  # documents a batch (tops), contexts a batch
 LOG = []
 
 
@@ -56,7 +56,7 @@ def tops(rev: str) -> dict:
     path = OUT / f"tops-{rev}.pt"
     if path.exists():
         return torch.load(path)
-    lm, stack = arch.load_model(MODEL, DEV, revision=None if rev == "main" else rev)
+    lm, stack = arch.load_model(MODEL, DEV, eager=False, revision=None if rev == "main" else rev)
     docs = documents()
     L, f = len(stack.layers), arch.text_config(MODEL).intermediate_size
     val = torch.full((L, TOP, f), -torch.inf, device=DEV)
@@ -86,7 +86,7 @@ def tops(rev: str) -> dict:
         mask[:, 0] = False  # statistics from position 1 (06's NEURON_FROM)
         ctx.update(mask=mask.to(DEV), doc=torch.arange(s, s + len(b), dtype=torch.int32, device=DEV))
         stack(input_ids=ids.to(DEV), attention_mask=am.to(DEV).long())
-        if s // BATCH % 200 == 0:
+        if s // BATCH % (12800 // BATCH) == 0:
             say(f"  {rev} {s}/{len(docs)} docs, {(s + len(b)) / (time.time() - t0):.0f} docs/s")
     for h in hs:
         h.remove()
@@ -129,8 +129,8 @@ def peaks(rev: str, C: list, T: list) -> torch.Tensor:
         hs.append(_down(stack.layers[l].mlp).register_forward_pre_hook(
             lambda m, a, js=js, ns=ns, ps=ps: cap.__setitem__(int(js[0]), (js, a[0][..., ns].float() * ps))))
     peak = torch.empty(len(C), len(T), dtype=torch.float16)
-    for i in range(0, len(C), 32):
-        ids, mask, win = sm.batch_ids(docs, C[i:i + 32])
+    for i in range(0, len(C), CTX_BATCH):
+        ids, mask, win = sm.batch_ids(docs, C[i:i + CTX_BATCH])
         cap.clear()
         stack(input_ids=ids.to(DEV), attention_mask=mask.to(DEV))
         row = torch.empty(len(ids), len(T), device=DEV)
