@@ -57,7 +57,7 @@ def unembed(dev, rows=None) -> torch.Tensor:
     nm = arch.names(MODEL)
     head = tensors(MODEL, [nm["unembed"], nm["norm"]])
     W = head[nm["unembed"]] if rows is None else head[nm["unembed"]][rows]
-    return W.float() * head[nm["norm"]].float()
+    return W.float() * arch.final_scale(MODEL)
 
 
 def diagonals(dev, tot: dict, extra: dict) -> dict:

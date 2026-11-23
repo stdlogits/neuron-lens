@@ -98,6 +98,7 @@ from typing import NamedTuple
 import torch
 import torch.nn.functional as F
 
+from neuron_lens import anatomy
 from neuron_lens.rules import (
     HALF_RULE_BETA,
     act_factor,
@@ -620,19 +621,6 @@ def check(model) -> None:
     _checked.add(id(model))
 
 
-def _norms(layer) -> tuple:
-    """``(n1, post1, n2, post2)``: Gemma 4's sandwich (input, post-attention, pre- and
-    post-feedforward norms), a pre-norm layer's input and post-attention norms, or OLMo 2 and 3's norms
-    on the sublayers' outputs alone (no input norms: there ``post_attention_layernorm`` norms the attention's
-    output, where in a pre-norm layer it norms the MLP's input)."""
-    if hasattr(layer, "pre_feedforward_layernorm"):
-        return (layer.input_layernorm, layer.post_attention_layernorm,
-                layer.pre_feedforward_layernorm, layer.post_feedforward_layernorm)
-    if not hasattr(layer, "input_layernorm"):
-        return None, layer.post_attention_layernorm, None, layer.post_feedforward_layernorm
-    return layer.input_layernorm, None, layer.post_attention_layernorm, None
-
-
 def rows(maps: list) -> tuple[int, int, torch.device]:
     """``(N, d, device)``: the valid rows and the residual's width of a document's maps (``linearize``)."""
     m = maps[0]
@@ -676,10 +664,11 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
     maps = []
     for i, layer in enumerate(model.layers):
         resident(model, i)
-        n1, post1, n2, post2 = _norms(layer)
-        parallel = bool(getattr(layer, "use_parallel_residual", False))
+        p = anatomy.parts(layer)
+        n1, post1, n2, post2 = (anatomy.module(layer, n) for n in (p.n1, p.post1, p.n2, p.post2))
+        parallel = p.parallel
         x, r1 = _normed(n1, h)
-        if hasattr(layer, "linear_attn"):
+        if p.deltanet:
             if exact:
                 raise ValueError("true derivatives are not written out for DeltaNet")
             a, mix = _delta_primal(layer.linear_attn, x.to(dt), S)
@@ -706,7 +695,7 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
             a, rp1 = _normed(post1, a_in)
         h_mid = h if parallel else h + a  # the residual the MLP reads
         x2, r2 = _normed(n2, h_mid)
-        if hasattr(layer.mlp, "experts"):
+        if p.sparse:
             if exact:
                 raise ValueError("true derivatives are not written out for sparse MLPs")
             z, mlp = _moe(layer.mlp, x2.to(dt), S)
@@ -718,7 +707,7 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
         h_out = h_mid + z.float()
         if parallel:
             h_out = h_out + a
-        scalar = getattr(layer, "layer_scalar", None)
+        scalar = anatomy.module(layer, p.scalar)
         if scalar is not None:
             h_out = h_out * scalar
         maps.append(Layer(

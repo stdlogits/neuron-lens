@@ -618,7 +618,7 @@ def head_tables(saved: dict, device) -> None:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted({nm["unembed"], nm["norm"]}))
     unembed = head[nm["unembed"]][keep].to(device, torch.float16)
-    gamma = head[nm["norm"]].to(device, torch.float32)
+    gamma = arch.final_scale(MODEL, device)
     J = arch.head_write_lens(MODEL, "R", R_FIT)
     ids, vals = [], []
     for l in range(L):

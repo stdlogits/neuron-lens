@@ -287,7 +287,7 @@ def score(args) -> None:
     nm = arch.names(args.model)
     head = tensors(args.model, sorted({nm["unembed"], nm["norm"]}))
     unembed = head[nm["unembed"]][:nv].to(dev, torch.float32)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     specs = args.lenses.split(",")
     lenses = {s: load_lens(s, args.model) for s in specs}
     cfg = AutoConfig.from_pretrained(args.model).get_text_config()

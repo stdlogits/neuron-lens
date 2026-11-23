@@ -133,7 +133,7 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     emb = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     emb = (emb - emb.mean(0)).to(dev, torch.float16)
     del head
@@ -226,7 +226,7 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     E = (E - E.mean(0)).to(dev)
-    Wu = arch.centre(head[nm["unembed"]][keep].float() * head[nm["norm"]].float(), MODEL).to(dev)
+    Wu = arch.centre(head[nm["unembed"]][keep].float() * arch.final_scale(MODEL), MODEL).to(dev)
     del head
     K_out, J_w = arch.lens(MODEL, "S_out", S_FIT), arch.head_write_lens(MODEL, "R", R_FIT)  # J_w: where the heads write
     eye = torch.eye(H, dtype=torch.bool)

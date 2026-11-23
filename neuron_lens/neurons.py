@@ -14,35 +14,42 @@ row plays the gate's part (``gate``; no ``up``), each neuron has one pole (``arc
 
 import torch
 
-from neuron_lens import metric
-from neuron_lens.arch import centre, is_gemma4, is_neox, layout
+from neuron_lens import anatomy, metric
+from neuron_lens.arch import centre, layout, norm_scale
 from neuron_lens.weights import tensors
 
 
 def mlp_names(model_id: str, layer: int) -> dict:
-    p = layout(model_id)[layer].prefix
-    if is_neox(model_id):
-        return {"gate": p + "mlp.dense_h_to_4h.weight", "down": p + "mlp.dense_4h_to_h.weight",
-                "norm": p + "post_attention_layernorm.weight"}
-    names = {"gate": p + "mlp.gate_proj.weight", "up": p + "mlp.up_proj.weight", "down": p + "mlp.down_proj.weight"}
-    if is_gemma4(model_id):
-        return names | {"norm": p + "pre_feedforward_layernorm.weight", "post": p + "post_feedforward_layernorm.weight",
-                        "scalar": p + "layer_scalar"}
-    return names | {"norm": p + "post_attention_layernorm.weight"}
+    """A dense MLP's tensor names in the checkpoint (``anatomy``): ``gate``, ``up`` (gated MLPs), ``down``, and the
+    norm that feeds it (``norm``; none where it reads the residual itself, OLMo 2 and 3), the norm on its output
+    (``post``: Gemma 4, OLMo) and the layer's scalar (``scalar``: Gemma 4), where the layer has them."""
+    p = anatomy.layer_parts(model_id, layer)
+    w = lambda path, what="weight": anatomy.weight_name(model_id, layer, path, what)
+    names = {"gate": w(p.gate), "down": w(p.down)}
+    for key, path in (("up", p.up), ("norm", p.n2), ("post", p.post2)):
+        if path is not None:
+            names[key] = w(path)
+    if p.scalar is not None:
+        names["scalar"] = w(p.scalar, "")
+    return names
 
 
 def directions(model_id: str, layer: int, dev="cpu") -> dict:
-    """``write`` ``[d, f]`` (the direction each neuron adds to the residual; for Gemma 4 its size at a
-    position also scales with the post-feedforward norm there), and the
-    read rows ``gate``, ``up`` ``[f, d]`` times the MLP input norm's weight (``centre``d), in fp32; no ``up``
-    for an ungated MLP."""
+    """``write`` ``[d, f]`` (the direction each neuron adds to the residual; where a norm follows the MLP, Gemma 4's
+    and OLMo's, its size at a position also scales with that norm there), and the read rows ``gate``, ``up``
+    ``[f, d]`` times the MLP input norm's scale (``arch.norm_scale``; none in OLMo 2 and 3), ``centre``d, in fp32; no
+    ``up`` for an ungated MLP."""
+    p, lay = anatomy.layer_parts(model_id, layer), layout(model_id)[layer]
     nm = mlp_names(model_id, layer)
     w = {k: v.float().to(dev) for k, v in tensors(model_id, sorted(nm.values())).items()}
-    g = w[nm["norm"]]
+    g = norm_scale(model_id, lay, p.n2, dev)
     write = w[nm["down"]]
-    if "post" in nm:
-        write = w[nm["scalar"]].reshape(()) * w[nm["post"]][:, None] * write
-    return {"write": centre(write, model_id, 0), **{k: centre(w[nm[k]] * g, model_id) for k in ("gate", "up") if k in nm}}
+    if p.post2 is not None:
+        write = norm_scale(model_id, lay, p.post2, dev)[:, None] * write
+    if "scalar" in nm:
+        write = w[nm["scalar"]].reshape(()) * write
+    rows = {k: w[nm[k]] if g is None else w[nm[k]] * g for k in ("gate", "up") if k in nm}
+    return {"write": centre(write, model_id, 0), **{k: centre(v, model_id) for k, v in rows.items()}}
 
 
 def softcap(model_id: str) -> float | None:

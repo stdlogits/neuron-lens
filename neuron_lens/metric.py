@@ -28,7 +28,7 @@ import functools
 
 import torch
 
-from neuron_lens import arch
+from neuron_lens import anatomy, arch
 from neuron_lens.paths import FITS
 from neuron_lens.weights import tensors
 
@@ -88,13 +88,16 @@ def scale_doc(stack, ids: torch.Tensor, acc: Sums, half: int, first: int) -> Non
     keep = slice(first, len(ids) - 1)
 
     def at(point, layer):
-        def f(module, args):
-            acc.add(point, layer, args[0][0, keep], half, is_centred(module))
+        def f(module, args, kwargs=None):
+            x = args[0] if args else kwargs["hidden_states"]
+            acc.add(point, layer, x[0, keep], half, is_centred(module))
         return f
 
     for layer, lay in enumerate(stack.layers):
-        hooks.append(lay.input_layernorm.register_forward_pre_hook(at("in", layer)))
-        hooks.append(arch.mid_norm(lay).register_forward_pre_hook(at("mid", layer)))
+        n1 = anatomy.module(lay, anatomy.parts(lay).n1)  # the layer's input: its input norm's, or the layer's own
+        hooks.append(n1.register_forward_pre_hook(at("in", layer)) if n1 is not None else
+                     lay.register_forward_pre_hook(at("in", layer), with_kwargs=True))
+        hooks.append(arch.mid_point(lay).register_forward_pre_hook(at("mid", layer)))
     hooks.append(final_norm(stack).register_forward_pre_hook(at("in", n)))
     try:
         stack(input_ids=ids[None].to(dev))
@@ -119,17 +122,15 @@ def scales(model_id: str) -> dict:
 
 
 def norm_weight(model_id: str, point: str, layer: int) -> torch.Tensor:
-    """The weight of the norm that reads ``point`` at ``layer`` (``in``: the layer's input norm, or the final norm
-    past the last layer; ``mid``: the norm that feeds the MLP)."""
+    """The scale of the norm that reads ``point`` at ``layer`` (``in``: the layer's input norm, or the final norm
+    past the last layer; ``mid``: the norm that feeds the MLP), as it multiplies (``arch.norm_scale``), or ones where
+    the sublayer reads the residual itself (OLMo 2 and 3)."""
     n = arch.text_config(model_id).num_hidden_layers
     if point == "in" and layer == n:
-        name = arch.names(model_id)["norm"]
-    elif point == "in":
-        name = arch.layout(model_id)[layer].prefix + "input_layernorm.weight"
-    else:
-        from neuron_lens.neurons import mlp_names
-        name = mlp_names(model_id, layer)["norm"]
-    return tensors(model_id, [name])[name].float()
+        return arch.final_scale(model_id)
+    p = anatomy.layer_parts(model_id, layer)
+    g = arch.norm_scale(model_id, arch.layout(model_id)[layer], p.n1 if point == "in" else p.n2)
+    return torch.ones(arch.text_config(model_id).hidden_size) if g is None else g
 
 
 def s2(model_id: str, point: str, layer: int, dev="cpu") -> torch.Tensor:

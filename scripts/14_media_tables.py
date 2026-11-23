@@ -152,7 +152,7 @@ def main() -> None:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted({nm["unembed"], nm["norm"]}))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     del head
     cap = softcap(MODEL)
     L = arch.text_config(MODEL).num_hidden_layers

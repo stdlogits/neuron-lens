@@ -43,8 +43,6 @@ import torch
 
 HALF_RULE_BETA = 0.5
 _GELU_C = math.sqrt(2 / math.pi)
-RESIDUAL_NORMS = ("input_layernorm", "post_attention_layernorm",
-                  "pre_feedforward_layernorm", "post_feedforward_layernorm")
 
 
 def is_centred(norm) -> bool:
@@ -79,7 +77,9 @@ def act_factor(act_fn, g: torch.Tensor) -> torch.Tensor:
 
 
 def residual_norms(layer) -> list:
-    return [getattr(layer, n) for n in RESIDUAL_NORMS if hasattr(layer, n)]
+    """The norms on the residual and the sublayers' outputs (``anatomy.parts``), which take the LN rule."""
+    from neuron_lens import anatomy
+    return [anatomy.module(layer, n) for n in anatomy.parts(layer).norms]
 
 
 def attention(layer):

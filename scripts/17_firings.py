@@ -174,7 +174,7 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     emb = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     emb = (emb - emb.mean(0)).to(dev, torch.float16)
     del head

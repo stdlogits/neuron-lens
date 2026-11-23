@@ -77,10 +77,10 @@ def main() -> None:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     E = head[nm["embed"]][keep].float()
     E = (E - E.mean(0)).to(dev)
-    Wu = (head[nm["unembed"]][keep].float() * head[nm["norm"]].float()).to(dev)  # W_U diag(γ_f)
+    Wu = (head[nm["unembed"]][keep].float() * arch.final_scale(MODEL)).to(dev)  # W_U diag(γ_f)
     del head
     R_FIT, S_FIT = arch.fits(MODEL)
     J_mid, K_out = arch.lens(MODEL, "R_mid", R_FIT), arch.lens(MODEL, "S_out", S_FIT)

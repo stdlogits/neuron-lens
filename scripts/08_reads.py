@@ -121,10 +121,10 @@ def neurons(layers: list[int], dev) -> None:
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
-    gamma = head[nm["norm"]].to(dev, torch.float32)
+    gamma = arch.final_scale(MODEL, dev)
     # Euclidean, as the final norm's rms takes a write's size (an entropy neuron works through it); a LayerNorm's
     # readout is W_U diag(γ) P, the constant direction in its null space
-    wu = arch.centre(head[nm["unembed"]].float() * head[nm["norm"]].float(), MODEL)
+    wu = arch.centre(head[nm["unembed"]].float() * arch.final_scale(MODEL), MODEL)
     null = torch.linalg.eigh(wu.T @ wu)[1][:, :max(1, int(NULL_SHARE * wu.shape[1]))].to(dev)  # ascending
     del wu
     emb = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)  # the residual's input (Gemma: × √d)
@@ -205,7 +205,7 @@ def heads(dev) -> None:
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
     E = (E - E.mean(0)).to(dev)
-    Wu = arch.centre(head[nm["unembed"]][keep].float() * head[nm["norm"]].float(), MODEL).to(dev)  # the readout, W_U diag(γ) (P)
+    Wu = arch.centre(head[nm["unembed"]][keep].float() * arch.final_scale(MODEL), MODEL).to(dev)  # the readout, W_U diag(γ) (P)
     del head
     K_out, J_out = arch.lens(MODEL, "S_out", S_FIT), arch.lens(MODEL, "R_out", R_FIT)
     K_w, J_w = arch.head_write_lens(MODEL, "S", S_FIT), arch.head_write_lens(MODEL, "R", R_FIT)  # where the heads write

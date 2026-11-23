@@ -30,8 +30,9 @@ from dataclasses import dataclass
 import torch
 from transformers import AutoConfig
 
+from neuron_lens import anatomy
 from neuron_lens.paths import DATA, FITS, SUMMARY
-from neuron_lens.rules import attention, is_centred, norm_eps
+from neuron_lens.rules import ZERO_CENTRED, attention, is_centred, is_gated, norm_eps
 from neuron_lens.weights import tensors
 
 QWEN = "Qwen/Qwen3-8B"
@@ -43,8 +44,9 @@ class Layer:
     kv_heads: int
     head_dim: int
     k_eq_v: bool  # the value is the raw key (no v_proj)
-    kind: str  # "sliding_attention", "full_attention" (Gemma 4) or "attention"
-    prefix: str  # the layer's weight name prefix
+    kind: str  # the config's layer type ("sliding_attention", "full_attention", "linear_attention"), or "attention"
+    prefix: str  # the layer's weight name prefix in the checkpoint
+    index: int = 0
 
 
 def stem(model_id: str) -> str:
@@ -68,7 +70,9 @@ def is_neox(model_id: str) -> bool:
 
 
 def n_poles(model_id: str) -> int:
-    return 1 if is_neox(model_id) else 2
+    """A neuron's poles: two for a gated MLP (its ``up`` takes both signs), one for an ungated one (GPT-NeoX's GELU)."""
+    p = anatomy.layer_parts(model_id, 0)
+    return 1 if not p.sparse and p.up is None else 2
 
 
 def signs(model_id: str) -> tuple[int, ...]:
@@ -77,11 +81,14 @@ def signs(model_id: str) -> tuple[int, ...]:
 
 
 def parallel(model_id: str) -> bool:
-    return bool(getattr(text_config(model_id), "use_parallel_residual", False))
+    return anatomy.layer_parts(model_id, 0).parallel
 
 
+@functools.cache
 def centred(model_id: str) -> bool:
-    return is_neox(model_id)
+    """The residual's norms are LayerNorms (GPT-NeoX's), which read the centred residual."""
+    layer = anatomy.skeleton(model_id)[1].layers[0]
+    return any(is_centred(anatomy.module(layer, n)) for n in anatomy.parts(layer).norms)
 
 
 def centre(x: torch.Tensor, model_id: str, dim: int = -1) -> torch.Tensor:
@@ -92,32 +99,34 @@ def centre(x: torch.Tensor, model_id: str, dim: int = -1) -> torch.Tensor:
 
 @functools.cache
 def layout(model_id: str) -> list[Layer]:
-    return layout_of(text_config(model_id), is_gemma4(model_id))
-
-
-def layout_of(tc, gemma: bool) -> list[Layer]:
-    if tc.model_type == "gpt_neox":  # no grouping; the weights under gpt_neox.
-        hd = tc.hidden_size // tc.num_attention_heads
-        return [Layer(tc.num_attention_heads, tc.num_attention_heads, hd, False, "attention", f"gpt_neox.layers.{i}.")
-                for i in range(tc.num_hidden_layers)]
-    if gemma:
-        return [Layer(tc.num_attention_heads, c.num_key_value_heads, c.head_dim, bool(t == "full_attention" and tc.attention_k_eq_v),
-                      t, f"model.language_model.layers.{i}.")
-                for i, (t, c) in enumerate(zip(tc.layer_types, tc.per_layer_config))]
-    return [Layer(tc.num_attention_heads, tc.num_key_value_heads, tc.head_dim, False, "attention", f"model.layers.{i}.")
-            for i in range(tc.num_hidden_layers)]
+    """Each layer's head geometry and kind, from the skeleton's modules (``anatomy.skeleton``): query and key-value heads
+    and the head size (Gemma 4 varies them by layer), whether the value is the raw key; a DeltaNet layer's heads are its
+    value heads."""
+    tc = text_config(model_id)
+    types = getattr(tc, "layer_types", None)
+    pre = anatomy.stack_prefix(model_id)
+    out = []
+    for i, layer in enumerate(anatomy.skeleton(model_id)[1].layers):
+        p = anatomy.parts(layer)
+        mix = anatomy.module(layer, p.mixer)
+        kind, prefix = types[i] if types else "attention", f"{pre}layers.{i}."
+        if p.deltanet:
+            out.append(Layer(mix.num_v_heads, mix.num_v_heads, mix.head_v_dim, False, kind, prefix, i))
+            continue
+        hd = getattr(mix, "head_dim", None) or mix.head_size
+        fused = getattr(mix, "query_key_value", None)
+        if fused is not None:  # GPT-NeoX: per head the query, key and value rows, no grouping
+            h = fused.out_features // (3 * hd)
+            out.append(Layer(h, h, hd, False, kind, prefix, i))
+            continue
+        hq = mix.q_proj.out_features // (hd * (2 if is_gated(mix) else 1))  # a gated q_proj gives the gate's rows too
+        out.append(Layer(hq, mix.k_proj.out_features // hd, hd, getattr(mix, "v_proj", None) is None, kind, prefix, i))
+    return out
 
 
 def names(model_id: str) -> dict:
-    """The embedding, unembedding and final norm weights' names."""
-    if is_neox(model_id):  # untied
-        return {"embed": "gpt_neox.embed_in.weight", "unembed": "embed_out.weight", "norm": "gpt_neox.final_layer_norm.weight"}
-    if is_gemma4(model_id):
-        e = "model.language_model.embed_tokens.weight"
-        return {"embed": e, "unembed": e, "norm": "model.language_model.norm.weight"}  # tied
-    e = "model.embed_tokens.weight"  # Qwen3 to 4B ties the unembedding to it, and stores no lm_head
-    return {"embed": e, "unembed": e if text_config(model_id).tie_word_embeddings else "lm_head.weight",
-            "norm": "model.norm.weight"}
+    """The embedding, unembedding and final norm weights' names (``anatomy.top_names``)."""
+    return anatomy.top_names(model_id)
 
 
 def chat_model(model_id: str) -> str:
@@ -139,51 +148,84 @@ def embed_scale(model_id: str) -> float:
     return text_config(model_id).hidden_size ** 0.5 if is_gemma4(model_id) else 1.0
 
 
+def _weights(model_id: str, lay: Layer, paths: dict, dev) -> dict:
+    """``{key: tensor}`` in fp32 for the parts ``paths`` (``{key: (path, what)}``) of layer ``lay``."""
+    names = {k: anatomy.weight_name(model_id, lay.index, *pw) for k, pw in paths.items()}
+    w = tensors(model_id, sorted(set(names.values())))
+    return {k: w[n].float().to(dev) for k, n in names.items()}
+
+
+def norm_scale(model_id: str, lay: Layer, path: str | None, dev="cpu") -> torch.Tensor | None:
+    """A norm's scale as it multiplies (``rules.norm_weight``: ``1 + w`` for Qwen3.5's zero-centred norms), from the
+    checkpoint, in fp32; ``None`` where the layer has no norm there."""
+    if path is None:
+        return None
+    norm = anatomy.module(anatomy.skeleton(model_id)[1].layers[lay.index], path)
+    w = _weights(model_id, lay, {"w": (path, "weight")}, dev)["w"]
+    return 1 + w if type(norm).__name__ in ZERO_CENTRED else w
+
+
+def final_scale(model_id: str, dev="cpu") -> torch.Tensor:
+    """The final norm's scale as it multiplies (``1 + w`` where it is zero-centred, Qwen3.5's), in fp32."""
+    from neuron_lens.rules import final_norm
+    norm = final_norm(anatomy.skeleton(model_id)[1])
+    name = names(model_id)["norm"]
+    w = tensors(model_id, [name])[name].float().to(dev)
+    return 1 + w if type(norm).__name__ in ZERO_CENTRED else w
+
+
+def _scaled_rows(w: torch.Tensor, g: torch.Tensor | None) -> torch.Tensor:
+    return w if g is None else w * g
+
+
 def _qkv(model_id: str, lay: Layer, dev) -> dict:
     """GPT-NeoX's fused projection as ``Wq``, ``Wk``, ``Wv`` ``[H·hd, d]`` and ``bq`` ``[H·hd]``, in fp32."""
-    p = lay.prefix + "attention.query_key_value."
-    w = tensors(model_id, [p + "weight", p + "bias"])
-    W = w[p + "weight"].float().to(dev).view(lay.q_heads, 3, lay.head_dim, -1)
+    p = anatomy.layer_parts(model_id, lay.index)
+    path = f"{p.mixer}.query_key_value"
+    w = _weights(model_id, lay, {"w": (path, "weight"), "b": (path, "bias")}, dev)
+    W = w["w"].view(lay.q_heads, 3, lay.head_dim, -1)
     return {"Wq": W[:, 0].reshape(-1, W.shape[-1]), "Wk": W[:, 1].reshape(-1, W.shape[-1]),
-            "Wv": W[:, 2].reshape(-1, W.shape[-1]),
-            "bq": w[p + "bias"].float().to(dev).view(lay.q_heads, 3, lay.head_dim)[:, 0].reshape(-1)}
+            "Wv": W[:, 2].reshape(-1, W.shape[-1]), "bq": w["b"].view(lay.q_heads, 3, lay.head_dim)[:, 0].reshape(-1)}
 
 
 def ov(model_id: str, lay: Layer, dev="cpu") -> tuple[torch.Tensor, torch.Tensor]:
-    """``(W_V diag(γ_in) [kv·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32 (the first ``centre``d)."""
-    p = lay.prefix
-    if is_neox(model_id):
-        ln, wo = p + "input_layernorm.weight", p + "attention.dense.weight"
-        w = {k: v.float().to(dev) for k, v in tensors(model_id, [ln, wo]).items()}
-        return centre(_qkv(model_id, lay, dev)["Wv"] * w[ln], model_id), centre(w[wo], model_id, 0)
-    wv = p + ("self_attn.k_proj.weight" if lay.k_eq_v else "self_attn.v_proj.weight")
-    want = [wv, p + "self_attn.o_proj.weight", p + "input_layernorm.weight"]
-    gemma = is_gemma4(model_id)
-    if gemma:
-        want.append(p + "post_attention_layernorm.weight")
-    w = {k: v.float().to(dev) for k, v in tensors(model_id, want).items()}
-    Wo = w[p + "self_attn.o_proj.weight"]
-    if gemma:
-        Wo = w[p + "post_attention_layernorm.weight"][:, None] * Wo
-    return w[wv] * w[p + "input_layernorm.weight"], Wo
+    """``(W_V diag(γ_in) [kv·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32 (the first ``centre``d): ``γ_in`` the mixer's
+    input norm (none in OLMo 2 and 3), ``γ_post`` the norm on its output (Gemma 4, OLMo), whose scale the LN rule holds."""
+    p = anatomy.layer_parts(model_id, lay.index)
+    g1 = norm_scale(model_id, lay, p.n1, dev)
+    if p.mixer == "attention":  # GPT-NeoX's fused projection
+        Wv = _qkv(model_id, lay, dev)["Wv"]
+    else:
+        Wv = _weights(model_id, lay, {"v": (f"{p.mixer}.{'k_proj' if lay.k_eq_v else 'v_proj'}", "weight")}, dev)["v"]
+    Wo = _weights(model_id, lay, {"o": (p.out, "weight")}, dev)["o"]
+    gp = norm_scale(model_id, lay, p.post1, dev)
+    if gp is not None:
+        Wo = gp[:, None] * Wo
+    return centre(_scaled_rows(Wv, g1), model_id), centre(Wo, model_id, 0)
 
 
 def qk(model_id: str, lay: Layer, dev="cpu") -> dict:
-    """``Wq``, ``Wk`` (times ``γ_in``, ``centre``d) and the q/k norm weights (``None`` without q/k norms), in fp32; GPT-NeoX's
-    query bias ``bq`` too (the key bias adds the same score to every key of a query, and cancels)."""
-    p = lay.prefix
-    if is_neox(model_id):
-        ln = p + "input_layernorm.weight"
-        g1 = tensors(model_id, [ln])[ln].float().to(dev)
+    """``Wq``, ``Wk`` ``[H·hd, d]`` (times ``γ_in``, ``centre``d; a gated ``q_proj``'s query rows alone), the q/k norm
+    scales per head, ``q_norm`` ``[Hq, hd]`` and ``k_norm`` ``[Hkv, hd]`` (``None`` without q/k norms), and the width
+    each norm takes its rms over, ``q_width`` and ``k_width`` (the head size, or OLMo's whole projection), in fp32;
+    GPT-NeoX's query bias ``bq`` too (the key bias adds the same score to every key of a query, and cancels)."""
+    p = anatomy.layer_parts(model_id, lay.index)
+    g1 = norm_scale(model_id, lay, p.n1, dev)
+    if p.mixer == "attention":
         w = _qkv(model_id, lay, dev)
-        return {"Wq": centre(w["Wq"] * g1, model_id), "Wk": centre(w["Wk"] * g1, model_id), "q_norm": None,
-                "k_norm": None, "bq": w["bq"]}
-    w = tensors(model_id, [p + f"self_attn.{n}" for n in ("q_proj.weight", "k_proj.weight", "q_norm.weight", "k_norm.weight")]
-                + [p + "input_layernorm.weight"])
-    w = {k: v.float().to(dev) for k, v in w.items()}
-    g1 = w[p + "input_layernorm.weight"]
-    return {"Wq": w[p + "self_attn.q_proj.weight"] * g1, "Wk": w[p + "self_attn.k_proj.weight"] * g1,
-            "q_norm": w[p + "self_attn.q_norm.weight"], "k_norm": w[p + "self_attn.k_norm.weight"], "bq": None}
+        return {"Wq": centre(_scaled_rows(w["Wq"], g1), model_id), "Wk": centre(_scaled_rows(w["Wk"], g1), model_id),
+                "q_norm": None, "k_norm": None, "q_width": None, "k_width": None, "bq": w["bq"]}
+    w = _weights(model_id, lay, {"q": (f"{p.mixer}.q_proj", "weight"), "k": (f"{p.mixer}.k_proj", "weight")}, dev)
+    Wq, hd = w["q"], lay.head_dim
+    if Wq.shape[0] == 2 * lay.q_heads * hd:  # Qwen3.5's gated attention: per head the query rows, then the gate's
+        Wq = Wq.view(lay.q_heads, 2 * hd, -1)[:, :hd].reshape(-1, Wq.shape[-1])
+    out = {"Wq": _scaled_rows(Wq, g1), "Wk": _scaled_rows(w["k"], g1), "bq": None}
+    for side, heads in (("q", lay.q_heads), ("k", lay.kv_heads)):
+        mod = anatomy.module(anatomy.skeleton(model_id)[1].layers[lay.index], f"{p.mixer}.{side}_norm")
+        g = None if mod is None else norm_scale(model_id, lay, f"{p.mixer}.{side}_norm", dev)
+        out[f"{side}_norm"] = None if g is None else (g.view(heads, hd) if g.numel() == heads * hd else g.expand(heads, hd))
+        out[f"{side}_width"] = None if g is None else g.numel()
+    return out
 
 
 def kv_of(lay: Layer, h: int) -> int:
@@ -376,15 +418,15 @@ def padded(model_id: str) -> tuple[int, int]:
 
 
 def attn_norm(layer):
-    """The norm between a decoder layer's attention output and the residual (Gemma 4's post-attention
+    """The norm between a decoder layer's attention output and the residual (Gemma 4's and OLMo's post-attention
     norm), or ``None`` where the heads write the residual directly (Qwen3)."""
-    return layer.post_attention_layernorm if hasattr(layer, "pre_feedforward_layernorm") else None
+    return anatomy.module(layer, anatomy.parts(layer).post1)
 
 
 def mlp_norm(layer):
-    """The norm between a decoder layer's MLP output and the residual (Gemma 4's post-feedforward
+    """The norm between a decoder layer's MLP output and the residual (Gemma 4's and OLMo's post-feedforward
     norm), or ``None`` where the neurons write the residual directly (Qwen3)."""
-    return getattr(layer, "post_feedforward_layernorm", None)
+    return anatomy.module(layer, anatomy.parts(layer).post2)
 
 
 def _scale(norm, x: torch.Tensor) -> torch.Tensor | None:
@@ -403,9 +445,9 @@ def head_write_lens(model_id: str, side: str, fit: str | None) -> torch.Tensor:
 def head_write(layer) -> torch.Tensor:
     """``[d, H·hd]``: a decoder layer's ``W_O`` as its heads' outputs reach the residual, in fp32:
     times the norm weight where a norm follows the attention (its scale per position: ``attn_scale``)."""
-    from neuron_lens.layers import _out_proj
-    w = _out_proj(attention(layer)).weight.float()
-    if is_centred(layer.input_layernorm):  # a write's mean reaches no reader (``centre``)
+    p = anatomy.parts(layer)
+    w = anatomy.module(layer, p.out).weight.float()
+    if any(is_centred(anatomy.module(layer, n)) for n in p.norms):  # a write's mean reaches no reader (``centre``)
         w = w - w.mean(0)
     norm = attn_norm(layer)
     return w if norm is None else norm.weight.float()[:, None] * w
@@ -420,8 +462,9 @@ def attn_scale(layer, attn_out: torch.Tensor) -> torch.Tensor | None:
 def mlp_write(layer) -> torch.Tensor:
     """``[d, f]``: a decoder layer's ``W_down`` as its neurons' outputs reach the residual, in fp32:
     times the norm weight where a norm follows the MLP (its scale per position: ``mlp_scale``)."""
-    w = (layer.mlp.down_proj if hasattr(layer.mlp, "down_proj") else layer.mlp.dense_4h_to_h).weight.float()
-    if is_centred(layer.input_layernorm):
+    p = anatomy.parts(layer)
+    w = anatomy.module(layer, p.down).weight.float()
+    if any(is_centred(anatomy.module(layer, n)) for n in p.norms):
         w = w - w.mean(0)
     norm = mlp_norm(layer)
     return w if norm is None else norm.weight.float()[:, None] * w
@@ -435,21 +478,25 @@ def mlp_scale(layer, mlp_out: torch.Tensor) -> torch.Tensor | None:
 
 def layer_scale(layer) -> float:
     """What multiplies a decoder layer's whole output (Gemma 4's ``layer_scalar``; 1 otherwise)."""
-    s = getattr(layer, "layer_scalar", None)
+    s = anatomy.module(layer, anatomy.parts(layer).scalar)
     return 1.0 if s is None else float(s)
 
 
 def mid_norm(layer):
-    """The norm that feeds a decoder layer's MLP (its input is the residual the ``mid`` lens targets read)."""
-    return layer.pre_feedforward_layernorm if hasattr(layer, "pre_feedforward_layernorm") else layer.post_attention_layernorm
+    """The norm that feeds a decoder layer's MLP, or ``None`` where the MLP reads the residual itself (OLMo 2 and 3).
+    To see the residual the ``mid`` lens targets read, hook ``mid_point``."""
+    return anatomy.module(layer, anatomy.parts(layer).n2)
+
+
+def mid_point(layer):
+    """The module whose input is the residual a decoder layer's MLP reads (``anatomy.mlp_reads``)."""
+    return anatomy.mlp_reads(layer)
 
 
 def mlp_output(layer):
     """``(module, scalar)``: the module whose output is the layer's MLP write, and what multiplies it on
-    the way to the residual (Gemma 4's ``layer_scalar``; ``None`` for Qwen3)."""
-    if hasattr(layer, "pre_feedforward_layernorm"):
-        return layer.post_feedforward_layernorm, layer.layer_scalar
-    return layer.mlp, None
+    the way to the residual (Gemma 4's ``layer_scalar``; ``None``), ``anatomy.mlp_writes``."""
+    return anatomy.mlp_writes(layer)
 
 
 def bos(tok) -> list[int]:
@@ -467,14 +514,18 @@ def chat_open(model_id: str, tok) -> int:
 
 
 def inv_freq(stack, model_id: str):
-    """RoPE's angle per position: one tensor (Qwen3), or one per layer type (Gemma 4)."""
-    rot = stack.rotary_emb
-    if is_gemma4(model_id):
-        return {t: getattr(rot, f"{t}_inv_freq").float().cpu() for t in {x.kind for x in layout(model_id)}}
+    """RoPE's angle per position: one tensor (Qwen3), one per layer type (Gemma 4, OLMo 3), or ``None`` where no layer
+    rotates (Olmo Hybrid's attention)."""
+    rot = getattr(stack, "rotary_emb", None)
+    if rot is None:
+        return None
+    kinds = {x.kind for x in layout(model_id)}
+    if all(hasattr(rot, f"{t}_inv_freq") for t in kinds):
+        return {t: getattr(rot, f"{t}_inv_freq").float().cpu() for t in kinds}
     return rot.inv_freq.float().cpu()
 
 
-def layer_inv_freq(freqs, model_id: str, layer: int) -> torch.Tensor:
+def layer_inv_freq(freqs, model_id: str, layer: int) -> torch.Tensor | None:
     return freqs[layout(model_id)[layer].kind] if isinstance(freqs, dict) else freqs
 
 
