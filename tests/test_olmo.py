@@ -32,8 +32,9 @@ D, V = 16, 50
 TYPES = ["sliding_attention", "sliding_attention", "full_attention", "sliding_attention"]
 HYBRID = ["linear_attention", "linear_attention", "full_attention", "linear_attention"]
 N_LAYERS = len(TYPES)
-RTOL = 1e-4  # β near 2 makes DeltaNet's triangular solve amplify fp32 roundoff to ~2e-5 by the last layer; a wrong map
-# misses by order one (dropping β's factor of 2 misses by 130%)
+RTOL = 1e-4  # of each entry and, as the absolute tolerance, of the map's largest: β near 2 makes DeltaNet's triangular
+# solve amplify fp32 roundoff to ~1.4e-4 on entries up to ~8 by the last layer, which the order of threaded sums moves
+# past a fixed 1e-4 now and then; a wrong map misses by order one (dropping β's factor of 2 misses by 130%)
 
 
 def tiny_model(kind: str):
@@ -74,9 +75,10 @@ def tiny_model(kind: str):
 
 
 def close(a, b, *where) -> None:
+    atol = RTOL * max(1.0, b.abs().max().item())
     worst = ((a - b).abs() - RTOL * b.abs()).argmax()
-    assert torch.allclose(a, b, atol=1e-4, rtol=RTOL), (*where, f"miss {(a - b).abs().max():.2e} at worst "
-                                                       f"{(a - b).flatten()[worst]:.2e} of {b.flatten()[worst]:.2e}")
+    assert torch.allclose(a, b, atol=atol, rtol=RTOL), (*where, f"miss {(a - b).abs().max():.2e} (tolerance {atol:.1e} + "
+                                                        f"{RTOL:.0e} of each entry) at {b.flatten()[worst]:.2e}")
 
 
 def pre_norm(block) -> bool:
