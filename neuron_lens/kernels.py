@@ -470,6 +470,12 @@ def _shapes(m):
     return hv, tp // C, C, dk, m.u.shape[-1]
 
 
+def supports(DK: int, DV: int) -> bool:
+    """Whether the DeltaNet kernels take heads of this size: powers of two, as their blocks are (Qwen3.5's 128 and 128).
+    Other sizes (Olmo Hybrid's keys of 96 and values of 192) run ``layers.py``'s torch passes on CUDA too."""
+    return all(x > 0 and x & (x - 1) == 0 for x in (DK, DV))
+
+
 def _config(name, DK, DV):
     BK, BV, nw, ns = CONFIG[name]
     BK, BV = min(BK, DK), min(BV, DV)

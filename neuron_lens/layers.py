@@ -1025,7 +1025,7 @@ def _delta_jvp(m: DeltaNet, xn: torch.Tensor) -> torch.Tensor:
     b, N, _ = xn.shape
     hv, dv = m.u.shape[0], m.u.shape[-1]
     hk, dk = m.q0.shape[1:]
-    cuda = kernels is not None and xn.is_cuda
+    cuda = kernels is not None and xn.is_cuda and kernels.supports(dk, dv)
     if cuda:  # the convolution and L2 norms in one kernel
         dq, dkk, dvv = kernels.delta_conv_in(m, F.linear(xn, m.w_qkv))
     else:
@@ -1048,7 +1048,7 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
     hk, dk = m.q0.shape[1:]
     gy = (G.to(dt) @ m.w_out).view(b, N, hv, dv)
     gx = ((gy * m.zg).reshape(b, N, -1).to(dt) @ m.w_z).float()
-    cuda = kernels is not None and G.is_cuda
+    cuda = kernels is not None and G.is_cuda and kernels.supports(dk, dv)
     gdq, gdk, gdv, gbeta, gdgc = (kernels.delta_vjp if cuda else _delta_core_vjp)(m, gy * m.zo)
     gdg = gdgc.flip(1).cumsum(1).flip(1)
     gx = gx + ((gbeta * m.db).to(dt) @ m.w_b + (gdg * m.dga).to(dt) @ m.w_a).float()
