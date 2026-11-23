@@ -29,7 +29,7 @@ the 99th percentile of the control's, pooled over layers (§3: from L5, 94-100% 
 predict their 1× steering); the per-layer share of poles that do, and of control pairs (chance).
 The per-layer medians and shares use the random picks only; the named poles are listed one by one.
 
-Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``): the MLP output passes a post-feedforward
+Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``; OLMo 2 and 3 alike): the MLP output passes a post-feedforward
 RMSNorm before the residual, so the push is added after it: ``s·α·γ_post ⊙ W_down[:, n]`` times the
 norm's scale at each position, the write as it reaches the residual (the lenses' LN rule; the layer
 scalar is the model's own); log-probs are after the final softcap; no named poles, random ones only.
@@ -55,6 +55,7 @@ from neuron_lens.catalog import MODEL, column, documents, neuron_table
 from neuron_lens.corpus import lens_docs
 from neuron_lens.known import EXTERNAL, KNOWN
 from neuron_lens.paths import CORPUS_DIR, DATA, SUMMARY
+from neuron_lens.rules import norm_weight
 from neuron_lens.stats import pearson
 
 SKIP_FIRST = 16
@@ -118,7 +119,6 @@ def measure(args) -> None:
     from neuron_lens.transport import decoder_stack
     model, lm_head = decoder_stack(lm), lm.get_output_embeddings()
     NP = len(SIGNS)
-    gemma = arch.is_gemma4(args.model)
     L, f = len(model.layers), model.config.intermediate_size
     picks = sample_neurons(L, f, args.per_layer)
     if args.layers:
@@ -172,8 +172,9 @@ def measure(args) -> None:
             continue
         blk = model.layers[layer]
         wd = _down(blk).weight  # [d, f]
-        if gemma:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
-            wd = (blk.post_feedforward_layernorm.weight.float()[:, None] * wd.float()).to(wd.dtype)
+        post = arch.mlp_norm(blk)  # a norm on the MLP's output (Gemma 4's, OLMo's), or none
+        if post is not None:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
+            wd = (norm_weight(post).float()[:, None] * wd.float()).to(wd.dtype)
         for s in range(0, len(conds), args.cond_batch):
             part = conds[s:s + args.cond_batch]
             # Row 0 is unsteered: the reference, at the same batch shape as the steered rows.
@@ -182,10 +183,9 @@ def measure(args) -> None:
                 for i, p, di in part])  # [1 + n_c, d]
             rows = delta.repeat_interleave(C, 0)[:, None, :]
             posmask = (torch.arange(T, device=device) >= SKIP_FIRST)[None, :, None].to(rows.dtype)
-            if gemma:  # after the post-feedforward norm, at its scale: the LN rule's write
-                pf = blk.post_feedforward_layernorm
-                hook = pf.register_forward_hook(lambda mod, a, o: o + rows * posmask * torch.rsqrt(
-                    a[0].float().pow(2).mean(-1, keepdim=True) + arch.norm_eps(pf)).to(o.dtype))
+            if post is not None:  # after the norm on the MLP's output, at its scale: the LN rule's write
+                hook = post.register_forward_hook(lambda mod, a, o, post=post: o + rows * posmask * torch.rsqrt(
+                    a[0].float().pow(2).mean(-1, keepdim=True) + arch.norm_eps(post)).to(o.dtype))
             else:
                 hook = blk.mlp.register_forward_hook(lambda mod, a, o: o + rows * posmask)
             with torch.inference_mode():
@@ -238,7 +238,7 @@ def measure(args) -> None:
                 x = a[0].clone()
                 x[rows, pos_t, neu_t] = 0
                 return (x,)
-            hook = _down(model.layers[layer].mlp).register_forward_pre_hook(ablate)
+            hook = _down(model.layers[layer]).register_forward_pre_hook(ablate)
             with torch.inference_mode():
                 hs = model(input_ids=ids.to(device), attention_mask=attn.to(device)).last_hidden_state
                 for r, (i, p, j, d, pos) in enumerate(part):
