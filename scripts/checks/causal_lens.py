@@ -50,7 +50,7 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-from neuron_lens import arch
+from neuron_lens import anatomy, arch
 from neuron_lens.catalog import MODEL, column, documents, neuron_table
 from neuron_lens.corpus import lens_docs
 from neuron_lens.known import EXTERNAL, KNOWN
@@ -106,8 +106,8 @@ def catalog_top(layers, f: int, k: int) -> dict:
     return out
 
 
-def _down(mlp):
-    return mlp.down_proj if hasattr(mlp, "down_proj") else mlp.dense_4h_to_h
+def _down(blk):
+    return anatomy.module(blk, anatomy.parts(blk).down)
 
 
 def measure(args) -> None:
@@ -171,7 +171,7 @@ def measure(args) -> None:
         if not conds or layer in out["done"]["steer"]:
             continue
         blk = model.layers[layer]
-        wd = _down(blk.mlp).weight  # [d, f]
+        wd = _down(blk).weight  # [d, f]
         if gemma:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
             wd = (blk.post_feedforward_layernorm.weight.float()[:, None] * wd.float()).to(wd.dtype)
         for s in range(0, len(conds), args.cond_batch):

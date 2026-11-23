@@ -35,7 +35,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import arch, layers
+from neuron_lens import anatomy, arch, layers
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -48,7 +48,7 @@ from neuron_lens.catalog import (
     neuron_table,
 )
 from neuron_lens.firings import firing_plan
-from neuron_lens.rules import attention, is_centred, mlp_act, norm_eps
+from neuron_lens.rules import attention, is_centred, mlp_act, norm_eps, norm_weight
 
 RANK = 256  # candidates kept per firing for driven-by
 RANK_WITH = 1024  # ... and for fires-with, where a source shared by several firings needs to survive each
@@ -57,8 +57,21 @@ PIECE = 2**26  # entries in one [firings, M·f] table at a time: Qwen3-14B's lat
 CHANNELS = ("v", "q", "k")  # a head's inputs: value, query, key
 
 
-def _down(mlp):
-    return mlp.down_proj if hasattr(mlp, "down_proj") else mlp.dense_4h_to_h
+def _down(lay):
+    return anatomy.module(lay, anatomy.parts(lay).down)
+
+
+def _input_norm(lay):
+    """The heads' input norm, or ``None`` where they read the residual itself (OLMo 2 and 3)."""
+    return anatomy.module(lay, anatomy.parts(lay).n1)
+
+
+def _per_head(w: torch.Tensor | None, r: torch.Tensor | None, head: int, pos, hd: int):
+    """A q/k norm's scale (``[hd]``) and rsqrt (at ``pos``) for one head: per head (``r`` ``[T, H, 1]``), or OLMo's over the
+    whole projection (``w`` ``[H·hd]``, ``r`` ``[T, 1]``, one rsqrt a position for every head)."""
+    scale = 1.0 if w is None else (w if w.numel() == hd else w.view(-1, hd)[head])
+    rs = 1.0 if r is None else (r[pos, 0] if r.dim() == 2 else r[pos, head, 0])
+    return scale, rs
 
 
 def _bias(mod, d: int, dev) -> torch.Tensor:
@@ -86,8 +99,9 @@ class Stream:
     def __init__(self, stack):
         self.layers, self.embed = stack.layers, stack.get_input_embeddings()
         self.n_heads = stack.config.num_attention_heads
-        self.parallel = bool(getattr(stack.layers[0], "use_parallel_residual", False))
-        self.centred = is_centred(stack.layers[0].input_layernorm)
+        first = stack.layers[0]
+        self.parallel = anatomy.parts(first).parallel
+        self.centred = any(is_centred(anatomy.module(first, n)) for n in anatomy.parts(first).norms)
         heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd], hd may differ by layer (Gemma 4's full-attention layers)
         self.all_heads = joined(heads)  # a layer's sources are a prefix of these
         self.all_neurons = joined([arch.mlp_write(lay) for lay in self.layers])  # [d, L·f]
@@ -99,10 +113,10 @@ class Stream:
         self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=dev)
         # the residual's constant (its writes' biases) entering each layer, and each MLP's input
         d = self.all_neurons.shape[0]
-        ab = [_bias(layers._out_proj(attention(lay)), d, dev) for lay in self.layers]
+        ab = [_bias(anatomy.module(lay, anatomy.parts(lay).out), d, dev) for lay in self.layers]
         cin = [torch.zeros(d, device=dev)]
         for l, lay in enumerate(self.layers):
-            cin.append((cin[-1] + ab[l] + _bias(_down(lay.mlp), d, dev)) * self.scalars[l])
+            cin.append((cin[-1] + ab[l] + _bias(_down(lay), d, dev)) * self.scalars[l])
         self.bias_in = torch.stack(cin)  # [L + 1, d]
         self.bias_mid = torch.stack([cin[l] + (0 if self.parallel else ab[l]) for l in range(len(self.layers))])
 
@@ -122,24 +136,25 @@ class Stream:
             return hook
         out = [self.embed.register_forward_hook(lambda mod, a, o: cap.__setitem__("emb", at(o).float()))]
         for l, lay in enumerate(self.layers[:None if upto is None else upto + 1]):
-            out.append(layers._out_proj(attention(lay)).register_forward_pre_hook(store(("z", l))))
+            out.append(anatomy.module(lay, anatomy.parts(lay).out).register_forward_pre_hook(store(("z", l))))
             out.append(attention(lay).register_forward_hook(scale(("attn", l), lambda o, lay=lay: arch.attn_scale(lay, o))))
-            out.append(arch.mid_norm(lay).register_forward_pre_hook(store(("x", l))))
+            out.append(arch.mid_point(lay).register_forward_pre_hook(store(("x", l))))
             if l != upto:
-                out.append(_down(lay.mlp).register_forward_pre_hook(store(("a", l))))
+                out.append(_down(lay).register_forward_pre_hook(store(("a", l))))
                 out.append(lay.mlp.register_forward_hook(scale(("mlp", l), lambda o, lay=lay: arch.mlp_scale(lay, o))))
         return out
 
     def sources(self, cap: dict, M: int, neuron: torch.Tensor, u: torch.Tensor) -> dict:
         """``split`` for the firings ``u`` (indices into ``cap``'s positions) of ``neuron`` ``[N]`` in layer ``M``."""
-        lay, norm = self.layers[M], arch.mid_norm(self.layers[M])
+        lay, norm = self.layers[M], arch.mid_norm(self.layers[M])  # no norm: the MLP reads the residual itself (OLMo)
         x = cap["x", M][u]
         xc = x - x.mean(-1, keepdim=True) if self.centred else x
-        inv = torch.rsqrt(xc.pow(2).mean(-1) + norm_eps(norm))[:, None]
-        mlp = lay.mlp
-        gp = mlp.gate_proj if hasattr(mlp, "gate_proj") else mlp.dense_h_to_4h
-        rg = gp.weight[neuron] * norm.weight
-        ru = mlp.up_proj.weight[neuron] * norm.weight if hasattr(mlp, "up_proj") else None
+        inv = torch.ones_like(x[:, :1]) if norm is None else torch.rsqrt(xc.pow(2).mean(-1) + norm_eps(norm))[:, None]
+        mlp, p = lay.mlp, anatomy.parts(lay)
+        gp, up = anatomy.module(lay, p.gate), anatomy.module(lay, p.up)
+        gamma = 1.0 if norm is None else norm_weight(norm)
+        rg = gp.weight[neuron] * gamma
+        ru = None if up is None else up.weight[neuron] * gamma
         b0 = torch.zeros(len(neuron), device=x.device) if gp.bias is None else gp.bias[neuron].float()
         if getattr(norm, "bias", None) is not None:  # W_in β
             b0 = b0 + gp.weight[neuron].float() @ norm.bias.float()
@@ -402,8 +417,8 @@ class HeadSources:
         and the read's own constant (its projection's and the norm's biases), whose sum over the sources is 1. ``m``: the
         layer's ``attention_map``, ``inv`` ``[T, 1]`` the input norm's scale."""
         lay = self.flow.layers[M]
-        at, ln = attention(lay), lay.input_layernorm
-        gamma = ln.weight.float()
+        at, ln = attention(lay), _input_norm(lay)
+        gamma = 1.0 if ln is None else norm_weight(ln).float()
         hd = at.head_dim if hasattr(at, "head_dim") else at.head_size
         g = getattr(at, "num_key_value_groups", 1)
         kv, dev = h // g, self.dev
@@ -426,7 +441,7 @@ class HeadSources:
             Wq, Wk, Wv = rows(m.wq, h), rows(m.wk, kv), rows(m.wk if m.wv is None else m.wv, kv)
             bias = lambda mod, i: None if mod is None or mod.bias is None else rows(mod.bias.float(), i)
             bq, bk, bv = bias(at.q_proj, h), bias(at.k_proj, kv), bias(getattr(at, "v_proj", None) or at.k_proj, kv)
-        beta = getattr(ln, "bias", None)
+        beta = getattr(ln, "bias", None) if ln is not None else None
 
         def own(W, b):  # the projection's output for a zero residual: W β + b
             out = torch.zeros(hd, device=dev) if b is None else b
@@ -437,13 +452,15 @@ class HeadSources:
         margin = (k[s] - k[1:].mean(0)) * m.scale
         size = (q * margin).sum()
         mq = layers._rope(margin, m.cos[t, 0], -m.sin[t, 0])  # the margin as a read of the query, before RoPE
-        Q = back(Wq, mq * (1.0 if m.wqn is None else m.wqn))[None] * scaled(m.rq, t, h) * inv[t, 0] / size
+        wq, rq = _per_head(m.wqn, m.rq, h, t, hd)
+        Q = back(Wq, mq * wq)[None] * rq * inv[t, 0] / size
         keys = torch.arange(1, t + 1, device=dev)
         weight = torch.full((t,), -1.0 / t, device=dev)
         weight[s - 1] += 1
         qk = layers._rope(q.expand(t, -1), m.cos[keys, 0], -m.sin[keys, 0])  # the query as a read of each key, before RoPE
-        K = back(Wk, qk * (1.0 if m.wkn is None else m.wkn))
-        K = K * (weight * scaled(m.rk, keys, kv) * inv[keys, 0] * m.scale / size)[:, None]
+        wk, rk = _per_head(m.wkn, m.rk, kv, keys, hd)
+        K = back(Wk, qk * wk)
+        K = K * (weight * rk * inv[keys, 0] * m.scale / size)[:, None]
         consts = ((c * own(Wv, bv)).sum(), (mq * own(Wq, bq)).sum() / size,  # (no biases, no LayerNorm: zero)
                   (weight * (qk @ own(Wk, bk))).sum() * m.scale / size)
         return {"v": (V, torch.arange(t + 1, device=dev), consts[0]), "q": (Q, torch.tensor([t], device=dev), consts[1]),
@@ -492,8 +509,11 @@ class HeadSources:
     def run(self, docs: list[torch.Tensor]) -> None:
         cap, flow = {}, self.flow
         hooks = flow.hooks(cap, lambda h: h[0])
-        for l, lay in enumerate(flow.layers):
-            hooks.append(lay.input_layernorm.register_forward_pre_hook(lambda mod, a, l=l: cap.__setitem__(("y", l), a[0][0].float())))
+        for l, lay in enumerate(flow.layers):  # the residual the heads read: their input norm's input, or the layer's
+            ln = _input_norm(lay)
+            hooks.append(ln.register_forward_pre_hook(lambda mod, a, l=l: cap.__setitem__(("y", l), a[0][0].float())) if ln is not None
+                         else lay.register_forward_pre_hook(lambda mod, a, kw, l=l: cap.__setitem__(
+                             ("y", l), (a[0] if a else kw["hidden_states"])[0].float()), with_kwargs=True))
         keep = self.doc < len(docs)
         doc, pos, row = self.doc[keep], self.pos[keep].tolist(), self.row[keep].tolist()
         uniq, counts = doc.unique_consecutive(return_counts=True)
@@ -505,9 +525,9 @@ class HeadSources:
             for t, r in zip(pos[at:at + k], row[at:at + k]):
                 M = r // self.H
                 if M not in maps:
-                    y, ln = cap["y", M], flow.layers[M].input_layernorm
+                    y, ln = cap["y", M], _input_norm(flow.layers[M])
                     yc = y - y.mean(-1, keepdim=True) if flow.centred else y
-                    inv = torch.rsqrt(yc.pow(2).mean(-1, keepdim=True) + norm_eps(ln))
+                    inv = torch.ones_like(y[:, :1]) if ln is None else torch.rsqrt(yc.pow(2).mean(-1, keepdim=True) + norm_eps(ln))
                     maps[M] = (layers.attention_map(self.stack, M, layers._normed(ln, y)[0]), inv)
                 self.firing(cap, *maps[M][:1], M, r, t, maps[M][1])
             at += k

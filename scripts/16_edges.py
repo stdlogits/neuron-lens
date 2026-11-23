@@ -74,7 +74,7 @@ def residual_stats(dev) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             scales[i].append(s[0, 1:].cpu())
     hooks = []
     for i, lay in enumerate(stack.layers):
-        hooks.append(arch.mid_norm(lay).register_forward_pre_hook(
+        hooks.append(arch.mid_point(lay).register_forward_pre_hook(
             lambda mod, a, i=i: seen[i].append(arch.centre(a[0][0, 1:].float(), MODEL).pow(2).mean(-1).sqrt().cpu())))
         hooks.append(lay.mlp.register_forward_hook(lambda mod, a, o, i=i: keep_scale(mod, a, o, i)))
     docs = documents()

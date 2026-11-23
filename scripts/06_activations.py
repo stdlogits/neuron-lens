@@ -58,7 +58,7 @@ import numpy as np
 import pyarrow as pa
 import torch
 
-from neuron_lens import arch
+from neuron_lens import anatomy, arch
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -79,7 +79,6 @@ from neuron_lens.catalog import (
     write,
 )
 from neuron_lens.corpus import ACT_SLICES, act_docs
-from neuron_lens.layers import _out_proj
 from neuron_lens.paths import LOGS, ROOT
 from neuron_lens.readout import rms_norm_columns
 from neuron_lens.rules import attention
@@ -223,6 +222,10 @@ class Collector:
             for k, x in new.items():
                 self.top[k][l, p][:, cols] = torch.cat([self.top[k][l, p][:, cols], x]).gather(0, i)
 
+    def no_input_norm(self, x: torch.Tensor) -> None:
+        if self.mode == "main":
+            self.ctx["inv_rho"] = torch.ones(x.shape[:2], device=x.device)
+
     def input_norm(self, l: int, x: torch.Tensor, eps: float) -> None:
         if self.mode == "main":
             x = x.float()
@@ -245,11 +248,20 @@ class Collector:
         self.seg["q"][l, :, :q.shape[-1]] += (q * self.ctx["qv"][..., None, None]).sum((0, 1))
 
     def qk_norm(self, l: int, side: str, x: torch.Tensor, out: torch.Tensor, eps: float) -> None:
+        """A q/k norm's sums per head: over each head (``[B, T, heads, hd]``), or over the whole projection (OLMo's,
+        ``[B, T, heads·hd]``: one rsqrt a position, the heads' blocks of its derivative; ``08_reads.py`` divides by the
+        width the norm spans)."""
         if self.mode != "main":
             return
-        x = x.float()  # [B, T, heads, hd], before the norm
+        x = x.float()  # before the norm
+        if x.dim() == 3:  # over the whole projection
+            g = self.geo[l]
+            nh = g.q_heads if side == "q" else g.kv_heads
+            r = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps).expand(*x.shape[:2], nh)
+            x, out = x.view(*x.shape[:2], nh, -1), out.view(*x.shape[:2], nh, -1)
+        else:
+            r = torch.rsqrt(x.pow(2).mean(-1) + eps)
         nh, hd = x.shape[-2:]  # this layer's heads and head size, the leading block of the buffers
-        r = torch.rsqrt(x.pow(2).mean(-1) + eps)
         valid = self.ctx["qv"] if side == "q" else self.ctx["kv"]  # v: the values, at the keys
         w = (valid * self.ctx["inv_rho"])[..., None]  # positions, times the input norm's scaling
         self.seg[f"{side}_r"][l, :nh] += (r * w).sum((0, 1))
@@ -307,19 +319,26 @@ class Collector:
     def hooks(self, model) -> list:
         hs = []
         for l, layer in enumerate(model.layers):
-            at, mlp = attention(layer), layer.mlp
-            gate, down = (mlp.gate_proj, mlp.down_proj) if hasattr(mlp, "gate_proj") else (mlp.dense_h_to_4h, mlp.dense_4h_to_h)
+            p = anatomy.parts(layer)
+            if p.deltanet or p.sparse:
+                raise NotImplementedError(f"layer {l}: DeltaNet heads and routed experts are not in the catalog yet")
+            at = attention(layer)
+            gate, down = anatomy.module(layer, p.gate), anatomy.module(layer, p.down)
             hs.append(gate.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)))
             hs.append(down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0])))
-            hs.append(layer.input_layernorm.register_forward_pre_hook(
-                lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
+            n1 = anatomy.module(layer, p.n1)
+            if n1 is not None:
+                hs.append(n1.register_forward_pre_hook(lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
+            else:  # the heads read the residual itself (OLMo 2 and 3): no input norm's scaling
+                hs.append(layer.register_forward_pre_hook(lambda m, x, kw: self.no_input_norm(x[0] if x else kw["hidden_states"]),
+                                                          with_kwargs=True))
             if hasattr(at, "query_key_value"):  # no q/k norms
                 hs.append(at.query_key_value.register_forward_hook(lambda m, x, out, l=l: self.query(l, out)))
             else:
                 for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
                     hs.append(norm.register_forward_hook(
                         lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
-            hs.append(_out_proj(at).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
+            hs.append(anatomy.module(layer, p.out).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
             hs.append(at.register_forward_hook(lambda m, x, out, l=l: self.attention(l, out[1], out[0])))
         return hs
 

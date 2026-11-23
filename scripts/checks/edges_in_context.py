@@ -53,7 +53,7 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from causal_lens import CAUSAL, random_neurons
-from neuron_lens import arch, metric
+from neuron_lens import anatomy, arch, metric
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -150,15 +150,17 @@ class Model:
         acts = torch.cat([cap["a", l] for l in range(M)], 1)  # [B, M·f]
         sign = acts.sign() if P == 2 else torch.ones_like(acts)  # the pole each upstream neuron is in
         pid = (torch.arange(M, device=dev)[:, None] * P * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
-        norm = arch.mid_norm(lay)
+        parts = anatomy.parts(lay)
+        gate, up = anatomy.module(lay, parts.gate).weight, anatomy.module(lay, parts.up)
+        gamma = anatomy.norm_scale(lay, parts.n2, gate.shape[1])  # ones where the MLP reads the residual itself (OLMo)
         s2 = metric.s2(MODEL, "mid", M, dev)
-        def unit(r):  # a read row times the norm's weight, centred where it centres, at unit length in the metric
-            c = arch.centre(r * norm.weight, MODEL)
+        def unit(r):  # a read row times the norm's scale, centred where it centres, at unit length in the metric
+            c = arch.centre(r * gamma, MODEL)
             return c / metric.cov_norm(c, s2)
         if P == 1:  # ungated: the input row
-            c_b = unit(lay.mlp.dense_h_to_4h.weight[neuron])
+            c_b = unit(gate[neuron])
         else:
-            a_hat, b_hat = unit(lay.mlp.gate_proj.weight[neuron]), unit(lay.mlp.up_proj.weight[neuron])
+            a_hat, b_hat = unit(gate[neuron]), unit(up.weight[neuron])
             lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
             c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as neurons.read_rows
             c_b = c_b / metric.cov_norm(c_b, s2)

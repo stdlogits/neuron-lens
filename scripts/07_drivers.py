@@ -26,7 +26,7 @@ import time
 
 import torch
 
-from neuron_lens import arch
+from neuron_lens import anatomy, arch
 from neuron_lens.catalog import (
     MODEL,
     TOP,
@@ -40,7 +40,6 @@ from neuron_lens.catalog import (
     write,
 )
 from neuron_lens.corpus import act_file, lens_docs
-from neuron_lens.layers import _out_proj
 from neuron_lens.rules import attention
 
 SLICES = {"dclm": 4, "code": 2, "chat": 2}
@@ -119,8 +118,9 @@ def main() -> None:
     with torch.inference_mode():
         prefix = model(input_ids=docs[:, :AT], use_cache=True).past_key_values
         for l, m in enumerate(model.layers):  # from here on every pass starts at the token
-            (m.mlp.down_proj if hasattr(m.mlp, "down_proj") else m.mlp.dense_4h_to_h).register_forward_pre_hook(neuron(l))
-            _out_proj(attention(m)).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
+            p = anatomy.parts(m)
+            anatomy.module(m, p.down).register_forward_pre_hook(neuron(l))
+            anatomy.module(m, p.out).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
             attention(m).register_forward_hook(attention_hook(l))
         for i in range(0, len(order), args.batch):
             ids = order[i:i + args.batch].to(dev)

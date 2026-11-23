@@ -253,9 +253,9 @@ def heads(dev) -> None:
             Xu = Xu @ An  # symmetric
         else:
             Aq = norm_derivative(qk["q_norm"], st["q_r"][layer].float().to(dev),
-                                 st["q_m"][layer, :, :hd, :hd].float().to(dev), float(st["n_q"]))
+                                 st["q_m"][layer, :, :hd, :hd].float().to(dev), float(st["n_q"]), qk["q_width"])
             Ak = norm_derivative(qk["k_norm"], st["k_r"][layer, :kvh].float().to(dev),
-                                 st["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(st["n_k"]))
+                                 st["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(st["n_k"]), qk["k_width"])
         def query(x, Wq=Wq, bq=bq):
             return x @ Wq.T if bq is None else x.shape[-1] ** 0.5 * x @ Wq.T + bq
         off = st["offset"][layer].float().to(dev)

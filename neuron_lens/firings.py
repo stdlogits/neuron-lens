@@ -24,7 +24,7 @@ and the projection's biases), and ``c = φ(g) k r``.
 """
 import torch
 
-from neuron_lens import arch
+from neuron_lens import anatomy, arch
 from neuron_lens.rules import final_norm, is_centred, mlp_act
 
 SITES = ("before", "mlp", "pred")
@@ -44,11 +44,11 @@ def weights(lay) -> dict:
     ``norm``; centred where the norm is a LayerNorm, through each row's mean ``gm``, ``um``), the activation, and per neuron
     the inner products of those rows and its write ``w``, in fp32. Ungated (GPT-NeoX): ``gate`` is the input row, ``up``
     is None, and ``b`` the pre-activation's constant ``W_in β + b_in``."""
-    norm_m = arch.mid_norm(lay)
-    norm, centred = norm_m.weight.float(), is_centred(norm_m)
-    mlp = lay.mlp
-    gated = hasattr(mlp, "gate_proj")
-    gate = (mlp.gate_proj if gated else mlp.dense_h_to_4h).weight.float()
+    norm_m = arch.mid_norm(lay)  # None: the MLP reads the residual itself (OLMo 2 and 3)
+    p, mlp = anatomy.parts(lay), lay.mlp
+    gated = p.up is not None
+    gate = anatomy.module(lay, p.gate).weight.float()
+    norm, centred = anatomy.norm_scale(lay, p.n2, gate.shape[1]), is_centred(norm_m)
     w = arch.mlp_write(lay).T
     dot = lambda a, b: (a * b).sum(1)
     rg = gate * norm
@@ -57,12 +57,12 @@ def weights(lay) -> dict:
     out = {"gate": gate, "norm": norm, "gm": gm, "act": mlp_act(mlp), "gw": dot(rg, w), "gg": dot(rg, rg), "ww": dot(w, w),
            "centred": centred}
     if gated:
-        up = mlp.up_proj.weight.float()
+        up = anatomy.module(lay, p.up).weight.float()
         ru = up * norm
         um = ru.mean(1) if centred else torch.zeros(len(ru), device=ru.device)
         ru = ru - um[:, None]
         return out | {"up": up, "um": um, "uw": dot(ru, w), "uu": dot(ru, ru), "gu": dot(rg, ru)}
-    b = mlp.dense_h_to_4h.bias
+    b = anatomy.module(lay, p.gate).bias
     beta = getattr(norm_m, "bias", None)
     const = torch.zeros(len(gate), device=gate.device) if b is None else b.float().clone()
     if beta is not None:
@@ -144,7 +144,7 @@ class Accumulator:
             lay = stack.layers[l]
             module, scalar = arch.mlp_output(lay)
             self.weights[l] = weights(lay)
-            out.append(arch.mid_norm(lay).register_forward_pre_hook(lambda m, a, l=l: self.before(l, a[0])))
+            out.append(arch.mid_point(lay).register_forward_pre_hook(lambda m, a, l=l: self.before(l, a[0])))
             out.append(module.register_forward_hook(lambda m, a, o, l=l, s=scalar, lay=lay: self.mlp(l, o, s, arch.mlp_scale(lay, a[0]))))
         out.append(final_norm(stack).register_forward_pre_hook(lambda m, a: self.pred(a[0])))
         return out

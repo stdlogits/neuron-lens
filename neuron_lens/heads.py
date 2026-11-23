@@ -46,10 +46,13 @@ def rope_mean(offsets: torch.Tensor, inv_freq: torch.Tensor, hd: int | None = No
     return torch.diag_embed(c) - torch.diag_embed(s) @ P
 
 
-def norm_derivative(weight: torch.Tensor, r: torch.Tensor, m: torch.Tensor, n: torch.Tensor) -> torch.Tensor:
+def norm_derivative(weight: torch.Tensor, r: torch.Tensor, m: torch.Tensor, n: torch.Tensor,
+                    width: int | None = None) -> torch.Tensor:
     """``[heads, hd, hd]``: the true derivative of a q/k RMSNorm (and the input norm's scaling),
-    averaged over positions: ``diag(w)(E[r/ρ] I − E[r³ x xᵀ/ρ] / hd)`` from the sums ``r``
-    ``[heads]`` and ``m`` ``[heads, hd, hd]`` over ``n`` positions."""
+    averaged over positions: ``diag(w)(E[r/ρ] I − E[r³ x xᵀ/ρ] / D)`` from the sums ``r``
+    ``[heads]`` and ``m`` ``[heads, hd, hd]`` over ``n`` positions, ``w`` the scale (``[hd]``, or per head
+    ``[heads, hd]``) and ``D`` the width the norm spans (``hd``; OLMo's whole projection, whose derivative this is
+    each head's block of, the head read through its own query or key)."""
     hd = m.shape[-1]
     eye = torch.eye(hd, device=m.device)
-    return weight[:, None] * (r[:, None, None] * eye - m / hd) / n
+    return weight[..., :, None] * (r[:, None, None] * eye - m / (width or hd)) / n

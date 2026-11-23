@@ -32,7 +32,7 @@ from transformers import AutoConfig
 
 from neuron_lens import anatomy
 from neuron_lens.paths import DATA, FITS, SUMMARY
-from neuron_lens.rules import ZERO_CENTRED, attention, is_centred, is_gated, norm_eps
+from neuron_lens.rules import ZERO_CENTRED, is_centred, is_gated, norm_eps
 from neuron_lens.weights import tensors
 
 QWEN = "Qwen/Qwen3-8B"

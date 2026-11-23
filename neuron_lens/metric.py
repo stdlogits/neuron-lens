@@ -30,7 +30,6 @@ import torch
 
 from neuron_lens import anatomy, arch
 from neuron_lens.paths import FITS
-from neuron_lens.weights import tensors
 
 TINY = 1e-12
 FLOOR = 0.1  # polar: K Kᵀ's eigenvalues floored at this share of their mean, which keeps the lens's null space out (§15)

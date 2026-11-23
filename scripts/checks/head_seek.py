@@ -78,9 +78,9 @@ def diagonals(dev, tot: dict, extra: dict) -> dict:
         kvh, hd = lay.kv_heads, lay.head_dim
         qk = arch.qk(MODEL, lay, dev)
         Aq = norm_derivative(qk["q_norm"], tot["q_r"][layer].float().to(dev), tot["q_m"][layer, :, :hd, :hd].float().to(dev),
-                             float(tot["n_q"]))
+                             float(tot["n_q"]), qk["q_width"])
         Ak = norm_derivative(qk["k_norm"], tot["k_r"][layer, :kvh].float().to(dev),
-                             tot["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(tot["n_k"]))
+                             tot["k_m"][layer, :kvh, :hd, :hd].float().to(dev), float(tot["n_k"]), qk["k_width"])
         off = tot["offset"][layer].float().to(dev)
         Rbar = rope_mean(off / off.sum(-1, keepdim=True), arch.layer_inv_freq(extra["inv_freq"], MODEL, layer).to(dev))
         s2 = metric.s2(MODEL, "in", layer, dev)  # as 08_reads.py: the R side a covector, as a vector
