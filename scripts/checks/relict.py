@@ -14,6 +14,13 @@ Parts (data in ``data/relict/<model>/``, summaries in ``data/summary/relict_<par
 - ``step <rev>...``: ``tops`` and ``matrix`` on one load of each checkpoint.
 - ``cross <rev> <revs>...``: at one checkpoint (``main``), every target on the contexts every checkpoint in ``revs``
   gave the census's units: whether a job a unit had earlier still drives the target.
+- ``score <revs>...``: how alike each confirmed pair's two units are at each checkpoint (the mean cosine of their top
+  contexts' embeddings, as z over ``N_RANDOM`` random pairs of baseline units at that checkpoint), by thirds of their
+  likeness at the final checkpoint on their first two contexts each; the final value retested on the other three
+  (free of that selection). *Onset*: the first checkpoint where the source's own top contexts drive the target
+  (≥ max(0.3, the control's q95 at that checkpoint) on two of five). Relict generalization predicts pairs unlike at the
+  end that were alike at onset (a hump); the null is random unlinked pairs of baseline units with the same final
+  selection.
 - ``embed <revs>...``: Qwen3-Embedding-0.6B embeddings of every top context, at every checkpoint, of the units in the
   census's confirmed pairs (``confirmed``) and of ``N_BASE`` random census units (the baseline), as
   ``secondary_modes.show`` prints them.
@@ -242,6 +249,92 @@ def embed(revs: list[str]) -> dict:
     return E
 
 
+N_RANDOM = 2000
+STEPS = lambda r: 143000 if r == "main" else int(r.removeprefix("step"))
+
+
+def score(revs: list[str]) -> None:
+    import random
+    P = sm.load()[0]
+    T = P["targets"]
+    win = torch.load(sm.OUT / "state.pt")["win"].float().nan_to_num(0)
+    pairs = confirmed(P, win)
+    E = torch.load(OUT / "embed.pt", weights_only=False)
+    revs = sorted((r for r in revs if (OUT / f"matrix-{r}.pt").exists() and r in E["emb"]), key=STEPS)
+    rng = random.Random(0)
+    sim = lambda a, b: float((a.float() @ b.float().T).mean()) if len(a) and len(b) else float("nan")
+    base = E["base"]
+    bs = {}
+    for r in revs:
+        x = torch.tensor([sim(E["emb"][r][u], E["emb"][r][v]) for u, v in (rng.sample(base, 2) for _ in range(N_RANDOM))])
+        x = x[~x.isnan()]
+        bs[r] = (x.mean().item(), x.std().item())
+    z = lambda v, r: (v - bs[r][0]) / bs[r][1]
+    say(f"{MODEL}: {len(pairs)} confirmed pairs, checkpoints {', '.join(revs)}")
+    say("random-pair baseline (mean cosine): " + ", ".join(f"{STEPS(r) // 1000}k {bs[r][0]:.3f}" for r in revs))
+    L = {}
+    for r in revs:
+        t, m = tops(r), matrix(r)
+        a = torch.tensor([float(t["act_top"][l, n]) for _, l, n, _ in T]).clamp_min(1e-3)
+        pk = m["peak"].float() / a
+        row = m.get("plan_row", torch.arange(len(P["contexts"])))
+        thr = torch.maximum(torch.full((len(T),), sm.THRESH), pk[row[P["control"]]].quantile(0.95, dim=0))
+        for j, X, _ in pairs:
+            uk = m["unit_ctx"].get(X, [])
+            L[(j, X, r)] = len(uk) >= 2 and bool((pk[uk, j] >= thr[j]).sum() >= 2)
+    fin, rows = E["emb"]["main"], []
+    for j, X, _ in pairs:
+        Pu = tuple(T[j][1:])
+        if len(fin[Pu]) < 5 or len(fin[X]) < 5:
+            continue
+        rows.append(dict(band=T[j][0], k0=next((r for r in revs if L[(j, X, r)]), None),
+                         sel=z(sim(fin[Pu][:2], fin[X][:2]), "main"), retest=z(sim(fin[Pu][2:], fin[X][2:]), "main"),
+                         zk={r: z(sim(E["emb"][r][Pu], E["emb"][r][X]), r) for r in revs}))
+    lo, hi = torch.tensor([x["sel"] for x in rows]).quantile(torch.tensor([1 / 3, 2 / 3])).tolist()
+    groups = (("unlike at the end", lambda x: x["sel"] < lo), ("middle", lambda x: lo <= x["sel"] < hi),
+              ("alike at the end", lambda x: x["sel"] >= hi))
+    med = lambda v: torch.tensor(v).nanmedian().item()
+    say("\nz (likeness over the random-pair baseline), medians; onset as in the docstring")
+    say("group                 n   final retest  at onset  onset − retest (mean ± se)   onset step")
+    for name, f in groups:
+        g = [x for x in rows if f(x) and x["k0"] not in (None, "main")]
+        d = torch.tensor([x["zk"][x["k0"]] - x["retest"] for x in g])
+        say(f"{name:18s} {len(g):5d}  {med([x['retest'] for x in g]):11.2f}  {med([x['zk'][x['k0']] for x in g]):8.2f}  "
+            f"{d.mean():8.2f} ± {d.std() / len(d) ** 0.5:.2f}            {med([STEPS(x['k0']) for x in g]):7.0f}")
+    say("\nmedian z by checkpoint (the final column includes the selecting contexts)")
+    say("group".ljust(18) + "".join(f"{STEPS(r) // 1000:>6}k" for r in revs))
+    for name, f in groups:
+        g = [x for x in rows if f(x)]
+        say(name.ljust(18) + "".join(f"{med([x['zk'][r] for x in g]):7.2f}" for r in revs))
+    # the null: random unlinked pairs of baseline units, earlier layer first, the same final selection
+    mid = [r for r in revs if 4000 <= STEPS(r) < 143000]
+    null = []
+    while len(null) < 4000:
+        u, v = sorted(rng.sample(base, 2))
+        eu, ev = E["emb"]["main"][u], E["emb"]["main"][v]
+        if u[0] == v[0] or len(eu) < 5 or len(ev) < 5 or any(min(len(E["emb"][r][u]), len(E["emb"][r][v])) < 2 for r in mid):
+            continue
+        null.append(dict(sel=z(sim(eu[:2], ev[:2]), "main"), retest=z(sim(eu[2:], ev[2:]), "main"),
+                         zk={r: z(sim(E["emb"][r][u], E["emb"][r][v]), r) for r in mid}))
+    un, nu = [x for x in rows if x["sel"] < lo], [x for x in null if x["sel"] < lo]
+    say(f"\nunlike at the end: linked pairs (n={len(un)}) against random unlinked pairs with the same selection (n={len(nu)})")
+    for c in (1.0, 1.5, 2.0):
+        f = lambda xs: sum(max(x["zk"][r] for r in mid) >= c for x in xs) / len(xs)
+        a_, b_ = f(un), f(nu)
+        se = (a_ * (1 - a_) / len(un) + b_ * (1 - b_) / len(nu)) ** 0.5
+        say(f"  z ≥ {c} at some checkpoint {STEPS(mid[0]) // 1000}k-{STEPS(mid[-1]) // 1000}k: linked {a_:.3f}, random {b_:.3f} "
+            f"(difference {a_ - b_:+.3f} ± {se:.3f})")
+    say("  median z: " + ", ".join(f"{STEPS(r) // 1000}k {med([x['zk'][r] for x in un]):.2f}/{med([x['zk'][r] for x in nu]):.2f}" for r in mid)
+        + f"; retest {med([x['retest'] for x in un]):.2f}/{med([x['retest'] for x in nu]):.2f} (linked/random)")
+    for b in dict.fromkeys(x["band"] for x in rows):
+        out = []
+        for name, f in groups:
+            g = [x for x in rows if f(x) and x["band"] == b and x["k0"] not in (None, "main")]
+            d = torch.tensor([x["zk"][x["k0"]] - x["retest"] for x in g])
+            out.append(f"{name} {d.mean():+.2f} ± {d.std() / max(len(d), 1) ** 0.5:.2f} (n={len(g)})")
+        say(f"  band {b}: onset − retest: " + "; ".join(out))
+
+
 def check_main(t: dict) -> None:
     """The pass at ``main`` against the catalog's ``acts`` tables: top-document overlap and act_top."""
     for l in (0, len(t["val"]) // 2, len(t["val"]) - 1):
@@ -254,7 +347,7 @@ def check_main(t: dict) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed"])
+    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed", "score"])
     ap.add_argument("revs", nargs="*")
     args = ap.parse_args()
     torch.set_grad_enabled(False)
@@ -278,7 +371,9 @@ def main():
         cross(args.revs[0], args.revs[1:])
     if args.part == "embed":
         embed(args.revs)
-    with open(SUMMARY / f"relict_{args.part}_{STEM}.log", "a") as f:
+    if args.part == "score":
+        score(args.revs)
+    with open(SUMMARY / f"relict_{args.part}_{STEM}.log", "w" if args.part == "score" else "a") as f:
         f.write("\n".join(LOG) + "\n")
 
 
