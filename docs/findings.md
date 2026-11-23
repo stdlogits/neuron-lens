@@ -3,7 +3,7 @@
 What the catalog shows about the neurons and attention heads of Qwen3-8B, Gemma 4 12B (in text, images and sound) and the
 rest of the Qwen3 family to 14B, and how far each way of reading them goes. Each section gives its setup, its results
 against controls, and its limits; the methods are in [design.md](design.md) and the overview in the
-[README](../README.md). The sections run in seven parts:
+[README](../README.md). The sections run in eight parts:
 
 | | § | in one line |
 |---|---|---|
@@ -29,6 +29,8 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B and 0.6B are width-pruned from the 8B and 1.7B: three lineages, not five sizes |
 | **VII. What the lenses miss** | [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the dark sector matters 300-5,700 times more than the lens predicts; what prompts differ in turns bright, and the rest is inert |
 | | [§22](#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read) | the R-lens reads a block of raw coordinates that the writes avoid; where it meets the S-lens's, a core carries each position's token through mid-depth, and late the prediction moves into the rest |
+| **VIII. Mixed units** | [§23](#23-a-colorado-neurons-tornado-mode-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses |
+| | [§24](#24-secondary-modes-weights-propose-contexts-check) | 15-33% of Qwen3-8B's poles have a weight-wired input from an unrelated domain at a third of their peak, 2-4% at half; weights propose them, but only contexts and labels say which are unrelated |
 
 Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
 (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in `data/summary/`, and figures are drawn by
@@ -1628,6 +1630,17 @@ the depth away.
   one: their weights have shrunk toward a shared direction (best and second-best scores within 0.005, even with up to 64
   shared components removed), and their activations are noise. Pearson agrees with the weights most often (96.6-99.6% at
   the 4B's L8-L28); the write reads add most at the last layers, where the activations agree least.
+- **Qwen3-32B is the 14B grown** (`checks/colorado_tornado.py lineage`, weights only). The two share the residual (5,120
+  wide) in the same basis, so neurons compare directly. 32B L55's neurons match 14B L31's index for index: over a sample
+  of the layer the same-index cosines have medians of 0.69 (gate rows), 0.68 (up rows) and 0.75 (down columns), against
+  0.01 with the index shuffled, and §23's neuron, n11703, matches at 0.74, 0.74 and 0.91, its best match among every 14B
+  neuron of every layer. 32B L11 and L35 both match 14B L11 (medians 0.35-0.47), and 32B L31 matches 14B L31 more weakly
+  (0.11-0.14). The 32B's MLPs, 25,600 wide against 17,408, add neurons that match 14B neurons too (median best |cos| 0.51
+  at L55): copies, not new ones. Layer for layer this fits the repeated block that comparisons of the two models' key and
+  value weights show (inuEbisu 2026, [X](https://x.com/inuEbisu/status/2115712058608271471); Tigges et al. 2026 see
+  32B L32-L55 copy L8-L31): the 14B's L0-L7, its L8-L31 twice and its L32-L39 make the 32B's 64 layers. The copy that
+  sits at its origin's relative depth (14B L31, 78% of the way up, at 32B L55, 86%) kept closer to it than the copy at
+  32B L31 (48%).
 
 **What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
 layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
@@ -1639,7 +1652,7 @@ from larger models in post-training; it doesn't mention pruning.
 
 **What it confounds.**
 - **The size comparison (§19).** The five post-trained sizes are three lineages: the 1.7B's (0.6B and 1.7B, 28 layers),
-  the 8B's (4B and 8B, 36 layers) and the 14B's (40 layers). The step in the S-lens's input reads from 28 to 36 layers is
+  the 8B's (4B and 8B, 36 layers) and the 14B's (40 layers), and the 32B, grown from the 14B, is in the 14B's. The step in the S-lens's input reads from 28 to 36 layers is
   also a step between lineages, and the 14B, which reads like the 8B, is the only check that it goes with depth.
 - **Width within a lineage (§19).** The 0.6B against the 1.7B and the 4B against the 8B set a cut-down, distilled model
   beside its parent, not two widths trained alike. The 4B's near-silent poles are the 8B's, inherited.
@@ -2029,6 +2042,160 @@ from the weights. The ICA sources (96 in the block, 48 in the late group) are fi
 outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*` and
 `data/summary/sectors_{unions,depth,late}_qwen3-8b.*`.
 
+## VIII. Mixed units
+
+A unit is mixed when it serves two jobs that share no feature. §23 traces one, from Qwen3-32B back to the 14B, to where
+the mixing enters; §24 counts such second jobs across Qwen3-8B.
+
+### §23. A Colorado neuron's Tornado mode: relict generalization
+
+Cammarata (2026, [Neural networks are already clean](https://already-clean.goodfire.com/)) described a Qwen3-32B
+neuron that tracks Colorado (L55 n11703); Brangus (2026, [X](https://x.com/RatOrthodox/status/2110976835089809678)) found that
+it also fires on code using Tornado, a Python web framework, and that zeroing it moves the model's answer to where Tornado
+was developed away from Colorado. Tigges et al. (2026, [Neurons as an interpretable
+basis](https://www.goodfire.com/research/neurons-as-an-interpretable-basis)) found the Tornado mode rare (98.5% of the
+neuron's strong firings on ordinary text are about places) and supposed it came from copying the 14B's layers. Its parent
+is 14B L31 n11703 (§20).
+
+**Setup** (`checks/colorado_tornado.py`; Qwen3-14B, bf16 on an M5 Max, the released lenses). A unit's activation on a
+text is its pole-signed peak over positions, as a share of its `act_top`. The texts are 32 short hand-written passages
+(`checks/colorado_tornado_texts.json`): Colorado, highland, plateau, steppe and prairie prose, Tornado code and prose
+(and the same code with the library renamed), other web libraries, MongoDB code, storm reports, Chinese-commented code.
+The code slice's 23 files that import Tornado are run against 23 files of other web libraries and 23 random files (their
+first 512 tokens). Splits of an activation over its sources are exact (half rule, the norm's rms held; Qwen3 is
+pre-norm, so a layer's MLP input is the sum of the embedding, every head's write and every earlier neuron's).
+
+- **The 14B parent already has the mode.** 14B L31 n11703+ is a Colorado neuron on every side the catalog keeps (its
+  write, read and drivers name Colorado, Denver, Boulder, the Rockies; all 64 top documents are Colorado's). On the files
+  that import Tornado it peaks at a median 0.26 of its `act_top` (max 0.45; 35% of files at 0.3 or more), against 0.01 on
+  other web libraries' files and on random code. Colorado prose gives 0.93-1.09, Bolivia 0.42, storm reports 0.05, and
+  the Tornado code with the library renamed 0.51. The 32B inherited the mode from the 14B with the layers.
+- **It enters at L11, in a unit with two jobs.** Of every pole whose reads or drivers name Colorado, those at L0-L12
+  barely respond to the Tornado files (medians 0.00-0.16, against 0.00-0.11 on the other libraries'); from L13 a run of
+  Colorado and Mountain West units fire on them at medians of 0.21-0.32 of their `act_top`, against 0.01-0.07 (L13
+  n11715−, L14 n489−, L17 n4541−, L21 n15023+, L23 n2209−, L29 n10886+, then L31), while others in the same layers don't. Upstream of them, L11 n6575− fires at 1.0-1.15 on Tornado
+  code (renamed too) and at 1.09 on Bolivia's Altiplano, 0.63 on Inner Mongolia's grassland, 0.53 on Wyoming's high
+  plains, 0.39 on Colorado and on Qinghai, against 0.11 on the Kansas prairie, 0.14 on the Swiss Alps and 0.01 on
+  Shanghai: a high-plateau unit, with Tornado code among at least 20 of its 64 top documents. Its strongest weight inputs
+  include a Colorado unit (L6 n7831+) and two Tornado-library units (L6 n7200−, L7 n12137−), which fire on Tornado code at
+  0.9-1.5 of their `act_top` and not on storm reports, other libraries or Chinese text. Run on each input's own five top
+  contexts, L11 n6575− fires at 0.81 and 0.91 on the Tornado units', 0.56 on a Peru unit's, 0.44 on the Colorado unit's,
+  0.34 on a Swiss unit's and 0.03 on random poles'.
+- **Late, the same heads carry both jobs.** At the Colorado neuron, heads give 56-96% of the activation at its Colorado
+  and its Tornado firings alike, the largest the same ones: L31h21 (whose OV read names Qinghai and Xining), L30h5 and
+  L26h27. The MLP input's R-lens read there names the next token at a Tornado firing (` response`, `.listen`) and Denver
+  or Colorado at a Colorado firing.
+- **Weights name the entry, not the inheritors.** Through the `edges` tables, the Tornado units are L11 n6575−'s second
+  and fourth strongest ancestors at L0-L10, L14 n489−'s about 120th-170th and the Colorado neuron's about 300th-400th. No
+  token read of the mixed units names the mode: in the S-lens read of L11 n6575− the best Tornado token (` tornado`,
+  ` coroutine`, `.settings`, ...) ranks past 19,000 of 124k kept tokens, and removing the layer's top 8-512 read
+  directions, or the read's own top 8-32 R-lens tokens one at a time, leaves them past 1,000. The S-lens read of the L7
+  Tornado unit names the framework's API instead: `.cookies` 9th, `.settings` 142nd, `_secure` 150th.
+- **The link carries fossils of MongoDB.** The output tokens the Tornado units' writes share most with L11 n6575−'s read
+  (R-lens, z-scored over the layer's rows) are ` bson`, ` mongo`, ` pymongo` and ` mongodb`, beside ` Mongolia`, 蒙古 and
+  内蒙古. Motor, MongoDB's asynchronous driver for Tornado, is among the L7 Tornado unit's drivers (` motor`, ` Motor`).
+  In L11 n6575−'s own read ` bson` ranks 6th-11th, ` mongo` 17th and ` mongodb` 18th-35th, beside Colorado (10th) and
+  Mongolia (15th); 0.07% of 4,096 random poles of L11 have a MongoDB token in their top 20, and a plateau reader off the
+  path (L7 n5551+, Inner Mongolia and Hebei) has Mongolia 461st and ` bson` 16,780th. Removing the Tornado units' writes,
+  or the writes of L11 n6575−'s top 64 weight inputs, from its read leaves ` bson` 12th-13th. The Colorado neuron's read
+  keeps them too (` mongo` 51st, ` bson` 161st; 0.27% of random L31 poles have one in their top 50), and a spelling unit
+  at L3 (n3032+) fires on both "Mongolia" (0.89) and `pymongo` (0.86). The token directions of `mongo` and of Mongolia at
+  L11's MLP input lie at a mean cosine of 0.40 (against random tokens', −0.01).
+- **No route through MongoDB is in use.** MongoDB code doesn't drive L11 n6575− (0.03-0.06 for pymongo, Motor, bson and
+  mongoose code) or the Colorado neuron (0.01 or less). The writes of five MongoDB-detecting units reach L11 n6575−'s
+  read at chance (|cosine| 0.002-0.012, random poles' median 0.008-0.010), where the Tornado units' (0.080, 0.100) and its plateau
+  inputs' (0.076-0.113) pass the random poles' 99th percentile. Projecting the `mongo` tokens' directions out of its MLP
+  input leaves its Tornado firing at 1.02-1.04 of itself, while projecting out place names' directions cuts its Colorado
+  firing to 0.45 and its Wyoming firing to 0.61 and leaves Tornado at 0.95-0.97. The Tornado drive runs along a direction
+  no output token names. Chinese comments neither drive it (Flask code with them, 0.02) nor add to Tornado's (1.16 against
+  1.15).
+
+**What this suggests.** One unit, L11 n6575−, mixes two jobs at full strength, high plateaus and Tornado code, and the
+units after it read its write as a plateau signal: they inherit a weaker copy of the mode while reading one thing each.
+Projected that far, a mixed unit early makes several units look mixed late. The fossils suggest how it formed: Tornado
+code predicts MongoDB (Motor), `mongo` lies next to Mongolia, and Mongolia next to the other high plateaus, a chain of
+related steps of the kind Cammarata calls recursive generalization; training would then have cut the MongoDB step, which
+would fire wrongly on every MongoDB file, and left the Tornado end, which costs anything only when a place is at stake in
+Tornado code, almost never. We call this **relict generalization**: recursive generalization whose middle steps were
+pruned, leaving the two ends joined with no working path between them, as a relict population outlives the range that
+once connected it. In the final model it looks like the arbitrary packing superposition predicts, but it carries fossils
+of the missing step. Without checkpoints the history is inferred: the final model shows that the fossils are there and
+that the route is gone.
+
+**Limits.** One unit and its chain. Hand-written texts and 23 files, in bf16. A lens read is an average over contexts, and
+the fossils are R-lens ranks of read rows. The code slice can't say how often Tornado, MongoDB or both occur in Qwen's
+training data (23 and 15 files of 8,000, none with both). Compact outputs are
+`data/summary/colorado_tornado_{lineage,probe,files,split,wiring,mongo}.log`.
+
+### §24. Secondary modes: weights propose, contexts check
+
+§23's mode entered through weight edges: the mixed unit's in-edges include its second job's units, and that job's own
+contexts drive it. This counts such inputs across a model.
+
+**Setup** (`checks/secondary_modes.py`; Qwen3-8B, bf16 on an M5 Max). 2,000 firing poles (`act_top` ≥ 0.05), 500 from
+each depth band (layers 1+, seed 0). Each pole's first 16 positive in-edges propose its inputs (23,429 in all). Every
+input's five top contexts (the 64 tokens before its firing and the 8 after) are run, with each pole's own five as the
+reference and one top context each of 400 random poles as the control (97,511 unique contexts), and every pole's peak over
+positions t − 2 to t + 8 around the input's firing is recorded as a share of its `act_top`. An input is *confirmed* when
+the pole reaches the larger of 0.3 and its 95th percentile over the control contexts on at least two of the five; five
+random control contexts pass that 0.1% of the time. A judge, Sonnet 5.5 at maximum effort, reads each pole's label and
+three of its own contexts, then each confirmed input as the two of its contexts where the pole fired most, with no
+activation values, and gives the probability that what they share is the pole's main job, a related neighbour of it, or
+unrelated to it (ranked, as in §13). Two decoys sit among the inputs on each card: the pole's own fourth and fifth
+contexts, and two random poles' contexts.
+
+- **Weights propose, a minority are confirmed.** 13% of the proposed inputs are confirmed, 6% in the sensory band and 20%
+  in the motor band; 58% of poles have at least one. Weight strength matters: 21% of the first four in-edges are
+  confirmed and 7% of the 13th-16th. A confirmed input drives its pole at a median 0.35 of its `act_top` (quartiles
+  0.27-0.48), below its top firings.
+- **The judge.** It reads the poles' own held-out contexts as their main job 80% of the time (calling 5.6% unrelated), and
+  random poles' contexts as unrelated 96% of the time (AUROC 0.99 between the two).
+- **How often an input is unrelated:**
+
+  | band | inputs confirmed | poles with one | same / related / unrelated | poles with an unrelated input (floor) | at 0.5× or more |
+  |---|---|---|---|---|---|
+  | sensory L1-L3 | 6.0% | 42% | 39 / 30 / 31% | 16.6% (4.1%) | 4.2% |
+  | association L4-L8 | 8.8% | 50% | 45 / 32 / 23% | 15.4% (5.5%) | 2.8% |
+  | workspace L9-L20 | 17.5% | 74% | 36 / 35 / 29% | 33.2% (11.1%) | 3.2% |
+  | motor L21-L35 | 20.0% | 65% | 46 / 38 / 17% | 20.2% (9.7%) | 2.4% |
+
+  "Unrelated" is the judge's p ≥ 0.5; the floor is what its rate on own contexts would give each pole from its number of
+  confirmed inputs. Early, the unrelated inputs mostly share a word piece with the pole's job (` couchpotato` driving a
+  knee and body-part pole through "ato"): one token-level job read as two meanings. Deeper they include second jobs
+  (L32 n1202+, `import` in numpy code and translated web novels, both in its own top contexts; L11 n2419−, research on
+  young children and key names in code configs) and labels narrower than the pole (L9 n1024−, second-person address,
+  driven by phrases about the future).
+- **The modes rarely spread.** For each unrelated input, the poles that share the pole's job (firing at 0.3 or more on
+  three of its five own contexts and on at most 2% of 200 control contexts) were run on the input's contexts. About 1% of
+  the job-sharers after the pole fire on them too (0.8-1.0% by band, chance 0.0%), and 16-37% of the modes reach one at
+  all; §23's spread over a run of Colorado units is the tail.
+- **No weight score says which inputs are unrelated.** Against the judge, the AUROC of twelve weight-only scores is
+  0.52-0.61 over all confirmed inputs (0.54-0.64 on the clearest cases, p ≥ 0.8 against p_same ≥ 0.6, and at most 0.74 in
+  one band): the edge's push and
+  cosine; the input's write beyond the pole's read direction (in the metric) against the same remainders of its other
+  inputs; write against read and read against read through either lens, z-scored per token, with or without the layer's
+  top 64 read directions removed; the input against the pole's other inputs. Per-pole weight signatures (the gate-up
+  cosine, how peaked the reads are, the write's norm) give 0.35-0.64.
+- **Labels do.** The cosine of the pole's and the input's catalog labels under a text-embedding model
+  (Qwen3-Embedding-0.6B) has an AUROC of 0.74 (0.89 on the clearest cases; 0.70-0.78 by band). It holds within one pole's
+  inputs (0.71 over 1,097 pairs), on clear labels only (0.78), past word overlap (0.67 for shared words; 0.66 on pairs
+  that share none) and within each quartile of weight strength (0.71-0.82); shuffled verdicts give 0.505. Median cosines:
+  random poles' labels 0.44, unrelated inputs 0.48, related 0.54, same 0.64.
+
+**What this suggests.** Weight edges point to a pole's second jobs, but don't say which inputs really drive it, or whether
+what drives it is related: a confirmed input writes along the pole's read direction by construction, so the pole's own
+weights see every input the same way, and §23's second job arrives along a direction no token names. Contexts confirm
+and labels relate, and the label and the judge agree because both summarize the same contexts. By count, about a fifth of
+poles (10-22% net of the judge's floor) have an input from an unrelated domain that drives them to a third of their
+peak; by strength, 2-4% have one at half their peak. Such modes sit below a pole's top firings, which is why its top 64
+documents and its reads don't show them, and they rarely spread.
+
+**Limits.** One model and one sample. Only positive in-edges are proposed, one hop back, with no head inputs (late
+neurons are driven mostly by heads, §12), so these are lower bounds. The judge compares inputs with one label of the pole,
+so a narrow label inflates "unrelated" (its floor is measured on own contexts, not on related ones). The 0.3 and 0.5
+thresholds and the window are choices. Outputs are in `data/summary/secondary_modes_{score,inherit,weights,labels}_qwen3-8b.log`;
+the matrix and the judge's verdicts stay local (`data/secondary_modes/qwen3-8b/`).
+
 ## Open questions
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
@@ -2057,3 +2224,8 @@ outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*
 - Gemma 4's labels with its image and sound exemplars on the cards (§16), and media reads per slot, which would say where
   in an image a neuron looks.
 - Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §12).
+- Whether relict generalization happens as §23 infers: in a model with checkpoints and a known data order (Pythia, OLMo),
+  whether an unrelated mode's link forms through an intermediate that drives the unit at first and later falls away, and
+  whether the step that survives is the one its data exercises least.
+- §24's census with head inputs, more than one hop back and a second model, and what weight-level quantity, if any, tells
+  a related input from an unrelated one (§24 found none among twelve).

@@ -1,0 +1,43 @@
+Qwen/Qwen3-8B: 2000 targets, 23429 proposed sources, 2954 confirmed, 1145 cards judged; own contexts 1.19 of act_top at the median; random contexts' q95 0.069
+judge on decoys: own held-out contexts argmax same 0.80, judged unrelated 0.056; random poles' contexts argmax unrelated 0.96; AUROC of p_unrelated, random vs own 0.99
+confirmed share by in-edge rank 1-4, 5-8, 9-12, 13-16: 0.208, 0.116, 0.079, 0.068
+confirmed sources' strength (share of the target's act_top on their contexts): median 0.35, quartiles 0.27-0.48
+
+band         targets proposed confirmed chance ≥1 conf |  same   rel unrel | ≥1 unrel  floor ≥1 unrel ≥0.5x
+sensory          500     6507     0.060  0.001    0.42 |  0.39  0.30  0.31 |    0.166  0.041          0.042
+association      500     5956     0.088  0.001    0.50 |  0.45  0.32  0.23 |    0.154  0.055          0.028
+workspace        500     6194     0.175  0.001    0.74 |  0.36  0.35  0.29 |    0.332  0.111          0.032
+motor            500     4772     0.200  0.001    0.65 |  0.46  0.38  0.17 |    0.202  0.097          0.024
+(floor: the share of targets the judge's false 'unrelated' rate on own contexts would give, from each target's number of confirmed sources)
+
+strongest unrelated sources (target ← source):
+  1.90  L1 n1466 − [faint shadow: 参差 and 参量 (zh 'uneven' fragments)] ← L0 n941 − [Chinese character 动 (move/motion) in compounds lik]  shared: The traditional Chinese character 動, once right after 參差 and
+  0.98  L1 n9951 + [Chinese pinyin and 汉语拼音 pronunciation notation] ← L0 n10251 + ['Updated' in 'Last Updated' / 'Created' date stamp]  shared: English 'Last Updated' timestamp label on web pages
+  0.95  L4 n12177 + [JavaScript declarations (let, const, function) in code] ← L3 n4647 + [Java and C++ code with array and map types]  shared: type-validation error mentions in code (an array error messa
+  0.87  L2 n3901 − [word-internal fragments 'weinger', 'webles', 'wecker' (We- s] ← L0 n9023 − ['Kit' in software names (buk-kit, AppKit, Toolkit)]  shared: 'Kit' completing 'AppKit', a word-internal fragment of a cam
+  0.81  L2 n9320 + [knee and other body-part/medical words in mixed contexts (kn] ← L1 n2651 + [potato and tomato words (potato, tomato, 土豆, 番茄, P]  shared: word-piece 'ato' inside 'couchpotato' in Python import code
+  0.79  L25 n9311 − ['Faith' in faith-based or Christian names] ← L24 n10866 − [citizen and city words (citizen, civic, 公民, 市民)]  shared: 'Citizen' as the first word of a title or name (Citizen Reef
+  0.75  L3 n7991 − [unclear: stray word fragments and abbreviations (O, Re, RL, ] ← L2 n11747 − [numeric fractions and measurements split at spaces]  shared: the space token between a whole number and a fraction in mix
+  0.73  L3 n5440 − [faint shadow: Chinese text ending in 了/会/i (不得了, 晚會)] ← L1 n1693 − ['well' as a word, especially in 'well-being' and p]  shared: English word-ending fragment 'ell' in Whewell and in a split
+  0.71  L6 n8322 + [mid-phrase tokens after 'in/around' and line breaks in code] ← L5 n1780 − [elliptical/oval shapes in botanical descriptions (]  shared: mid-word Chinese character 圓 in 橢圓形 (oval) in botanical leaf
+  0.71  L12 n9384 + [faint shadow of the − pole; no input read] ← L10 n10607 − [PDF and download words (PDF, download, 下载)]  shared: downloadable PDF or software documents
+  0.71  L1 n2419 + [the 'export'/'require' keyword in JavaScript and TypeScript ] ← L0 n613 − [Thai and Lao script syllables]  shared: The Thai script character 'ข' inside Thai text, with no code
+  0.71  L9 n1024 − ['you/your' and second-person address] ← L8 n7853 + [years 2005-2018 written as a partial digit split, ]  shared: sentence-final time or future phrase ('grows up', 'by 2015')
+  0.70  L11 n2419 − [children and early-childhood research: children, babies, tod] ← L10 n4115 + [encryption keys and RSA key names in code]  shared: Mid-token continuations inside compound terms: the DNA 'tran
+  0.70  L16 n1530 − [update and recent-news words (Update, Alerts, pending, recen] ← L15 n12164 + ['answer' and 'accept' in forum replies]  shared: Stack Exchange comment boilerplate asking the asker to accep
+  0.69  L3 n9005 − ['minute/part' in 分分秒秒, 五分之四, 四分之三] ← L1 n9351 − [the word 数 (number/quantity) in Chinese, e.g. 数量, ]  shared: Traditional Chinese 數量 (quantity): 量 as the second character
+  0.66  L2 n9320 + [knee and other body-part/medical words in mixed contexts (kn] ← L1 n8848 − [tennis and sport names (Tennis, 网球, 乒乓, Wimbledon)]  shared: Chinese 球 (ball) ending 網球, tennis; sports, not a body part
+  0.65  L7 n4985 − [code import lines and module names (openc og, kit, kim)] ← L6 n5338 + ['G NN' in Chinese bracketed codes and similar frag]  shared: Latin acronym GNN inside a Chinese news byline (name fragmen
+  0.64  L5 n12017 + [dollar-sign and $-quoted tokens, and income/收入 in Chinese] ← L0 n497 − [the verb 登 (ascend, register) in 登机, 登记, 登载]  shared: Chinese character 登 (ascend/publish) in 登载 and 独登台; an enter
+  0.64  L32 n1202 + ['import' in numpy/Python import statements] ← L25 n2447 + [wuxia/martial-arts novel dialogue and chapter brea]  shared: Chinese web-novel text: a Chinese title name fragment and 'w
+  0.63  L1 n10031 + [the 'SYS' and 'analysis' span in engineering software names ] ← L0 n7992 + [molecule and molecular (分子, molecular, molecules)]  shared: Chinese 高分子 (polymer) materials term; technical materials-sc
+  0.63  L2 n8453 − [citation and source-attribution fragments (Encyclopedia.com,] ← L0 n5229 + [Katakana and name tokens (ッ, ス, フィ, Rohingya)]  shared: partial UTF-8 byte-fragment tokens in Chinese web text (cate
+  0.63  L19 n2612 + [closing quotation mark after a sentence-ending period or quo] ← L18 n4087 + [ellipsis and bracketed ellipsis after a number or ]  shared: dotted software version numbers in a table and in prose
+  0.63  L13 n2933 − [Soviet/Russian names and nationalities] ← L11 n5269 − [Russia and the USSR: Russian, Moscow, Soviet, Krem]  shared: Dot tokens in a Python module path and in a Russian author's
+  0.62  L1 n6803 − [transcript speaker tags and dialogue lines (e.g. 'MARTIN:', ] ← L0 n8261 − [Double-angle-bracket and shift operators (>>, <<)]  shared: ' >>' breadcrumb navigation separator in English and Chinese
+  0.62  L7 n7948 + ['plant' as a verb (plant seed, plant a kiss, plant trees)] ← L6 n10869 − ['love' after 'in' or 'fell in' (in love)]  shared: the phrase 'fall/fell in love', firing on 'love'
+  0.61  L15 n8073 + [shadow pole, weak firing on prepositions and commas before a] ← L14 n7772 + [trade-offs and costs: usability, pleasure, economy]  shared: trade-off consequences (economy tanks, usability decreases);
+  0.61  L1 n8773 − [the 'el' ending in the name Frankel] ← L0 n11205 − [citation and cite word family]  shared: the word ' citation' in unrelated contexts (reference info, 
+  0.61  L31 n1163 + ['legally bound' and binding-by-agreement phrases] ← L30 n6724 − [directional traffic terms: destination, southbound]  shared: compass direction in a driving context, southbound/north of 
+  0.61  L28 n1921 + [proper names and capitalized terms in formal text (Hispanic,] ← L27 n1648 − [dogs and dog breeds]  shared: Dog-related text: a bare space before '10 kg' and 'standard'
+  0.60  L2 n12282 − ['Pages'/'Words' counts and 'Paper' in essay-site metadata] ← L0 n10939 − [Django/ORM import paths like '.models' and '/auth']  shared: Python/Django relative imports (from .models import), code
