@@ -450,6 +450,7 @@ def score(revs: list[str]) -> None:
 # contexts in place of a label (Pythia's catalog has none; prompt relict_judge.md)
 
 N_JUDGE = 200  # targets with a confirmed source judged per model, as many from each band (seed 0)
+N_ONSET = 70  # of those with an unrelated source at the end, the targets whose onset and retest cards are judged (seed 0)
 PROMPT = Path(__file__).with_name("relict_judge.md")
 
 
@@ -564,8 +565,8 @@ def judge_test(n: int) -> None:
 
 
 def judge_submit(stage: str) -> None:
-    """``end``: every end card; ``onset``: the onset and retest cards of the targets with a source judged unrelated
-    (p ≥ 0.5) at the end."""
+    """``end``: every end card; ``onset``: the onset and retest cards of ``N_ONSET`` targets with a source judged
+    unrelated (p ≥ 0.5) at the end."""
     import json
 
     from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
@@ -575,7 +576,9 @@ def judge_submit(stage: str) -> None:
     if stage == "end":
         cards = [c for c in cards if key[c["custom_id"]]["stage"] == "end"]
     else:
-        un = {v["j"] for v in judged() if v["stage"] == "end" and v["kind"] == "src" and v["p_un"] >= 0.5}
+        import random
+        un = sorted({v["j"] for v in judged() if v["stage"] == "end" and v["kind"] == "src" and v["p_un"] >= 0.5})
+        un = set(random.Random(0).sample(un, min(N_ONSET, len(un))))
         cards = [c for c in cards if key[c["custom_id"]]["stage"] in ("onset", "retest") and key[c["custom_id"]]["target"] in un]
     b = sm.client().messages.batches.create(
         requests=[Request(custom_id=c["custom_id"], params=MessageCreateParamsNonStreaming(**params(c))) for c in cards])
@@ -673,8 +676,14 @@ def judge_score() -> None:
         say(f"  {name:26s} n={len(g):4d}: unrelated at the retest {sum(r_) / max(len(r_), 1):.3f} (n={len(r_)}), at onset "
             f"{sum(o_) / max(len(o_), 1):.3f} (n={len(o_)}; median onset step "
             f"{torch.tensor([STEPS(ons[k]['rev']) for k in g if k in ons]).float().median():.0f})")
+    say("  by onset step (share unrelated at onset, n): unrelated at the end / not")
+    for lo_, hi_ in ((0, 2000), (4000, 4000), (8000, 16000), (32000, 120000)):
+        cell = lambda f: [un(ons[k]) for k, v in end.items() if f(v) and k in ons and lo_ <= STEPS(ons[k]["rev"]) <= hi_]
+        a_, b_ = cell(un), cell(lambda v: not un(v))
+        say(f"    {lo_ // 1000}k-{hi_ // 1000}k: {sum(a_) / max(len(a_), 1):.2f} ({len(a_)}) / {sum(b_) / max(len(b_), 1):.2f} ({len(b_)})")
     say("  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)")
-    for v in sorted((v for k, v in ons.items() if un(end[k]) and k in ret and un(ret[k]) and not un(v)), key=lambda v: v["j"])[:12]:
+    for v in sorted((v for k, v in ons.items() if k in end and un(end[k]) and k in ret and un(ret[k]) and not un(v)),
+                    key=lambda v: v["j"])[:12]:
         e = end[(v["j"], v["src"])]
         say(f"    {sm.name(T[v['j']][1:])} ← {sm.name(v['src'])}: at {v['rev']} '{v['shared'][:50]}' ({v['p_un']:.2f}); at the end "
             f"'{e['shared'][:50]}' ({e['p_un']:.2f})")
