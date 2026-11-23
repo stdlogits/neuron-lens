@@ -37,8 +37,8 @@ whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-
 ``--from-branch`` releases the catalog a branch of the dataset holds instead of this machine's (a GPU box's, sent with
 ``--tables``): the model's whole folder is copied on the Hub, the card's numbers read from its parquet files' footers, and
 what the target has in that folder and the branch lacks is deleted. The Qwen3 family's other sizes (``LADDER``) get a
-section of each card. The Pythia suite (``PYTHIA``) has none yet: its ``lenses`` and ``scale`` go up alone, the cards as they
-are, and its tables with ``--tables``.
+section of each card. The Pythia suite, Qwen3.5 and Qwen3-30B-A3B (``LENS_ONLY``) have none yet: their ``lenses`` and
+``scale`` go up alone, the cards as they are, and Pythia's tables with ``--tables``.
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
@@ -75,6 +75,9 @@ QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwe
          "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
 LADDER = tuple(m for m in QWEN3 if m not in MODELS)
 PYTHIA = tuple(f"EleutherAI/pythia-{s}" for s in ("14m", "70m", "160m", "410m", "1b", "1.4b", "2.8b", "6.9b", "12b"))
+# Models whose lenses go up alone, the cards as they are, until the cards cover them: the Pythia suite, Qwen3.5 and
+# Qwen3-30B-A3B
+LENS_ONLY = PYTHIA + tuple(f"Qwen/Qwen3.5-{s}" for s in ("0.8B", "2B", "4B", "9B", "35B-A3B")) + ("Qwen/Qwen3-30B-A3B",)
 PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
@@ -154,8 +157,9 @@ def write_lenses(model: str, out: Path) -> dict:
     last = n_layers - 1
     facts = {}
     for sub, corpus in [("", "dclm")] + ([(f"{m}/", c) for m, c in MEDIA.items()] if arch.is_gemma4(model) else []):
-        r = torch.load(FITS / f"r-{stem}-L{n_layers}-{corpus}.pt", weights_only=False, map_location="cpu", mmap=True)
-        s = torch.load(FITS / f"s-{stem}-L{n_layers}-{corpus}.pt", weights_only=False, map_location="cpu", mmap=True)
+        tag = arch.seq_tag(model) if corpus == "dclm" else ""  # Qwen3.5's text lenses: 512-token documents
+        r = torch.load(FITS / f"r-{stem}-L{n_layers}-{corpus}{tag}.pt", weights_only=False, map_location="cpu", mmap=True)
+        s = torch.load(FITS / f"s-{stem}-L{n_layers}-{corpus}{tag}.pt", weights_only=False, map_location="cpu", mmap=True)
         r_acc, s_acc = Accumulator.from_state(r["state"]), Accumulator.from_state(s["state"])
         (out / sub / "r-lens").mkdir(parents=True, exist_ok=True)
         (out / sub / "s-lens").mkdir(parents=True, exist_ok=True)
@@ -1252,10 +1256,10 @@ def main() -> None:
     parts = set(filter(None, args.parts.split(",")))
     if parts - set(PARTS):
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
-    if MODEL not in MODELS + LADDER + PYTHIA:
-        raise ValueError(f"{MODEL} is in none of MODELS, LADDER and PYTHIA")
-    if MODEL in PYTHIA and parts - {"lenses", "scale"}:
-        raise ValueError("Pythia's catalog goes to a branch with --tables until the cards cover it")
+    if MODEL not in MODELS + LADDER + LENS_ONLY:
+        raise ValueError(f"{MODEL} is in none of MODELS, LADDER and LENS_ONLY")
+    if MODEL in LENS_ONLY and parts - {"lenses", "scale"}:
+        raise ValueError(f"{MODEL}'s catalog goes to a branch with --tables until the cards cover it")
     if args.from_branch and parts != {"neurons", "heads", "files"}:
         raise ValueError("--from-branch releases the model's whole catalog folder: --parts neurons,heads,files")
     stem = arch.stem(MODEL)
@@ -1272,7 +1276,7 @@ def main() -> None:
         facts["lenses"] = write_lenses(MODEL, lens_root / stem)
     if parts & {"lenses", "scale"}:
         facts["scale"] = write_scale(MODEL, lens_root / stem)
-    if MODEL in PYTHIA:  # its lens files alone, the cards as they are
+    if MODEL in LENS_ONLY:  # its lens files alone, the cards as they are
         facts_path.write_text(json.dumps(facts, indent=1) + "\n")
         lens_files = [f"{stem}/**"] if "lenses" in parts else [f"{stem}/scale.pt"]
         if not args.dry_run:

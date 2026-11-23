@@ -546,10 +546,17 @@ def lens(model_id: str, kind: str, fit: str | None):
     return lens_means(model_id, parts=(lens_kind,))[lens_kind]
 
 
+def seq_tag(model_id: str) -> str:
+    """The text lenses of record's document-length tag in their fit names: ``-T512`` where a layer is a Gated DeltaNet
+    (Qwen3.5: documents of exactly 512 tokens, ``02_fit.py --full-length``, so its memories fill), else none."""
+    return "-T512" if "linear_attention" in (getattr(text_config(model_id), "layer_types", None) or ()) else ""
+
+
 def fits(model_id: str) -> tuple[str, str]:
     """``(R fit, S fit)`` of record: the model's DCLM fit files in ``data/fits/`` (``02_fit.py``),
     else, where they are not on this machine, the released lenses (``hub``)."""
-    names = tuple(f"{lens}-{stem(model_id)}-L{text_config(model_id).num_hidden_layers}-dclm" for lens in "rs")
+    names = tuple(f"{lens}-{stem(model_id)}-L{text_config(model_id).num_hidden_layers}-dclm{seq_tag(model_id)}"
+                  for lens in "rs")
     return names if all((FITS / f"{x}.pt").exists() for x in names) else ("hub", "hub")
 
 
