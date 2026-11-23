@@ -53,7 +53,7 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from causal_lens import CAUSAL, random_neurons
-from neuron_lens import anatomy, arch, metric
+from neuron_lens import anatomy, arch, experts, metric
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -112,7 +112,7 @@ class Model:
         lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(dev).eval().requires_grad_(False)
         self.stack, self.dev = decoder_stack(lm), dev
         self.flow = Stream(self.stack)
-        self.L, self.f = len(self.stack.layers), self.stack.config.intermediate_size
+        self.L, self.f = len(self.stack.layers), self.flow.f  # a sparse layer's experts' neurons, then its shared expert's
         self.H = self.stack.config.num_attention_heads
         self.act_top = torch.stack([torch.from_numpy(pq.read_table(neuron_table("acts", l), columns=["act_top"])
                                                      .column(0).to_numpy().copy()).float() for l in range(self.L)]).to(dev)
@@ -147,25 +147,30 @@ class Model:
                 h.remove()
         got = self.flow.sources(cap, M, neuron, torch.arange(B, device=dev))
         emb, heads, neurons, g, a = got["emb"], got["heads"], got["neurons"], got["g"], got["a"]
-        acts = torch.cat([cap["a", l] for l in range(M)], 1)  # [B, M·f]
+        acts = torch.cat([cap["a", l][torch.arange(B, device=dev)] for l in range(M)], 1)  # [B, M·f]
         sign = acts.sign() if P == 2 else torch.ones_like(acts)  # the pole each upstream neuron is in
         pid = (torch.arange(M, device=dev)[:, None] * P * f + torch.arange(f, device=dev)).flatten() + f * (sign < 0)
         parts = anatomy.parts(lay)
-        gate, up = anatomy.module(lay, parts.gate).weight, anatomy.module(lay, parts.up)
-        gamma = anatomy.norm_scale(lay, parts.n2, gate.shape[1])  # ones where the MLP reads the residual itself (OLMo)
+        g_rows, u_rows, _ = self.flow.read_rows(lay, M, neuron, 1.0)  # (a sparse layer's: experts.Rows)
+        gamma = anatomy.norm_scale(lay, parts.n2, g_rows.shape[1])  # ones where the MLP reads the residual itself (OLMo)
         s2 = metric.s2(MODEL, "mid", M, dev)
         def unit(r):  # a read row times the norm's scale, centred where it centres, at unit length in the metric
             c = arch.centre(r * gamma, MODEL)
             return c / metric.cov_norm(c, s2)
         if P == 1:  # ungated: the input row
-            c_b = unit(gate[neuron])
+            c_b = unit(g_rows)
         else:
-            a_hat, b_hat = unit(gate[neuron]), unit(up.weight[neuron])
+            a_hat, b_hat = unit(g_rows), unit(u_rows)
             lobe = lobe_signs(M).to(dev)[neuron + f * (pole < 0)][:, None]
             c_b = torch.where(lobe < 0, -pole[:, None] * b_hat, a_hat + pole[:, None] * b_hat)  # as neurons.read_rows
             c_b = c_b / metric.cov_norm(c_b, s2)
-        norms = [metric.vec_norm(w.T, s2).squeeze(1) for w in self.flow.neurons[:M]]  # each write's length at M, [f]
-        cos = torch.cat([c_b @ (w / n) for w, n in zip(self.flow.neurons[:M], norms)], 1) * sign
+        if self.flow.sparse:  # each write's length at M from the experts' own weights, a block of neurons at a time
+            norms = [torch.cat([metric.vec_norm(w, s2).squeeze(1) for _, w in experts.layer_rows(self.stack.layers[l])["write"].blocks()])
+                     for l in range(M)]
+            cos = torch.cat([self.flow.layer_reads(c_b, l) / norms[l] for l in range(M)], 1) * sign
+        else:
+            norms = [metric.vec_norm(w.T, s2).squeeze(1) for w in self.flow.neurons[:M]]  # each write's length at M, [f]
+            cos = torch.cat([c_b @ (w / n) for w, n in zip(self.flow.neurons[:M], norms)], 1) * sign
         size = self.act_top[:M] * torch.stack(norms).repeat(1, P)  # [M, P·f]
         gain = torch.stack([self.mlp_scale[l] * self.flow.scalars[l:M].prod() for l in range(M)])  # [M], as 16_edges.py
         push = cos * size.flatten()[pid] * gain[pid.div(P * f, rounding_mode="floor")]

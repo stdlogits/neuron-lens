@@ -50,7 +50,7 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-from neuron_lens import anatomy, arch
+from neuron_lens import anatomy, arch, experts
 from neuron_lens.catalog import MODEL, column, documents, neuron_table
 from neuron_lens.corpus import lens_docs
 from neuron_lens.known import EXTERNAL, KNOWN
@@ -110,6 +110,39 @@ def _down(blk):
     return anatomy.module(blk, anatomy.parts(blk).down)
 
 
+def _write(blk):
+    """``write(n)`` ``[d]``: neuron ``n``'s ``W_down`` column, a dense or a sparse layer's (``experts.Rows``)."""
+    if experts.sparse(blk):
+        rows = experts.layer_rows(blk)["write"]
+        return lambda n: rows[torch.tensor([n], device=rows.experts.device)][0].to(rows.experts.dtype)
+    wd = _down(blk).weight
+    return lambda n: wd[:, n]
+
+
+def _ablation(blk, rows: torch.Tensor, pos: torch.Tensor, neu: torch.Tensor) -> list:
+    """Hooks that zero neuron ``neu[r]``'s activation at row ``rows[r]``, position ``pos[r]``: a dense MLP's at its down
+    projection's input; a sparse one's by taking its write at that activation (``experts.Routed``, its routing weight
+    included) back off the MLP's output."""
+    if not experts.sparse(blk):
+        def ablate(mod, a):
+            x = a[0].clone()
+            x[rows, pos, neu] = 0
+            return (x,)
+        return [_down(blk).register_forward_pre_hook(ablate)]
+    got = {}
+    tap = experts.Tap(blk.mlp, lambda r: got.__setitem__("r", r))
+    write = experts.layer_rows(blk)["write"]
+
+    def subtract(mod, a, o):
+        T = o.shape[1]
+        r = got.pop("r")
+        act = r.at(rows * T + pos).gather(1, neu[:, None].long())  # [n, 1]
+        o = o.clone()
+        o[rows, pos] -= (act * write[neu]).to(o.dtype)
+        return o
+    return tap.hooks + [blk.mlp.register_forward_hook(subtract)]
+
+
 def measure(args) -> None:
     device = args.device
     tok = AutoTokenizer.from_pretrained(args.model)
@@ -119,7 +152,7 @@ def measure(args) -> None:
     model, lm_head = decoder_stack(lm), lm.get_output_embeddings()
     NP = len(SIGNS)
     gemma = arch.is_gemma4(args.model)
-    L, f = len(model.layers), model.config.intermediate_size
+    L, f = len(model.layers), experts.stack_width(model)  # a sparse layer's experts' neurons, then its shared expert's
     picks = sample_neurons(L, f, args.per_layer)
     if args.layers:
         picks = [(l, n) for l, n in picks if l in {int(x) for x in args.layers.split(',')}]
@@ -171,14 +204,16 @@ def measure(args) -> None:
         if not conds or layer in out["done"]["steer"]:
             continue
         blk = model.layers[layer]
-        wd = _down(blk).weight  # [d, f]
+        wd = _write(blk)  # a neuron's column of W_down, [d]
         if gemma:  # what reaches the residual per unit activation: γ_post ⊙ W_down (its scale per position below)
-            wd = (blk.post_feedforward_layernorm.weight.float()[:, None] * wd.float()).to(wd.dtype)
+            dense = _down(blk).weight
+            dense = (blk.post_feedforward_layernorm.weight.float()[:, None] * dense.float()).to(dense.dtype)
+            wd = lambda n, dense=dense: dense[:, n]
         for s in range(0, len(conds), args.cond_batch):
             part = conds[s:s + args.cond_batch]
             # Row 0 is unsteered: the reference, at the same batch shape as the steered rows.
-            delta = torch.stack([torch.zeros_like(wd[:, 0])] + [
-                SIGNS[p] * DOSES[di] * alpha[i, p].item() * wd[:, picks[i][1]]
+            delta = torch.stack([torch.zeros_like(wd(0))] + [
+                SIGNS[p] * DOSES[di] * alpha[i, p].item() * wd(picks[i][1])
                 for i, p, di in part])  # [1 + n_c, d]
             rows = delta.repeat_interleave(C, 0)[:, None, :]
             posmask = (torch.arange(T, device=device) >= SKIP_FIRST)[None, :, None].to(rows.dtype)
@@ -233,12 +268,7 @@ def measure(args) -> None:
             rows = torch.arange(1, 2 * len(part), 2, device=device)
             pos_t = torch.tensor([pos for *_, pos in part], device=device)
             neu_t = torch.tensor([picks[i][1] for i, *_ in part], device=device)
-
-            def ablate(mod, a):
-                x = a[0].clone()
-                x[rows, pos_t, neu_t] = 0
-                return (x,)
-            hook = _down(model.layers[layer].mlp).register_forward_pre_hook(ablate)
+            hooks = _ablation(model.layers[layer], rows, pos_t, neu_t)
             with torch.inference_mode():
                 hs = model(input_ids=ids.to(device), attention_mask=attn.to(device)).last_hidden_state
                 for r, (i, p, j, d, pos) in enumerate(part):
@@ -251,7 +281,8 @@ def measure(args) -> None:
                     counts[(i, p)] = counts.get((i, p), 0) + 1
                     if pos + 1 < len(seqs[r]):
                         out["dlogp_next"][i, p, j] = diff[0, seqs[r][pos + 1]].item()
-            hook.remove()
+            for h in hooks:
+                h.remove()
         for key, c in counts.items():
             out["ablate_pos"][key] = (sums_pos[key] / c).half().cpu()
             out["ablate_win"][key] = (sums_win[key] / c).half().cpu()
@@ -291,7 +322,7 @@ def score(args) -> None:
     specs = args.lenses.split(",")
     lenses = {s: load_lens(s, args.model) for s in specs}
     cfg = AutoConfig.from_pretrained(args.model).get_text_config()
-    rand = set(random_neurons(cfg.num_hidden_layers, cfg.intermediate_size, saved["meta"]["per_layer"]))
+    rand = set(random_neurons(cfg.num_hidden_layers, experts.width(args.model), saved["meta"]["per_layer"]))
     named = named_poles()
     named_r = {}  # (pole, target, lens) -> (r, top-10 overlap)
     targets = {"steer 1x": saved["steer"][:, :, 0], "steer 4x": saved["steer"][:, :, 1],
