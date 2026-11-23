@@ -22,6 +22,11 @@ Parts (data in ``data/relict/<model>/``, summaries in ``data/summary/relict_<par
   alike at onset; the null is unlinked pairs of baseline units with the same final selection, layer gap and final
   retest, so a difference earlier in training is one the end doesn't carry. Last, an absolute share for comparing
   models: confirmed pairs as unlike at the end as a typical random pair at their layer gap.
+- ``judge cards <revs>... | test [n] | submit end|onset | collect | score``: the census's judge (``secondary_modes.py``:
+  Sonnet 5.5 at maximum effort, Batch API, decoys on every card) with five own contexts in place of a label (prompt
+  ``relict_judge.md``), for ``N_JUDGE`` targets: each one's confirmed sources at the end, the same card again (the
+  judge's reproducibility), and the sources at their link onset; ``score`` sets onset against the end and the retest,
+  and the free rulers (likeness, a shared marked token) against the judge.
 - ``embed <revs>...``: Qwen3-Embedding-0.6B embeddings of every top context, at every checkpoint, of the units in the
   census's confirmed pairs (``confirmed``) and of ``N_BASE`` random census units (the baseline), as
   ``secondary_modes.show`` prints them.
@@ -214,6 +219,24 @@ def confirmed(P: dict, win: torch.Tensor) -> list[tuple[int, tuple, list[int]]]:
     return out
 
 
+def link_at(P: dict, pairs: list, t: dict, m: dict) -> dict:
+    """At one checkpoint (its ``tops`` and ``matrix``), for each confirmed pair: whether the source's own top contexts
+    there drive the target (≥ max(0.3, the control's q95 there) on two), and those contexts in order of the target's
+    peak on them."""
+    T = P["targets"]
+    a = torch.tensor([float(t["act_top"][l, n]) for _, l, n, _ in T]).clamp_min(1e-3)
+    pk = m["peak"].float() / a
+    row = m.get("plan_row", torch.arange(len(P["contexts"])))
+    thr = torch.maximum(torch.full((len(T),), sm.THRESH), pk[row[P["control"]]].quantile(0.95, dim=0))
+    out = {}
+    for j, X, _ in pairs:
+        uk = m["unit_ctx"].get(X, [])
+        v = pk[uk, j]
+        out[(j, X)] = (len(uk) >= 2 and bool((v >= thr[j]).sum() >= 2),
+                       [m["contexts"][uk[i]] for i in v.argsort(descending=True).tolist()])
+    return out
+
+
 N_BASE = 500
 
 
@@ -298,13 +321,8 @@ def score(revs: list[str]) -> None:
     for r in revs:
         t, m = tops(r), matrix(r)
         D[r] = {u: [d_ for d_, _ in top_contexts(t, u)] for u in us}
-        a = torch.tensor([float(t["act_top"][l, n]) for _, l, n, _ in T]).clamp_min(1e-3)
-        pk = m["peak"].float() / a
-        row = m.get("plan_row", torch.arange(len(P["contexts"])))
-        thr = torch.maximum(torch.full((len(T),), sm.THRESH), pk[row[P["control"]]].quantile(0.95, dim=0))
-        for j, X, _ in pairs:
-            uk = m["unit_ctx"].get(X, [])
-            L[(j, X, r)] = len(uk) >= 2 and bool((pk[uk, j] >= thr[j]).sum() >= 2)
+        for (j, X), (lk_, _) in link_at(P, pairs, t, m).items():
+            L[(j, X, r)] = lk_
     n5 = torch.tensor([len(E["emb"]["main"][u]) >= 5 for u in us])
     keep = [(j, X) for j, X, _ in pairs if n5[ix[tuple(T[j][1:])]] and n5[ix[X]]]
     pi, xi = torch.tensor([ix[tuple(T[j][1:])] for j, _ in keep]), torch.tensor([ix[X] for _, X in keep])
@@ -428,6 +446,240 @@ def score(revs: list[str]) -> None:
             f"({sum(len(f) == FIRST for f in first) / len(js):.2f} with {FIRST} proposed)")
 
 
+# the judge: secondary_modes.py's (Sonnet 5.5 at maximum effort, Batch API, decoys on every card), with five own
+# contexts in place of a label (Pythia's catalog has none; prompt relict_judge.md)
+
+N_JUDGE = 200  # targets with a confirmed source judged per model, as many from each band (seed 0)
+PROMPT = Path(__file__).with_name("relict_judge.md")
+
+
+def judge_cards(revs: list[str]) -> None:
+    """``judge-cards.jsonl`` and ``judge-key.json``. For each of N_JUDGE targets with a confirmed source: an *end* card
+    (its confirmed sources, each as the two of the source's contexts where the target fires most, with the target's own
+    sixth and seventh contexts and two random poles' contexts as decoys, shuffled; five own contexts above them), a
+    *retest* card (the same, shuffled again, other random decoys: the judge's reproducibility), and an *onset* card for
+    each checkpoint before the last where one of its links begins (the target's and those sources' top contexts there)."""
+    import json
+    import random
+
+    from neuron_lens.catalog import tokenizer
+    P = sm.load()[0]
+    T, C = P["targets"], P["contexts"]
+    win = torch.load(sm.OUT / "state.pt")["win"].float().nan_to_num(0)
+    pairs = confirmed(P, win)
+    revs = sorted((r for r in revs if (OUT / f"matrix-{r}.pt").exists()), key=STEPS)
+    by = {}
+    for j, X, rows in pairs:
+        by.setdefault(j, []).append((X, rows))
+    rng = random.Random(0)
+    bands = list(dict.fromkeys(x[0] for x in T))
+    pick = []
+    for b in bands:
+        js = sorted(j for j in by if T[j][0] == b)
+        pick += rng.sample(js, min(N_JUDGE // len(bands), len(js)))
+    tok, docs = tokenizer(), documents()
+    cards, key = [], {}
+
+    def card(cid, j, own, srcs, **info):
+        groups = [("src", X, cs) for X, cs in srcs[:sm.MAX_SRC]]
+        if len(own) >= 7:
+            groups.append(("own", None, own[5:7]))
+        groups.append(("random", None, [C[rng.choice(P["control"])] for _ in range(2)]))
+        rng.shuffle(groups)
+        letters = [chr(65 + i) for i in range(len(groups))]
+        text = [f"Target unit: {sm.name(T[j][1:])}", "Its own top contexts:"] + [f"  {sm.show(tok, docs, *c)}" for c in own[:5]]
+        for a_, (_, _, cs) in zip(letters, groups):
+            text += [f"\nGroup {a_}:"] + [f"  {sm.show(tok, docs, *c)}" for c in cs]
+        cards.append({"custom_id": cid, "text": "\n".join(text)})
+        key[cid] = dict(target=j, groups={a_: {"kind": k, "src": x} for a_, (k, x, _) in zip(letters, groups)}, **info)
+
+    t = tops("main")
+    for j in pick:
+        srcs = sorted(by[j], key=lambda x: -float(win[x[1], j].mean()))
+        srcs = [(X, [C[rows[i]] for i in win[rows, j].argsort(descending=True)[:2].tolist()]) for X, rows in srcs]
+        own = top_contexts(t, tuple(T[j][1:]), 7)
+        card(f"e{j:04d}", j, own, srcs, stage="end", rev="main")
+        card(f"r{j:04d}", j, own, srcs, stage="retest", rev="main")
+    sel, onset, own = [(j, X, r_) for j, X, r_ in pairs if j in set(pick)], {}, {}
+    for r in revs:
+        t, m = tops(r), matrix(r)
+        own.update({(j, r): top_contexts(t, tuple(T[j][1:]), 7) for j in pick})
+        for (j, X), (ok, cs) in link_at(P, sel, t, m).items():
+            if ok and (j, X) not in onset:
+                onset[(j, X)] = (r, cs[:2])
+    for j in pick:
+        at = {}
+        for X, _ in sorted(by[j], key=lambda x: -float(win[x[1], j].mean())):
+            if (j, X) in onset and onset[(j, X)][0] != "main":
+                at.setdefault(onset[(j, X)][0], []).append((X, onset[(j, X)][1]))
+        for r, srcs in at.items():
+            card(f"o{j:04d}-{r}", j, own[(j, r)], srcs, stage="onset", rev=r)
+    (OUT / "judge-cards.jsonl").write_text("\n".join(json.dumps(c, ensure_ascii=False) for c in cards))
+    (OUT / "judge-key.json").write_text(json.dumps(key))
+    n = {st: sum(k["stage"] == st for k in key.values()) for st in ("end", "retest", "onset")}
+    say(f"{len(pick)} targets ({len(sel)} confirmed pairs, {sum(v[0] != 'main' for v in onset.values())} with an onset before "
+        f"the last checkpoint): {n['end']} end cards, {n['retest']} retest, {n['onset']} onset")
+
+
+def judge_key() -> dict:
+    import json
+    return json.loads((OUT / "judge-key.json").read_text())
+
+
+def judged() -> list[dict]:
+    """Every judged group: card, stage, checkpoint, target, kind, source, normalized p_same, p_related, p_unrelated."""
+    key = judge_key()
+    J = torch.load(OUT / "judged.pt", weights_only=False) if (OUT / "judged.pt").exists() else {}
+    out = []
+    for cid, gs in J.items():
+        k = key[cid]
+        for g in gs:
+            a = g["group"].strip().removeprefix("Group ").strip()
+            if a not in k["groups"]:
+                continue
+            s_ = g["p_same"] + g["p_related"] + g["p_unrelated"] or 1
+            info = k["groups"][a]
+            out.append(dict(cid=cid, stage=k["stage"], rev=k["rev"], j=k["target"], kind=info["kind"],
+                            src=tuple(info["src"]) if info["src"] else None, p_same=g["p_same"] / s_,
+                            p_rel=g["p_related"] / s_, p_un=g["p_unrelated"] / s_, shared=g["shared"]))
+    return out
+
+
+def params(card: dict) -> dict:
+    p = sm.params(card)
+    p["system"] = [{"type": "text", "text": PROMPT.read_text(), "cache_control": {"type": "ephemeral"}}]
+    return p
+
+
+def judge_test(n: int) -> None:
+    import json
+    import random
+    cards = [json.loads(x) for x in (OUT / "judge-cards.jsonl").read_text().split("\n")]
+    key, c = judge_key(), sm.client()
+    for card in random.Random(1).sample(cards, n):
+        with c.messages.stream(**params(card)) as st:
+            r = st.get_final_message()
+        say(card["text"], f"\n--- {key[card['custom_id']]}\n" + next(b.text for b in r.content if b.type == "text"))
+        say(f"usage: {r.usage.input_tokens} in, {r.usage.cache_read_input_tokens} cache read, {r.usage.output_tokens} out\n")
+
+
+def judge_submit(stage: str) -> None:
+    """``end``: every end card; ``onset``: the onset and retest cards of the targets with a source judged unrelated
+    (p ≥ 0.5) at the end."""
+    import json
+
+    from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+    from anthropic.types.messages.batch_create_params import Request
+    cards = [json.loads(x) for x in (OUT / "judge-cards.jsonl").read_text().split("\n")]
+    key = judge_key()
+    if stage == "end":
+        cards = [c for c in cards if key[c["custom_id"]]["stage"] == "end"]
+    else:
+        un = {v["j"] for v in judged() if v["stage"] == "end" and v["kind"] == "src" and v["p_un"] >= 0.5}
+        cards = [c for c in cards if key[c["custom_id"]]["stage"] in ("onset", "retest") and key[c["custom_id"]]["target"] in un]
+    b = sm.client().messages.batches.create(
+        requests=[Request(custom_id=c["custom_id"], params=MessageCreateParamsNonStreaming(**params(c))) for c in cards])
+    path = OUT / "judge-batches.json"
+    ids = json.loads(path.read_text()) if path.exists() else {}
+    ids[stage] = b.id
+    path.write_text(json.dumps(ids))
+    say(f"{stage}: {len(cards)} cards, batch {b.id}")
+
+
+def judge_collect() -> None:
+    import json
+    c = sm.client()
+    path = OUT / "judged.pt"
+    J = torch.load(path, weights_only=False) if path.exists() else {}
+    for stage, bid in json.loads((OUT / "judge-batches.json").read_text()).items():
+        while (b := c.messages.batches.retrieve(bid)).processing_status != "ended":
+            print(time.strftime("%H:%M:%S"), stage, b.request_counts, flush=True)
+            time.sleep(60)
+        n, bad, tk = 0, 0, [0, 0, 0, 0]
+        for r in c.messages.batches.results(bid):
+            try:
+                J[r.custom_id] = json.loads(next(x.text for x in r.result.message.content if x.type == "text"))["groups"]
+                u = r.result.message.usage
+                tk = [a + (b_ or 0) for a, b_ in zip(tk, (u.input_tokens, u.cache_creation_input_tokens,
+                                                         u.cache_read_input_tokens, u.output_tokens))]
+                n += 1
+            except Exception:
+                bad += 1
+        # the Batch API's prices for Sonnet 5.5: half of $2 in, $2.50 cache write, $0.10 cache read, $10 out per MTok
+        cost = (tk[0] * 1 + tk[1] * 1.25 + tk[2] * 0.05 + tk[3] * 5) / 1e6
+        say(f"{stage}: {n} judged, {bad} failed; tokens in {tk[0]}, cache write {tk[1]}, cache read {tk[2]}, out {tk[3]} "
+            f"(~${cost:.2f})")
+    torch.save(J, path)
+
+
+def judge_score() -> None:
+    """The judge's verdicts: decoys, the share of judged inputs and targets with an unrelated source (with the floor the
+    judge's false 'unrelated' on own contexts puts under it), the free rulers against the judge, and each pair's verdict
+    at its onset against its verdict at the end and at the retest."""
+    from neuron_lens.stats import auroc
+    P = sm.load()[0]
+    T = P["targets"]
+    V, key = judged(), judge_key()
+    un = lambda v: v["p_un"] >= 0.5
+    say(f"{MODEL}: {len({v['cid'] for v in V})} cards judged")
+    fpr = {}
+    for st in ("end", "retest", "onset"):
+        d = {k: [v for v in V if v["stage"] == st and v["kind"] == k] for k in ("own", "random")}
+        if not d["own"]:
+            continue
+        fpr[st] = sum(map(un, d["own"])) / len(d["own"])
+        say(f"  {st} decoys: own contexts judged same {sum(v['p_same'] >= max(v['p_rel'], v['p_un']) for v in d['own']) / len(d['own']):.2f}, "
+            f"unrelated {fpr[st]:.3f} (n={len(d['own'])}); random poles' contexts unrelated {sum(map(un, d['random'])) / len(d['random']):.2f}")
+    end = {(v["j"], v["src"]): v for v in V if v["stage"] == "end" and v["kind"] == "src"}
+    say(f"\nend: {len(end)} judged inputs, unrelated {sum(map(un, end.values())) / len(end):.3f}; "
+        f"argmax same/related/unrelated " + "/".join(f"{sum(max(('p_same', 'p_rel', 'p_un'), key=v.get) == k for v in end.values()) / len(end):.2f}"
+                                                for k in ("p_same", "p_rel", "p_un")))
+    js = sorted({v["j"] for v in V if v["stage"] == "end"})
+    for b in dict.fromkeys(T[j][0] for j in js):
+        jb = [j for j in js if T[j][0] == b]
+        n = {j: sum(1 for (j_, _) in end if j_ == j) for j in jb}
+        has = {j for (j, _), v in end.items() if un(v) and T[j][0] == b}
+        floor = sum(1 - (1 - fpr["end"]) ** n[j] for j in jb) / len(jb)
+        say(f"  band {b}: {len(jb)} targets, inputs unrelated {sum(un(v) for (j, _), v in end.items() if T[j][0] == b) / sum(n.values()):.3f}; "
+            f"targets with one {len(has) / len(jb):.3f} (floor {floor:.3f})")
+    # the free rulers against the judge
+    E = torch.load(OUT / "embed.pt", weights_only=False)
+    em, base = E["emb"]["main"], E["base"]
+    M = torch.stack([em[u].float().mean(0) for u in base if len(em[u])])
+    S_ = M @ M.T
+    x = S_[torch.triu_indices(len(M), len(M), 1).unbind()]
+    docs, t = documents(), tops("main")
+    marked = lambda u: {int(docs[d][q]) for d, q in top_contexts(t, u, 20)}
+    ys, zs, ws = [], [], []
+    for (j, X), v in end.items():
+        U = tuple(T[j][1:])
+        if len(em.get(U, [])) and len(em.get(X, [])):
+            ys.append(un(v))
+            zs.append(-(((em[U].float().mean(0) @ em[X].float().mean(0)).item() - x.mean().item()) / x.std().item()))
+            ws.append(-float(len(marked(U) & marked(X)) > 0))
+    ys = torch.tensor(ys)
+    say(f"  free rulers against the judge's 'unrelated' (AUROC, n={len(ys)}, {int(ys.sum())} unrelated): topical likeness "
+        f"{auroc(torch.tensor(zs), ys):.2f}, a shared marked token in the top 20 {auroc(torch.tensor(ws), ys):.2f}")
+    # onset against end and retest
+    ret = {(v["j"], v["src"]): v for v in V if v["stage"] == "retest" and v["kind"] == "src"}
+    ons = {(v["j"], v["src"]): v for v in V if v["stage"] == "onset" and v["kind"] == "src"}
+    if not ons:
+        return
+    say("\nthe targets with an unrelated input at the end: their inputs' verdicts at the retest and at onset")
+    for name, f in (("unrelated at the end", un), ("not unrelated at the end", lambda v: not un(v))):
+        g = [k for k, v in end.items() if f(v) and k[0] in {j for j, _ in ons}]
+        r_ = [un(ret[k]) for k in g if k in ret]
+        o_ = [un(ons[k]) for k in g if k in ons]
+        say(f"  {name:26s} n={len(g):4d}: unrelated at the retest {sum(r_) / max(len(r_), 1):.3f} (n={len(r_)}), at onset "
+            f"{sum(o_) / max(len(o_), 1):.3f} (n={len(o_)}; median onset step "
+            f"{torch.tensor([STEPS(ons[k]['rev']) for k in g if k in ons]).float().median():.0f})")
+    say("  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)")
+    for v in sorted((v for k, v in ons.items() if un(end[k]) and k in ret and un(ret[k]) and not un(v)), key=lambda v: v["j"])[:12]:
+        e = end[(v["j"], v["src"])]
+        say(f"    {sm.name(T[v['j']][1:])} ← {sm.name(v['src'])}: at {v['rev']} '{v['shared'][:50]}' ({v['p_un']:.2f}); at the end "
+            f"'{e['shared'][:50]}' ({e['p_un']:.2f})")
+
+
 def check_main(t: dict) -> None:
     """The pass at ``main`` against the catalog's ``acts`` tables: top-document overlap and act_top."""
     for l in (0, len(t["val"]) // 2, len(t["val"]) - 1):
@@ -440,7 +692,7 @@ def check_main(t: dict) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed", "score"])
+    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed", "score", "judge"])
     ap.add_argument("revs", nargs="*")
     args = ap.parse_args()
     torch.set_grad_enabled(False)
@@ -466,7 +718,13 @@ def main():
         embed(args.revs)
     if args.part == "score":
         score(args.revs)
-    with open(SUMMARY / f"relict_{args.part}_{STEM}.log", "w" if args.part == "score" else "a") as f:
+    part = args.part
+    if args.part == "judge":
+        act, rest = args.revs[0], args.revs[1:]
+        {"cards": lambda: judge_cards(rest), "test": lambda: judge_test(int(rest[0]) if rest else 2),
+         "submit": lambda: judge_submit(rest[0]), "collect": judge_collect, "score": judge_score}[act]()
+        part = "judge_score" if act == "score" else "judge"
+    with open(SUMMARY / f"relict_{part}_{STEM}.log", "w" if part in ("score", "judge_score") else "a") as f:
         f.write("\n".join(LOG) + "\n")
 
 
