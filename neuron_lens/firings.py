@@ -20,11 +20,12 @@ write as the residual sees it). Along ``c`` that map multiplies the residual by 
 pole amplifies what it reads, negative where it suppresses it; off ``c`` it adds ``orthogonal = √(‖c‖²‖w‖² − (c · w)²)`` of the
 same size. Both are numbers per unit of what the pole reads, unchanged by rescaling ``up`` against ``down``. An ungated MLP
 (GPT-NeoX's) reads ``g = k r · x + b`` with ``r`` its centred input row and ``b = W_in β + b_in`` its constant (the norm's
-and the projection's biases), and ``c = φ(g) k r``.
+and the projection's biases), and ``c = φ(g) k r``. A sparse MLP's neuron (``neuron_lens.experts``) carries its routing
+weight ``ρ`` at the firing (its shared expert's gate, for a shared neuron), held as the norm's scale is: ``c`` times ``ρ``.
 """
 import torch
 
-from neuron_lens import anatomy, arch
+from neuron_lens import anatomy, arch, experts
 from neuron_lens.rules import final_norm, is_centred, mlp_act
 
 SITES = ("before", "mlp", "pred")
@@ -46,6 +47,8 @@ def weights(lay) -> dict:
     is None, and ``b`` the pre-activation's constant ``W_in β + b_in``."""
     norm_m = arch.mid_norm(lay)  # None: the MLP reads the residual itself (OLMo 2 and 3)
     p, mlp = anatomy.parts(lay), lay.mlp
+    if p.sparse:
+        return _sparse_weights(lay, p)
     gated = p.up is not None
     gate = anatomy.module(lay, p.gate).weight.float()
     norm, centred = anatomy.norm_scale(lay, p.n2, gate.shape[1]), is_centred(norm_m)
@@ -68,6 +71,36 @@ def weights(lay) -> dict:
     if beta is not None:
         const += gate @ beta.float()
     return out | {"up": None, "b": const}
+
+
+def _sparse_weights(lay, p) -> dict:
+    """``weights`` for a sparse MLP: the rows as ``experts.Rows`` (gathered by neuron, no ``[f, d]`` copies), the inner
+    products a block of neurons at a time, and ``rho``, the weight a neuron's activation carries at a normed residual
+    (its expert's routing weight there, the shared expert's gate for a shared neuron), which multiplies its map."""
+    mlp = lay.mlp
+    E, I = mlp.experts.num_experts, mlp.experts.intermediate_dim
+    rows = experts.layer_rows(lay)
+    d = rows["gate"].d
+    norm = anatomy.norm_scale(lay, p.n2, d)
+    dot = lambda a, b: (a * b).sum(1)
+    acc = {k: [] for k in ("gw", "gg", "ww", "uw", "uu", "gu")}
+    for (_, g), (_, u), (_, w) in zip(rows["gate"].blocks(), rows["up"].blocks(), rows["write"].blocks()):
+        rg, ru = g * norm, u * norm
+        for k, (a, b) in {"gw": (rg, w), "gg": (rg, rg), "ww": (w, w), "uw": (ru, w), "uu": (ru, ru), "gu": (rg, ru)}.items():
+            acc[k].append(dot(a, b))
+    zeros = torch.zeros(len(rows["gate"]), device=norm.device)
+    shared_gate = getattr(mlp, "shared_expert_gate", None)
+
+    def rho(xn: torch.Tensor, n: torch.Tensor) -> torch.Tensor:
+        _, top_w, idx = mlp.gate(xn.to(mlp.gate.weight.dtype))
+        routed = n < E * I
+        out = torch.ones(len(n), device=xn.device)
+        out[routed] = (top_w.float() * (idx == (n // I)[:, None])).sum(1)[routed]
+        if shared_gate is not None and (~routed).any():
+            out[~routed] = torch.sigmoid(xn[~routed] @ shared_gate.weight.float().T)[:, 0]
+        return out
+    return {"gate": rows["gate"], "up": rows["up"], "norm": norm, "gm": zeros, "um": zeros, "act": mlp.experts.act_fn,
+            "centred": False, "rho": rho, **{k: torch.cat(v) for k, v in acc.items()}}
 
 
 class Accumulator:
@@ -116,6 +149,8 @@ class Accumulator:
             return torch.stack([par, (c.square() * w["gg"][n] * w["ww"][n] - par.square()).clamp_min(0).sqrt()], 1)
         u = ((w["up"][n] * w["norm"] * x).sum(-1) - w["um"][n] * xs) * k
         s = w["act"](g) / g
+        if "rho" in w:  # a sparse MLP's neuron: times its routing weight (or its shared expert's gate) there
+            s = s * w["rho"](x * w["norm"] * k[:, None], n)
         cg, cu = 0.5 * s * u * k, 0.5 * s * g * k  # the read at this firing: c = cg r_gate + cu r_up
         par = cg * w["gw"][n] + cu * w["uw"][n]
         size2 = (cg.square() * w["gg"][n] + cu.square() * w["uu"][n] + 2 * cg * cu * w["gu"][n]) * w["ww"][n]

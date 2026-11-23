@@ -49,6 +49,22 @@ output as it reaches the residual (the post-attention norm's weight and its scal
 every document starts with ``<bos>``, so the first-position and repeated-token passes put it
 before their tokens (the token's position is 1); RoPE per layer type; the released R-lens.
 
+A sparse MLP (Qwen3.5-35B-A3B, Qwen3-30B-A3B, OLMoE): its neurons are its experts' side by side, then its shared
+expert's, each activation ``ρ · silu(g) · u`` where the router chooses the neuron's expert (``ρ`` the routing weight)
+and 0 where it doesn't (``neuron_lens.experts``). Only the routed pairs are computed and counted; a routed neuron's other
+positions land in the grid's zero bin, and its top documents are those its expert is routed to at all (padded where
+fewer than ``TOP``). Per expert, for ``experts/acts.parquet``: the positions routed to it, its routing weights, its top
+documents by routing weight, and its neurons' RelP factors summed where routed (``expert_tables``).
+
+**Layer groups** (``--layers a-b``): the neurons of those layers alone, so a model whose top lists don't fit beside its
+weights runs in several passes. The group from layer 0 collects the heads too and saves to the activations file; the
+others save to ``data/acts/<model>-L<a>-<b>.pt`` and stop each forward pass after layer ``b``. Each pass writes its
+layers' tables. The neuron buffers on the device take ``f · (P · TOP · 12 + 2 · NB · 4)`` bytes a layer (``P`` poles,
+the top lists' value, document, position and gate, the grid counts): 290 MB for Qwen3.5-35B-A3B's 131,584 neurons,
+11.6 GB for its 40 layers, which with its 67 GB of weights and the heads' statistics (``recv`` alone 1.3 GB) doesn't
+fit an 80 GB GPU in one pass; four groups of ten layers do. On the CPU the totals take ``f · 2 · NB · 8 · 4`` bytes a
+layer for the four slices' counts (700 MB for the 35B-A3B).
+
 The state is saved to ``data/acts/<model>.pt`` every ``--save-minutes`` and resumes from there.
 Once the pass is complete, the script writes the acts tables, ``neurons/acts/L<layer>.parquet``
 and ``heads/acts.parquet``, and ``docs.parquet`` (each document's slice and line in the slice's
@@ -57,7 +73,7 @@ the R-lens from the MLP input. ``cur_mode`` and ``next_mode``: the share of a po
 most common peak token, or before its most common next token; for a head, ``cur_mode`` and ``src_mode``,
 on its most common query token, or attending most to its most common token (findings §8, §11).
 
-    python scripts/06_activations.py [--detach] [--docs N]
+    python scripts/06_activations.py [--detach] [--docs N] [--layers a-b]
 """
 import argparse
 import functools
@@ -69,9 +85,12 @@ from collections import Counter
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import anatomy, arch, layers
+from neuron_lens import anatomy, arch, experts
+from neuron_lens.layers import delta_pattern
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -80,6 +99,8 @@ from neuron_lens.catalog import (
     acts_path,
     catalog_dir,
     context,
+    expert_keys,
+    expert_table,
     firing_tokens,
     fixed,
     head_keys,
@@ -118,11 +139,19 @@ def bf16_bins() -> torch.Tensor:
     return ((v < 0).int() * NB + torch.bucketize(v.abs(), EDGES)).int()
 
 
-def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int, C: int) -> dict:
-    """Running sums: ``name: (shape, integer, per slice)``. ``dn``: the residual's width where the scores read the
-    input norm's own derivative (no q/k norms, GPT-NeoX), else 0; ``C``: a DeltaNet's convolution channels, else 0."""
-    return {"n": ((), True, True), "sum": ((L, f), False, True), "sumsq": ((L, f), False, True),
-            "count": ((L, 2, NB, f), True, True),
+NEURON_BUFFERS = {"n", "sum", "sumsq", "count", "e_n", "e_w", "e_cg", "e_cu"}  # the rest are the heads'
+
+
+def buffers(L: int, nl: int, f: int, E: int, H: int, kvh: int, hd: int, V: int, dn: int, C: int) -> dict:
+    """Running sums: ``name: (shape, integer, per slice)``, the neurons' over ``nl`` layers (``--layers``). ``E``: a
+    sparse MLP's experts (0: dense), for the expert tables: the positions routed to each (``e_n``), their routing weights
+    (``e_w``) and RelP's factors per neuron (``e_cg``, ``e_cu``: ``experts.factors``), summed. ``dn``: the residual's
+    width where the scores read the input norm's own derivative (no q/k norms, GPT-NeoX), else 0; ``C``: a DeltaNet's
+    convolution channels, else 0."""
+    routed = {"e_n": ((nl, E), True, True), "e_w": ((nl, E), False, False), "e_cg": ((nl, f), False, False),
+              "e_cu": ((nl, f), False, False)} if E else {}
+    return {"n": ((), True, True), "sum": ((nl, f), False, True), "sumsq": ((nl, f), False, True),
+            "count": ((nl, 2, NB, f), True, True), **routed,
             "h_n": ((), True, True), "h_sum": ((L, H), False, True), "h_sumsq": ((L, H), False, True),
             "h_count": ((L, NB, H), True, True),
             "sink": ((L, H), False, False), "prev": ((L, H), False, False), "self": ((L, H), False, False),
@@ -137,35 +166,47 @@ def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int, C: int) 
 
 
 class Collector:
-    def __init__(self, model, n_slices: int, device):
+    def __init__(self, model, n_slices: int, device, layers: list[int] | None = None, heads: bool = True):
         cfg = model.config  # the decoder stack's (text) config
-        L, f, H = cfg.num_hidden_layers, cfg.intermediate_size, arch.max_heads(MODEL)  # heads: a grid, each layer's first
+        L, H = cfg.num_hidden_layers, arch.max_heads(MODEL)  # heads: a grid, each layer's first
+        f = experts.stack_width(model)  # a sparse layer's: its experts' neurons side by side, then its shared expert's
+        layers = list(range(L)) if layers is None else layers
+        self.nl, self.heads = {l: i for i, l in enumerate(layers)}, heads  # a neuron layer's row in the neuron buffers
+        sparse = [lay.mlp.experts for lay in model.layers if experts.sparse(lay)]
+        self.E, self.I = (sparse[0].num_experts, sparse[0].intermediate_dim) if sparse else (0, 0)
         kvh, hd = arch.padded(MODEL)  # per-layer statistics sit in the leading block of these
         d, V = cfg.hidden_size, cfg.vocab_size
         self.geo = arch.layout(MODEL)
         self.L, self.f, self.H, self.hd, self.d, self.dev = L, f, H, hd, d, device
         self.dn = d if arch.is_neox(MODEL) else 0  # no q/k norms: the scores read the input norm's true derivative
         C = max((m.linear_attn.conv_dim for m in model.layers if hasattr(m, "linear_attn")), default=0)
-        self.spec = buffers(L, f, H, kvh, hd, V, self.dn, C)
+        self.spec = buffers(L, len(layers), f, self.E, H, kvh, hd, V, self.dn, C)
+        if not heads:
+            self.spec = {k: v for k, v in self.spec.items() if k in NEURON_BUFFERS}
         self.total = {k: torch.zeros(((n_slices,) if per else ()) + shape, dtype=torch.int64 if integer else torch.float64)
                       for k, (shape, integer, per) in self.spec.items()}
         self.seg = {k: torch.zeros(shape, dtype=torch.int32 if integer else torch.float32, device=device)
                     for k, (shape, integer, per) in self.spec.items()}
         k, P = TOP, arch.n_poles(MODEL)
         self.signs = arch.signs(MODEL)
-        self.top = {"val": torch.full((L, P, k, f), -torch.inf, device=device),
-                    "doc": torch.zeros((L, P, k, f), dtype=torch.int32, device=device),
-                    "pos": torch.zeros((L, P, k, f), dtype=torch.int16, device=device),
-                    "gate": torch.zeros((L, P, k, f), dtype=torch.float16, device=device),
+        nl = len(layers)
+        self.top = {"val": torch.full((nl, P, k, f), -torch.inf, device=device),
+                    "doc": torch.zeros((nl, P, k, f), dtype=torch.int32, device=device),
+                    "pos": torch.zeros((nl, P, k, f), dtype=torch.int16, device=device),
+                    "gate": torch.zeros((nl, P, k, f), dtype=torch.float16, device=device),
                     "h_val": torch.full((L, H, k), -torch.inf, device=device),
                     "h_doc": torch.zeros((L, H, k), dtype=torch.int32, device=device),
                     "h_pos": torch.zeros((L, H, k), dtype=torch.int16, device=device),
                     "h_src": torch.zeros((L, H, k), dtype=torch.int16, device=device),
                     "h_out": torch.zeros((L, H, k, d), dtype=torch.float16, device=device)}
-        self.extra = {"first_val": torch.full((L, P, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((L, P, FIRST_K, f), dtype=torch.int32),
-                      "first_chat": torch.zeros(L, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
+        if self.E:  # each expert's top documents by its routing weight
+            self.top |= {"e_val": torch.full((nl, self.E, k), -torch.inf, device=device),
+                         "e_doc": torch.zeros((nl, self.E, k), dtype=torch.int32, device=device),
+                         "e_pos": torch.zeros((nl, self.E, k), dtype=torch.int16, device=device)}
+        self.extra = {**({"expert_width": self.I} if self.E else {}),"first_val": torch.full((nl, P, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((nl, P, FIRST_K, f), dtype=torch.int32),
+                      "first_chat": torch.zeros(nl, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
         self.layers = model.layers
-        self.wo = [arch.head_write(layer).view(d, g.q_heads, g.head_dim) for layer, g in zip(model.layers, self.geo)]
+        self.wo = [arch.head_write(layer).view(d, g.q_heads, g.head_dim) for layer, g in zip(model.layers, self.geo)] if heads else []
         self.gram = [torch.einsum("dhi,dhj->hij", w, w) for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
         self.first_pos = 0  # the token's position in the first-position and repeated passes (1 after <bos>)
         self.edges, self.bins = EDGES.to(device), bf16_bins().to(device)
@@ -202,17 +243,45 @@ class Collector:
                     b = b + NB * (xc < 0).int()
             flat.index_add_(0, (b * n + cols).flatten(), torch.ones(xc.numel(), dtype=flat.dtype, device=x.device))
 
+    def count_at(self, cnt: torch.Tensor, x: torch.Tensor, cols: torch.Tensor) -> None:
+        """``count`` of fp32 values ``x`` at the columns ``cols`` (as ``x``): by sign and bin, into ``cnt`` ``[2, NB, f]``."""
+        n, flat = cnt.shape[-1], cnt.view(-1)
+        for s in range(0, len(x), CHUNK):
+            xc = x[s:s + CHUNK]
+            b = torch.bucketize(xc.abs(), self.edges, out_int32=True) + NB * (xc < 0).int()
+            flat.index_add_(0, (b * n + cols[s:s + CHUNK]).flatten(), torch.ones(xc.numel(), dtype=flat.dtype, device=x.device))
+
+    def first(self, li: int, x: torch.Tensor) -> None:
+        """The first-position pass: ``x`` ``[B, f]``, each token's activations (NaN: a routed neuron whose expert isn't
+        chosen, no entry)."""
+        ids = self.ctx["ids"]
+        for p, sign in enumerate(self.signs):
+            sx = torch.where(x.isnan(), -torch.inf, sign * x)
+            v, i = torch.cat([self.extra["first_val"][li, p].to(x.device), sx]).topk(FIRST_K, 0)
+            cand = torch.cat([self.extra["first_tok"][li, p].to(x.device), ids[:, None].expand_as(x).int()])
+            self.extra["first_val"][li, p], self.extra["first_tok"][li, p] = v.cpu(), cand.gather(0, i).cpu()
+
+    def merge_top(self, li: int, p: int, ext: torch.Tensor, pos: torch.Tensor, gate) -> None:
+        """A batch's extremes ``ext`` ``[B, f]`` (pole ``p``, its sign applied), at ``pos``, into the pole's top documents;
+        ``gate(cols, at)``: the gate's pre-activation there."""
+        cols = (ext.amax(0) > self.top["val"][li, p, -1]).nonzero().squeeze(1)  # only a neuron with a new entry needs its list redone
+        if not len(cols):
+            return
+        v, i = torch.cat([self.top["val"][li, p][:, cols], ext[:, cols]]).topk(TOP, dim=0)
+        self.top["val"][li, p][:, cols] = v
+        at = pos[:, cols]
+        new = {"gate": gate(cols, at).half(), "doc": self.ctx["doc"][:, None].expand(-1, len(cols)), "pos": at.to(torch.int16)}
+        for k, x in new.items():
+            self.top[k][li, p][:, cols] = torch.cat([self.top[k][li, p][:, cols], x]).gather(0, i)
+
     def neuron(self, l: int, a: torch.Tensor) -> None:  # a: [B, T, f]
+        li = self.nl[l]
         if self.mode == "first":
             x = a[:, self.first_pos].float()  # [B, f]
             if self.ctx["chat"]:
-                self.extra["first_chat"][l] = x[0].cpu()
+                self.extra["first_chat"][li] = x[0].cpu()
                 return
-            ids = self.ctx["ids"]
-            for p, sign in enumerate(self.signs):
-                v, i = torch.cat([self.extra["first_val"][l, p].to(x.device), sign * x]).topk(FIRST_K, 0)
-                cand = torch.cat([self.extra["first_tok"][l, p].to(x.device), ids[:, None].expand_as(x).int()])
-                self.extra["first_val"][l, p], self.extra["first_tok"][l, p] = v.cpu(), cand.gather(0, i).cpu()
+            self.first(li, x)
             return
         if self.mode != "main":
             return
@@ -220,24 +289,84 @@ class Collector:
         xb = a[m]  # [P, f]
         for s in range(0, len(xb), CHUNK):
             xc = xb[s:s + CHUNK].float()
-            self.seg["sum"][l] += xc.sum(0)
-            self.seg["sumsq"][l] += xc.pow(2).sum(0)
-        self.count(self.seg["count"][l], xb)
+            self.seg["sum"][li] += xc.sum(0)
+            self.seg["sumsq"][li] += xc.pow(2).sum(0)
+        self.count(self.seg["count"][li], xb)
         gate = self.stash.pop(("gate", l))  # [B, T, f]: the gate's pre-activation (GPT-NeoX: dense_h_to_4h's output)
         B = a.shape[0]
         for p, sign in enumerate(self.signs):
             ext, pos = (a * sign).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, f]
-            ext = ext.float()
-            cols = (ext.amax(0) > self.top["val"][l, p, -1]).nonzero().squeeze(1)  # only a neuron with a new entry needs its list redone
-            if not len(cols):
-                continue
-            v, i = torch.cat([self.top["val"][l, p][:, cols], ext[:, cols]]).topk(TOP, dim=0)
-            self.top["val"][l, p][:, cols] = v
-            at = pos[:, cols]
-            new = {"gate": gate[torch.arange(B, device=a.device)[:, None], at, cols[None, :]].half(),
-                   "doc": self.ctx["doc"][:, None].expand(-1, len(cols)), "pos": at.to(torch.int16)}
-            for k, x in new.items():
-                self.top[k][l, p][:, cols] = torch.cat([self.top[k][l, p][:, cols], x]).gather(0, i)
+            self.merge_top(li, p, ext.float(), pos,
+                           lambda cols, at: gate[torch.arange(B, device=a.device)[:, None], at, cols[None, :]])
+
+    def sparse_neuron(self, l: int, r: experts.Routed) -> None:
+        """``neuron`` for a sparse MLP's pass (``experts.Routed``): its routed pairs counted, summed and ranked where they
+        are, every other valid position of a routed neuron in bin 0 (its activation, 0), the shared expert's neurons as a
+        dense MLP's; and the expert tables' sums (positions routed, routing weights, RelP's factors) and each expert's top
+        documents by its routing weight."""
+        li, f, E, I = self.nl[l], self.f, self.E, self.I
+        if self.mode == "first":
+            T = self.first_pos + 1
+            at = torch.arange(r.n, device=r.act.device) % T == self.first_pos
+            if self.ctx["chat"]:
+                self.extra["first_chat"][li] = r.dense(at)[0].cpu()
+                return
+            self.first(li, r.dense(at, float("nan")))
+            return
+        if self.mode != "main":
+            return
+        m = self.ctx["n_mask"]
+        B, T = m.shape
+        valid = m.flatten()
+        keep = valid[r.rows]
+        rows, act, gate = r.rows[keep], r.act[keep], r.gate[keep]
+        e = r.expert[keep]
+        cols = r.cols()[keep]
+        self.seg["sum"][li].index_add_(0, cols.flatten(), act.flatten())
+        self.seg["sumsq"][li].index_add_(0, cols.flatten(), act.pow(2).flatten())
+        cnt = self.seg["count"][li]
+        self.count_at(cnt, act, cols)
+        routed_e = torch.bincount(e, minlength=E)
+        cnt[0, 0, :E * I] += (int(valid.sum()) - routed_e).repeat_interleave(I).to(cnt.dtype)  # the unrouted positions: 0
+        sh = None if r.shared is None else r.shared.view(B, T, -1)
+        if sh is not None:
+            sv = sh[m]  # [P, Is]
+            for s in range(0, len(sv), CHUNK):
+                self.seg["sum"][li, E * I:] += sv[s:s + CHUNK].sum(0)
+                self.seg["sumsq"][li, E * I:] += sv[s:s + CHUNK].pow(2).sum(0)
+            self.count_at(cnt, sv, (E * I + torch.arange(sv.shape[1], device=sv.device)).expand_as(sv))
+        # the expert tables: positions, weights and factors where routed; each expert's top documents by routing weight
+        self.seg["e_n"][li] += routed_e.to(torch.int32)
+        w = r.weight[keep]
+        self.seg["e_w"][li].index_add_(0, e, w)
+        fc, cg, cu = experts.factors(r, valid, self.layers[l].mlp.experts.act_fn)
+        self.seg["e_cg"][li].index_add_(0, fc.flatten(), cg.flatten())
+        self.seg["e_cu"][li].index_add_(0, fc.flatten(), cu.flatten())
+        doc_row, t = rows // T, rows % T
+        ev = torch.full((B * E,), -torch.inf, device=w.device).scatter_reduce_(0, doc_row * E + e, w, "amax")
+        epos = torch.zeros(B * E, dtype=torch.long, device=w.device)
+        hit = w == ev[doc_row * E + e]
+        epos[(doc_row * E + e)[hit]] = t[hit]
+        ev, epos = ev.view(B, E).T, epos.view(B, E).T  # [E, B]
+        top = torch.cat([self.top["e_val"][li], ev], 1).topk(TOP, dim=1).indices
+        for k, new in (("e_val", ev), ("e_doc", self.ctx["doc"][None, :].expand(E, -1)), ("e_pos", epos.to(torch.int16))):
+            self.top[k][li] = torch.cat([self.top[k][li], new.to(self.top[k].dtype)], 1).gather(1, top)
+        # each pole's extreme in each document, its position and gate there
+        key = (doc_row[:, None] * f + cols).flatten()
+        tk = t[:, None].expand_as(cols).flatten()
+        for p, sign in enumerate(self.signs):
+            v = (sign * act).flatten()
+            ext = torch.full((B * f,), -torch.inf, device=v.device).scatter_reduce_(0, key, v, "amax")
+            pos = torch.zeros(B * f, dtype=torch.long, device=v.device)
+            g_at = torch.zeros(B * f, device=v.device)
+            hit = v == ext[key]
+            pos[key[hit]], g_at[key[hit]] = tk[hit], gate.flatten()[hit]
+            ext, pos, g_at = ext.view(B, f), pos.view(B, f), g_at.view(B, f)
+            if sh is not None:
+                se, sp = (sign * sh).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, Is]
+                ext[:, E * I:], pos[:, E * I:] = se, sp
+                g_at[:, E * I:] = r.shared_gate.view(B, T, -1).gather(1, sp[:, None]).squeeze(1)
+            self.merge_top(li, p, ext, pos, lambda cols, at, g_at=g_at: g_at[:, cols])
 
     def no_input_norm(self, x: torch.Tensor) -> None:
         if self.mode == "main":
@@ -305,7 +434,7 @@ class Collector:
         the keys for the rest); and the output's gate, the output norm's scale and rsqrt times ``silu(z)``, per channel."""
         if self.mode not in ("main", "rep"):
             return
-        p = layers.delta_pattern(la, x)
+        p = delta_pattern(la, x)
         if self.mode == "main":
             g, qv, kv, inv = self.geo[l], self.ctx["qv"], self.ctx["kv"], self.ctx["inv_rho"]
             hv, hk, dk = g.q_heads, g.kv_heads, g.kd
@@ -379,13 +508,14 @@ class Collector:
         hs = []
         for l, layer in enumerate(model.layers):
             p = anatomy.parts(layer)
-            hs += self.mlp_hooks(l, layer, p) + self.mixer_hooks(l, layer, p)
+            hs += (self.mlp_hooks(l, layer, p) if l in self.nl else []) + (self.mixer_hooks(l, layer, p) if self.heads else [])
         return hs
 
     def mlp_hooks(self, l: int, layer, p) -> list:
-        """The neurons' activations (the MLP's down projection's input) and the gate's pre-activation."""
+        """The neurons' activations (the MLP's down projection's input) and the gate's pre-activation; a sparse MLP's
+        through ``experts.Tap``."""
         if p.sparse:
-            raise NotImplementedError(f"layer {l}: routed experts are not in the catalog yet")
+            return experts.Tap(layer.mlp, lambda r, l=l: self.sparse_neuron(l, r)).hooks
         gate, down = anatomy.module(layer, p.gate), anatomy.module(layer, p.down)
         return [gate.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)),
                 down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0]))]
@@ -423,6 +553,9 @@ class Collector:
         real = mask.bool()
         self.ctx.update(ids=ids, doc=docs, n_mask=real & (ar >= NEURON_FROM), h_mask=real & (ar >= HEAD_FROM),
                         qv=(real & (ar >= HEAD_FROM)).float(), kv=(real & (ar >= 1)).float())
+        self.seg["n"] += int(self.ctx["n_mask"].sum())
+        if not self.heads:
+            return
         if "delta" not in self.ctx:
             ad = torch.arange(SEQ, device=dev)
             self.ctx["delta"] = (ad[:, None] - ad[None, :]).clamp_min(0)
@@ -431,7 +564,6 @@ class Collector:
         self.seg["occ"].index_add_(0, ids.flatten(), (pairs > 0).float().flatten())
         self.seg["n_q"] += self.ctx["qv"].sum()
         self.seg["n_k"] += self.ctx["kv"].sum()
-        self.seg["n"] += int(self.ctx["n_mask"].sum())
         self.seg["h_n"] += int(self.ctx["h_mask"].sum())
 
 
@@ -447,6 +579,22 @@ def plan_batches(slice_of: list[int], batch_docs: int) -> list[tuple[int, int]]:
     return out
 
 
+class _Stop(Exception):
+    """Raised past the last layer a group without the heads reads (``--layers``), to end the pass there."""
+
+
+def neuron_layers(saved: dict) -> list[int]:
+    """The layers whose neurons a saved pass holds (``--layers``; all by default)."""
+    lo, hi = saved["meta"].get("layers", (0, saved["state"]["top"]["val"].shape[0] - 1))
+    return list(range(lo, hi + 1))
+
+
+def group_path(lo: int, hi: int, n_layers: int):
+    """Where a pass over the neurons of layers ``lo..hi`` saves: the catalog's activations file (``acts_path``) for
+    the group from layer 0, which holds the heads; ``<model>-L<lo>-<hi>.pt`` beside it for the others."""
+    return ACTS if lo == 0 else ACTS.with_name(f"{ACTS.stem}-L{lo}-{hi}.pt")
+
+
 def collect(args, docs: list) -> dict:
     device = args.device
     tok = tokenizer()
@@ -457,13 +605,27 @@ def collect(args, docs: list) -> dict:
             "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP,
             "batch_docs": args.batch_docs, "dtype": str(lm.dtype).removeprefix("torch."),
             "attention": lm.config._attn_implementation}
-    col = Collector(model, len(ACT_SLICES), device)
+    L = len(model.layers)
+    lo, hi = (0, L - 1) if args.layers is None else map(int, args.layers.split("-"))
+    if (lo, hi) != (0, L - 1):
+        meta["layers"] = [lo, hi]
+    heads, path = lo == 0, group_path(lo, hi, L)
+    col = Collector(model, len(ACT_SLICES), device, list(range(lo, hi + 1)), heads)
+    def halt(*_):
+        raise _Stop
+    stop = [] if heads or hi == L - 1 else [model.layers[hi].register_forward_hook(halt)]
+
+    def run(**kw) -> None:
+        try:
+            model(**kw)
+        except _Stop:
+            pass
     plan = plan_batches(slice_of, args.batch_docs)
     next_batch, stage = 0, "main"
-    if ACTS.exists():
-        saved = torch.load(ACTS, weights_only=False, map_location="cpu")
+    if path.exists():
+        saved = torch.load(path, weights_only=False, map_location="cpu")
         if saved["meta"] != meta:
-            raise SystemExit(f"{ACTS} was collected with {saved['meta']}, not {meta}")
+            raise SystemExit(f"{path} was collected with {saved['meta']}, not {meta}")
         col.load(saved["state"])
         next_batch, stage = saved["next_batch"], saved["stage"]
         if stage == "done":
@@ -476,10 +638,10 @@ def collect(args, docs: list) -> dict:
         out = {"meta": meta, "state": col.state(), "next_batch": next_batch, "stage": stage, "tokens": flat,
                "doc_start": start, "slice_of": torch.tensor(slice_of, dtype=torch.int8),
                "line_of": torch.tensor([ln for _, ln, _ in docs], dtype=torch.int32)}
-        ACTS.parent.mkdir(parents=True, exist_ok=True)
-        tmp = ACTS.with_suffix(".tmp")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
         torch.save(out, tmp)
-        os.replace(tmp, ACTS)
+        os.replace(tmp, path)
         return out
 
     hooks = col.hooks(model)
@@ -495,7 +657,7 @@ def collect(args, docs: list) -> dict:
         ids, mask = ids.to(device), mask.to(device)
         col.batch(ids, mask, torch.arange(a, b, dtype=torch.int32, device=device))
         with torch.inference_mode():
-            model(input_ids=ids, attention_mask=mask)
+            run(input_ids=ids, attention_mask=mask)
         done += int(mask.sum())
         next_batch = bi + 1
         last = next_batch == len(plan)
@@ -517,23 +679,23 @@ def collect(args, docs: list) -> dict:
     with_pre = lambda x: torch.cat([torch.tensor(pre, dtype=x.dtype, device=x.device).expand(len(x), -1), x], 1)  # noqa: E731
     with torch.inference_mode():
         col.ctx.update(chat=True)
-        model(input_ids=with_pre(torch.tensor([[arch.chat_open(MODEL, tok)]], device=device)))
+        run(input_ids=with_pre(torch.tensor([[arch.chat_open(MODEL, tok)]], device=device)))
         col.ctx["chat"] = False
         for s in range(0, len(vocab_ids), 1024):
             col.ctx["ids"] = vocab_ids[s:s + 1024].to(device)
-            model(input_ids=with_pre(col.ctx["ids"][:, None]))
-        # Repeated random tokens, for induction and duplicate-token scores.
-        col.mode = "rep"
-        special = set(tok.all_special_ids)
-        pool = torch.tensor([i for i in vocab_ids.tolist() if i not in special])
-        half = pool[torch.randint(len(pool), (REP_SEQS, REP_LEN), generator=torch.Generator().manual_seed(0))]
-        rep = torch.cat([half, half], 1)
-        for s in range(0, REP_SEQS, 16):
-            model(input_ids=with_pre(rep[s:s + 16].to(device)))
-        col.extra["induction"] /= REP_SEQS
-        col.extra["duplicate"] /= REP_SEQS
+            run(input_ids=with_pre(col.ctx["ids"][:, None]))
+        if heads:  # Repeated random tokens, for induction and duplicate-token scores.
+            col.mode = "rep"
+            special = set(tok.all_special_ids)
+            pool = torch.tensor([i for i in vocab_ids.tolist() if i not in special])
+            half = pool[torch.randint(len(pool), (REP_SEQS, REP_LEN), generator=torch.Generator().manual_seed(0))]
+            rep = torch.cat([half, half], 1)
+            for s in range(0, REP_SEQS, 16):
+                model(input_ids=with_pre(rep[s:s + 16].to(device)))
+            col.extra["induction"] /= REP_SEQS
+            col.extra["duplicate"] /= REP_SEQS
     col.extra["inv_freq"] = arch.inv_freq(model, MODEL)  # RoPE's angle per position (per layer type), for 08_reads
-    for h in hooks:
+    for h in hooks + stop:
         h.remove()
     print(f"{time.strftime('%H:%M:%S')} done: {int(col.total['n'].sum())} neuron positions, {len(rows)} documents", flush=True)
     return save("done")
@@ -592,13 +754,13 @@ def head_modes(saved: dict) -> dict:
 
 
 def neuron_tables(saved: dict, workers: int = 1) -> None:
-    """One ``neurons/acts`` table per layer; with ``workers`` > 1, layers in forked processes (the
-    per-pole contexts are Python string work, ~45 s a layer for Gemma 4's 30,720 poles)."""
-    L = saved["state"]["top"]["val"].shape[0]
+    """One ``neurons/acts`` table per layer of the pass (``neuron_layers``); with ``workers`` > 1, layers in forked
+    processes (the per-pole contexts are Python string work, ~45 s a layer for Gemma 4's 30,720 poles)."""
+    L = len(neuron_layers(saved))
     _SAVED["s"] = saved
     if workers <= 1:
-        for layer in range(L):
-            _neuron_layer(layer)
+        for i in range(L):
+            _neuron_layer(i)
         return
     import multiprocessing as mp
     with mp.get_context("fork").Pool(min(workers, L)) as pool:
@@ -606,9 +768,13 @@ def neuron_tables(saved: dict, workers: int = 1) -> None:
             pass
 
 
-def _neuron_layer(layer: int) -> None:
+def _neuron_layer(li: int) -> None:
+    """The ``neurons/acts`` table of the pass's ``li``-th layer. A pole's list of top documents shorter than ``TOP`` (a
+    routed neuron's, whose expert few documents reach) is padded: ``top_doc``, ``top_pos`` −1, ``top_val``, ``top_gate``
+    NaN; so is ``first_max``, NaN where no token alone routes to it."""
     torch.set_num_threads(1)
     saved = _SAVED["s"]
+    layer = neuron_layers(saved)[li]
     tok = tokenizer()
     dec = functools.cache(lambda i: tok.decode([i]))
     st, top, extra = saved["state"]["total"], saved["state"]["top"], saved["state"]["extra"]
@@ -618,19 +784,19 @@ def _neuron_layer(layer: int) -> None:
     grid = torch.cat([-EDGES[1:].flip(0), EDGES]).double()
     f = top["val"].shape[-1]
     t0 = time.perf_counter()
-    E_s = past(st["count"][:, layer].double())  # [S, 2, len(EDGES), f]
+    E_s = past(st["count"][:, li].double())  # [S, 2, len(EDGES), f]
     E = E_s.sum(0)
-    mean = st["sum"][:, layer].sum(0) / n
-    std = (st["sumsq"][:, layer].sum(0) / n - mean.pow(2)).clamp_min(0).sqrt()
+    mean = st["sum"][:, li].sum(0) / n
+    std = (st["sumsq"][:, li].sum(0) / n - mean.pow(2)).clamp_min(0).sqrt()
     cols = neuron_keys(layer, f)
     acc = {k: [] for k in ("act_top", "act_max", "pos_share", "rate", *[f"rate_{s}" for s in ACT_SLICES],
                            "q50", "q90", "q99", "q999", "mean", "std", "neg_lobe", "peak_tokens", "next_tokens", "contexts")}
     P = top["val"].shape[1]  # the poles (arch.n_poles); count's sign axis stays two-wide (a pole's quantiles need both)
     for p in range(P):
-        val = top["val"][layer, p]  # [K, f]
+        val = top["val"][li, p]  # [K, f]
         act_top = val[:TYPICAL].median(0).values.clamp_min(0).double()
         acc["act_top"].append(act_top)
-        acc["act_max"].append(val[0].double())
+        acc["act_max"].append(val[0].double().nan_to_num(nan=float("nan"), neginf=float("nan")))
         acc["pos_share"].append(E[p, 0] / n)
         acc["rate"].append(interp(E[p], n, act_top / 4))
         for si, s in enumerate(ACT_SLICES):
@@ -640,12 +806,12 @@ def _neuron_layer(layer: int) -> None:
             acc[k].append(q)
         acc["mean"].append(mean)
         acc["std"].append(std)
-        docs, poss = top["doc"][layer, p].long(), top["pos"][layer, p].long()
+        docs, poss = top["doc"][li, p].long(), top["pos"][li, p].long()
         peak = flat[start[docs] + poss]  # [K, f]
         after = start[docs] + poss + 1  # the token after each firing; past its document's end, none
         following = torch.where(after < start[docs + 1], flat[after.clamp_max(len(flat) - 1)].long(), -1)
         size = val.clamp_min(0)  # activation-weighted, so a pole's weak tail of top firings doesn't decide its side
-        acc["neg_lobe"].append((size * (top["gate"][layer, p] < 0)).sum(0).double() / size.sum(0).clamp_min(1e-9))
+        acc["neg_lobe"].append((size * (top["gate"][li, p] < 0)).sum(0).double() / size.sum(0).clamp_min(1e-9))
         for nn in range(f):
             fired = (val[:, nn] > 0).nonzero().squeeze(1).tolist()
             c = Counter(int(peak[j, nn]) for j in fired)
@@ -656,14 +822,17 @@ def _neuron_layer(layer: int) -> None:
                 context(tok, flat[start[docs[j, nn]]:start[docs[j, nn] + 1]], int(poss[j, nn])) for j in fired[:N_CONTEXTS]))
     for k, v in acc.items():
         cols[k] = pa.array(v) if isinstance(v[0], str) else pa.array(torch.cat(v).float().numpy())
+    none = torch.cat([top["val"][li, p].T for p in range(P)]) == -torch.inf  # a shorter list's padding
     for k in ("doc", "pos", "val", "gate"):
-        cols[f"top_{k}"] = fixed(torch.cat([top[k][layer, p].T for p in range(P)]))
-    fv, ft = extra["first_val"][layer], extra["first_tok"][layer]  # [P, K, f]
-    cols["first_max"] = pa.array(fv[:, 0].flatten().numpy())
-    cols["first_tokens"] = pa.array([" | ".join(f"{dec(int(ft[p, j, nn]))!r} {fv[p, j, nn]:.3g}" for j in range(FIRST_K))
+        x = torch.cat([top[k][li, p].T for p in range(P)])
+        cols[f"top_{k}"] = fixed(x.masked_fill(none, -1 if k in ("doc", "pos") else float("nan")))
+    fv, ft = extra["first_val"][li], extra["first_tok"][li]  # [P, K, f]
+    cols["first_max"] = pa.array(fv[:, 0].flatten().masked_fill(fv[:, 0].flatten() == -torch.inf, float("nan")).numpy())
+    cols["first_tokens"] = pa.array([" | ".join(f"{dec(int(ft[p, j, nn]))!r} {fv[p, j, nn]:.3g}" for j in range(FIRST_K)
+                                                if fv[p, j, nn] > -torch.inf)
                                      for p in range(P) for nn in range(f)])
-    cols["first_chat"] = pa.array(torch.cat([s * extra["first_chat"][layer] for s in arch.signs(MODEL)]).numpy())
-    cols |= {k: pa.array(v.float().numpy()) for k, v in neuron_modes(saved, layer).items()}
+    cols["first_chat"] = pa.array(torch.cat([s * extra["first_chat"][li] for s in arch.signs(MODEL)]).numpy())
+    cols |= {k: pa.array(v.float().numpy()) for k, v in neuron_modes(saved, li).items()}
     write(cols, neuron_table("acts", layer))
     print(f"{time.strftime('%H:%M:%S')} neurons/acts L{layer} in {time.perf_counter() - t0:.0f}s", flush=True)
 
@@ -727,6 +896,51 @@ def head_tables(saved: dict, device) -> None:
     print(f"{time.strftime('%H:%M:%S')} heads/acts written", flush=True)
 
 
+def expert_tables(saved: dict) -> None:
+    """``experts/acts.parquet``, a row per (layer, expert) of a sparse model, this pass's layers in place of the
+    file's rows for them (a model collected in groups, ``--layers``, fills it a group at a time): ``rate`` (the share of
+    positions routed to it, and ``rate_<slice>``), ``weight`` (its mean routing weight where routed), its top ``TOP``
+    documents by routing weight (``top_doc``, ``top_pos``, ``top_val``; padded where fewer route to it), ``peak_tokens``
+    and ``contexts`` there, and ``mean_cg``, ``mean_cu`` (``[I]`` each, its neurons' RelP factors times the routing
+    weight, ``experts.factors``, averaged over its routed positions: the expert's mean map, ``08_reads.py``)."""
+    tok = tokenizer()
+    dec = functools.cache(lambda i: tok.decode([i]))
+    st, top = saved["state"]["total"], saved["state"]["top"]
+    flat, start = saved["tokens"], saved["doc_start"]
+    layers = neuron_layers(saved)
+    nl, E, K = top["e_val"].shape
+    I = saved["state"]["extra"]["expert_width"]
+    n_s = st["n"].double()
+    routed = st["e_n"].double()  # [S, nl, E]
+    count = routed.sum(0)
+    cols = expert_keys(layers, E)
+    cols["rate"] = pa.array((count / n_s.sum()).flatten().float().numpy())
+    for si, s in enumerate(ACT_SLICES):
+        cols[f"rate_{s}"] = pa.array((routed[si] / n_s[si].clamp_min(1)).flatten().float().numpy())
+    cols["weight"] = pa.array((st["e_w"] / count.clamp_min(1)).flatten().float().numpy())
+    val, docs, pos = top["e_val"].reshape(nl * E, K), top["e_doc"].reshape(nl * E, K).long(), top["e_pos"].reshape(nl * E, K).long()
+    none = val == -torch.inf
+    cols["top_doc"], cols["top_pos"] = fixed(docs.masked_fill(none, -1).int()), fixed(pos.masked_fill(none, -1).short())
+    cols["top_val"] = fixed(val.masked_fill(none, float("nan")))
+    peak = flat[start[docs] + pos]
+    cols["peak_tokens"] = pa.array([" | ".join(f"{dec(int(t))!r}×{c}" for t, c in Counter(peak[r][~none[r]].tolist()).most_common(5))
+                                    for r in range(nl * E)])
+    cols["contexts"] = pa.array([" ‖ ".join(context(tok, flat[start[docs[r, j]]:start[docs[r, j] + 1]], int(pos[r, j]))
+                                            for j in range(N_CONTEXTS) if not none[r, j]) for r in range(nl * E)])
+    for k, name in (("e_cg", "mean_cg"), ("e_cu", "mean_cu")):  # the experts' neurons come first, a shared expert's after
+        m = st[k][:, :E * I].view(nl, E, I) / count[..., None].clamp_min(1)
+        cols[name] = fixed(m.reshape(nl * E, I).float())
+    path = expert_table("acts")
+    table = pa.table(cols)
+    if path.exists():
+        old = pq.read_table(path)
+        table = pa.concat_tables([old.filter(pc.invert(pc.is_in(old.column("layer"), pa.array(layers, pa.int16())))), table])
+        table = table.sort_by([("layer", "ascending"), ("expert", "ascending")])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(table, path)
+    print(f"{time.strftime('%H:%M:%S')} experts/acts L{layers[0]}-L{layers[-1]} written", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--docs", type=int, default=None,
@@ -737,6 +951,8 @@ def main() -> None:
     ap.add_argument("--detach", action="store_true")
     ap.add_argument("--table-workers", type=int, default=16 if torch.cuda.is_available() else 1,
                     help="processes writing the neuron tables, one layer each (forked)")
+    ap.add_argument("--layers", default=None,
+                    help="a-b: the neurons of these layers alone (default all); the group from layer 0 also collects the heads")
     args = ap.parse_args()
     if args.detach:
         LOGS.mkdir(exist_ok=True)
@@ -758,7 +974,10 @@ def main() -> None:
         print(f"smoke test done: {ACTS.name} saved, tables not written", flush=True)
         return
     neuron_tables(saved, args.table_workers)
-    head_tables(saved, args.device)
+    if "e_val" in saved["state"]["top"]:
+        expert_tables(saved)
+    if neuron_layers(saved)[0] == 0:
+        head_tables(saved, args.device)
     write({"doc": pa.array(range(len(docs)), pa.int32()), "slice": pa.array([ACT_SLICES[s] for s, _, _ in docs]),
                "line": pa.array([ln for _, ln, _ in docs], pa.int32()),
                "tokens": pa.array([len(r) for _, _, r in docs], pa.int16())}, catalog_dir() / "docs.parquet")

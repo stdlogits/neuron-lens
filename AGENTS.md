@@ -37,7 +37,8 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   audio collections; `corpus.py` the corpora (`act_file` names each slice's file); `catalog.py` holds
   the catalog's layout, the kept tokens and the table helpers (and browses it:
   `python -m neuron_lens.catalog`); `firings.py` and `sources.py` the activation-side passes (the residual at a pole's firings; the exact split of
-  an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons.
+  an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons; `experts.py` a sparse MLP's neurons on the activation side (the model's own routing, the
+  routed pairs' activations, per-neuron rows gathered from the experts' weights) for 06, 07, 17 and the checks.
 - `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
   reads → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
   `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`; then `11` figures
@@ -62,7 +63,9 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   the catalog a DeltaNet layer's heads are its value heads, mixing through `A` (`o = A v`, `layers.delta_pattern`): 06
   reads `|A|` as their attention pattern, 08 their OV and QK maps through the convolution's summed taps and their own
   `beta_S` and `decay_S` reads, 17 splits their value channel (design.md's Qwen3.5 section). The Triton kernels take
-  heads of powers of two (`kernels.supports`); Olmo Hybrid's run the torch passes.
+  heads of powers of two (`kernels.supports`); Olmo Hybrid's run the torch passes. A sparse layer's neurons are its
+  experts' side by side, then its shared expert's (design.md's "Sparse MLPs in the catalog"), with expert tables of their
+  own. No catalog has run on a full Qwen3.5 model yet.
 - **OLMo (in progress):** `layers.py` and the stages cover OLMo 2 and 3 (norms on the sublayers' outputs only, so each
   sublayer reads the residual itself: `anatomy`'s third layout; q/k norms over the whole projection, one rsqrt a
   position; OLMo 3's sliding windows and per-type RoPE with YaRN), OLMoE (64 experts, top 8, the router's weights not
@@ -85,7 +88,8 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   release staging folders, and outside data (`data/external/`). `neuron_lens/paths.py` names
   them. The catalog lives in `data/catalog/<model>/`, laid out as the release:
   `neurons/<table>/L<layer>.parquet` (a row per pole, the + poles first) and
-  `heads/<table>.parquet` (a row per head), key columns in front. Per model: `token_counts-<model>.pt` and
+  `heads/<table>.parquet` (a row per head), key columns in front; a sparse model's experts also get
+  `experts/acts.parquet` and `experts/reads.parquet`, a row per (layer, expert). Per model: `token_counts-<model>.pt` and
   the chat slice `act-chat-<model>.jsonl`, the other slices shared; Gemma's media sources in
   `data/corpus/media-<modality>.provenance.json`. `data/summary/release_<model>.json` holds what the
   Hub cards say about each model's release, so either model's run rebuilds both cards.
@@ -187,7 +191,10 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   pruned from the 8B and the 1.7B, and their neurons sit in order of the parent's activation, most active first
   (findings §20). In those two models a range of indices is a slice by activation rank, not a sample, so draw neurons at
   random. Qwen3's sizes to 14B are three lineages (the 1.7B's, the 8B's and the 14B's), not five independent points.
-  `checks/lineage.py` maps each neuron to its parent; its `table` part writes the catalog's `lineage` table.
+  `checks/lineage.py` maps each neuron to its parent; its `table` part writes the catalog's `lineage` table. A sparse
+  layer's neuron `e·I + i` is neuron `i` of expert `e`, and its shared expert's neurons follow its experts'. Its
+  activation includes the routing weight (the shared expert's gate), and a routed pole's top lists hold the positions
+  its expert is chosen for, padded.
 - **Gemma 4.** A neuron's write is what reaches the residual, `s · γ_post ⊙ W_down[:, n]` (the
   post-feedforward norm's scale held constant, `layer_scalar` `s`); its read rows are scaled by the
   pre-feedforward norm. Logits pass a softcap (`30 · tanh(x / 30)`), which R-lens probabilities
@@ -255,6 +262,9 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   MLPs, so it keeps 20 of its 64 (67 GiB at the peak, 43 s a document).
 - `13_media_activations.py` keeps every document's activations for all of Gemma's neurons in RAM
   (about 220 GB for the images): run the two modalities one at a time.
+- Sparse models with large widths run 06 and 07 in layer groups (`--layers a-b`; the group from layer 0 collects the
+  heads) and 17 a few layers at a time; 17 runs the model in fp32 (Qwen3.5-35B-A3B: 140 GB, more than one 80 GB GPU
+  holds, and no offload path is built for it yet).
 - One GPU process per GPU. Before GPU work, check for running jobs (`ps`, `nvidia-smi`); on a
   shared machine, never run beside or stop a job that isn't yours. Light CPU work (weight-only
   reads, tests) can run beside a GPU job; heavy CPU work slows it on unified memory.

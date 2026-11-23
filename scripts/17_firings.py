@@ -56,6 +56,14 @@ Per layer in ``data/summary/head_sources_<model>.json``.
 
 The neurons' pass saves every ``--save-minutes`` and resumes there; the checkpoints go with the tables.
 
+A sparse MLP's neurons (``neuron_lens.experts``): their activations are gathered at the positions some firing sits at,
+their writes read a layer at a time from the experts' own weights (``sources.Stream``), and a firing's map carries its
+routing weight (``firings``); a routed pole's shares don't (it multiplies the activation and each source's part alike).
+The state grows with the neurons: per layer, ``P·f · d · 4`` bytes a site for the firings' sums (2.2 GB for each of
+Qwen3.5-35B-A3B's three sites a layer, 260 GB for its 40 layers) and about ``P·f · N_CONTEXTS · RANK · 8`` for the sources'
+candidates (2.7 GB a layer), on the CPU: run such a model a few layers at a time (``--layers``). The pass runs the model
+in fp32 (Qwen3.5-35B-A3B: 140 GB, more than one 80 GB GPU holds).
+
     python scripts/17_firings.py [--detach] [--layers a-b] [--docs N] [--batch-docs 32] [--parts neurons,heads]
 
 ``--docs N`` is a smoke test: only the first N documents, printing what it collected, writing no table.
@@ -73,7 +81,7 @@ import pyarrow.parquet as pq
 import torch
 from transformers import AutoModelForCausalLM
 
-from neuron_lens import arch, metric
+from neuron_lens import arch, experts, metric
 from neuron_lens.catalog import (
     MODEL,
     TOP,
@@ -119,7 +127,8 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
     lm = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval().requires_grad_(False)
     stack = decoder_stack(lm).to(args.device)  # the unembedding stays on the CPU: the pass reads the stream, not logits
     cfg = stack.config
-    acc = Accumulator({l: layer_plan(l) for l in layers}, arch.n_poles(MODEL) * cfg.intermediate_size, cfg.hidden_size, args.device)
+    acc = Accumulator({l: layer_plan(l) for l in layers}, arch.n_poles(MODEL) * experts.stack_width(stack), cfg.hidden_size,
+                      args.device)
     src = Sources(stack, [l for l in layers if l > 0], args.device, sum(len(d) for d in docs))
     meta = {"model": MODEL, "layers": layers, "top": TOP, "docs": len(docs)}
     next_doc = 0

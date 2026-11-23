@@ -54,7 +54,7 @@ import time
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import arch, metric
+from neuron_lens import arch, experts, metric
 from neuron_lens.catalog import (
     MODEL,
     acts_path,
@@ -130,7 +130,7 @@ def band_rows(per: list[dict], L: int) -> dict:
 
 def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     cfg = arch.text_config(MODEL)
-    L, f = cfg.num_hidden_layers, cfg.intermediate_size
+    L, f = cfg.num_hidden_layers, experts.width(MODEL)  # a sparse layer's experts' neurons, then its shared expert's
     keep, kidx = kept(), kept_index()
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
@@ -141,16 +141,17 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
     del head
     J_out, J_mid = arch.lens(MODEL, "R_out", R_FIT), arch.lens(MODEL, "R_mid", R_FIT)
     K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)
-    top = saved["state"]["top"]
     g = torch.Generator().manual_seed(0)
     per, unit_q = [], {}
     for layer in range(L):
         t0 = time.perf_counter()
         P = len(SIGNS)
-        val = torch.cat([top["val"][layer, p].T for p in range(P)]).float()  # [P·f, K]: + poles, then −
-        doc = torch.cat([top["doc"][layer, p].T for p in range(P)]).long()
-        pos = torch.cat([top["pos"][layer, p].T for p in range(P)]).long()
+        # the top firings from the acts table (+ poles, then −; a model collected in layer groups keeps each group's
+        # state apart, the tables in one place), padding where a routed pole has fewer
+        tt = pq.read_table(neuron_table("acts", layer), columns=["top_doc", "top_pos", "top_val"])
+        val, doc, pos = column(tt, "top_val").float(), column(tt, "top_doc").long(), column(tt, "top_pos").long()
         fired = val > 0
+        doc, pos = doc.clamp_min(0), pos.clamp_min(0)
         flat, start = saved["tokens"], saved["doc_start"]
         cur, nxt = firing_tokens(flat, start, doc, pos).long(), firing_tokens(flat, start, doc, pos, 1).long()
         acts = pq.read_table(neuron_table("acts", layer), columns=["act_top", "cur_mode", "next_mode"]).to_pydict()

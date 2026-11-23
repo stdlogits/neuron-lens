@@ -44,6 +44,7 @@ from neuron_lens.catalog import (
     documents,
     fixed,
     lobe_signs,
+    neuron_dtype,
     neuron_keys,
     neuron_table,
     write,
@@ -57,6 +58,8 @@ SIGNS = arch.signs(MODEL)
 P = len(SIGNS)  # a neuron's poles
 SIGMAS = 5.0
 RMS_DOCS = 64
+TILE = 2**31  # entries of one [B poles, A poles] block of cosines (8 GB fp32): a dense model's layer pairs are one block
+STORE = 2**34  # bytes of lists and writes kept on the device; past it (a sparse model's) they wait on the CPU
 
 
 @torch.inference_mode()
@@ -110,38 +113,61 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
     ``[L, 2, P·f]``: each pole's largest |cos| with the layer before's writes, and with them rotated at random."""
     rms, mlp_scale, scalars = residual_stats(dev)
     L = len(rms)
-    units = [poles(layer, dev) for layer in range(L)]
-    d, f = units[0][0].shape
+    first = poles(0, dev)
+    d, f = first[0].shape
+    # Each layer's writes and act_top, kept from its turn as a target on (on the CPU where the lists and writes would
+    # pass STORE bytes on the device: a sparse model's), and a target's read rows at its turn alone.
+    store = "cpu" if L * P * f * (k * 20 + d * 2) > STORE else dev
+    to = lambda x, where: tuple(t.to(where) for t in x)
+    units = {0: to(first[:2], store)}
+    del first
     # writes in each target layer's metric: unit length there and their sizes, [d, f] and [2f]
     unit = lambda w, s2: (w / metric.vec_norm(w.T, s2).T, metric.vec_norm(w.T, s2).squeeze(1))
     floor = SIGMAS / d ** 0.5
-    empty = lambda: (torch.full((P * f, k), -1.0, device=dev), torch.full((P * f, k), -1, device=dev),
-                     torch.full((P * f, k), float("nan"), device=dev), torch.full((P * f, k), float("nan"), device=dev))
+    empty = lambda: (torch.full((P * f, k), -1.0, device=store), torch.full((P * f, k), -1, device=store),
+                     torch.full((P * f, k), float("nan"), device=store), torch.full((P * f, k), float("nan"), device=store))
     ins, outs = [empty() for _ in range(L)], [empty() for _ in range(L)]
     rot = torch.linalg.qr(torch.randn(d, d, generator=torch.Generator().manual_seed(0)))[0].to(dev)
     prev = torch.full((L, 2, P * f), float("nan"))
+    cb = f if (P * f) ** 2 <= TILE else max(1, TILE // (P * f * P))  # A neurons a block: a dense model's in one
     t0 = time.perf_counter()
     for m in range(1, L):
-        read, s2 = units[m][2], units[m][3]
+        wm, am, read, s2 = poles(m, dev)
+        units[m] = to((wm, am), store)
+        del wm, am
         s = s2.sqrt()
+        in_m = to(ins[m], dev)
         for l in range(m):
-            w, norm = unit(units[l][0], s2)
-            size = units[l][1] * torch.cat([norm] * P)
-            c = read @ w
-            cos = torch.cat([x * c for x in SIGNS], 1)  # [P·f B poles, P·f A poles]
-            del c
-            if l == m - 1:  # the rotation in the metric's orthonormal coordinates
-                prev[m, 0], prev[m, 1] = cos.abs().amax(1).cpu(), ((read * s) @ (rot @ (w / s[:, None]))).abs().amax(1).cpu()
-            push = cos * size * (mlp_scale[l] * scalars[l + 1:m].prod()).item() / rms[m].item()  # ``size`` holds A's own scalar
-            score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
-            ids = l * P * f + torch.arange(P * f, device=dev)
-            top = score.topk(k, dim=1).indices
-            ins[m] = merge(ins[m], (score.gather(1, top), ids[top], push.gather(1, top), cos.gather(1, top)), k)
-            top = score.topk(k, dim=0).indices.T  # [P·f A poles, k]
-            ids = m * P * f + top
-            pick = lambda t: t.T.gather(1, top)
-            outs[l] = merge(outs[l], (pick(score), ids, pick(push), pick(cos)), k)
-            del cos, push, score
+            w, norm = unit(units[l][0].to(dev), s2)
+            size = units[l][1].to(dev) * torch.cat([norm] * P)
+            gain = (mlp_scale[l] * scalars[l + 1:m].prod()).item(), rms[m].item()  # ``size`` holds A's own scalar
+            out_l = to(outs[l], dev)
+            near = torch.full((2, P * f), -torch.inf, device=dev)
+            for c0 in range(0, f, cb):  # a block of A's neurons, both its poles
+                a_rows = torch.cat([torch.arange(c0, min(c0 + cb, f), device=dev) + p * f for p in range(P)])
+                c = read @ w[:, c0:c0 + cb]
+                cos = torch.cat([x * c for x in SIGNS], 1)  # [P·f B poles, the block's A poles]
+                del c
+                if l == m - 1:  # the rotation in the metric's orthonormal coordinates
+                    near[0] = torch.maximum(near[0], cos.abs().amax(1))
+                    near[1] = torch.maximum(near[1], ((read * s) @ (rot @ (w[:, c0:c0 + cb] / s[:, None]))).abs().amax(1))
+                push = cos * size[a_rows] * gain[0] / gain[1]
+                score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
+                ids = l * P * f + a_rows
+                top = score.topk(min(k, score.shape[1]), dim=1).indices
+                in_m = merge(in_m, (score.gather(1, top), ids[top], push.gather(1, top), cos.gather(1, top)), k)
+                top = score.topk(k, dim=0).indices.T  # [the block's A poles, k]
+                pick = lambda t, top=top: t.T.gather(1, top)
+                new = merge(tuple(t[a_rows] for t in out_l), (pick(score), m * P * f + top, pick(push), pick(cos)), k)
+                for t, v in zip(out_l, new):
+                    t[a_rows] = v
+                del cos, push, score
+            if l == m - 1:
+                prev[m] = near.cpu()
+            outs[l] = to(out_l, store)
+            del out_l, w
+        ins[m] = to(in_m, store)
+        del read
         print(f"{time.strftime('%H:%M:%S')} L{m}: in from L0-L{m - 1}, {time.perf_counter() - t0:.0f}s", flush=True)
     return [tuple(t.cpu() for t in x) for x in ins], [tuple(t.cpu() for t in x) for x in outs], rms, mlp_scale, prev
 
@@ -152,7 +178,7 @@ def columns(cols: dict, side: str, lists: tuple, f: int) -> None:
     ids = torch.where(ok, ids, -1)
     layer, row = ids.div(P * f, rounding_mode="floor"), ids % (P * f)
     cols[f"{side}_layer"] = fixed(torch.where(ok, layer, -1).to(torch.int16))
-    cols[f"{side}_neuron"] = fixed(torch.where(ok, row % f, -1).to(torch.int16))
+    cols[f"{side}_neuron"] = fixed(torch.where(ok, row % f, -1).to(neuron_dtype(f)))
     cols[f"{side}_pole"] = fixed(torch.where(ok, 1 - 2 * (row // f), 0).to(torch.int8))
     cols[f"{side}_push"] = fixed(torch.where(ok, push, float("nan")))
     cols[f"{side}_cos"] = fixed(torch.where(ok, cos, float("nan")))

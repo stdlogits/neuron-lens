@@ -39,7 +39,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import anatomy, arch, layers
+from neuron_lens import anatomy, arch, experts, layers
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -49,6 +49,7 @@ from neuron_lens.catalog import (
     head_keys,
     head_rows,
     head_table,
+    neuron_dtype,
     neuron_keys,
     neuron_table,
 )
@@ -80,7 +81,7 @@ def _per_head(w: torch.Tensor | None, r: torch.Tensor | None, head: int, pos, hd
 
 
 def _bias(mod, d: int, dev) -> torch.Tensor:
-    return torch.zeros(d, device=dev) if mod.bias is None else mod.bias.float()
+    return torch.zeros(d, device=dev) if mod is None or mod.bias is None else mod.bias.float()  # (a sparse MLP: none)
 
 
 def joined(parts: list[torch.Tensor]) -> torch.Tensor:
@@ -110,15 +111,20 @@ class Stream:
         self.centred = any(is_centred(anatomy.module(first, n)) for n in anatomy.parts(first).norms)
         heads = [arch.head_write(lay) for lay in self.layers]  # [d, H·hd], hd may differ by layer (Gemma 4's full-attention layers)
         self.all_heads = joined(heads)  # a layer's sources are a prefix of these
-        self.all_neurons = joined([arch.mlp_write(lay) for lay in self.layers])  # [d, L·f]
-        self.neurons = self.all_neurons.split(stack.config.intermediate_size, 1)  # per layer, views of it
-        dev = self.all_neurons.device
+        self.f = experts.stack_width(stack)  # a sparse layer's: its experts' neurons side by side, then its shared expert's
+        # a sparse stack's writes stay its experts' own weights (Qwen3.5-35B-A3B's side by side would be 43 GB): its reads
+        # are made a layer at a time (neuron_reads)
+        self.sparse = any(experts.sparse(lay) for lay in self.layers)
+        self.all_neurons = None if self.sparse else joined([arch.mlp_write(lay) for lay in self.layers])  # [d, L·f]
+        self.neurons = None if self.sparse else self.all_neurons.split(self.f, 1)  # per layer, views of it
+        self.rows = {}  # a sparse layer's gate and up rows (experts.layer_rows), by layer
+        dev = self.all_heads.device
         self.head_end = torch.tensor([w.shape[1] for w in heads]).cumsum(0).tolist()  # layer l's heads end at this column
         self.head_of = torch.cat([l * self.n_heads + torch.arange(w.shape[1], device=dev) // geo[l].head_dim
                                   for l, w in enumerate(heads)])  # the head each column of all_heads belongs to
         self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=dev)
         # the residual's constant (its writes' biases) entering each layer, and each MLP's input
-        d = self.all_neurons.shape[0]
+        d = self.all_heads.shape[0]
         ab = [_bias(anatomy.module(lay, anatomy.parts(lay).out), d, dev) for lay in self.layers]
         cin = [torch.zeros(d, device=dev)]
         for l, lay in enumerate(self.layers):
@@ -146,10 +152,44 @@ class Stream:
             out.append(anatomy.module(lay, anatomy.parts(lay).mixer).register_forward_hook(  # (attention or a DeltaNet)
                 scale(("attn", l), lambda o, lay=lay: arch.attn_scale(lay, o))))
             out.append(arch.mid_point(lay).register_forward_pre_hook(store(("x", l))))
-            if l != upto:
+            if l != upto and experts.sparse(lay):  # the activations at the picked positions alone (experts.Picked)
+                out += self._sparse_hook(cap, at, l, lay)
+                out.append(lay.mlp.register_forward_hook(scale(("mlp", l), lambda o, lay=lay: arch.mlp_scale(lay, o))))
+            elif l != upto:
                 out.append(_down(lay).register_forward_pre_hook(store(("a", l))))
                 out.append(lay.mlp.register_forward_hook(scale(("mlp", l), lambda o, lay=lay: arch.mlp_scale(lay, o))))
         return out
+
+    def _sparse_hook(self, cap: dict, at: Callable, l: int, lay) -> list:
+        picked = {}
+
+        def rows(shape):  # the rows of the positions ``at`` picks, in its order
+            idx = at(torch.arange(shape.numel(), device=self.all_heads.device).view(shape)).flatten()
+            picked["rows"] = idx
+            mask = torch.zeros(shape.numel(), dtype=torch.bool, device=idx.device)
+            mask[idx] = True
+            return mask
+        return experts.Tap(lay.mlp, lambda r: cap.__setitem__(("a", l), experts.Picked(r, picked["rows"])), rows).hooks
+
+    def layer_reads(self, r: torch.Tensor, l: int) -> torch.Tensor:
+        """``[n, f]``: read rows ``r`` ``[n, d]`` against layer ``l``'s neurons' writes."""
+        return experts.layer_write_reads(self.layers[l], r) if self.sparse else times(r, self.neurons[l])
+
+    def neuron_reads(self, r: torch.Tensor, M: int) -> torch.Tensor:
+        """``[n, M·f]``: read rows ``r`` against the writes of every neuron of layers ``< M``."""
+        if not self.sparse:
+            return times(r, self.all_neurons[:, :M * self.f])
+        return torch.cat([self.layer_reads(r, l) for l in range(M)], 1) if M else r[:, :0]
+
+    def read_rows(self, lay, l: int, neuron: torch.Tensor, gamma) -> tuple:
+        """The gate and up rows of ``neuron`` times the MLP input norm's scale ``gamma``, and the gate's bias."""
+        p = anatomy.parts(lay)
+        if p.sparse:
+            if l not in self.rows:
+                self.rows[l] = experts.layer_rows(lay)
+            return self.rows[l]["gate"][neuron] * gamma, self.rows[l]["up"][neuron] * gamma, None
+        gp, up = anatomy.module(lay, p.gate), anatomy.module(lay, p.up)
+        return gp.weight[neuron] * gamma, None if up is None else up.weight[neuron] * gamma, gp
 
     def sources(self, cap: dict, M: int, neuron: torch.Tensor, u: torch.Tensor) -> dict:
         """``split`` for the firings ``u`` (indices into ``cap``'s positions) of ``neuron`` ``[N]`` in layer ``M``."""
@@ -158,11 +198,9 @@ class Stream:
         xc = x - x.mean(-1, keepdim=True) if self.centred else x
         inv = torch.ones_like(x[:, :1]) if norm is None else torch.rsqrt(xc.pow(2).mean(-1) + norm_eps(norm))[:, None]
         mlp, p = lay.mlp, anatomy.parts(lay)
-        gp, up = anatomy.module(lay, p.gate), anatomy.module(lay, p.up)
         gamma = 1.0 if norm is None else norm_weight(norm)
-        rg = gp.weight[neuron] * gamma
-        ru = None if up is None else up.weight[neuron] * gamma
-        b0 = torch.zeros(len(neuron), device=x.device) if gp.bias is None else gp.bias[neuron].float()
+        rg, ru, gp = self.read_rows(lay, M, neuron, gamma)  # (a routed neuron's routing weight cancels in its shares)
+        b0 = torch.zeros(len(neuron), device=x.device) if gp is None or gp.bias is None else gp.bias[neuron].float()
         if getattr(norm, "bias", None) is not None:  # W_in β
             b0 = b0 + gp.weight[neuron].float() @ norm.bias.float()
         if self.centred:
@@ -177,8 +215,9 @@ class Stream:
         return split(rg, ru, x, inv, cap["emb"][u] * self.scalars[:M].prod(),
                      torch.cat([reaching("z", "attn", l) for l in range(nh)], 1) if nh else x[:, :0],
                      torch.cat([reaching("a", "mlp", l) for l in range(M)], 1) if M else x[:, :0],
-                     self.all_neurons[:, :M * self.neurons[0].shape[1]], self.all_heads[:, :end],
-                     self.head_of[:end], nh * self.n_heads, mlp_act(mlp), self.bias_mid[M], b0)
+                     lambda r: self.neuron_reads(r, M), self.all_heads[:, :end],
+                     self.head_of[:end], nh * self.n_heads, mlp.experts.act_fn if p.sparse else mlp_act(mlp),
+                     self.bias_mid[M], b0)
 
 
 def times(r: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
@@ -191,13 +230,14 @@ def times(r: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
 
 
 def split(rg: torch.Tensor, ru: torch.Tensor | None, x: torch.Tensor, inv: torch.Tensor, emb: torch.Tensor,
-          z: torch.Tensor, acts: torch.Tensor, downs: torch.Tensor, wos: torch.Tensor, head_of: torch.Tensor, n_heads: int,
+          z: torch.Tensor, acts: torch.Tensor, downs: Callable, wos: torch.Tensor, head_of: torch.Tensor, n_heads: int,
           act: Callable, bias: torch.Tensor, b0: torch.Tensor) -> dict:
     """Per firing (rows): ``rg``, ``ru`` ``[N, d]``, the neuron's gate and up rows times the norm's weight;
     ``x`` ``[N, d]``, the residual entering the norm; ``inv`` ``[N, 1]``, the norm's scale; ``emb`` the
     embedding, ``z`` ``[N, C]`` the heads' pre-``o_proj`` outputs at layers ≤ ``M``, ``acts`` ``[N, M·f]``
-    the activations at layers < ``M``, these three scaled as they reach ``x``; ``downs`` ``[d, M·f]``, ``wos``
-    ``[d, C]`` the writes as the residual sees them; ``head_of`` ``[C]`` the head each of ``C`` columns belongs to, of
+    the activations at layers < ``M``, these three scaled as they reach ``x``; ``downs(r)`` ``[N, M·f]``, read rows
+    against the neurons' writes as the residual sees them (``Stream.neuron_reads``), ``wos``
+    ``[d, C]`` the heads'; ``head_of`` ``[C]`` the head each of ``C`` columns belongs to, of
     ``n_heads``; ``act`` the MLP's activation; ``bias`` ``[d]`` the residual's constant, ``b0`` ``[N]`` the pre-activation's
     own. Returns ``g``, ``a`` ``[N]`` and the shares ``emb``, ``const`` ``[N]``, ``heads`` ``[N, n_heads]``, ``neurons``
     ``[N, M·f]``, which sum to 1 over the four. Ungated (``ru`` None): ``a = φ(g) g`` splits as ``g`` (rows centred
@@ -208,14 +248,14 @@ def split(rg: torch.Tensor, ru: torch.Tensor | None, x: torch.Tensor, inv: torch
         share = lambda gx: gx / g[:, None]
         return {"g": g, "a": act(g), "emb": share((rg * emb).sum(-1, keepdim=True) * inv)[:, 0],
                 "const": share((rg @ bias)[:, None] * inv + b0[:, None])[:, 0], "heads": share(per(rg)),
-                "neurons": share(times(rg, downs) * acts * inv)}
+                "neurons": share(downs(rg) * acts * inv)}
     g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
     a = act(g) * u
     share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
     e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
     c = share((rg @ bias)[:, None] * inv, (ru @ bias)[:, None] * inv)[:, 0]  # (no biases in the gated models: zero)
     return {"g": g, "a": a, "emb": e, "const": c, "heads": share(per(rg), per(ru)),
-            "neurons": share(times(rg, downs) * acts * inv, times(ru, downs) * acts * inv)}
+            "neurons": share(downs(rg) * acts * inv, downs(ru) * acts * inv)}
 
 
 def merged(rows: torch.Tensor, ids: torch.Tensor, vals: torch.Tensor, n_ids: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -276,7 +316,7 @@ def pole_list(cols: dict, name: str, ids: torch.Tensor, value: torch.Tensor, val
     P = arch.n_poles(MODEL)
     layer, row = ids.div(P * f, rounding_mode="floor"), ids % (P * f)
     cols[f"{name}_layer"] = fixed(torch.where(ok, layer, -1).to(torch.int16))
-    cols[f"{name}_neuron"] = fixed(torch.where(ok, row % f, -1).to(torch.int16))
+    cols[f"{name}_neuron"] = fixed(torch.where(ok, row % f, -1).to(neuron_dtype(f)))
     cols[f"{name}_pole"] = fixed(torch.where(ok, 1 - 2 * (row // f), 0).to(torch.int8))
     cols[f"{name}_{value_name}"] = fixed(value.float())
 
@@ -291,7 +331,8 @@ class Sources:
     def __init__(self, stack, layers: list[int], dev, positions: int):
         self.stack, self.layers, self.dev, self.flow = stack, layers, dev, Stream(stack)
         self.rate_floor = 1 / positions  # a pole seen firing at all fires at least once
-        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, self.flow.n_heads
+        self.L, self.f, self.H = len(stack.layers), self.flow.f, self.flow.n_heads  # f: a sparse layer's experts' and shared
+        # expert's neurons (the config's is a dense MLP's); heads on the grid
         self.P = arch.n_poles(MODEL)
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
         self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev).flatten()
@@ -405,7 +446,8 @@ class HeadSources:
 
     def __init__(self, stack, dev, positions: int):
         self.stack, self.dev, self.flow = stack, dev, Stream(stack)
-        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, self.flow.n_heads  # heads on the grid
+        self.L, self.f, self.H = len(stack.layers), self.flow.f, self.flow.n_heads  # f: a sparse layer's experts' and shared
+        # expert's neurons (the config's is a dense MLP's); heads on the grid
         self.P = arch.n_poles(MODEL)
         self.rate_floor = 1 / positions
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
@@ -506,9 +548,16 @@ class HeadSources:
             return e, torch.zeros(0, device=self.dev), torch.zeros(0, device=self.dev), b
         reach = lambda key, scale, l: cap[key, l][pos] * s[l:M].prod() * (cap[scale, l][pos][:, None] if (scale, l) in cap else 1)
         z = torch.cat([reach("z", "attn", l) for l in range(M)], 1)
-        a = torch.cat([reach("a", "mlp", l) for l in range(M)], 1)
         C = self.flow.head_end[M - 1]
         heads = torch.zeros(M * self.H, device=self.dev).index_add_(0, self.flow.head_of[:C], ((R @ self.flow.all_heads[:, :C]) * z).sum(0))
+        if self.flow.sparse:  # a layer at a time: a sparse stack's [positions, M·f] tables would be gigabytes
+            parts = []
+            for l in range(M):
+                a = reach("a", "mlp", l)
+                each = self.flow.layer_reads(R, l) * a
+                parts.append(each.sum(0) if self.P == 1 else torch.cat([(each * (a > 0)).sum(0), (each * (a < 0)).sum(0)]))
+            return e, heads, torch.cat(parts), b
+        a = torch.cat([reach("a", "mlp", l) for l in range(M)], 1)
         each = (R @ self.flow.all_neurons[:, :M * self.f]) * a
         if self.P == 1:
             return e, heads, each.sum(0), b

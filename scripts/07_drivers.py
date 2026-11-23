@@ -20,7 +20,13 @@ continues from their cache.
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``): per-layer head sizes, and each head's
 output as it reaches the residual (the post-attention norm's weight and its scale at the token).
 
-    python scripts/07_drivers.py
+A sparse MLP's neurons (``neuron_lens.experts``): a routed neuron's activation is 0 in a document where the token, or a
+position after it, isn't routed to its expert, and the means over the documents count those zeros: a driver is a token
+that both routes to the expert and drives the neuron there. ``--layers a-b`` takes the neurons of those layers alone,
+the heads with the group from layer 0 (the top lists take ``f · P · TOP · 8 · 2`` bytes a layer on the device: 270 MB
+for Qwen3.5-35B-A3B's 131,584 neurons, 10.8 GB for its 40 layers beside 67 GB of weights).
+
+    python scripts/07_drivers.py [--layers a-b]
 """
 import argparse
 import copy
@@ -28,7 +34,8 @@ import time
 
 import torch
 
-from neuron_lens import anatomy, arch, layers
+from neuron_lens import anatomy, arch, experts
+from neuron_lens.layers import delta_pattern
 from neuron_lens.catalog import (
     MODEL,
     TOP,
@@ -84,10 +91,29 @@ def pole_drivers(a: torch.Tensor) -> dict[str, torch.Tensor]:
     return {"at": a[:, :, 0].mean(0), "sum": a.sum(2).mean(0)}  # [B, f]
 
 
+def sparse_drivers(r: experts.Routed, D: int, B: int) -> dict[str, torch.Tensor]:
+    """``pole_drivers`` from a sparse MLP's pass (``experts.Routed``, rows document-major as the batch is flattened):
+    a routed neuron's activation is 0 in the documents whose token doesn't route to its expert, which the means count."""
+    f, Tp = r.width, r.n // (D * B)
+    db, t = r.rows // Tp, r.rows % Tp
+    key = ((db % B)[:, None] * f + r.cols()).flatten()
+    out = {}
+    for name, sel in (("at", (t == 0)[:, None].expand_as(r.act).flatten()), ("sum", None)):
+        v = r.act.flatten() if sel is None else r.act.flatten() * sel
+        out[name] = torch.zeros(B * f, device=v.device).index_add_(0, key, v).view(B, f) / D
+    if r.shared is not None:
+        sh = r.shared.view(D, B, Tp, -1)
+        for name, v in pole_drivers(sh).items():
+            out[name][:, r.E * r.I:] = v
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=64, help="tokens per pass, each in every document")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
+    ap.add_argument("--layers", default=None,
+                    help="a-b: the neurons of these layers alone (default all), the heads with the group from layer 0")
     args = ap.parse_args()
     dev = args.device
     docs = documents(dev)
@@ -95,30 +121,35 @@ def main() -> None:
     _, model = arch.load_model(MODEL, dev)  # in its half dtype, eager attention
     cfg = model.config
     P, signs = arch.n_poles(MODEL), arch.signs(MODEL)
-    L, f, H, d = cfg.num_hidden_layers, cfg.intermediate_size, arch.max_heads(MODEL), cfg.hidden_size
+    L, f, H, d = cfg.num_hidden_layers, experts.stack_width(model), arch.max_heads(MODEL), cfg.hidden_size
+    lo, hi = (0, L - 1) if args.layers is None else map(int, args.layers.split("-"))
+    layers, heads = list(range(lo, hi + 1)), lo == 0
+    nl = {l: i for i, l in enumerate(layers)}
     geo = arch.layout(MODEL)  # heads: a grid of H a layer, each layer's first
     wo = [arch.head_write(m).view(d, g.q_heads, g.head_dim) for m, g in zip(model.layers, geo)]  # as the residual sees it
     gram = [torch.einsum("dhi,dhj->hij", w, w) for w in wo]  # |W_O^h z|² = zᵀ G_h z
     del wo
     best = {k: torch.full(shape, -torch.inf, device=dev) for k, shape in
-            (("at", (L, P, f, TOP)), ("sum", (L, P, f, TOP)), ("h_out", (L, H, TOP)), ("h_key", (L, H, TOP)))}
-    best_ids = {k: torch.zeros(v.shape, dtype=torch.long, device=dev) for k, v in best.items()}
+            (("at", (len(layers), P, f, TOP)), ("sum", (len(layers), P, f, TOP)), ("h_out", (L, H, TOP)), ("h_key", (L, H, TOP)))}
+    best_ids = {k: torch.zeros(v.shape, dtype=torch.int32, device=dev) for k, v in best.items()}
     cur, stash = {}, {}
 
     def merge(key: str, l, val: torch.Tensor, ids: torch.Tensor) -> None:  # val [rows, B]; l indexes best[key]
         v, j = torch.cat([best[key][l], val], -1).topk(TOP, dim=-1)
-        best_ids[key][l] = torch.cat([best_ids[key][l], ids.expand_as(val)], -1).gather(-1, j)
+        best_ids[key][l] = torch.cat([best_ids[key][l], ids.to(torch.int32).expand_as(val)], -1).gather(-1, j)
         best[key][l] = v
+
+    def drivers(l: int, reduced: dict) -> None:
+        for key, v in reduced.items():
+            for p, sign in enumerate(signs):
+                merge(key, (nl[l], p), sign * v.T, cur["ids"])
 
     def neuron(l: int):
         def hook(m, x):
-            a = x[0].float().unflatten(0, (D, -1))  # [D, B, 1 + AFTER, f]
-            for key, v in pole_drivers(a).items():
-                for p, sign in enumerate(signs):
-                    merge(key, (l, p), sign * v.T, cur["ids"])
+            drivers(l, pole_drivers(x[0].float().unflatten(0, (D, -1))))  # [D, B, 1 + AFTER, f]
         return hook
 
-    def heads(l: int, out, key: torch.Tensor) -> None:
+    def head_stats(l: int, out, key: torch.Tensor) -> None:
         """The token's output norm as the query, and ``key`` ``[D·B, H]``, the attention it receives."""
         Hl = geo[l].q_heads
         z = stash.pop(l)[:, 0].float().view(-1, Hl, geo[l].head_dim)  # [D·B, H, hd]: the token as the query
@@ -131,7 +162,7 @@ def main() -> None:
 
     def attention_hook(l: int):
         def hook(m, x, out):
-            heads(l, out[0], out[1][:, :, 1:, AT].float().mean(-1))  # attention from the positions after it
+            head_stats(l, out[0], out[1][:, :, 1:, AT].float().mean(-1))  # attention from the positions after it
         return hook
 
     prefix_x = {}  # a DeltaNet layer's input over the prefix, [D, AT, d]
@@ -143,23 +174,27 @@ def main() -> None:
                 prefix_x[l] = x
                 return
             full = torch.cat([prefix_x[l].repeat_interleave(len(cur["ids"]), 0), x], 1)  # document-major, as the batch
-            A = layers.delta_pattern(m, full).A[:, :, AT + 1:].abs()  # [D·B, H, AFTER, T]: the rows after the token
-            heads(l, None, (A[..., AT] / A.sum(-1).clamp_min(1e-30)).mean(-1))
+            A = delta_pattern(m, full).A[:, :, AT + 1:].abs()  # [D·B, H, AFTER, T]: the rows after the token
+            head_stats(l, None, (A[..., AT] / A.sum(-1).clamp_min(1e-30)).mean(-1))
         return hook
     order = token_order()
     t0 = time.time()
     with torch.inference_mode():
         for l, m in enumerate(model.layers):  # a DeltaNet's mixer keeps its input over the prefix
-            if anatomy.parts(m).deltanet:
+            if heads and anatomy.parts(m).deltanet:
                 anatomy.module(m, anatomy.parts(m).mixer).register_forward_hook(delta_hook(l), with_kwargs=True)
         cur["prefix"] = True
         prefix = model(input_ids=docs[:, :AT], use_cache=True).past_key_values
         cur["prefix"] = False
         for l, m in enumerate(model.layers):  # from here on every pass starts at the token
             p = anatomy.parts(m)
-            anatomy.module(m, p.down).register_forward_pre_hook(neuron(l))
-            anatomy.module(m, p.out).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
-            if not p.deltanet:
+            if l in nl and p.sparse:
+                experts.Tap(m.mlp, lambda r, l=l: drivers(l, sparse_drivers(r, D, len(cur["ids"]))))
+            elif l in nl:
+                anatomy.module(m, p.down).register_forward_pre_hook(neuron(l))
+            if heads:
+                anatomy.module(m, p.out).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
+            if heads and not p.deltanet:
                 attention(m).register_forward_hook(attention_hook(l))
         for i in range(0, len(order), args.batch):
             ids = order[i:i + args.batch].to(dev)
@@ -173,12 +208,15 @@ def main() -> None:
             if (i // args.batch) % 100 == 0:
                 print(f"{time.strftime('%H:%M:%S')} {i + len(ids)}/{len(order)} tokens, {time.time() - t0:.0f}s", flush=True)
 
-    for l in range(L):
+    for l in layers:
         cols = neuron_keys(l, f)
         for key, name in (("at", "drivers"), ("sum", "drivers_sum")):
-            put(cols, name, torch.cat([best_ids[key][l, p] for p in range(P)]).cpu(),
-                torch.cat([best[key][l, p] for p in range(P)]).cpu())  # times the pole's sign, as top_val
+            put(cols, name, torch.cat([best_ids[key][nl[l], p] for p in range(P)]).cpu(),
+                torch.cat([best[key][nl[l], p] for p in range(P)]).cpu())  # times the pole's sign, as top_val
         write(cols, neuron_table("drivers", l))
+    if not heads:
+        print(f"{time.strftime('%H:%M:%S')} drivers of L{lo}-L{hi} written, {time.time() - t0:.0f}s", flush=True)
+        return
     cols = head_keys()
     for key, name in (("h_out", "drivers"), ("h_key", "keys")):
         put(cols, name, best_ids[key].flatten(0, 1).cpu(), best[key].flatten(0, 1).cpu())

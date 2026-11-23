@@ -9,6 +9,8 @@ centres each column first; its bias, the same for every column, is left out.
 """
 import torch
 
+WHOLE = 2**32  # entries of the largest unembedding product ``layer_reads`` keeps whole (8 GB in fp16)
+
 
 def rms_norm_columns(t: torch.Tensor, gamma: torch.Tensor, eps: float = 1e-6, centre: bool = False) -> torch.Tensor:
     """The model's final norm applied to each column of ``t`` ``[d, n]``: an RMSNorm, or with ``centre`` a LayerNorm."""
@@ -102,7 +104,8 @@ def layer_reads(
     renorm: bool = True,
     centre: bool = False,
 ) -> dict:
-    """Every column's read on each sign (pole), from one unembedding product kept whole.
+    """Every column's read on each sign (pole), from one unembedding product kept whole (where it fits ``WHOLE``; else
+    made a chunk of columns at a time, once for the z statistics and once for the reads).
     With ``softcap`` (Gemma), the logits are the model's: ``softcap · tanh(logits / softcap)``.
     ``renorm=False`` keeps each column's size (columns already on the final norm's scale, before its weight, and
     centred where it centres).
@@ -116,15 +119,23 @@ def layer_reads(
     gamma = gamma.to(vectors.device, torch.float32)
     t = rms_norm_columns(transport(vectors, jacobian), gamma, centre=centre) if renorm else \
         transport(vectors, jacobian) * gamma[:, None]
-    logits = unembed @ t.to(unembed.dtype)
-    n = logits.shape[1]
-    if softcap:  # in place, a chunk of columns at a time (a whole fp32 copy is 7 GB for Gemma 4)
+    n = t.shape[1]
+    # the product kept whole where it fits WHOLE, else made a chunk at a time, twice (a sparse layer's 131,584 neurons
+    # against Qwen3.5's vocabulary would be a 30 GB product)
+    logits = unembed @ t.to(unembed.dtype) if unembed.shape[0] * n <= WHOLE else None
+    if softcap and logits is not None:  # in place, a chunk of columns at a time (a whole fp32 copy is 7 GB for Gemma 4)
         for s in range(0, n, chunk):
             logits[:, s:s + chunk] = (torch.tanh(logits[:, s:s + chunk].float() / softcap) * softcap).to(logits.dtype)
-    total = torch.zeros(logits.shape[0], device=logits.device)
+
+    def block(s: int) -> torch.Tensor:
+        if logits is not None:
+            return logits[:, s:s + chunk].float()
+        lg = unembed @ t[:, s:s + chunk].to(unembed.dtype)
+        return (torch.tanh(lg.float() / softcap) * softcap).to(lg.dtype).float() if softcap else lg.float()
+    total = torch.zeros(unembed.shape[0], device=unembed.device)
     sq = torch.zeros_like(total)
     for s in range(0, n, chunk):
-        lg = logits[:, s:s + chunk].float()
+        lg = block(s)
         total += lg.sum(1)
         sq += lg.pow(2).sum(1)
     mean = total / n
@@ -132,7 +143,7 @@ def layer_reads(
     out = {"ids": {s: [] for s in signs}, "probs": {s: [] for s in signs},
            "zids": {s: [] for s in signs}, "z": {s: [] for s in signs}, "skew": [], "kurt": []}
     for s in range(0, n, chunk):
-        lg = logits[:, s:s + chunk].float()
+        lg = block(s)
         z = (lg - mean[:, None]) / std[:, None]
         for sign in signs:
             top, idx = (sign * lg).topk(k, dim=0)
