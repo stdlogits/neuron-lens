@@ -1,0 +1,5 @@
+EleutherAI/pythia-160m: 2000 targets, 26710 proposed inputs (floor 3.0/√d), 4343 confirmed
+  L0-L2: proposed 3189 (6.4 a target), confirmed 0.073, targets with one 0.31
+  L3-L5: proposed 7542 (15.1 a target), confirmed 0.110, targets with one 0.75
+  L6-L8: proposed 7988 (16.0 a target), confirmed 0.172, targets with one 0.88
+  L9-L11: proposed 7991 (16.0 a target), confirmed 0.239, targets with one 0.91

@@ -1,0 +1,13 @@
+main: 68812 contexts (67619 the census's) in 76 s
+step512: 135280 contexts (67619 the census's) in 83 s
+step1000: 135575 contexts (67619 the census's) in 83 s
+step2000: 135356 contexts (67619 the census's) in 84 s
+step4000: 134568 contexts (67619 the census's) in 83 s
+step8000: 133028 contexts (67619 the census's) in 82 s
+step16000: 130784 contexts (67619 the census's) in 81 s
+step32000: 127299 contexts (67619 the census's) in 79 s
+step48000: 123615 contexts (67619 the census's) in 77 s
+step64000: 119137 contexts (67619 the census's) in 75 s
+step80000: 114315 contexts (67619 the census's) in 72 s
+step100000: 107507 contexts (67619 the census's) in 68 s
+step120000: 101793 contexts (67619 the census's) in 64 s

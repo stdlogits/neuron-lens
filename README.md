@@ -430,6 +430,14 @@ modes rarely spread to the units that share the pole's job. No weight-only score
 (AUROC 0.52-0.61), but the similarity of the two units' catalog labels does (0.74)
 ([§24](docs/findings.md#24-secondary-modes-weights-propose-contexts-check)).
 
+**25. Secondary modes over Pythia's training: a first look.** The same census ran on four Pythia sizes (160M-6.9B), and
+on 13 training checkpoints of three of them. At the end, a judge calls about half of a sample's confirmed inputs unrelated to the
+neuron's main job: 59% at 160M, 50% at 1.4B and 6.9B. Most of those were unrelated when the link formed, too. The ones
+that were related then are matched by inputs that became related later, so the checkpoints show no net drift away from
+the target's job. A reading of the cards shows the verdicts are noisy, most of all early in training, so these numbers
+need manual review before they can support a conclusion
+([§25](docs/findings.md#25-secondary-modes-over-pythias-training-a-first-look)).
+
 ### Limits
 
 - Two models read in depth, and nine more Qwen3 models (the four post-trained ones labelled); one lens corpus for text

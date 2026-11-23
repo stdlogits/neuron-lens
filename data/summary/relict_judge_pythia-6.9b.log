@@ -1,0 +1,5 @@
+200 targets (715 confirmed pairs, 688 with an onset before the last checkpoint): 200 end cards, 200 retest, 529 onset
+end: 200 cards
+end: 192 judged, 8 failed; tokens in 262959, cache write 0, cache read 165696, out 2478477
+onset: 266 cards
+onset: 257 judged, 9 failed; tokens in 287104, cache write 863, cache read 220928, out 2892794

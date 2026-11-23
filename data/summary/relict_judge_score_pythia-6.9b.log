@@ -1,0 +1,37 @@
+EleutherAI/pythia-6.9b: 449 cards judged
+  end decoys: own contexts judged same 0.68, unrelated 0.130 (n=192); random poles' contexts unrelated 0.89
+  retest decoys: own contexts judged same 0.73, unrelated 0.134 (n=67); random poles' contexts unrelated 0.90
+  onset decoys: own contexts judged same 0.65, unrelated 0.132 (n=190); random poles' contexts unrelated 0.91
+
+end: 669 judged inputs, unrelated 0.501; argmax same/related/unrelated 0.20/0.26/0.54
+  band L0-L7: 50 targets, inputs unrelated 0.538; targets with one 0.640 (floor 0.236)
+  band L8-L15: 47 targets, inputs unrelated 0.522; targets with one 0.830 (floor 0.392)
+  band L16-L23: 48 targets, inputs unrelated 0.465; targets with one 0.854 (floor 0.418)
+  band L24-L31: 47 targets, inputs unrelated 0.497; targets with one 0.745 (floor 0.376)
+  free rulers against the judge's 'unrelated' (AUROC, n=669, 335 unrelated): topical likeness 0.65, a shared marked token in the top 20 0.61
+
+the targets with an unrelated input at the end: their inputs' verdicts at the retest and at onset
+  unrelated at the end       n= 151: unrelated at the retest 0.874 (n=143), at onset 0.703 (n=138; median onset step 8000)
+  not unrelated at the end   n= 116: unrelated at the retest 0.073 (n=110), at onset 0.398 (n=113; median onset step 4000)
+  by onset step (share unrelated at onset, n): unrelated at the end / not
+    0k-2k: 0.70 (37) / 0.53 (32)
+    4k-4k: 0.71 (17) / 0.43 (28)
+    8k-16k: 0.55 (38) / 0.26 (31)
+    32k-120k: 0.83 (46) / 0.36 (22)
+  every judged input, reweighted from those two rates: unrelated at onset 0.551, at the end 0.501
+  onset → end, where the retest agrees with the end (p ≥ 0.5; n=216): related → unrelated 31, unrelated → unrelated 86, unrelated → related 39, related → related 60
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7; n=216): related → unrelated 5, unrelated → unrelated 24, unrelated → related 6, related → related 33
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7, onset from 2k; n=178): related → unrelated 5, unrelated → unrelated 18, unrelated → related 2, related → related 28
+  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)
+    L5 n3222 + ← L4 n1229 +: at step8000 'generic noun after a number or quantifier that int' (0.17); at the end 'plural noun after 'Here are 5/some' introducing a ' (0.87)
+    L7 n5067 + ← L0 n1041 +: at step16000 'Capital ' V' token after a noun phrase, either a s' (0.03); at the end 'capital ' V' token, as in 'Vs.' (versus) and the w' (0.55)
+    L4 n13188 + ← L1 n12576 +: at step64000 'Complete common Chinese character 最 (most) in 最近/最' (0.38); at the end 'the whole-character token 最 ('most') in Chinese se' (0.75)
+    L14 n12592 + ← L13 n5559 +: at step4000 'words right before a reaction noun (met with a gro' (0.24); at the end 'noun followed by a relative clause ('standing ovat' (0.76)
+    L10 n10169 + ← L3 n226 +: at step80000 'plural noun ending an idiom after 'all the' (pull ' (0.48); at the end 'noun completing an idiom after 'the' (ticks all th' (0.67)
+    L10 n10169 + ← L8 n11977 +: at step4000 'noun right after a number word, where the phrase e' (0.20); at the end ''so' in the approximation phrase 'or so'' (0.93)
+    L15 n14242 + ← L14 n42 +: at step8000 'main verbs (facing, become) in the opening sentenc' (0.22); at the end 'passive or past-participle verb phrases about spec' (0.85)
+    L15 n14242 + ← L14 n1442 +: at step2000 'political and legislative news (any major legislat' (0.25); at the end 'formulaic legislative bill title and summary token' (0.55)
+    L15 n6536 + ← L10 n4071 +: at step8000 'mid-idiom determiner or possessive words in fixed ' (0.40); at the end 'preposition inside a fixed idiom with a predictabl' (0.50)
+    L9 n10363 + ← L7 n16099 +: at step512 'the determiner ' a' inside a how-to or cooking que' (0.40); at the end 'ordinary whole words (can, language) after a noun ' (0.70)
+    L14 n5273 + ← L8 n15183 +: at step16000 'mid-unit fragments: a CJK byte piece and the fixed' (0.48); at the end 'the word 'name' in naming statements (a name appli' (0.75)
+    L14 n5273 + ← L10 n12718 +: at step512 'the CJK character 月 after a digit in Chinese date ' (0.38); at the end ''name' in evaluative remarks like 'a pretty good n' (0.80)

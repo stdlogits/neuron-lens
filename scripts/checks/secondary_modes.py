@@ -233,7 +233,7 @@ def measure(args):
         if time.time() - saved > 600 or st["done"] >= len(C):
             torch.save(st, sf)
             saved = time.time()
-            say(f"{time.strftime('%H:%M:%S')} {st['done']}/{len(C)} contexts, {(st['done'] - i0) / (time.time() - t0):.1f}/s")
+            print(time.strftime('%H:%M:%S'), f"{st['done']}/{len(C)} contexts, {(st['done'] - i0) / (time.time() - t0):.1f}/s", flush=True)
 
 
 # the judge

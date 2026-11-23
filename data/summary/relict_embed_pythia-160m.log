@@ -1,0 +1,13 @@
+embed main: 22920 contexts of 4584 units in 122 s
+embed step512: 22920 contexts of 4584 units in 133 s
+embed step1000: 22920 contexts of 4584 units in 77 s
+embed step2000: 22920 contexts of 4584 units in 75 s
+embed step4000: 22920 contexts of 4584 units in 75 s
+embed step8000: 22920 contexts of 4584 units in 78 s
+embed step16000: 22920 contexts of 4584 units in 80 s
+embed step32000: 22920 contexts of 4584 units in 78 s
+embed step48000: 22920 contexts of 4584 units in 77 s
+embed step64000: 22920 contexts of 4584 units in 76 s
+embed step80000: 22920 contexts of 4584 units in 77 s
+embed step100000: 22920 contexts of 4584 units in 77 s
+embed step120000: 22920 contexts of 4584 units in 75 s

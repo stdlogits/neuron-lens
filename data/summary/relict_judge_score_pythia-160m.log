@@ -1,0 +1,37 @@
+EleutherAI/pythia-160m: 428 cards judged
+  end decoys: own contexts judged same 0.84, unrelated 0.055 (n=200); random poles' contexts unrelated 0.90
+  retest decoys: own contexts judged same 0.84, unrelated 0.043 (n=70); random poles' contexts unrelated 0.97
+  onset decoys: own contexts judged same 0.85, unrelated 0.051 (n=158); random poles' contexts unrelated 0.94
+
+end: 557 judged inputs, unrelated 0.585; argmax same/related/unrelated 0.16/0.23/0.61
+  band L0-L2: 50 targets, inputs unrelated 0.570; targets with one 0.660 (floor 0.084)
+  band L3-L5: 50 targets, inputs unrelated 0.641; targets with one 0.720 (floor 0.109)
+  band L6-L8: 50 targets, inputs unrelated 0.547; targets with one 0.840 (floor 0.160)
+  band L9-L11: 50 targets, inputs unrelated 0.593; targets with one 0.820 (floor 0.205)
+  free rulers against the judge's 'unrelated' (AUROC, n=557, 326 unrelated): topical likeness 0.64, a shared marked token in the top 20 0.63
+
+the targets with an unrelated input at the end: their inputs' verdicts at the retest and at onset
+  unrelated at the end       n= 160: unrelated at the retest 0.950 (n=160), at onset 0.671 (n=149; median onset step 8000)
+  not unrelated at the end   n=  53: unrelated at the retest 0.038 (n=53), at onset 0.440 (n=50; median onset step 4000)
+  by onset step (share unrelated at onset, n): unrelated at the end / not
+    0k-2k: 0.55 (33) / 0.59 (17)
+    4k-4k: 0.71 (24) / 0.33 (9)
+    8k-16k: 0.68 (41) / 0.50 (12)
+    32k-120k: 0.73 (51) / 0.25 (12)
+  every judged input, reweighted from those two rates: unrelated at onset 0.575, at the end 0.585
+  onset → end, where the retest agrees with the end (p ≥ 0.5; n=189): related → unrelated 45, unrelated → unrelated 96, unrelated → related 21, related → related 27
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7; n=189): related → unrelated 15, unrelated → unrelated 57, unrelated → related 5, related → related 18
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7, onset from 2k; n=161): related → unrelated 12, unrelated → unrelated 53, unrelated → related 4, related → related 15
+  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)
+    L2 n162 + ← L1 n558 +: at step80000 'mid-word or suffix fragments of rare split words (' (0.35); at the end 'continuation pieces inside split words (Ir-re-proa' (0.55)
+    L1 n1018 + ← L0 n960 +: at step4000 'the verb 'finished' after a subject, the antonym o' (0.25); at the end 'The word 'begun' (a past participle) in both conte' (0.75)
+    L4 n512 + ← L0 n2383 +: at step16000 'sentence- or paragraph-initial quantity word 'One'' (0.20); at the end ''One' as a generic pronoun or list-item opener' (0.86)
+    L4 n754 + ← L3 n963 +: at step8000 'word right after a sentence-initial 'Just' or simi' (0.10); at the end 'two-digit decade number after an apostrophe in 'ea' (0.78)
+    L5 n142 + ← L2 n1268 +: at step16000 ''aspect' after the quantifier 'every' (every aspec' (0.22); at the end 'generic words 'object' (used as a verb) and 'thing' (0.72)
+    L5 n2372 + ← L3 n2672 +: at step512 'past-tense or participle verbs, one in a passive '' (0.25); at the end 'medical/biomedical terminology completing a word (' (0.63)
+    L5 n2372 + ← L4 n1711 +: at step4000 'the '-ar' ending of the anatomical adjective 'coch' (0.03); at the end 'body-part terms in consumer health writing (lower ' (0.61)
+    L5 n238 + ← L4 n422 +: at step16000 'mid-word fragment after a one-letter 'o' prefix in' (0.05); at the end 'middle byte fragment of a Chinese character in byt' (0.85)
+    L5 n238 + ← L2 n2173 +: at step32000 ''out' as the second piece of the split word 'gout'' (0.15); at the end 'mid-word subword piece 'int' in 'Ointment', a noun' (0.67)
+    L4 n1101 + ← L3 n410 +: at step64000 'numbers as items in a numeric list or enumeration ' (0.12); at the end 'second element of a paired or parallel set (Pokemo' (0.62)
+    L3 n1185 + ← L2 n689 +: at step80000 ''s contraction right after the subject 'That' in d' (0.40); at the end ''s contraction after the demonstrative pronoun "Th' (0.70)
+    L7 n500 + ← L5 n177 +: at step8000 'playful exclamations and greetings in casual blog ' (0.20); at the end 'expressive letter elongation inside words (Ewwww, ' (0.70)

@@ -1,0 +1,5 @@
+EleutherAI/pythia-1.4b: 2000 targets, 23738 proposed inputs (floor 4.0/√d), 4417 confirmed
+  L0-L5: proposed 3484 (7.0 a target), confirmed 0.070, targets with one 0.29
+  L6-L11: proposed 5954 (11.9 a target), confirmed 0.218, targets with one 0.71
+  L12-L17: proposed 7392 (14.8 a target), confirmed 0.205, targets with one 0.82
+  L18-L23: proposed 6908 (13.8 a target), confirmed 0.197, targets with one 0.81

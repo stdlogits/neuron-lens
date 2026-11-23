@@ -1,0 +1,37 @@
+EleutherAI/pythia-1.4b: 438 cards judged
+  end decoys: own contexts judged same 0.74, unrelated 0.080 (n=199); random poles' contexts unrelated 0.93
+  retest decoys: own contexts judged same 0.79, unrelated 0.086 (n=70); random poles' contexts unrelated 0.96
+  onset decoys: own contexts judged same 0.68, unrelated 0.095 (n=169); random poles' contexts unrelated 0.94
+
+end: 611 judged inputs, unrelated 0.496; argmax same/related/unrelated 0.20/0.26/0.54
+  band L0-L5: 50 targets, inputs unrelated 0.511; targets with one 0.700 (floor 0.138)
+  band L6-L11: 50 targets, inputs unrelated 0.530; targets with one 0.860 (floor 0.213)
+  band L12-L17: 50 targets, inputs unrelated 0.518; targets with one 0.840 (floor 0.268)
+  band L18-L23: 49 targets, inputs unrelated 0.432; targets with one 0.755 (floor 0.232)
+  free rulers against the judge's 'unrelated' (AUROC, n=611, 303 unrelated): topical likeness 0.63, a shared marked token in the top 20 0.65
+
+the targets with an unrelated input at the end: their inputs' verdicts at the retest and at onset
+  unrelated at the end       n= 142: unrelated at the retest 0.901 (n=142), at onset 0.691 (n=136; median onset step 16000)
+  not unrelated at the end   n=  99: unrelated at the retest 0.061 (n=99), at onset 0.521 (n=96; median onset step 4000)
+  by onset step (share unrelated at onset, n): unrelated at the end / not
+    0k-2k: 0.68 (34) / 0.59 (39)
+    4k-4k: 0.64 (11) / 0.43 (23)
+    8k-16k: 0.51 (37) / 0.56 (25)
+    32k-120k: 0.83 (54) / 0.33 (9)
+  every judged input, reweighted from those two rates: unrelated at onset 0.605, at the end 0.496
+  onset → end, where the retest agrees with the end (p ≥ 0.5; n=212): related → unrelated 39, unrelated → unrelated 83, unrelated → related 46, related → related 44
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7; n=212): related → unrelated 11, unrelated → unrelated 35, unrelated → related 22, related → related 24
+  onset → end, where the retest agrees with the end (≤ 0.3 / ≥ 0.7, onset from 2k; n=170): related → unrelated 11, unrelated → unrelated 26, unrelated → related 15, related → related 20
+  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)
+    L4 n3877 + ← L2 n6867 +: at step4000 'suffix piece 'by' completing the split word flab|b' (0.10); at the end ''largest' after an ordinal (nth largest country/ci' (0.52)
+    L2 n4162 + ← L1 n2687 +: at step32000 '' az' as the first piece of 'azure' in Python impo' (0.35); at the end 'A rare Latin-name fragment ' ambig' (ambiguus) pai' (0.58)
+    L5 n1857 + ← L4 n1077 +: at step8000 'final piece of a hyphenated or idiomatic 'X-to-Y' ' (0.33); at the end 'Python code identifier ask_yes_no, final 'no' toke' (0.86)
+    L11 n3670 + ← L10 n4400 +: at step16000 'generalizing comparison openers ('Like all good in' (0.35); at the end 'ordinary prose: name word-piece and 'like starting' (0.77)
+    L6 n2502 + ← L5 n2642 +: at step8000 'verbs of hearing/receiving information secondhand ' (0.22); at the end ''hear' verbs (heard, hearing) in non-news contexts' (0.70)
+    L6 n2502 + ← L5 n4988 +: at step16000 'journalistic interview phrase "We caught up with [' (0.45); at the end 'informal words for inside information or news ('in' (0.60)
+    L9 n1115 + ← L5 n4368 +: at step48000 'main verb 'is' right after a long, complex subject' (0.34); at the end 'main verb 'is' resuming the sentence after a long ' (0.55)
+    L11 n8059 + ← L9 n7132 +: at step4000 'fixed parenthetical or discourse phrases inside a ' (0.40); at the end ''the' inside the fixed idiom 'to say the least'' (0.58)
+    L8 n3037 + ← L6 n2082 +: at step4000 'word-internal fragments: a name piece ('ig' in Eig' (0.18); at the end 'Repeated-pattern tokens: newline after docstring q' (0.50)
+    L7 n6095 + ← L5 n609 +: at step2000 'verb-phrase objects or complements about learning ' (0.27); at the end 'verbs of informing or notifying and the word compl' (0.80)
+    L10 n4774 + ← L9 n5769 +: at step4000 ''one' ending the compound modifier 'one to one' ri' (0.06); at the end 'English distributive ' a' meaning 'per' after a qu' (0.82)
+    L7 n4446 + ← L6 n8152 +: at step1000 '' Cat' as the first word piece of 'Catcher' in the' (0.40); at the end 'mid-title words in book or article titles (in Acti' (0.76)

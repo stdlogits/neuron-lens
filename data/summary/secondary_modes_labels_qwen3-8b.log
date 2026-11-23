@@ -1,0 +1,15 @@
+label cosine (Qwen3-Embedding-0.6B) against the judge's 'unrelated', AUROC, low cosine = unrelated; n=2907
+  sensory      n= 384  all 0.782   extremes 0.965
+  association  n= 514  all 0.769   extremes 0.908
+  workspace    n=1060  all 0.696   extremes 0.827
+  motor        n= 949  all 0.725   extremes 0.901
+  all          n=2907  all 0.742   extremes 0.894
+controls: shuffled verdicts 0.505
+  within one target (unrelated against the target's other sources): 0.714 over 1097 pairs
+  clear target labels only (n=1354): 0.780
+  word overlap (Jaccard) 0.667; the embedding on pairs sharing no word 0.663 (n=1741)
+  median cosine (IQR): random poles 0.437 (0.377-0.502) | judged unrelated 0.478 (0.408-0.543) | related 0.539 (0.470-0.620) | same 0.638 (0.541-0.730)
+  push quartile 1 (n=727): 0.708
+  push quartile 2 (n=726): 0.710
+  push quartile 3 (n=727): 0.727
+  push quartile 4 (n=727): 0.821

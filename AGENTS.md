@@ -64,7 +64,7 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   the LN rule; the fused QKV with biases; RoPE on a quarter of each head; the ungated GELU MLP,
   identity rule; parallel blocks, where `mid` is the layer's input, so `mid[L]` = `out[L − 1]`).
   Checkpoints are revisions (`02_fit.py --revision step<N>`, `fit_queue.sh model@step<N>`), fitted
-  locally until the release has a place for them. The catalog stages run on it through three facts in `arch.py`:
+  locally until the release has a place for them; `checks/relict.py` follows §24's census across them (findings §25). The catalog stages run on it through three facts in `arch.py`:
   `n_poles` (one pole per neuron: GELU's negative side is a dip, not a second direction), `parallel` (head writes
   read where the heads write, `arch.head_write_lens`: the layer's `out`) and `centred` (LayerNorms: read rows,
   writes and the readout centred). Its attention has no q/k norms, so the queries and keys read their input norm's

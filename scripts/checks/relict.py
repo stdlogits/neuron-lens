@@ -1,9 +1,10 @@
-"""Relict generalization across training checkpoints (findings §23, §24): does an unrelated secondary mode's link form
-through an intermediate that later falls away? Pythia (``MODEL``, one data order, checkpoints as revisions), fp16 on
-MPS or CUDA.
+"""Secondary modes across training checkpoints (findings §25; §23's relict generalization, §24's census): was an input
+that is unrelated to its unit at the end related when the link formed? Pythia (``MODEL``, one data order, checkpoints as
+revisions), fp16 on MPS or CUDA.
 
 Parts (data in ``data/relict/<model>/``, summaries in ``data/summary/relict_<part>_<model>.log``):
 
+- ``census``: the census at the final checkpoint by band (``secondary_modes.py measure``, with ``--floor``).
 - ``tops <rev>...``: every neuron's top documents at each checkpoint, over the catalog's activation documents as
   ``06_activations.py`` keeps them (per document its peak position from 1, the ``TOP`` highest documents, ``act_top``
   the median of the first ``TYPICAL``).
@@ -111,6 +112,10 @@ def tops(rev: str, stack=None) -> dict:
         h.remove()
     out = {"val": val.half().cpu(), "doc": doc.cpu(), "pos": pos.cpu(),
            "act_top": val[:, :TYPICAL].median(1).values.clamp_min(0).cpu()}
+    final = OUT / "tops-main.pt"
+    if rev != "main" and final.exists() and torch.equal(torch.load(final)["doc"], out["doc"]):
+        # Pythia-2.8B's intermediate revisions on the Hub load the final model's weights at most steps
+        raise ValueError(f"{rev}: every neuron's top documents are the final checkpoint's; the revision's weights are not its own")
     OUT.mkdir(parents=True, exist_ok=True)
     torch.save(out, path)
     say(f"{rev}: {len(docs)} docs in {time.time() - t0:.0f} s")
@@ -586,7 +591,8 @@ def judge_submit(stage: str) -> None:
     ids = json.loads(path.read_text()) if path.exists() else {}
     ids[stage] = b.id
     path.write_text(json.dumps(ids))
-    say(f"{stage}: {len(cards)} cards, batch {b.id}")
+    print("batch", b.id)
+    say(f"{stage}: {len(cards)} cards")
 
 
 def judge_collect() -> None:
@@ -608,10 +614,7 @@ def judge_collect() -> None:
                 n += 1
             except Exception:
                 bad += 1
-        # the Batch API's prices for Sonnet 5.5: half of $2 in, $2.50 cache write, $0.10 cache read, $10 out per MTok
-        cost = (tk[0] * 1 + tk[1] * 1.25 + tk[2] * 0.05 + tk[3] * 5) / 1e6
-        say(f"{stage}: {n} judged, {bad} failed; tokens in {tk[0]}, cache write {tk[1]}, cache read {tk[2]}, out {tk[3]} "
-            f"(~${cost:.2f})")
+        say(f"{stage}: {n} judged, {bad} failed; tokens in {tk[0]}, cache write {tk[1]}, cache read {tk[2]}, out {tk[3]}")
     torch.save(J, path)
 
 
@@ -681,12 +684,47 @@ def judge_score() -> None:
         cell = lambda f: [un(ons[k]) for k, v in end.items() if f(v) and k in ons and lo_ <= STEPS(ons[k]["rev"]) <= hi_]
         a_, b_ = cell(un), cell(lambda v: not un(v))
         say(f"    {lo_ // 1000}k-{hi_ // 1000}k: {sum(a_) / max(len(a_), 1):.2f} ({len(a_)}) / {sum(b_) / max(len(b_), 1):.2f} ({len(b_)})")
+    pop = sum(map(un, end.values())) / len(end)
+    rate = lambda f: sum(un(ons[k]) for k, v in end.items() if f(v) and k in ons) / max(sum(f(v) and k in ons for k, v in end.items()), 1)
+    say(f"  every judged input, reweighted from those two rates: unrelated at onset {rate(un) * pop + rate(lambda v: not un(v)) * (1 - pop):.3f}, "
+        f"at the end {pop:.3f}")
+    agree = [k for k in ons if k in end and k in ret and un(end[k]) == un(ret[k])]
+    for name, ks, rel, unr in (("p ≥ 0.5", agree, lambda p_: p_ < 0.5, lambda p_: p_ >= 0.5),
+                               ("≤ 0.3 / ≥ 0.7", agree, lambda p_: p_ <= 0.3, lambda p_: p_ >= 0.7),
+                               ("≤ 0.3 / ≥ 0.7, onset from 2k", [k for k in agree if STEPS(ons[k]["rev"]) >= 2000],
+                                lambda p_: p_ <= 0.3, lambda p_: p_ >= 0.7)):
+        c = lambda v: "unrelated" if unr(v["p_un"]) else "related" if rel(v["p_un"]) else None
+        n = {}
+        for k in ks:
+            if c(ons[k]) and c(end[k]):
+                n[(c(ons[k]), c(end[k]))] = n.get((c(ons[k]), c(end[k])), 0) + 1
+        say(f"  onset → end, where the retest agrees with the end ({name}; n={len(ks)}): " + ", ".join(
+            f"{x} → {y} {n.get((x, y), 0)}" for x, y in (("related", "unrelated"), ("unrelated", "unrelated"),
+                                                         ("unrelated", "related"), ("related", "related"))))
     say("  (relict generalization: inputs unrelated at the end and at their retest that were not at their onset)")
     for v in sorted((v for k, v in ons.items() if k in end and un(end[k]) and k in ret and un(ret[k]) and not un(v)),
                     key=lambda v: v["j"])[:12]:
         e = end[(v["j"], v["src"])]
         say(f"    {sm.name(T[v['j']][1:])} ← {sm.name(v['src'])}: at {v['rev']} '{v['shared'][:50]}' ({v['p_un']:.2f}); at the end "
             f"'{e['shared'][:50]}' ({e['p_un']:.2f})")
+
+
+def census() -> None:
+    """The census at the final checkpoint (``secondary_modes.py measure``): proposed inputs, the share confirmed and the
+    targets with a confirmed input, by band."""
+    P = sm.load()[0]
+    T = P["targets"]
+    win = torch.load(sm.OUT / "state.pt")["win"].float().nan_to_num(0)
+    conf = {}
+    for j, X, _ in confirmed(P, win):
+        conf.setdefault(j, set()).add(X)
+    say(f"{MODEL}: {len(T)} targets, {sum(map(len, P['sources']))} proposed inputs (floor {P.get('floor', 5.0)}/√d), "
+        f"{sum(map(len, conf.values()))} confirmed")
+    for b in dict.fromkeys(t[0] for t in T):
+        js = [j for j, t in enumerate(T) if t[0] == b]
+        n = sum(len(P["sources"][j]) for j in js)
+        say(f"  {b}: proposed {n} ({n / len(js):.1f} a target), confirmed {sum(len(conf.get(j, ())) for j in js) / n:.3f}, "
+            f"targets with one {sum(j in conf for j in js) / len(js):.2f}")
 
 
 def check_main(t: dict) -> None:
@@ -701,10 +739,12 @@ def check_main(t: dict) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed", "score", "judge"])
+    ap.add_argument("part", choices=["census", "tops", "matrix", "step", "cross", "embed", "score", "judge"])
     ap.add_argument("revs", nargs="*")
     args = ap.parse_args()
     torch.set_grad_enabled(False)
+    if args.part == "census":
+        census()
     if args.part == "tops":
         for rev in args.revs:
             t = tops(rev)
@@ -733,7 +773,7 @@ def main():
         {"cards": lambda: judge_cards(rest), "test": lambda: judge_test(int(rest[0]) if rest else 2),
          "submit": lambda: judge_submit(rest[0]), "collect": judge_collect, "score": judge_score}[act]()
         part = "judge_score" if act == "score" else "judge"
-    with open(SUMMARY / f"relict_{part}_{STEM}.log", "w" if part in ("score", "judge_score") else "a") as f:
+    with open(SUMMARY / f"relict_{part}_{STEM}.log", "w" if part in ("census", "score", "judge_score") else "a") as f:
         f.write("\n".join(LOG) + "\n")
 
 

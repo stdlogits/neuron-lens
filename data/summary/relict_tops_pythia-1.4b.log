@@ -1,0 +1,9 @@
+  main 0/63992 docs, 54 docs/s
+  main 12800/63992 docs, 226 docs/s
+  main 25600/63992 docs, 227 docs/s
+  main 38400/63992 docs, 225 docs/s
+  main 51200/63992 docs, 225 docs/s
+main: 63992 docs in 283 s
+  L0: top-doc overlap with the catalog median 1.000, act_top ratio median 1.0000
+  L12: top-doc overlap with the catalog median 1.000, act_top ratio median 1.0000
+  L23: top-doc overlap with the catalog median 0.984, act_top ratio median 1.0000

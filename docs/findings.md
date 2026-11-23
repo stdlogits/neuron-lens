@@ -31,6 +31,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§22](#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read) | the R-lens reads a block of raw coordinates that the writes avoid; where it meets the S-lens's, a core carries each position's token through mid-depth, and late the prediction moves into the rest |
 | **VIII. Mixed units** | [§23](#23-a-colorado-neurons-tornado-mode-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses |
 | | [§24](#24-secondary-modes-weights-propose-contexts-check) | 15-33% of Qwen3-8B's poles have a weight-wired input from an unrelated domain at a third of their peak, 2-4% at half; weights propose them, but only contexts and labels say which are unrelated |
+| | [§25](#25-secondary-modes-over-pythias-training-a-first-look) | a first look over Pythia's checkpoints (160M-6.9B): half of the confirmed inputs look unrelated at the end, and their histories run both ways with no net drift; noisy, needs manual review |
 
 Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
 (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in `data/summary/`, and figures are drawn by
@@ -2045,7 +2046,7 @@ outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*
 ## VIII. Mixed units
 
 A unit is mixed when it serves two jobs that share no feature. §23 traces one, from Qwen3-32B back to the 14B, to where
-the mixing enters; §24 counts such second jobs across Qwen3-8B.
+the mixing enters; §24 counts such second jobs across Qwen3-8B; §25 follows them through Pythia's training.
 
 ### §23. A Colorado neuron's Tornado mode: relict generalization
 
@@ -2196,6 +2197,143 @@ so a narrow label inflates "unrelated" (its floor is measured on own contexts, n
 thresholds and the window are choices. Outputs are in `data/summary/secondary_modes_{score,inherit,weights,labels}_qwen3-8b.log`;
 the matrix and the judge's verdicts stay local (`data/secondary_modes/qwen3-8b/`).
 
+### §25. Secondary modes over Pythia's training: a first look
+
+§23 inferred a mode's history from fossils in the final model. Pythia trains every size on one data order and keeps its
+checkpoints, so the history can be watched. Two questions:
+- Was an input that is unrelated to its unit at the end related when the link formed (relict generalization), or
+  unrelated from the start (packing)?
+- Does the share of unrelated inputs fall with size? Cammarata's argument that larger models give each neuron more room
+  to specialize predicts it should.
+
+The measures below disagree in places, and their verdicts are noisy, most of all early in training. They are a first look,
+and they need manual review before they can support a conclusion.
+
+**Setup** (`checks/secondary_modes.py`, `checks/relict.py`; Pythia-160M, 1.4B, 2.8B and 6.9B in fp16; 160M on an M5 Max,
+the others on one H100).
+- **The census.** §24's census runs on each model's final checkpoint (step 143,000). It takes 500 firing neurons from
+  each quarter of depth, each proposing its first 16 positive in-edges. Pythia's GELU gives each neuron one pole, so units
+  are named without a sign.
+- **The edge floor.** Pythia's weight graph is sparse: the median 160M neuron has no in-edge past 5/√d. So the edges are
+  recomputed past 3/√d for 160M and 4/√d for the others.
+- **Checkpoints.** There are 13: steps 512, 1k, 2k, 4k, 8k, 16k, 32k, 48k, 64k, 80k, 100k, 120k and 143k. At each one,
+  every neuron's top 64 documents are recomputed over the catalog's activation documents; at the last they match the
+  catalog. Every target is then run on the census's contexts, and on its own and its confirmed inputs' top five contexts
+  at that checkpoint. 2.8B takes the final checkpoint only (see the limits).
+- **Onset.** A link's *onset* is the first checkpoint at which the input's own top contexts there drive the target, by
+  the census's rule with that checkpoint's `act_top` and control.
+- **Measuring likeness, two ways.** Both say how alike a pair's jobs are:
+  - **Context embeddings:** the mean cosine of the two units' top-context embeddings (Qwen3-Embedding-0.6B), as z over
+    pairs of 500 random census units at the same checkpoint.
+  - **The judge:** §24's, without a label, since the catalog has none for Pythia. It reads five of the target's own
+    contexts instead, with a prompt (`checks/relict_judge.md`) that asks it to read the marked token and the words before
+    it. It covers 200 targets with a confirmed input per model (50 a quarter) for 160M, 1.4B and 6.9B.
+- **Retest and onset cards.** Every judged card is judged again, reshuffled and with new random decoys (the *retest*).
+  For 70 targets per model with an unrelated input at the end, every input is also judged at its onset, on both units' top
+  contexts there.
+
+**Results.**
+
+- **The census at the end.**
+
+  | | inputs proposed | confirmed, by quarter of depth | neurons with a confirmed input |
+  |---|---|---|---|
+  | 160M | 26,710 | 7 / 11 / 17 / 24% | 31 / 75 / 88 / 91% |
+  | 1.4B | 23,738 | 7 / 22 / 21 / 20% | 29 / 71 / 82 / 81% |
+  | 2.8B | 28,751 | 9 / 22 / 21 / 19% | 46 / 86 / 87 / 85% |
+  | 6.9B | 30,694 | 8 / 23 / 28 / 24% | 53 / 91 / 98 / 92% |
+
+- **Context embeddings measure the passage, not the job.** Most of these units fire on a word, a word piece or a
+  construction, whatever the passage is about: " time" after "last", "who" after a person, a number after "/". The
+  embedding ranks pairs by topic.
+  - Against the judge's "unrelated" its AUROC is 0.63-0.65. A simpler test, whether the two units share a marked token
+    among their top 20 contexts, does no better (0.61-0.65).
+  - On this measure, linked pairs that are unlike at the end were compared with random pairs of census units. The random
+    pairs were matched on layer gap and on final likeness: the two contexts each that selected them, and a retest on the
+    other three.
+  - The linked pairs are a little more alike at every checkpoint, by z 0.04 at 160M, 0.08-0.13 at 1.4B and 0.13-0.15 at
+    6.9B.
+  - They are no more alike early than late. Early (4k-16k) minus late (64k-120k), linked against random: −0.01 ± 0.03,
+    +0.05 ± 0.03 and +0.03 ± 0.02.
+- **The judge at the end.** It calls half of the confirmed inputs unrelated (p ≥ 0.5, as in §24): 59% at 160M, 50% at
+  1.4B and 50% at 6.9B. §24 found 17-31% by band for Qwen3-8B, judged with labels.
+
+  | | 160M | 1.4B | 6.9B |
+  |---|---|---|---|
+  | target's held-out contexts judged "same" | 84% | 74% | 68% |
+  | target's held-out contexts judged unrelated | 5.5% | 8.0% | 13.0% |
+  | random contexts judged unrelated | 90% | 93% | 89% |
+  | "unrelated" verdicts the retest repeats | 95% | 90% | 87% |
+  | other inputs the retest calls unrelated | 4% | 6% | 7% |
+- **At onset**, for the 70 targets per model:
+
+  | | 160M | 1.4B | 6.9B |
+  |---|---|---|---|
+  | unrelated at the end: unrelated at onset | 67% | 69% | 70% |
+  | not unrelated at the end: unrelated at onset | 44% | 52% | 40% |
+  | median onset step (those / these) | 8k / 4k | 16k / 4k | 8k / 4k |
+  | all judged inputs reweighted, unrelated at onset / at the end | 58 / 59% | 61 / 50% | 55 / 50% |
+
+  - **Late onsets keep their verdict.** For links whose onset is at 32k or later, 73-83% of the unrelated ones were
+    unrelated at onset, against 25-36% of the others.
+  - **Early onsets change in both directions.** These are the links that start by 16k.
+  - **With a margin**, the counts below keep inputs with p ≤ 0.3 or p ≥ 0.7 at both times, where the retest agrees with
+    the end:
+
+    | | related → unrelated | unrelated → unrelated | unrelated → related | related → related |
+    |---|---|---|---|---|
+    | 160M | 15 | 57 | 5 | 18 |
+    | 1.4B | 11 | 35 | 22 | 24 |
+    | 6.9B | 5 | 24 | 6 | 33 |
+- **What a reading of the cards shows.** These are seeded draws, three per transition at 6.9B.
+  - **Much of the movement comes from the measure itself.** Some onsets are at step 512, before the units have jobs. Some
+    verdicts sit either side of 0.5. Some turn on the two contexts a card shows: L21 n8076 fires on `except ImportError:`
+    at both times, but one of the two contexts shown at its onset was "out of his head", which its target L28 n1018's own
+    "Pull His Sleigh" echoes.
+  - **Some changes are real**, and in several the input kept its job while the target moved onto it:
+    - L14 n4463 fires on place ranges at 4k ("from Pakistan and India to …") and on "pertaining to" at the end. L12 n15223
+      feeds it throughout, firing on "corresponds to", then "adhering to".
+    - L15 n4483 ends on free-choice words ("no matter what", "whatever device"). L8 n7486 feeds it with "anything from X
+      to Y" at 8k and "be it X or Y" at the end.
+  - **"Unrelated to the main job" includes inputs that feed a minor mode of a mixed target.** L11 n15655 fires on verbs of
+    beginning at 4k and of ending at the end. L14 n5273's top contexts are mostly recipes, but they include "begins to
+    brown" at 4k and `DTEND:` (an iCalendar event's end time) at the end. The judge calls this input unrelated both times.
+
+**What this suggests.**
+- **No net drift.** On these measures, most inputs that are unrelated at the end were unrelated at their onset too.
+  Inputs that were related at onset and unrelated at the end are matched by the reverse. So the checkpoints show no net
+  drift of inputs away from their targets' jobs. If relict generalization happens, it isn't the main source of unrelated
+  inputs here.
+- **Size.** The share of unrelated inputs falls from 160M to 1.4B but not from 1.4B to 6.9B, while the judge's false
+  "unrelated" rate on own contexts rises with size.
+- **The caveat.** Both readings rest on verdicts that the cards show to be noisy, and on a judge that sees a target's job
+  only through five contexts.
+
+**Limits.**
+- One census per model, with 200 judged targets per model and 70 at onset.
+- The onset sample is chosen by the end verdict, and the reweighted rate corrects for that only in part.
+- There are 13 checkpoints, so an onset is placed no finer than the gap before it. Links that form by step 2k form while
+  the units are still forming.
+- The edge floor differs between 160M and the larger models.
+- The judge reads two contexts per input.
+- 2.8B is in the census only. At all 12 of its intermediate revisions used here, the weights that load by default from
+  the Hub are the final checkpoint's: every neuron's top documents match the final model's exactly.
+  - Read directly, its `model.safetensors` at steps 1k, 64k and 120k holds the final weights, and at 64k its
+    `pytorch_model.bin` does too.
+  - Some branches keep the real checkpoint in sharded files (step 512) or in `pytorch_model.bin` (step 120k).
+  - `relict.py` refuses a checkpoint whose top documents are the final model's.
+
+**What it needs.** Before these results can support a conclusion:
+- a manual review of the cards in each transition: do the verdicts hold, and is the target's job well defined?
+- labels for Pythia's units, so the judge compares against a described job;
+- a test against each of a target's own modes, not only its main job;
+- onsets from units that have formed (from about step 2k), with finer checkpoints around them;
+- more targets per size, and 2.8B's checkpoints from the files that hold them.
+
+Outputs are in `data/summary/relict_{census,score,judge,judge_score}_pythia-*.log` and
+`data/summary/secondary_modes_measure_pythia-*.log`. The top documents, matrices, embeddings and verdicts stay local
+(`data/relict/`, `data/secondary_modes/`).
+
 ## Open questions
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
@@ -2224,8 +2362,11 @@ the matrix and the judge's verdicts stay local (`data/secondary_modes/qwen3-8b/`
 - Gemma 4's labels with its image and sound exemplars on the cards (§16), and media reads per slot, which would say where
   in an image a neuron looks.
 - Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §12).
-- Whether relict generalization happens as §23 infers: in a model with checkpoints and a known data order (Pythia, OLMo),
-  whether an unrelated mode's link forms through an intermediate that drives the unit at first and later falls away, and
-  whether the step that survives is the one its data exercises least.
+- Whether relict generalization happens as §23 infers. §25's first look at Pythia's checkpoints finds no net drift of
+  inputs away from their targets' jobs, but its verdicts need a manual review, labels, onsets after the units form and
+  finer checkpoints. Open too: whether an unrelated mode's link forms through an intermediate that drives the unit at
+  first and later falls away, and whether the step that survives is the one its data exercises least.
 - §24's census with head inputs, more than one hop back and a second model, and what weight-level quantity, if any, tells
-  a related input from an unrelated one (§24 found none among twelve).
+  a related input from an unrelated one (§24 found none among twelve). Whether Pythia's share of unrelated inputs falls
+  with size once the judge's rising floor is understood, and how much of it is inputs that feed a mixed target's minor
+  mode (§25).

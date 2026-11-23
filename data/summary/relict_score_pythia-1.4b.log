@@ -1,0 +1,40 @@
+EleutherAI/pythia-1.4b: 4417 confirmed pairs, checkpoints step512, step1000, step2000, step4000, step8000, step16000, step32000, step48000, step64000, step80000, step100000, step120000, main
+random-pair baseline (mean cosine): 0k 0.194, 1k 0.192, 2k 0.189, 4k 0.190, 8k 0.188, 16k 0.194, 32k 0.193, 48k 0.193, 64k 0.193, 80k 0.192, 100k 0.190, 120k 0.192, 143k 0.192
+
+z (likeness over the random-pair baseline), medians; onset as in the docstring
+group                 n   final retest  at onset  onset − retest (mean ± se)   onset step
+unlike at the end   1414        -0.05      0.07      0.10 ± 0.04               8000
+middle              1418         0.37      0.26     -0.11 ± 0.04               8000
+alike at the end    1430         0.95      0.58     -0.35 ± 0.05               8000
+
+median z by checkpoint (the final column includes the selecting contexts)
+group                  0k     1k     2k     4k     8k    16k    32k    48k    64k    80k   100k   120k   143k
+unlike at the end   -0.03  -0.09  -0.00   0.02   0.11  -0.08  -0.10  -0.16  -0.15  -0.28  -0.25  -0.38  -0.45
+middle               0.02   0.02   0.09   0.17   0.31   0.09   0.20   0.19   0.24   0.27   0.37   0.37   0.39
+alike at the end     0.09  -0.02   0.28   0.31   0.59   0.57   0.77   0.86   1.02   1.26   1.43   1.39   1.45
+  band L0-L5: onset − retest: unlike at the end +0.04 ± 0.22 (n=65); middle +0.02 ± 0.16 (n=68); alike at the end +0.17 ± 0.16 (n=90)
+  band L6-L11: onset − retest: unlike at the end -0.12 ± 0.07 (n=421); middle -0.11 ± 0.07 (n=452); alike at the end -0.35 ± 0.09 (n=378)
+  band L12-L17: onset − retest: unlike at the end +0.18 ± 0.07 (n=451); middle -0.15 ± 0.07 (n=490); alike at the end -0.35 ± 0.08 (n=524)
+  band L18-L23: onset − retest: unlike at the end +0.23 ± 0.08 (n=477); middle -0.06 ± 0.09 (n=408); alike at the end -0.46 ± 0.10 (n=438)
+
+unlike at the end: linked pairs (n=1473 of 1473 with a cell) against random unlinked pairs in other layers with the same final selection, layer gap and final retest (n=4419, from 118135)
+  z ≥ 1.0 at some checkpoint 4k-120k: linked 0.572, random 0.537 (difference +0.034 ± 0.015)
+  z ≥ 1.5 at some checkpoint 4k-120k: linked 0.350, random 0.288 (difference +0.062 ± 0.014)
+  z ≥ 2.0 at some checkpoint 4k-120k: linked 0.187, random 0.132 (difference +0.055 ± 0.011)
+  median z (linked/random): 4k 0.02/-0.07, 8k 0.11/-0.11, 16k -0.08/-0.09, 32k -0.10/-0.16, 48k -0.16/-0.18, 64k -0.15/-0.22, 80k -0.28/-0.25, 100k -0.25/-0.35, 120k -0.38/-0.39; retest -0.06/-0.06
+  mean z early: linked 0.074, random -0.057 (difference +0.131 ± 0.023)
+  mean z late: linked -0.214, random -0.293 (difference +0.079 ± 0.024)
+  mean z early − late, per pair (a history the end doesn't share): linked 0.288, random 0.236 (difference +0.052 ± 0.027)
+    (early 4k, 8k, 16k; late 64k, 80k, 100k, 120k)
+  sharing a top document (linked/random): 4k 0.004/0.000, 8k 0.005/0.000, 16k 0.012/0.000, 32k 0.016/0.000, 48k 0.018/0.000, 64k 0.018/0.001, 80k 0.013/0.001, 100k 0.012/0.000, 120k 0.010/0.000
+  median z over contexts from different documents (linked/random): 4k 0.02/-0.07, 8k 0.11/-0.11, 16k -0.09/-0.09, 32k -0.10/-0.16, 48k -0.18/-0.18, 64k -0.16/-0.22, 80k -0.29/-0.25, 100k -0.26/-0.35, 120k -0.38/-0.39
+  same, mean z early: linked 0.067, random -0.057 (difference +0.124 ± 0.023)
+  same, mean z late: linked -0.228, random -0.293 (difference +0.065 ± 0.023)
+
+absolute (all contexts at the end): random pairs' median z by layer gap 1+ 0.00, 2+ 0.00, 3+ -0.01, 5+ -0.01, 9+ -0.11; a unit against itself (2 contexts against 3) 1.44, below the random median 0.170 (the ruler's floor)
+  a unit against itself, median z by checkpoint (baseline units with five contexts): 0k 1.13, 1k 1.09, 2k 1.13, 4k 1.33, 8k 1.43, 16k 1.22, 32k 1.40, 48k 1.41, 64k 1.42, 80k 1.39, 100k 1.46, 120k 1.43, 143k 1.44
+  confirmed pairs: median z 0.42; as unlike as a typical random pair (below its gap's median) 0.355; likeness from random (0) to the same unit (1): quartiles -0.24, 0.30, 0.88
+  band L0-L5: confirmed inputs below random 0.327 (n=245); median likeness (0-1) 0.36; poles with one among their 4 strongest inputs 0.090 of 500 (0.65 with 4 proposed)
+  band L6-L11: confirmed inputs below random 0.350 (n=1297); median likeness (0-1) 0.29; poles with one among their 4 strongest inputs 0.284 of 500 (0.94 with 4 proposed)
+  band L12-L17: confirmed inputs below random 0.329 (n=1516); median likeness (0-1) 0.35; poles with one among their 4 strongest inputs 0.368 of 500 (1.00 with 4 proposed)
+  band L18-L23: confirmed inputs below random 0.395 (n=1359); median likeness (0-1) 0.26; poles with one among their 4 strongest inputs 0.398 of 500 (1.00 with 4 proposed)

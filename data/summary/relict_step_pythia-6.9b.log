@@ -1,0 +1,91 @@
+  main 0/63992 docs, 82 docs/s
+  main 12800/63992 docs, 53 docs/s
+  main 25600/63992 docs, 53 docs/s
+  main 38400/63992 docs, 53 docs/s
+  main 51200/63992 docs, 53 docs/s
+main: 63992 docs in 1214 s
+main: 36759 contexts (36265 the census's) in 182 s
+  step512 0/63992 docs, 82 docs/s
+  step512 12800/63992 docs, 53 docs/s
+  step512 25600/63992 docs, 53 docs/s
+  step512 38400/63992 docs, 53 docs/s
+  step512 51200/63992 docs, 53 docs/s
+step512: 63992 docs in 1209 s
+step512: 72349 contexts (36265 the census's) in 358 s
+  step1000 0/63992 docs, 82 docs/s
+  step1000 12800/63992 docs, 52 docs/s
+  step1000 25600/63992 docs, 52 docs/s
+  step1000 38400/63992 docs, 52 docs/s
+  step1000 51200/63992 docs, 52 docs/s
+step1000: 63992 docs in 1222 s
+step1000: 72555 contexts (36265 the census's) in 360 s
+  step2000 0/63992 docs, 82 docs/s
+  step2000 12800/63992 docs, 52 docs/s
+  step2000 25600/63992 docs, 53 docs/s
+  step2000 38400/63992 docs, 53 docs/s
+  step2000 51200/63992 docs, 53 docs/s
+step2000: 63992 docs in 1209 s
+step2000: 72515 contexts (36265 the census's) in 359 s
+  step4000 0/63992 docs, 81 docs/s
+  step4000 12800/63992 docs, 52 docs/s
+  step4000 25600/63992 docs, 52 docs/s
+  step4000 38400/63992 docs, 53 docs/s
+  step4000 51200/63992 docs, 53 docs/s
+step4000: 63992 docs in 1214 s
+step4000: 72228 contexts (36265 the census's) in 360 s
+  step8000 0/63992 docs, 82 docs/s
+  step8000 12800/63992 docs, 52 docs/s
+  step8000 25600/63992 docs, 52 docs/s
+  step8000 38400/63992 docs, 52 docs/s
+  step8000 51200/63992 docs, 52 docs/s
+step8000: 63992 docs in 1218 s
+step8000: 71674 contexts (36265 the census's) in 358 s
+  step16000 0/63992 docs, 82 docs/s
+  step16000 12800/63992 docs, 52 docs/s
+  step16000 25600/63992 docs, 52 docs/s
+  step16000 38400/63992 docs, 52 docs/s
+  step16000 51200/63992 docs, 51 docs/s
+step16000: 63992 docs in 1251 s
+step16000: 70184 contexts (36265 the census's) in 350 s
+  step32000 0/63992 docs, 71 docs/s
+  step32000 12800/63992 docs, 52 docs/s
+  step32000 25600/63992 docs, 52 docs/s
+  step32000 38400/63992 docs, 52 docs/s
+  step32000 51200/63992 docs, 52 docs/s
+step32000: 63992 docs in 1249 s
+step32000: 67052 contexts (36265 the census's) in 335 s
+  step48000 0/63992 docs, 82 docs/s
+  step48000 12800/63992 docs, 52 docs/s
+  step48000 25600/63992 docs, 52 docs/s
+  step48000 38400/63992 docs, 52 docs/s
+  step48000 51200/63992 docs, 52 docs/s
+step48000: 63992 docs in 1248 s
+step48000: 63650 contexts (36265 the census's) in 319 s
+  step64000 0/63992 docs, 82 docs/s
+  step64000 12800/63992 docs, 52 docs/s
+  step64000 25600/63992 docs, 52 docs/s
+  step64000 38400/63992 docs, 52 docs/s
+  step64000 51200/63992 docs, 52 docs/s
+step64000: 63992 docs in 1248 s
+step64000: 60194 contexts (36265 the census's) in 302 s
+  step80000 0/63992 docs, 82 docs/s
+  step80000 12800/63992 docs, 52 docs/s
+  step80000 25600/63992 docs, 52 docs/s
+  step80000 38400/63992 docs, 52 docs/s
+  step80000 51200/63992 docs, 52 docs/s
+step80000: 63992 docs in 1215 s
+step80000: 56591 contexts (36265 the census's) in 280 s
+  step100000 0/63992 docs, 80 docs/s
+  step100000 12800/63992 docs, 52 docs/s
+  step100000 25600/63992 docs, 52 docs/s
+  step100000 38400/63992 docs, 52 docs/s
+  step100000 51200/63992 docs, 52 docs/s
+step100000: 63992 docs in 1248 s
+step100000: 51696 contexts (36265 the census's) in 258 s
+  step120000 0/63992 docs, 81 docs/s
+  step120000 12800/63992 docs, 52 docs/s
+  step120000 25600/63992 docs, 53 docs/s
+  step120000 38400/63992 docs, 53 docs/s
+  step120000 51200/63992 docs, 53 docs/s
+step120000: 63992 docs in 1201 s
+step120000: 47887 contexts (36265 the census's) in 237 s
