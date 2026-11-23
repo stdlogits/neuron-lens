@@ -49,7 +49,7 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   `catalog.documents` (the activations file, else rebuilt from the corpus), so most run from the
   release and the model.
 - `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models
-  (`test_transport.py` Qwen3, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5,
+  (`test_transport.py` Qwen3, dense and MoE, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5,
   `test_pythia.py` GPT-NeoX), and
   `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA). Anything that fails loudly or
   reads wrong in the output gets fixed when it comes up; don't add tests for it.

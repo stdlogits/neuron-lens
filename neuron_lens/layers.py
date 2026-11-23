@@ -1,7 +1,7 @@
 """Decoder layers as linear maps for the lens estimators (``neuron_lens.transport``), one
 implementation per component, composed per layer from what the model's layer holds: a new
-architecture built from these parts needs no new map. Qwen3, Gemma 4, Qwen3.5 (dense and MoE) and
-GPT-NeoX (Pythia) are covered; ``check`` refuses what is not.
+architecture built from these parts needs no new map. Qwen3 (dense and MoE), Gemma 4, Qwen3.5 (dense and
+MoE) and GPT-NeoX (Pythia) are covered; ``check`` refuses what is not.
 
 A layer is read as
 
@@ -67,8 +67,8 @@ Mixers:
   ``_delta_core_vjp``; Triton kernels on CUDA, ``neuron_lens.kernels``).
 
 MLPs: **dense**, gated (SwiGLU or GELU-tanh) or not (GPT-NeoX's GELU), or **sparse**: routed experts weighted by the router's softmax
-renormalised over its top k (Qwen3.5's 256 experts, top 8), plus an optional shared expert behind an
-optional sigmoid gate.
+renormalised over its top k (Qwen3.5's 256 experts, top 8; Qwen3-MoE's 128, top 8), plus an optional shared
+expert behind an optional sigmoid gate (Qwen3.5 has one, Qwen3-MoE none).
 
 **Precision.** The primal runs in fp32 at full precision (no TF32: the residual, the norms, softmax attention and
 dense MLPs, each layer's weights upcast while it runs; DeltaNet and the sparse MLP take their input in the model's

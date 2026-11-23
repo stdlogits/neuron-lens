@@ -1,7 +1,8 @@
-"""The estimators against brute-force Jacobians of the patched model, on a tiny Qwen3."""
+"""The estimators against brute-force Jacobians of the patched model, on a tiny Qwen3, dense and sparse (Qwen3-MoE:
+routed experts renormalised over their top k, no shared expert)."""
 import pytest
 import torch
-from transformers import Qwen3Config, Qwen3Model
+from transformers import Qwen3Config, Qwen3Model, Qwen3MoeConfig, Qwen3MoeModel
 
 from neuron_lens.rules import relp_rules
 from neuron_lens.transport import (
@@ -15,18 +16,21 @@ from neuron_lens.transport import (
 D, N_LAYERS = 16, 3
 
 
-def tiny_model(**overrides) -> Qwen3Model:
+def tiny_model(moe: bool = False, **overrides):
     torch.manual_seed(0)
     cfg = dict(vocab_size=50, hidden_size=D, intermediate_size=32, num_hidden_layers=N_LAYERS,
                num_attention_heads=2, num_key_value_heads=1, head_dim=8, attn_implementation="eager")
+    if moe:
+        cfg |= dict(num_experts=8, num_experts_per_tok=3, moe_intermediate_size=12, norm_topk_prob=True)
+        return Qwen3MoeModel(Qwen3MoeConfig(**cfg | overrides)).float().eval().requires_grad_(False)
     return Qwen3Model(Qwen3Config(**cfg | overrides)).float().eval().requires_grad_(False)
 
 
-def realistic_model() -> Qwen3Model:
+def realistic_model(moe: bool = False):
     """Two query heads per KV head (8B has four), weights large enough that the MLP's RelP
     coefficients are not near zero, and random norm weights, which the default init leaves at 1:
     the tiny model cannot tell a swapped GQA layout or a dropped norm weight from the right ones."""
-    model = tiny_model(num_attention_heads=4, num_key_value_heads=2, initializer_range=0.2)
+    model = tiny_model(moe, num_attention_heads=4, num_key_value_heads=2, initializer_range=0.2)
     torch.manual_seed(1)
     for name, p in model.named_parameters():
         if name.endswith("norm.weight"):  # input, post-attention, q, k and final norms
@@ -71,10 +75,10 @@ def exact_from(model, ids, layer, f):
     return torch.autograd.functional.jacobian(lambda x: f(run_with(model, ids, layer, x)[1]), h)
 
 
-@pytest.mark.parametrize("n_valid", [7, 8])  # keys padded to a multiple of 8 (Tp), and not
-def test_estimates_match_brute_force(n_valid):
+@pytest.mark.parametrize("n_valid,moe", [(7, False), (8, False), (7, True)])  # keys padded to a multiple of 8 (Tp), and not
+def test_estimates_match_brute_force(n_valid, moe):
     """The hand-written maps against autograd through the model under the RelP rules."""
-    model = realistic_model()
+    model = realistic_model(moe)
     ids = torch.randint(0, 50, (SKIP_FIRST + n_valid,))
     valid = valid_positions(len(ids))
     r = Accumulator({"out": N_LAYERS - 1, "mid": N_LAYERS}, D)
