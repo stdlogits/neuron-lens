@@ -5,7 +5,7 @@
 # fits (the catalog stages download it again). Fits save every 10 minutes and resume when rerun; a finished one leaves
 # logs/fit_<lens>_<model>.done and is skipped. A failed fit is logged, keeps its model, and the queue moves on.
 # UPLOAD=1 releases each model's lenses to the Hub as soon as its fits are done (12_release.py --parts lenses: a model
-# in its LADDER or MODELS), one upload at a time in the background, and deletes the staged files after.
+# its MODELS, LADDER or LENS_ONLY knows), one upload at a time in the background, and deletes the staged files after.
 # Progress in logs/fit_queue.log, each fit's output in logs/fit_<lens>_<model>.log. After scripts/gpu_box.sh:
 #
 #   UPLOAD=1 setsid nohup bash scripts/fit_queue.sh Qwen/Qwen3-0.6B Qwen/Qwen3-0.6B-Base ... > logs/fit_queue.log 2>&1 &
