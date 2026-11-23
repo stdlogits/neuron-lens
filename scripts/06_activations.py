@@ -320,26 +320,38 @@ class Collector:
         hs = []
         for l, layer in enumerate(model.layers):
             p = anatomy.parts(layer)
-            if p.deltanet or p.sparse:
-                raise NotImplementedError(f"layer {l}: DeltaNet heads and routed experts are not in the catalog yet")
-            at = attention(layer)
-            gate, down = anatomy.module(layer, p.gate), anatomy.module(layer, p.down)
-            hs.append(gate.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)))
-            hs.append(down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0])))
-            n1 = anatomy.module(layer, p.n1)
-            if n1 is not None:
-                hs.append(n1.register_forward_pre_hook(lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
-            else:  # the heads read the residual itself (OLMo 2 and 3): no input norm's scaling
-                hs.append(layer.register_forward_pre_hook(lambda m, x, kw: self.no_input_norm(x[0] if x else kw["hidden_states"]),
-                                                          with_kwargs=True))
-            if hasattr(at, "query_key_value"):  # no q/k norms
-                hs.append(at.query_key_value.register_forward_hook(lambda m, x, out, l=l: self.query(l, out)))
-            else:
-                for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
-                    hs.append(norm.register_forward_hook(
-                        lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
-            hs.append(anatomy.module(layer, p.out).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
-            hs.append(at.register_forward_hook(lambda m, x, out, l=l: self.attention(l, out[1], out[0])))
+            hs += self.mlp_hooks(l, layer, p) + self.mixer_hooks(l, layer, p)
+        return hs
+
+    def mlp_hooks(self, l: int, layer, p) -> list:
+        """The neurons' activations (the MLP's down projection's input) and the gate's pre-activation."""
+        if p.sparse:
+            raise NotImplementedError(f"layer {l}: routed experts are not in the catalog yet")
+        gate, down = anatomy.module(layer, p.gate), anatomy.module(layer, p.down)
+        return [gate.register_forward_hook(lambda m, x, out, l=l: self.stash.__setitem__(("gate", l), out)),
+                down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0]))]
+
+    def mixer_hooks(self, l: int, layer, p) -> list:
+        """The heads' outputs (the output projection's input), the input norm's scaling, the q/k norms' sums and the
+        attention pattern."""
+        if p.deltanet:
+            raise NotImplementedError(f"layer {l}: DeltaNet heads are not in the catalog yet")
+        hs = []
+        at = attention(layer)
+        n1 = anatomy.module(layer, p.n1)
+        if n1 is not None:
+            hs.append(n1.register_forward_pre_hook(lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
+        else:  # the heads read the residual itself (OLMo 2 and 3): no input norm's scaling
+            hs.append(layer.register_forward_pre_hook(lambda m, x, kw: self.no_input_norm(x[0] if x else kw["hidden_states"]),
+                                                      with_kwargs=True))
+        if hasattr(at, "query_key_value"):  # no q/k norms
+            hs.append(at.query_key_value.register_forward_hook(lambda m, x, out, l=l: self.query(l, out)))
+        else:
+            for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
+                hs.append(norm.register_forward_hook(
+                    lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
+        hs.append(anatomy.module(layer, p.out).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
+        hs.append(at.register_forward_hook(lambda m, x, out, l=l: self.attention(l, out[1], out[0])))
         return hs
 
     def batch(self, ids: torch.Tensor, mask: torch.Tensor, docs: torch.Tensor) -> None:
