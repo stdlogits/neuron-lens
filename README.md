@@ -377,7 +377,8 @@ the style of the models' reasoning ([§19](docs/findings.md#19-the-qwen3-family-
 
 **20. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B.** In the 4B and the 0.6B a neuron's index tracks its
 activation (Spearman ρ to −0.76), where every other model's indices are exchangeable (±0.03). Each pair shares its
-attention heads one for one, a linear map fitted on those heads takes the parent's residual to the model's, and through it
+attention heads one for one, the residual keeps a subset of the parent's coordinates (the 4B's tied embedding those of the
+8B's unembedding), a linear map fitted on the heads takes the parent's residual to the model's, and through it
 99-100% of the 4B's neurons from L1 to L34 match a parent neuron that keeps their scale and promotes the same tokens. The
 neurons cut were the parent's least active. This is what width pruning by activation leaves, as in Minitron, so finding
 19's five sizes are three lineages. Each neuron's parent is identified for 93% of the 4B's neurons and 85% of the 0.6B's;

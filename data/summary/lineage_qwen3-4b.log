@@ -14,7 +14,8 @@ qwen3-8b       ρ -0.02 to +0.02, |ρ| > 0.1 on 0/36 layers: -0.00 +0.00 +0.01 -
 heads, Qwen/Qwen3-4B against Qwen/Qwen3-8B: correlation over heads, median (min) over layers
   q +0.96 (+0.73), k +0.98 (+0.89), v +0.98 (+0.16), o +0.98 (+0.66), q_norm +0.99 (+0.92), k_norm +0.99 (+0.98), o_shuffled -0.00 (-0.34)
 
-map: embedding coordinates, each of 2560 qwen3-4b coordinates' best |r| among Qwen/Qwen3-8B's: q10/50/90 [0.043, 0.058, 0.093], second best (median) 0.046, distinct best 1523
+map: coordinates, each of 2560 qwen3-4b embedding columns' best |r| among Qwen/Qwen3-8B's embed columns: q10/50/90 [0.043, 0.058, 0.093], second best (median) 0.046, distinct best 1523
+map: coordinates, each of 2560 qwen3-4b embedding columns' best |r| among Qwen/Qwen3-8B's unembed columns: q10/50/90 [0.439, 0.469, 0.55], second best (median) 0.054, distinct best 2547
 map: B fitted on the even layers' q/k rows; held-out (odd) rows' cosine with their prediction, median 0.55 (by layer 0.18-0.73); the next head's rows 0.05; training layers 0.61
 
 neurons, Qwen/Qwen3-4B against Qwen/Qwen3-8B (score: mean cosine of gate and up rows through B)

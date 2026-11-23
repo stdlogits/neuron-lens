@@ -9,8 +9,9 @@ base) and its parent (``PARENT``: the 8B or the 1.7B, the same kind), which have
   random start are exchangeable: ρ ≈ 0, near-silent neurons at a mean position of 0.5.
 - ``heads``: per layer, the correlation over heads of each head's q, k, v and o weight norms between the two models,
   and of the q_norm and k_norm gains over the head dimension; the control shuffles the parent's heads.
-- ``map``: the residual's correspondence. Coordinates: each model's embedding columns over the vocabulary, each of the
-  model's coordinates' best |r| among the parent's. A linear map ``B`` (a parent row times ``B`` is the model's row):
+- ``map``: the residual's correspondence. Coordinates: the model's (tied) embedding columns over the vocabulary, each
+  one's best |r| among the parent's input embedding columns and among its unembedding columns (the 8B's are untied, and
+  the 4B's tied matrix descends from its unembedding). A linear map ``B`` (a parent row times ``B`` is the model's row):
   least squares on the even layers' q and k rows (times the input norm's gain, unit length), which act on the normed
   residual and keep their head-internal basis (q_norm and k_norm); tested on the odd layers' rows, against the next
   head's rows. The neurons part uses ``B`` refitted on every layer's rows.
@@ -145,22 +146,27 @@ def qk_rows(repo: str, layer: int) -> torch.Tensor:
     return unit(torch.cat([q, k]) * g)
 
 
-def residual_map() -> tuple[list[str], dict, torch.Tensor]:
-    emb = arch.names(MODEL)["embed"]
-    Ea, Eb = get(MODEL, [emb])[0], get(PARENT, [emb])[0]
+def coordinates(Ea: torch.Tensor, Eb: torch.Tensor) -> dict:
+    """Each of ``Ea``'s columns (coordinates, over the vocabulary) against ``Eb``'s: the best |r|, the second best, and
+    how many distinct columns of ``Eb`` are someone's best."""
     v = min(len(Ea), len(Eb))
     ok = (Ea[:v].norm(dim=1) > 1e-3) & (Eb[:v].norm(dim=1) > 1e-3)
 
     def z(x):
         x = x - x.mean(0)
         return x / x.norm(dim=0)
-    C = (z(Ea[:v][ok]).T @ z(Eb[:v][ok])).abs()
-    del Ea, Eb
-    top2 = C.topk(2, dim=1)
-    coords = {"best_r": [round(float(x), 3) for x in top2.values[:, 0].quantile(torch.tensor([0.1, 0.5, 0.9]))],
-              "second_r": float(top2.values[:, 1].median()), "distinct": len(set(top2.indices[:, 0].tolist())),
-              "of": int(C.shape[0])}
-    del C
+    top2 = (z(Ea[:v][ok]).T @ z(Eb[:v][ok])).abs().topk(2, dim=1)
+    return {"best_r": [round(float(x), 3) for x in top2.values[:, 0].quantile(torch.tensor([0.1, 0.5, 0.9]))],
+            "second_r": float(top2.values[:, 1].median()), "distinct": len(set(top2.indices[:, 0].tolist())),
+            "of": int(len(top2.values))}
+
+
+def residual_map() -> tuple[list[str], dict, torch.Tensor]:
+    # the model's tied embedding against the parent's input embedding and its unembedding (one tensor where tied)
+    names, parent = arch.names(MODEL), arch.names(PARENT)
+    Ea = get(MODEL, [names["embed"]])[0]
+    coords = {side: coordinates(Ea, get(PARENT, [parent[side]])[0]) for side in ("embed", "unembed")}
+    del Ea
     ra = {layer: qk_rows(MODEL, layer) for layer in range(L)}
     rb = {layer: qk_rows(PARENT, layer) for layer in range(L)}
     train, test = range(0, L, 2), range(1, L, 2)
@@ -172,11 +178,12 @@ def residual_map() -> tuple[list[str], dict, torch.Tensor]:
                       "next_head": float((pred * ra[layer].roll(HD, 0)).sum(1).median())}
     held = [per[i]["same"] for i in test]
     B = torch.linalg.pinv(torch.cat([rb[i] for i in range(L)]), rtol=1e-4) @ torch.cat([ra[i] for i in range(L)])
-    lines = [f"map: embedding coordinates, each of {coords['of']} {STEM} coordinates' best |r| among {PARENT}'s: "
-             f"q10/50/90 {coords['best_r']}, second best (median) {coords['second_r']:.3f}, distinct best {coords['distinct']}",
-             f"map: B fitted on the even layers' q/k rows; held-out (odd) rows' cosine with their prediction, median "
-             f"{np.median(held):.2f} (by layer {min(held):.2f}-{max(held):.2f}); the next head's rows "
-             f"{np.median([per[i]['next_head'] for i in test]):.2f}; training layers {np.median([per[i]['same'] for i in train]):.2f}"]
+    lines = [f"map: coordinates, each of {c['of']} {STEM} embedding columns' best |r| among {PARENT}'s {side} columns: "
+             f"q10/50/90 {c['best_r']}, second best (median) {c['second_r']:.3f}, distinct best {c['distinct']}"
+             for side, c in coords.items()]
+    lines += [f"map: B fitted on the even layers' q/k rows; held-out (odd) rows' cosine with their prediction, median "
+              f"{np.median(held):.2f} (by layer {min(held):.2f}-{max(held):.2f}); the next head's rows "
+              f"{np.median([per[i]['next_head'] for i in test]):.2f}; training layers {np.median([per[i]['same'] for i in train]):.2f}"]
     return lines, {"coords": coords, "qk": per}, B
 
 

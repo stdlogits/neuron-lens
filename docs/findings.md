@@ -1597,10 +1597,14 @@ the depth away.
   and the 8B has medians of 0.96 (q) and 0.98 (k, v, o), 0.99 for the q_norm and k_norm gains, and −0.00 with the parent's
   heads shuffled; between the 0.6B and the 1.7B, 0.93-0.97, 0.97-0.99 and −0.07. Castin et al. (2026, KV-Lingo, their
   appendix G) report the same pairs' heads aligned one to one.
-- **The residual is a linear image of the parent's.** Most of the 0.6B's coordinates are the 1.7B's: 1,008 of its 1,024
-  embedding columns match distinct ones (median |r| 0.23, 0.08 for the second best). The 4B's coordinates don't match, but
-  a linear map holds: fitted on the even layers' q and k rows, it predicts the odd layers' at a median cosine of 0.55
-  (0.18-0.73 by layer), and the next head's rows at 0.05. For the 0.6B these are 0.40 and 0.02.
+- **The residual keeps a subset of the parent's coordinates.** The 4B, the 0.6B and the 1.7B tie their embedding to
+  their unembedding; the 8B doesn't. Most of the 0.6B's coordinates are the 1.7B's: 1,008 of its 1,024 embedding columns
+  match distinct ones (median |r| 0.23, 0.08 for the second best). The 4B's are the 8B's unembedding's: 2,547 of its
+  2,560 columns match distinct columns of the 8B's `lm_head` (median |r| 0.47, 0.05 for the second best), against
+  1,523 distinct at a median |r| of 0.06 among its `embed_tokens`. Its tied matrix descends from the 8B's output side, so
+  each input token enters the 4B along the direction the 8B unembeds it with, not the one it embeds it with. A linear map
+  holds too: fitted on the even layers' q and k rows, it predicts the odd layers' at a median cosine of 0.55 (0.18-0.73
+  by layer), and the next head's rows at 0.05. For the 0.6B these are 0.40 and 0.02.
 - **Nearly every neuron of the 4B has a parent.** Its best score clears the null's 99% point for 99-100% of neurons at
   L1-L34, 90% at L0 and 95% at L35 (median best 0.13-0.59 by layer, null 0.07-0.12), and 92-100% of best matches are
   distinct, except at L1-L3 (53-79%), where near-silent neurons look alike. Matched pairs keep their scale (ρ 0.85-0.95
@@ -1645,8 +1649,8 @@ the depth away.
 
 **What this suggests.** This is what width pruning by activation leaves (Muralidharan et al. 2024, Minitron: rank each
 layer's neurons, heads and embedding channels by their activations on calibration data, keep the top ones, then distill):
-the heads stay in place; the residual narrows by channel (the 0.6B) or under enough retraining that only a linear map
-survives (the 4B); each MLP's neurons are ranked by activation and cut, near-silent ones first, and the kept ones stay in
+the heads stay in place; the residual narrows by channel (for the 4B, channels of the 8B's unembedding, which became its
+tied matrix); each MLP's neurons are ranked by activation and cut, near-silent ones first, and the kept ones stay in
 rank order. Both sides trained a long way after the cut, so scores are 0.3-0.6 rather than 1, and the parent may have been
 an earlier checkpoint. Qwen's technical report describes one pre-training recipe for every dense size and distillation
 from larger models in post-training; it doesn't mention pruning.
