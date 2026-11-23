@@ -8,8 +8,10 @@ Parts (data in ``data/relict/<model>/``, summaries in ``data/summary/relict_<par
   ``06_activations.py`` keeps them (per document its peak position from 1, the ``TOP`` highest documents, ``act_top``
   the median of the first ``TYPICAL``).
 - ``matrix <rev>...``: at each checkpoint, every census target's (``secondary_modes.py``'s plan, run on the final
-  checkpoint) peak over positions [t − 2, t + 8] on the census's contexts and on every census unit's (targets and
-  proposed sources) own ``N_CTX`` top contexts at that checkpoint; raw values, ``[contexts × targets]``.
+  checkpoint) peak over positions [t − 2, t + 8] on the census's contexts (the targets' own, the confirmed sources'
+  and the control) and on the ``N_CTX`` top contexts at that checkpoint of the targets and their confirmed sources;
+  raw values, ``[contexts × targets]``.
+- ``step <rev>...``: ``tops`` and ``matrix`` on one load of each checkpoint.
 - ``cross <rev> <revs>...``: at one checkpoint (``main``), every target on the contexts every checkpoint in ``revs``
   gave the census's units: whether a job a unit had earlier still drives the target.
 - ``embed <revs>...``: Qwen3-Embedding-0.6B embeddings of every top context, at every checkpoint, of the units in the
@@ -50,13 +52,17 @@ def _down(mlp):
     return mlp.down_proj if hasattr(mlp, "down_proj") else mlp.dense_4h_to_h
 
 
+def load(rev: str):
+    return arch.load_model(MODEL, DEV, eager=False, revision=None if rev == "main" else rev)[1]
+
+
 @torch.inference_mode()
-def tops(rev: str) -> dict:
+def tops(rev: str, stack=None) -> dict:
     """``{"val", "doc", "pos"}`` ``[L, TOP, f]`` and ``act_top`` ``[L, f]`` at checkpoint ``rev`` (one pole a neuron)."""
     path = OUT / f"tops-{rev}.pt"
     if path.exists():
         return torch.load(path)
-    lm, stack = arch.load_model(MODEL, DEV, eager=False, revision=None if rev == "main" else rev)
+    stack = stack or load(rev)
     docs = documents()
     L, f = len(stack.layers), arch.text_config(MODEL).intermediate_size
     val = torch.full((L, TOP, f), -torch.inf, device=DEV)
@@ -113,10 +119,10 @@ def top_contexts(t: dict, u: tuple, k: int = sm.N_CTX) -> list[tuple[int, int]]:
 
 
 @torch.inference_mode()
-def peaks(rev: str, C: list, T: list) -> torch.Tensor:
+def peaks(rev: str, C: list, T: list, stack=None) -> torch.Tensor:
     """Every target's raw window peak (``secondary_modes.batch_ids``' window) on contexts ``C`` at ``rev``,
     ``[len(C), len(T)]`` fp16."""
-    lm, stack = arch.load_model(MODEL, DEV, eager=False, revision=None if rev == "main" else rev)
+    stack = stack or load(rev)
     docs = documents()
     cap, by_layer = {}, {}
     for j, (_, l, n, p) in enumerate(T):
@@ -143,20 +149,28 @@ def peaks(rev: str, C: list, T: list) -> torch.Tensor:
     return peak
 
 
-def matrix(rev: str) -> dict:
-    """``{"contexts", "unit_ctx", "peak"}``: the contexts run (the census's, then each unit's top contexts at ``rev``),
-    each unit's rows among them, and every target's raw window peak ``[contexts × targets]`` (fp16)."""
+def matrix(rev: str, stack=None) -> dict:
+    """``{"contexts", "plan_row", "unit_ctx", "peak"}``: the contexts run, every target's raw window peak on them
+    ``[contexts × targets]`` (fp16), the row of each of the census's contexts (−1 where not run) and each unit's rows.
+    Run: of the census's contexts, the targets' own, the confirmed sources' and the control's; and the top contexts at
+    ``rev`` of the targets and their confirmed sources (the census's confirmed pairs, ``confirmed``)."""
     path = OUT / f"matrix-{rev}.pt"
     if path.exists():
         return torch.load(path, weights_only=False)
-    P, t = sm.load()[0], tops(rev)
-    idx = {c: i for i, c in enumerate(P["contexts"])}
-    unit_ctx = {u: [idx.setdefault(c, len(idx)) for c in top_contexts(t, u)] for u in units(P)}
+    P, t = sm.load()[0], tops(rev, stack)
+    win = torch.load(sm.OUT / "state.pt")["win"].float().nan_to_num(0)
+    pairs = confirmed(P, win)
+    keep = sorted({i for o in P["own"] for i in o} | {i for _, _, rows in pairs for i in rows} | set(P["control"]))
+    idx = {P["contexts"][i]: r for r, i in enumerate(keep)}
+    plan_row = torch.full((len(P["contexts"]),), -1, dtype=torch.long)
+    plan_row[keep] = torch.arange(len(keep))
+    us = list(dict.fromkeys([tuple(x[1:]) for x in P["targets"]] + [s_ for _, s_, _ in pairs]))
+    unit_ctx = {u: [idx.setdefault(c, len(idx)) for c in top_contexts(t, u)] for u in us}
     C = sorted(idx, key=idx.get)
     t0 = time.time()
-    out = {"contexts": C, "unit_ctx": unit_ctx, "peak": peaks(rev, C, P["targets"])}
+    out = {"contexts": C, "plan_row": plan_row, "unit_ctx": unit_ctx, "peak": peaks(rev, C, P["targets"], stack)}
     torch.save(out, path)
-    say(f"{rev}: {len(C)} contexts ({len(P['contexts'])} the census's) in {time.time() - t0:.0f} s")
+    say(f"{rev}: {len(C)} contexts ({len(keep)} the census's) in {time.time() - t0:.0f} s")
     return out
 
 
@@ -240,7 +254,7 @@ def check_main(t: dict) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("part", choices=["tops", "matrix", "cross", "embed"])
+    ap.add_argument("part", choices=["tops", "matrix", "step", "cross", "embed"])
     ap.add_argument("revs", nargs="*")
     args = ap.parse_args()
     torch.set_grad_enabled(False)
@@ -252,6 +266,14 @@ def main():
     if args.part == "matrix":
         for rev in args.revs:
             matrix(rev)
+    if args.part == "step":
+        for rev in args.revs:
+            if not (OUT / f"matrix-{rev}.pt").exists():
+                stack = load(rev)
+                tops(rev, stack)
+                matrix(rev, stack)
+                del stack
+                torch.cuda.empty_cache() if DEV == "cuda" else None
     if args.part == "cross":
         cross(args.revs[0], args.revs[1:])
     if args.part == "embed":
