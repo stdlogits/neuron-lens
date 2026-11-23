@@ -174,18 +174,46 @@ def neuron_keys(layer: int, f: int, model: str = MODEL) -> dict:
             "pole": pa.array([x for x in s for _ in range(f)], pa.int8())}
 
 
-def head_keys(n_layers: int, n_heads: int, group) -> dict:
-    """The key columns of a head table, layer-major; ``kv_head`` is the key-value head a query head reads
-    (``group`` query heads per key head: one number, or one per layer, as Gemma 4's)."""
-    head = torch.arange(n_heads).repeat(n_layers)
-    g = torch.tensor(group).repeat_interleave(n_heads) if isinstance(group, (list, tuple)) else group
-    return {"layer": pa.array(torch.arange(n_layers).repeat_interleave(n_heads).numpy(), pa.int16()),
-            "head": pa.array(head.numpy(), pa.int16()), "kv_head": pa.array((head // g).numpy(), pa.int16())}
+def head_keys(model: str = MODEL) -> dict:
+    """The key columns of a head table over the stages' grid of heads (``arch.max_heads`` a layer, layer-major):
+    ``layer``, ``head``, and ``kv_head``, the key-value head it reads (a DeltaNet's: the key head whose query and key
+    it reads). ``write_heads`` keeps the rows of the heads that exist."""
+    from neuron_lens.arch import layout, max_heads
+    lay, H = layout(model), max_heads(model)
+    head = torch.arange(H).repeat(len(lay))
+    group = torch.tensor([x.q_heads // x.kv_heads for x in lay]).repeat_interleave(H)
+    return {"layer": pa.array(torch.arange(len(lay)).repeat_interleave(H).numpy(), pa.int16()),
+            "head": pa.array(head.numpy(), pa.int16()), "kv_head": pa.array((head // group).numpy(), pa.int16())}
 
 
 def write(cols: dict, path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table(cols), path)
+
+
+def write_heads(cols: dict, path, model: str = MODEL) -> None:
+    """A head table from columns over the grid of heads (``head_keys``): the rows of the heads that exist (a layer with
+    fewer heads than another leaves the rest of its grid row out)."""
+    from neuron_lens.arch import head_grid
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.table(cols).filter(pa.array(head_grid(model).flatten().numpy())), path)
+
+
+def head_rows(model: str = MODEL) -> torch.Tensor:
+    """Each head table row's place in the grid, ``layer · arch.max_heads + head``."""
+    from neuron_lens.arch import head_grid
+    return head_grid(model).flatten().nonzero().squeeze(1)
+
+
+def gridded(x, model: str = MODEL, fill=float("nan")) -> torch.Tensor:
+    """A head table column (a list or ``[rows, ...]``) on the grid, ``[layers, max_heads, ...]``, ``fill`` where no head is."""
+    from neuron_lens.arch import head_grid
+    x = torch.as_tensor(x)
+    grid = head_grid(model)
+    dtype = x.dtype if x.is_floating_point() or not isinstance(fill, float) else torch.float32
+    out = torch.full((grid.numel(), *x.shape[1:]), fill, dtype=dtype)
+    out[grid.flatten()] = x.to(dtype)
+    return out.view(*grid.shape, *x.shape[1:])
 
 
 def context(tok, ids, pos: int, src: int | None = None, after: int = CONTEXT_AFTER) -> str:
@@ -238,8 +266,9 @@ def entry(layer: int, neuron: int, pole: int, model: str = MODEL) -> dict:
 
 def head_entry(layer: int, head: int, model: str = MODEL) -> dict:
     t = load_heads(model)
-    n_heads = len(t) // (max(t.column("layer").to_pylist()) + 1)
-    return {k: v[0] for k, v in t.slice(layer * n_heads + head, 1).to_pydict().items()}
+    row = next(i for i, (l, h) in enumerate(zip(t.column("layer").to_pylist(), t.column("head").to_pylist()))
+               if (l, h) == (layer, head))
+    return {k: v[0] for k, v in t.slice(row, 1).to_pydict().items()}
 
 
 def edge_list(e: dict, side: str, k: int = 6, value: str = "push") -> str:

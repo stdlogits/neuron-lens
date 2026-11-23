@@ -74,14 +74,13 @@ import pyarrow.parquet as pq
 
 from neuron_lens import arch
 from neuron_lens.catalog import (
-    MODEL,
     HELD_OUT,
+    MODEL,
     N_CONTEXTS,
     acts_path,
     context,
     corpus_doc_tokens,
     doc_tokens,
-    head_keys,
     head_table,
     load_heads,
     load_layer,
@@ -663,9 +662,8 @@ def shards(args) -> None:
             write(neuron_keys(layer, f) | columns(rows), path)
     else:
         keys = pq.read_table(head_table("reads"), columns=["layer", "head", "kv_head"])
-        L, H = max(keys.column("layer").to_pylist()) + 1, keys.num_rows // (max(keys.column("layer").to_pylist()) + 1)
-        rows = [got[(layer, h)] for layer in range(L) for h in range(H)]
-        write(head_keys(L, H, H // (max(keys.column("kv_head").to_pylist()) + 1)) | columns(rows), head_table("labels"))
+        rows = [got[(layer, h)] for layer, h in zip(keys.column("layer").to_pylist(), keys.column("head").to_pylist())]
+        write({k: keys.column(k) for k in keys.column_names} | columns(rows), head_table("labels"))
     print(f"{time.strftime('%H:%M:%S')} {side}/labels written" + (f", {len(missing)} without a label" if missing else ""))
 
 

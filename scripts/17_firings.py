@@ -85,6 +85,7 @@ from neuron_lens.catalog import (
     neuron_table,
     put,
     write,
+    write_heads,
 )
 from neuron_lens.firings import Accumulator, firing_plan
 from neuron_lens.neurons import softcap
@@ -236,7 +237,7 @@ def head_sources(args, docs: list[torch.Tensor]) -> None:
     worst = {c: max(s[c]["err"] for s in summary.values()) for c in ("v", "q", "k")}
     print("largest error per channel:", worst, flush=True)
     if args.docs is None:
-        write(src.table(), head_table("sources"))
+        write_heads(src.table(), head_table("sources"))
         (SUMMARY / f"head_sources_{STEM}.json").write_text(json.dumps(summary))
     else:
         src.table()

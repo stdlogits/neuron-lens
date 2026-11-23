@@ -524,6 +524,20 @@ stages are not ported yet.
   128-token documents barely use. Its lenses are fitted on 512-token documents (`02_fit.py
   --seq-len 512 --full-length`: the first DCLM documents that long, 63% of rows). The cost per
   document grows linearly with length: about 19 s per 512-token document and lens on an H100.
+- **DeltaNet heads in the catalog.** A head is a value head: its block of the output projection, its own value rows
+  and its key head's query and key (Qwen3.5 has two value heads per key head, Olmo Hybrid one). DeltaNet layers have
+  twice the heads of Qwen3.5's attention layers, so the stages keep heads in a grid of `arch.max_heads` a layer and
+  the head tables list the ones that exist. Its pattern is `A` itself (`layers.delta_pattern`, exact: the tests
+  rebuild the mixer's output from it), read as an attention pattern through `|A|` with each row at unit sum, the
+  share of a position's output mixed from each earlier position's value: `A` can be negative (the delta rule
+  subtracts what an earlier key wrote) and its rows don't sum to 1. Its OV map takes the value rows times the
+  convolution summed over its four taps (the token held over the window), SiLU's ratio and the output's gate (the
+  output norm's scale and `silu(z)`) averaged over positions; its QK map `q̂ · k̂` the query and key rows the same
+  way, through their L2 norms' true derivative averaged over positions, without RoPE. Both leave out what else sets
+  `A`: the decay, the write strength `β` and the delta rule's corrections. The decay and `β` get reads of their own
+  (`beta_S`, `decay_S`: the input tokens that make a head write harder, or forget faster). The head sources split
+  the value channel exactly, holding `A`, SiLU's ratio and the gate; the query, key, `β` and decay channels, which
+  set `A` together, are left for later.
 - **Memory.** The decoder stack is 68 GB in bf16, which leaves about 15 GiB of an 80 GB H100. A
   512-token document's maps take about 7 GiB and a layer step 1.5-2 GiB at a dim batch of 32, so
   both lenses fit with their sums on the GPU. A larger dim batch gains nothing: a step at 64 takes

@@ -109,3 +109,24 @@ def test_estimates_match_brute_force(moe, chunk, monkeypatch):
                     lambda x, layer=layer, kind=kind: run_with(model, ids, None, x)[0 if kind == "mid" else 1]
                     [layer][0, valid].mean(0), emb)
                 assert torch.allclose(s.mean(kind)[layer], K[:, valid].sum(1), atol=1e-4), (kind, layer)
+
+
+
+def delta_rebuilds(la, x):
+    """``la``'s output rebuilt from ``layers.delta_pattern``: ``W_out (gate ⊙ A v)``."""
+    p = layers.delta_pattern(la, x)
+    v = torch.nn.functional.silu(p.c)[..., 2 * la.key_dim:].unflatten(-1, (la.num_v_heads, la.head_v_dim))
+    o = (p.A @ v.transpose(1, 2)).transpose(1, 2)
+    return (p.gate * o).flatten(2) @ layers.delta_parts(la).out.T
+
+
+def test_delta_pattern():
+    """The catalog's DeltaNet pattern is exact (``o = A v``), each document's rows untouched by padding after it."""
+    model = tiny_model(moe=False)
+    x = torch.randn(2, SKIP_FIRST + 9, D)
+    for block in model.layers:
+        if hasattr(block, "linear_attn"):
+            la = block.linear_attn
+            full = delta_rebuilds(la, x)
+            assert torch.allclose(full, la(hidden_states=x), atol=1e-5)
+            assert torch.allclose(delta_rebuilds(la, x[:, :10]), full[:, :10], atol=1e-6)

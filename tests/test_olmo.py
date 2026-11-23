@@ -137,3 +137,18 @@ def test_estimates_match_brute_force(kind, chunk, monkeypatch):
                     [layer][0, valid].mean(0), emb)
                 assert torch.allclose(s.mean(kind_)[layer], K[:, valid].sum(1), atol=1e-4, rtol=RTOL), (kind_, layer)
 
+
+
+def test_delta_pattern():
+    """The catalog's DeltaNet pattern (``layers.delta_pattern``) is exact for Olmo Hybrid's separate projections, values
+    wider than keys and β up to 2: ``W_out (gate ⊙ A v)`` is the mixer's output."""
+    model = tiny_model("hybrid")
+    x = torch.randn(2, SKIP_FIRST + 9, D)
+    for block in model.layers:
+        if hasattr(block, "linear_attn"):
+            la = block.linear_attn
+            p = layers.delta_pattern(la, x)
+            v = torch.nn.functional.silu(p.c)[..., 2 * la.key_dim:].unflatten(-1, (la.num_v_heads, la.head_v_dim))
+            o = (p.A @ v.transpose(1, 2)).transpose(1, 2)
+            out = (p.gate * o).flatten(2) @ layers.delta_parts(la).out.T
+            assert torch.allclose(out, la(hidden_states=x), atol=1e-5)

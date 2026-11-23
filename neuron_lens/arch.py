@@ -40,13 +40,25 @@ QWEN = "Qwen/Qwen3-8B"
 
 @dataclass
 class Layer:
-    q_heads: int
-    kv_heads: int
-    head_dim: int
+    q_heads: int  # the layer's heads (a Gated DeltaNet's: its value heads)
+    kv_heads: int  # key heads, each read by q_heads // kv_heads heads (a DeltaNet's key heads)
+    head_dim: int  # a head's value size
     k_eq_v: bool  # the value is the raw key (no v_proj)
     kind: str  # the config's layer type ("sliding_attention", "full_attention", "linear_attention"), or "attention"
     prefix: str  # the layer's weight name prefix in the checkpoint
     index: int = 0
+    deltanet: bool = False  # a Gated DeltaNet: each value head has its own value rows, its key head's query and key
+    key_dim: int = 0  # the queries' and keys' size, where it differs from head_dim (a DeltaNet's)
+    gated: bool = False  # an elementwise gate multiplies each head's output (Qwen3.5's attention; a DeltaNet's silu(z))
+
+    @property
+    def kd(self) -> int:
+        return self.key_dim or self.head_dim
+
+    @property
+    def v_heads(self) -> int:
+        """The value heads: one per head in a DeltaNet, one per key head in attention."""
+        return self.q_heads if self.deltanet else self.kv_heads
 
 
 def stem(model_id: str) -> str:
@@ -111,7 +123,8 @@ def layout(model_id: str) -> list[Layer]:
         mix = anatomy.module(layer, p.mixer)
         kind, prefix = types[i] if types else "attention", f"{pre}layers.{i}."
         if p.deltanet:
-            out.append(Layer(mix.num_v_heads, mix.num_v_heads, mix.head_v_dim, False, kind, prefix, i))
+            out.append(Layer(mix.num_v_heads, mix.num_k_heads, mix.head_v_dim, False, kind, prefix, i, deltanet=True,
+                             key_dim=mix.head_k_dim, gated=True))
             continue
         hd = getattr(mix, "head_dim", None) or mix.head_size
         fused = getattr(mix, "query_key_value", None)
@@ -120,7 +133,8 @@ def layout(model_id: str) -> list[Layer]:
             out.append(Layer(h, h, hd, False, kind, prefix, i))
             continue
         hq = mix.q_proj.out_features // (hd * (2 if is_gated(mix) else 1))  # a gated q_proj gives the gate's rows too
-        out.append(Layer(hq, mix.k_proj.out_features // hd, hd, getattr(mix, "v_proj", None) is None, kind, prefix, i))
+        out.append(Layer(hq, mix.k_proj.out_features // hd, hd, getattr(mix, "v_proj", None) is None, kind, prefix, i,
+                         gated=is_gated(mix)))
     return out
 
 
@@ -188,12 +202,40 @@ def _qkv(model_id: str, lay: Layer, dev) -> dict:
             "Wv": W[:, 2].reshape(-1, W.shape[-1]), "bq": w["b"].view(lay.q_heads, 3, lay.head_dim)[:, 0].reshape(-1)}
 
 
+def _delta_rows(model_id: str, lay: Layer, dev) -> dict:
+    """A Gated DeltaNet's input rows in fp32, from the checkpoint: ``q``, ``k`` ``[Hk·dk, d]`` and ``v`` ``[Hv·dv, d]``,
+    each times its channel's convolution summed over the taps (a token held over the convolution's window, the weight
+    reads' stand-in for the four positions a channel mixes), and ``b`` (β's rows) and ``a`` (the decay's), ``[Hv, d]``."""
+    p = anatomy.layer_parts(model_id, lay.index)
+    la = anatomy.module(anatomy.skeleton(model_id)[1].layers[lay.index], p.mixer)
+    m, fused = p.mixer, hasattr(la, "in_proj_qkv")  # Qwen3.5's fused projections, or Olmo Hybrid's separate ones
+    paths = {"conv": (f"{m}.conv1d", "weight"), "b": (f"{m}.{'in_proj_b' if fused else 'b_proj'}", "weight"),
+             "a": (f"{m}.{'in_proj_a' if fused else 'a_proj'}", "weight")}
+    paths |= {"qkv": (f"{m}.in_proj_qkv", "weight")} if fused else {s: (f"{m}.{s}_proj", "weight") for s in "qkv"}
+    w = _weights(model_id, lay, paths, dev)
+    qkv = w["qkv"] if fused else torch.cat([w["q"], w["k"], w["v"]])
+    q, k, v = (qkv * w["conv"].flatten(1).sum(1)[:, None]).split([la.key_dim, la.key_dim, la.value_dim])
+    return {"q": q, "k": k, "v": v, "b": w["b"], "a": w["a"]}
+
+
+def delta_gates(model_id: str, lay: Layer, dev="cpu") -> dict:
+    """A Gated DeltaNet layer's per-head scalar reads of its input, times ``γ_in``, in fp32: ``beta`` ``[Hv, d]``, whose
+    rise strengthens the head's write (β = σ(b·x̂)), and ``decay`` ``[Hv, d]``, whose rise makes its memory forget
+    faster (the log decay ``−e^{A} softplus(a·x̂ + dt)`` falls)."""
+    w = _delta_rows(model_id, lay, dev)
+    g1 = norm_scale(model_id, lay, anatomy.layer_parts(model_id, lay.index).n1, dev)
+    return {"beta": _scaled_rows(w["b"], g1), "decay": _scaled_rows(w["a"], g1)}
+
+
 def ov(model_id: str, lay: Layer, dev="cpu") -> tuple[torch.Tensor, torch.Tensor]:
-    """``(W_V diag(γ_in) [kv·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32 (the first ``centre``d): ``γ_in`` the mixer's
-    input norm (none in OLMo 2 and 3), ``γ_post`` the norm on its output (Gemma 4, OLMo), whose scale the LN rule holds."""
+    """``(W_V diag(γ_in) [v_heads·hd, d], diag(γ_post) W_O [d, H·hd])`` in fp32 (the first ``centre``d): ``γ_in`` the
+    mixer's input norm (none in OLMo 2 and 3), ``γ_post`` the norm on its output (Gemma 4, OLMo), whose scale the LN rule
+    holds. A DeltaNet's values are per head, after the convolution's summed taps (``_delta_rows``)."""
     p = anatomy.layer_parts(model_id, lay.index)
     g1 = norm_scale(model_id, lay, p.n1, dev)
-    if p.mixer == "attention":  # GPT-NeoX's fused projection
+    if lay.deltanet:
+        Wv = _delta_rows(model_id, lay, dev)["v"]
+    elif p.mixer == "attention":  # GPT-NeoX's fused projection
         Wv = _qkv(model_id, lay, dev)["Wv"]
     else:
         Wv = _weights(model_id, lay, {"v": (f"{p.mixer}.{'k_proj' if lay.k_eq_v else 'v_proj'}", "weight")}, dev)["v"]
@@ -208,9 +250,18 @@ def qk(model_id: str, lay: Layer, dev="cpu") -> dict:
     """``Wq``, ``Wk`` ``[H·hd, d]`` (times ``γ_in``, ``centre``d; a gated ``q_proj``'s query rows alone), the q/k norm
     scales per head, ``q_norm`` ``[Hq, hd]`` and ``k_norm`` ``[Hkv, hd]`` (``None`` without q/k norms), and the width
     each norm takes its rms over, ``q_width`` and ``k_width`` (the head size, or OLMo's whole projection), in fp32;
-    GPT-NeoX's query bias ``bq`` too (the key bias adds the same score to every key of a query, and cancels)."""
+    GPT-NeoX's query bias ``bq`` too (the key bias adds the same score to every key of a query, and cancels). A
+    DeltaNet's queries and keys are its key heads', after the convolution's summed taps (``_delta_rows``), the queries
+    repeated to the value heads that read them, each through an L2 norm (width 1: its derivative is ``r I − r³ x xᵀ``),
+    the queries' scale ``dk^-½``."""
     p = anatomy.layer_parts(model_id, lay.index)
     g1 = norm_scale(model_id, lay, p.n1, dev)
+    if lay.deltanet:
+        w, kd = _delta_rows(model_id, lay, dev), lay.kd
+        Wq = w["q"].view(lay.kv_heads, kd, -1).repeat_interleave(lay.q_heads // lay.kv_heads, 0).flatten(0, 1)
+        return {"Wq": _scaled_rows(Wq, g1), "Wk": _scaled_rows(w["k"], g1), "bq": None,
+                "q_norm": torch.full((lay.q_heads, kd), kd ** -0.5, device=dev), "k_norm": torch.ones(lay.kv_heads, kd, device=dev),
+                "q_width": 1, "k_width": 1}
     if p.mixer == "attention":
         w = _qkv(model_id, lay, dev)
         return {"Wq": centre(_scaled_rows(w["Wq"], g1), model_id), "Wk": centre(_scaled_rows(w["Wk"], g1), model_id),
@@ -233,9 +284,9 @@ def kv_of(lay: Layer, h: int) -> int:
 
 
 def head_slices(lay: Layer, h: int) -> tuple[slice, slice]:
-    """Query head ``h``'s rows of ``W_V`` (its KV head) and columns of ``W_O``."""
-    kv, hd = kv_of(lay, h), lay.head_dim
-    return slice(kv * hd, (kv + 1) * hd), slice(h * hd, (h + 1) * hd)
+    """Head ``h``'s rows of ``W_V`` (its key-value head's, or in a DeltaNet its own) and columns of ``W_O``."""
+    v, hd = h if lay.deltanet else kv_of(lay, h), lay.head_dim
+    return slice(v * hd, (v + 1) * hd), slice(h * hd, (h + 1) * hd)
 
 
 def lens_means(model_id: str, r_fit: str | None = None, s_fit: str | None = None, sub: str = "",
@@ -411,10 +462,22 @@ def groups(model_id: str) -> list[int]:
 
 
 def padded(model_id: str) -> tuple[int, int]:
-    """``(key-value heads, head size)``, the largest over layers: per-layer statistics are kept in
-    buffers this size, each layer in its leading block (Gemma 4: 8 heads of 256, or 1 of 512)."""
+    """``(key-value heads, head size)``, the largest over layers (a head's value, query or key size): per-layer
+    statistics are kept in buffers this size, each layer in its leading block (Gemma 4: 8 heads of 256, or 1 of 512)."""
     lay = layout(model_id)
-    return max(x.kv_heads for x in lay), max(x.head_dim for x in lay)
+    return max(x.kv_heads for x in lay), max(max(x.head_dim, x.kd) for x in lay)
+
+
+def max_heads(model_id: str) -> int:
+    """The most heads a layer has (Qwen3.5's DeltaNet layers have twice its attention layers'): the stages keep heads in
+    ``[layers, max_heads]`` grids, each layer's in its leading entries, and head ``h`` of layer ``l`` is
+    ``l · max_heads + h`` among them; the tables list the heads that exist (``head_grid``)."""
+    return max(x.q_heads for x in layout(model_id))
+
+
+def head_grid(model_id: str) -> torch.Tensor:
+    """``[layers, max_heads]``: True where the head exists."""
+    return torch.arange(max_heads(model_id))[None] < torch.tensor([x.q_heads for x in layout(model_id)])[:, None]
 
 
 def attn_norm(layer):
@@ -526,6 +589,9 @@ def inv_freq(stack, model_id: str):
 
 
 def layer_inv_freq(freqs, model_id: str, layer: int) -> torch.Tensor | None:
+    """A layer's RoPE angles, or ``None`` where it rotates nothing (a DeltaNet; Olmo Hybrid's attention)."""
+    if freqs is None or layout(model_id)[layer].deltanet:
+        return None
     return freqs[layout(model_id)[layer].kind] if isinstance(freqs, dict) else freqs
 
 

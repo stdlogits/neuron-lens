@@ -60,6 +60,7 @@ from neuron_lens.catalog import (
     acts_path,
     column,
     firing_tokens,
+    gridded,
     head_table,
     kept,
     kept_index,
@@ -67,6 +68,7 @@ from neuron_lens.catalog import (
     neuron_table,
 )
 from neuron_lens.heads import norm_derivative
+from neuron_lens.heads import weights as head_weights
 from neuron_lens.neurons import orthogonal_write, poles
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import rms_norm_columns, transport
@@ -208,7 +210,8 @@ def neurons(saved: dict, dev) -> tuple[list[str], dict]:
 
 def heads(saved: dict, dev) -> tuple[list[str], dict]:
     geo = arch.layout(MODEL)
-    L, H = len(geo), geo[0].q_heads
+    L, H = len(geo), arch.max_heads(MODEL)  # heads on the grid, each layer's first (Qwen3.5's DeltaNet layers have more)
+    grid = arch.head_grid(MODEL)
     tot = saved["state"]["total"]  # (the scoring loop below uses `st` for its own statistics)
     tz = torch.load(TOKEN_Z, weights_only=False, mmap=True)
     keep = tz["keep"]
@@ -220,8 +223,8 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     att, nxt = firing_tokens(flat, start, doc, src).long(), firing_tokens(flat, start, doc, pos, 1).long()
     k_att, k_nxt = (torch.where(t >= 0, kidx[t.clamp_min(0)], -1) for t in (att, nxt))
     acts = pq.read_table(head_table("acts"), columns=[*PATTERN, "cur_mode", "src_mode"]).to_pydict()
-    pattern = torch.stack([torch.tensor(acts[k]).view(L, H) > v for k, v in PATTERN.items()]).any(0)
-    cur_mode, src_mode = (torch.tensor(acts[k]).view(L, H) for k in ("cur_mode", "src_mode"))
+    pattern = torch.stack([gridded(acts[k]) > v for k, v in PATTERN.items()]).any(0)
+    cur_mode, src_mode = (gridded(acts[k]) for k in ("cur_mode", "src_mode"))
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     E = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
@@ -229,54 +232,56 @@ def heads(saved: dict, dev) -> tuple[list[str], dict]:
     Wu = arch.centre(head[nm["unembed"]][keep].float() * arch.final_scale(MODEL), MODEL).to(dev)
     del head
     K_out, J_w = arch.lens(MODEL, "S_out", S_FIT), arch.head_write_lens(MODEL, "R", R_FIT)  # J_w: where the heads write
-    eye = torch.eye(H, dtype=torch.bool)
     stat, pval = {t: torch.full((L, H), torch.nan) for t in HEAD_TESTS}, {t: torch.ones(L, H) for t in HEAD_TESTS}
 
     for l in range(L):
-        ok_att = k_att[l] >= 0  # [H, K]
-        ka = k_att[l].clamp_min(0)
+        Hl = geo[l].q_heads  # this layer's heads, the leading block of the grid's
+        eye = torch.eye(Hl, dtype=torch.bool)
+        ok_att = k_att[l, :Hl] >= 0  # [H, K]
+        ka = k_att[l, :Hl].clamp_min(0)
         scores = {}  # test -> [H, H', K]: firing j of head h scored under head h'
         for test, name in (("ov_copy", "ov_R"), ("ov_S", "ov_S"), ("qk_S", "qk_S")):
-            zl = tz[name][l].float()  # [H', V]
-            scores[test] = (zl[:, ka.flatten()].view(H, H, -1).transpose(0, 1), ok_att)
+            zl = tz[name][l, :Hl].float()  # [H', V]
+            scores[test] = (zl[:, ka.flatten()].view(Hl, Hl, -1).transpose(0, 1), ok_att)
         # ov_R: z of the next token in the attended token's column, M[u, v] = A_u · B_v.
-        kvh, hd = geo[l].kv_heads, geo[l].head_dim
-        grp = H // kvh
-        Wv, Wo = arch.ov(MODEL, geo[l], dev)  # W_V (W_K where keys are values) × γ_in; W_O, × γ_post for Gemma
-        A = (Wu @ (J_w[l].to(dev) @ Wo)).view(V, H, hd)
+        nv, hd = geo[l].v_heads, geo[l].head_dim
+        grp = Hl // nv
+        w = head_weights(MODEL, geo[l], tot, dev)  # W_V (W_K where keys are values) × γ_in; W_O, × γ_post, as 08_reads.py
+        Wv, Wo = w["Wv"], w["Wo"]
+        A = (Wu @ (J_w[l].to(dev) @ Wo)).view(V, Hl, hd)
         abar = A.mean(0)
         cov = torch.einsum("vhi,vhj->hij", A - abar, A - abar) / V
         X = (E[ka.flatten().to(dev)] @ K_out[l - 1].to(dev).T) if l else E[ka.flatten().to(dev)]  # [H·K, d]
-        B = (X @ Wv.T).view(H, -1, kvh, hd)  # [H, K, kvh, hd]: each firing through every kv head's W_V
-        if "v_r" in tot and float(tot["v_r"][l, :kvh].abs().sum()) > 0:  # Gemma's v_norm, as 08_reads.py
-            Av = norm_derivative(torch.ones(hd, device=dev), tot["v_r"][l, :kvh].float().to(dev),
-                                 tot["v_m"][l, :kvh, :hd, :hd].float().to(dev), float(tot["n_k"]))
+        B = (X @ Wv.T).view(Hl, -1, nv, hd)  # [H, K, nv, hd]: each firing through every value head's W_V
+        if "v_r" in tot and float(tot["v_r"][l, :nv].abs().sum()) > 0:  # Gemma's v_norm, as 08_reads.py
+            Av = norm_derivative(torch.ones(hd, device=dev), tot["v_r"][l, :nv].float().to(dev),
+                                 tot["v_m"][l, :nv, :hd, :hd].float().to(dev), float(tot["n_k"]))
             B = torch.einsum("gij,hkgj->hkgi", Av, B)
-        Bh = B[:, :, torch.arange(H) // grp]  # [H, K, H', hd]
-        An = A[k_nxt[l].clamp_min(0).flatten().to(dev)].view(H, -1, H, hd)  # [H, K, H', hd]
+        Bh = B[:, :, torch.arange(Hl) // grp]  # [H, K, H', hd]
+        An = A[k_nxt[l, :Hl].clamp_min(0).flatten().to(dev)].view(Hl, -1, Hl, hd)  # [H, K, H', hd]
         num = ((An - abar) * Bh).sum(-1)
         var = torch.einsum("hkgi,gij,hkgj->hkg", Bh, cov, Bh)
-        scores["ov_R"] = ((num / var.clamp_min(1e-30).sqrt()).permute(0, 2, 1).cpu(), ok_att & (k_nxt[l] >= 0))
+        scores["ov_R"] = ((num / var.clamp_min(1e-30).sqrt()).permute(0, 2, 1).cpu(), ok_att & (k_nxt[l, :Hl] >= 0))
         del A, cov, X, B, Bh, An
         for test, (sc, ok) in scores.items():  # sc [H, H', K]
             st = (sc * ok[:, None, :]).sum(-1) / ok.sum(-1, keepdim=True).clamp_min(1)
             m = st.diagonal().clone()
             m[ok.sum(-1) < MIN_FIRINGS] = torch.nan
-            stat[test][l] = m
-            pval[test][l] = null_p(m, st[~eye])
+            stat[test][l, :Hl] = m
+            pval[test][l, :Hl] = null_p(m, st[~eye])
         print(f"{time.strftime('%H:%M:%S')} heads L{l}", flush=True)
-    q = {t: bh(pval[t].flatten()).view(L, H) for t in HEAD_TESTS}
+    q = {t: gridded(bh(pval[t][grid]), fill=1.0) for t in HEAD_TESTS}  # BH over the heads that exist
     flags = {t: q[t] <= FDR for t in HEAD_TESTS} | {"cur_det": cur_mode >= PAST, "src_det": src_mode >= PAST,
                                                     "mode": (cur_mode >= PAST) | (src_mode >= PAST), "pattern": pattern}
     flags |= {f"{t}_p05": pval[t] <= 0.05 for t in HEAD_TESTS}  # uncorrected; 5% by chance
-    lines = [(f"heads, {MODEL}: {L} × {H} heads; share of each band's heads passing each test at a {FDR:.0%} false discovery "
+    lines = [(f"heads, {MODEL}: {int(grid.sum())} heads in {L} layers; share of each band's heads passing each test at a {FDR:.0%} false discovery "
               "rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: "
               f"{', '.join(f'{k} > {v}' for k, v in PATTERN.items())}"), "", "band     " + "  ".join(f"{k:>9s}" for k in flags)]
     bands = {}
     for lo, hi in BANDS + ((0, L - 1),):
-        bands[f"L{lo}-{hi}"] = {k: v[lo:hi + 1].float().mean().item() for k, v in flags.items()}
+        bands[f"L{lo}-{hi}"] = {k: v[lo:hi + 1][grid[lo:hi + 1]].float().mean().item() for k, v in flags.items()}
         lines.append(f"L{lo}-{hi}".ljust(8) + " " + "  ".join(f"{x:9.2f}" for x in bands[f"L{lo}-{hi}"].values()))
-    layers = [{"layer": l, **{k: v[l].float().mean().item() for k, v in flags.items()}} for l in range(L)]
+    layers = [{"layer": l, **{k: v[l, grid[l]].float().mean().item() for k, v in flags.items()}} for l in range(L)]
     return lines, {"layers": layers, "bands": bands}, {"q": q, "p": pval}
 
 

@@ -106,9 +106,13 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   are padded with −1, NaN and an empty preview. Parallel sources get parallel names: R-lens and S-lens reads differ only by
   `_R` / `_S`, weight reads and firing reads share their `_z` meaning, modalities get a table each, and every model has the same
   columns and the same file names, so nothing is special-cased for the default model.
-- **Another model in the catalog** comes through `arch.py` and `neurons.py`: what a layer's heads and neurons write as the
+- **Another model in the catalog** comes through `anatomy.py`, `arch.py` and `neurons.py`: `anatomy.parts` reads a decoder
+  layer's norms, mixer and MLP by attribute path (nothing else reads a norm by name: `post_attention_layernorm` is the MLP's
+  input norm in Qwen3 and the attention output's norm in OLMo), and `arch` what a layer's heads and neurons write as the
   residual sees them, and what rescales that on the way (`attn_norm`, `mlp_norm`, `layer_scale`). The stages read those instead of
-  branching on the model. Analyses in `scripts/checks/` tied to one model's named units or findings section may stay that model's.
+  branching on the model. Heads sit in a grid of `arch.max_heads` a layer, each layer's first (Qwen3.5's DeltaNet layers have
+  twice its attention layers' heads); a head table lists the heads that exist (`catalog.write_heads`), and `catalog.gridded`
+  puts a column back on the grid. Analyses in `scripts/checks/` tied to one model's named units or findings section may stay that model's.
 - **One token mask.** Every token read covers `catalog.kept()`: tokens seen 5+ times in the
   activation corpora, without byte-fallback pieces.
 - **Description cards stay leak-free.** `10_labels.py check` and `checks/lens_blind.py` hold out a

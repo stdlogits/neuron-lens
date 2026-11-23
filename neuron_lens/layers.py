@@ -484,6 +484,40 @@ def _delta_primal(la, x, S):
     return out, m
 
 
+class DeltaPattern(NamedTuple):
+    """A Gated DeltaNet's mixing over documents, for the catalog (``delta_pattern``), fp32."""
+    A: torch.Tensor  # [B, Hv, T, T]: o_t = Σ_s A_ts v_s, exactly
+    c: torch.Tensor  # [B, T, C]: the convolution's output, before its SiLU
+    q0: torch.Tensor  # [B, T, Hk, dk]: queries and keys before their L2 norms
+    k0: torch.Tensor
+    gate: torch.Tensor  # [B, T, Hv, dv]: what multiplies o on its way to the output projection, the output norm's
+    # scale and rsqrt times silu(z)
+
+
+def delta_pattern(la, x: torch.Tensor) -> DeltaPattern:
+    """The DeltaNet mixer ``la``'s mixing matrix over documents ``x`` ``[B, T, d]`` (the mixer's input), unrolled as in the
+    module docstring: ``A = W L⁻¹ diag(β)``, each head's attention-like pattern, and the parts the catalog's statistics
+    read (``DeltaPattern``). Causal: padding after a document's end changes none of its rows."""
+    B, T = x.shape[:2]
+    hk, hv, dk, dv = la.num_k_heads, la.num_v_heads, la.head_k_dim, la.head_v_dim
+    w = delta_parts(la)
+    c = _conv(F.linear(x, w.qkv).float(), la.conv1d.weight.squeeze(1).float())  # [B, T, C]
+    q0, k0, v = F.silu(c).split([la.key_dim, la.key_dim, la.value_dim], -1)
+    q0, k0 = q0.view(B, T, hk, dk), k0.view(B, T, hk, dk)
+    beta = (w.beta * torch.sigmoid(F.linear(x, w.b).float())).transpose(1, 2)  # [B, Hv, T]
+    g = -la.A_log.float().exp() * F.softplus(F.linear(x, w.a).float() + la.dt_bias.float())
+    rep = hv // hk
+    qh = (_l2(q0)[0] * dk ** -0.5).repeat_interleave(rep, 2).transpose(1, 2)  # [B, Hv, T, dk]
+    kh = _l2(k0)[0].repeat_interleave(rep, 2).transpose(1, 2)
+    gam, strict = _decay_mask(g.transpose(1, 2).cumsum(-1), g.transpose(1, 2).cumsum(-1), 0)  # [B, Hv, T, T]
+    L = torch.eye(T, device=x.device) + beta[..., None] * ((kh @ kh.mT) * gam * strict)
+    A = ((qh @ kh.mT) * gam) @ torch.linalg.solve_triangular(L, torch.diag_embed(beta), upper=False, unitriangular=True)
+    o = (A @ v.view(B, T, hv, dv).transpose(1, 2)).transpose(1, 2)  # [B, T, Hv, dv]
+    r = torch.rsqrt(o.pow(2).mean(-1, keepdim=True) + w.norm.variance_epsilon)
+    z = F.linear(x, w.z).float().view(B, T, hv, dv)
+    return DeltaPattern(A, c, q0, k0, w.norm.weight.float() * r * F.silu(z))
+
+
 def _decays(gc):
     """Per chunk, from the cumulative log decay ``[Hv, Tp]``: ``Γ`` within it (``[Hv, n, C, C]``,
     ``s ≤ t``), ``e^{gc_t − gc at the previous chunk's end}`` and ``e^{gc at its end − gc_s}``

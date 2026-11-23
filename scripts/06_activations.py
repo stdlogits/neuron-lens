@@ -30,6 +30,19 @@ template's opening token); and ``REP_SEQS`` sequences of ``REP_LEN`` random kept
 for the heads' ``induction`` (attention from the second copy to the token after the first
 occurrence) and ``duplicate`` (to the occurrence itself) scores.
 
+**Gated DeltaNet heads** (Qwen3.5's ``linear_attention`` layers, Olmo Hybrid's): a head is a value head (its block of
+the output projection), and a layer's heads may outnumber its attention layers' (Qwen3.5-0.8B: 16 against 8), so head
+statistics sit in a grid of ``arch.max_heads`` a layer, each layer's in its leading entries, and the tables list the
+heads that exist. A DeltaNet head mixes its values through ``A = W L⁻¹ diag(β)`` (``o = A v`` exactly,
+``layers.delta_pattern``, computed from the mixer's input). The attention statistics read ``|A|`` with each row at
+unit sum, a position's share of what its output mixes from each earlier position's value: ``sink``, ``prev``,
+``self``, the attended position, the offsets, ``recv``, ``induction`` and ``duplicate`` mean the same as for softmax
+heads, on that pattern (the value's four-tap convolution, which reaches three positions further back, stays out of
+it). For ``08_reads.py``: the sums of the L2 norms' true derivative on the queries (per value head, as each reads its
+key head's query) and keys, the mean query after its norm and scale, SiLU's ratio ``σ(c)`` per convolution channel,
+and per channel the output's gate (the output norm's scale and rsqrt times ``silu(z)``); and gated attention's
+``σ(gate)`` per channel (Qwen3.5's full layers), the gates the OV reads average.
+
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``): GELU-tanh activations; per-layer head
 sizes and key heads (the QK statistics padded to the largest, 8 key heads of 512); each head's
 output as it reaches the residual (the post-attention norm's weight and its scale per position);
@@ -58,7 +71,7 @@ import numpy as np
 import pyarrow as pa
 import torch
 
-from neuron_lens import anatomy, arch
+from neuron_lens import anatomy, arch, layers
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -77,6 +90,7 @@ from neuron_lens.catalog import (
     put,
     tokenizer,
     write,
+    write_heads,
 )
 from neuron_lens.corpus import ACT_SLICES, act_docs
 from neuron_lens.paths import LOGS, ROOT
@@ -104,9 +118,9 @@ def bf16_bins() -> torch.Tensor:
     return ((v < 0).int() * NB + torch.bucketize(v.abs(), EDGES)).int()
 
 
-def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int) -> dict:
+def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int, C: int) -> dict:
     """Running sums: ``name: (shape, integer, per slice)``. ``dn``: the residual's width where the scores read the
-    input norm's own derivative (no q/k norms, GPT-NeoX), else 0."""
+    input norm's own derivative (no q/k norms, GPT-NeoX), else 0; ``C``: a DeltaNet's convolution channels, else 0."""
     return {"n": ((), True, True), "sum": ((L, f), False, True), "sumsq": ((L, f), False, True),
             "count": ((L, 2, NB, f), True, True),
             "h_n": ((), True, True), "h_sum": ((L, H), False, True), "h_sumsq": ((L, H), False, True),
@@ -117,19 +131,22 @@ def buffers(L: int, f: int, H: int, kvh: int, hd: int, V: int, dn: int) -> dict:
             "k_m": ((L, kvh, hd, hd), False, False), "offset": ((L, H, SEQ), False, False),
             "v_r": ((L, kvh), False, False), "v_m": ((L, kvh, hd, hd), False, False),  # Gemma 4's v_norm (else 0)
             "in_r": ((L,), False, False), "in_m": ((L, dn, dn), False, False),  # the input norm, without q/k norms
+            "og": ((L, H, hd), False, False),  # an output gate's factor per channel (gated attention, DeltaNet), else 0
+            "sig": ((L, C), False, False),  # a DeltaNet's SiLU factor per convolution channel
             "recv": ((L, H, V), False, False), "pairs": ((V,), False, False), "occ": ((V,), False, False)}
 
 
 class Collector:
     def __init__(self, model, n_slices: int, device):
         cfg = model.config  # the decoder stack's (text) config
-        L, f, H = cfg.num_hidden_layers, cfg.intermediate_size, cfg.num_attention_heads
+        L, f, H = cfg.num_hidden_layers, cfg.intermediate_size, arch.max_heads(MODEL)  # heads: a grid, each layer's first
         kvh, hd = arch.padded(MODEL)  # per-layer statistics sit in the leading block of these
         d, V = cfg.hidden_size, cfg.vocab_size
         self.geo = arch.layout(MODEL)
         self.L, self.f, self.H, self.hd, self.d, self.dev = L, f, H, hd, d, device
         self.dn = d if arch.is_neox(MODEL) else 0  # no q/k norms: the scores read the input norm's true derivative
-        self.spec = buffers(L, f, H, kvh, hd, V, self.dn)
+        C = max((m.linear_attn.conv_dim for m in model.layers if hasattr(m, "linear_attn")), default=0)
+        self.spec = buffers(L, f, H, kvh, hd, V, self.dn, C)
         self.total = {k: torch.zeros(((n_slices,) if per else ()) + shape, dtype=torch.int64 if integer else torch.float64)
                       for k, (shape, integer, per) in self.spec.items()}
         self.seg = {k: torch.zeros(shape, dtype=torch.int32 if integer else torch.float32, device=device)
@@ -148,7 +165,7 @@ class Collector:
         self.extra = {"first_val": torch.full((L, P, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((L, P, FIRST_K, f), dtype=torch.int32),
                       "first_chat": torch.zeros(L, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
         self.layers = model.layers
-        self.wo = [arch.head_write(layer).view(d, H, g.head_dim) for layer, g in zip(model.layers, self.geo)]
+        self.wo = [arch.head_write(layer).view(d, g.q_heads, g.head_dim) for layer, g in zip(model.layers, self.geo)]
         self.gram = [torch.einsum("dhi,dhj->hij", w, w) for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
         self.first_pos = 0  # the token's position in the first-position and repeated passes (1 after <bos>)
         self.edges, self.bins = EDGES.to(device), bf16_bins().to(device)
@@ -244,8 +261,9 @@ class Collector:
         if self.mode != "main":
             return
         B, T = qkv.shape[:2]
-        q = qkv.view(B, T, self.H, 3, -1)[..., 0, :].float()
-        self.seg["q"][l, :, :q.shape[-1]] += (q * self.ctx["qv"][..., None, None]).sum((0, 1))
+        H = self.geo[l].q_heads
+        q = qkv.view(B, T, H, 3, -1)[..., 0, :].float()
+        self.seg["q"][l, :H, :q.shape[-1]] += (q * self.ctx["qv"][..., None, None]).sum((0, 1))
 
     def qk_norm(self, l: int, side: str, x: torch.Tensor, out: torch.Tensor, eps: float) -> None:
         """A q/k norm's sums per head: over each head (``[B, T, heads, hd]``), or over the whole projection (OLMo's,
@@ -267,20 +285,61 @@ class Collector:
         self.seg[f"{side}_r"][l, :nh] += (r * w).sum((0, 1))
         self.seg[f"{side}_m"][l, :nh, :hd, :hd] += torch.einsum("bth,bthi,bthj->hij", r.pow(3) * w, x, x)
         if side == "q":
-            self.seg["q"][l, :, :hd] += (out.float() * valid[..., None, None]).sum((0, 1))
+            self.seg["q"][l, :nh, :hd] += (out.float() * valid[..., None, None]).sum((0, 1))
 
-    def attention(self, l: int, a: torch.Tensor, attn_out: torch.Tensor) -> None:  # a: [B, H, T, T]
+    def out_gate(self, l: int, q: torch.Tensor) -> None:
+        """Gated attention's output gate (Qwen3.5: ``q_proj`` gives per head the query, then the gate): ``σ(gate)`` per
+        channel, summed over the queries, the factor the OV reads take on a head's output."""
+        if self.mode != "main":
+            return
+        g = self.geo[l]
+        gate = q.view(*q.shape[:2], g.q_heads, 2 * g.head_dim)[..., g.head_dim:].float()
+        self.seg["og"][l, :g.q_heads, :g.head_dim] += (torch.sigmoid(gate) * self.ctx["qv"][..., None, None]).sum((0, 1))
+
+    def delta(self, l: int, la, x: torch.Tensor) -> None:
+        """A Gated DeltaNet layer (its input ``x`` ``[B, T, d]``): its mixing matrix ``A`` (``o = A v``, ``layers.delta_pattern``)
+        as the attention statistics' pattern, ``|A|`` with each row at unit sum (a position's share of what its output
+        mixes, from each earlier position's value); the sums of its L2 norms' true derivative as ``qk_norm``'s (an L2 norm
+        spans width 1: ``r I − r³ x xᵀ``, ``r = 1/‖x‖``), the queries' per value head, the keys' per key head; the
+        SiLU's factor ``σ(c)`` per convolution channel (the identity rule's, at the queries for the query channels, at
+        the keys for the rest); and the output's gate, the output norm's scale and rsqrt times ``silu(z)``, per channel."""
+        if self.mode not in ("main", "rep"):
+            return
+        p = layers.delta_pattern(la, x)
+        if self.mode == "main":
+            g, qv, kv, inv = self.geo[l], self.ctx["qv"], self.ctx["kv"], self.ctx["inv_rho"]
+            hv, hk, dk = g.q_heads, g.kv_heads, g.kd
+            for side, x0, valid in (("q", p.q0, qv), ("k", p.k0, kv)):
+                r = torch.rsqrt(x0.pow(2).sum(-1) + 1e-6)  # [B, T, Hk]: layers._l2's
+                w = (valid * inv)[..., None]
+                rs, ms = (r * w).sum((0, 1)), torch.einsum("bth,bthi,bthj->hij", r.pow(3) * w, x0, x0)
+                if side == "q":  # per value head, as each reads its key head's query
+                    rs, ms = rs.repeat_interleave(hv // hk), ms.repeat_interleave(hv // hk, 0)
+                    mean = (x0 * (r * dk ** -0.5 * valid[..., None])[..., None]).sum((0, 1))
+                    self.seg["q"][l, :hv, :dk] += mean.repeat_interleave(hv // hk, 0)
+                nh = len(rs)
+                self.seg[f"{side}_r"][l, :nh] += rs
+                self.seg[f"{side}_m"][l, :nh, :dk, :dk] += ms
+            s, kd = torch.sigmoid(p.c), la.key_dim
+            self.seg["sig"][l, :kd] += (s[..., :kd] * qv[..., None]).sum((0, 1))
+            self.seg["sig"][l, kd:s.shape[-1]] += (s[..., kd:] * kv[..., None]).sum((0, 1))
+            self.seg["og"][l, :hv, :g.head_dim] += (p.gate * qv[..., None, None]).sum((0, 1))
+        a = p.A.abs()
+        self.attention(l, a / a.sum(-1, keepdim=True).clamp_min(1e-30), None)
+
+    def attention(self, l: int, a: torch.Tensor, attn_out: torch.Tensor | None) -> None:  # a: [B, H, T, T]
+        H = self.geo[l].q_heads  # this layer's heads, the leading block of the grid's
         if self.mode == "rep":
             o = self.first_pos  # <bos> first, for Gemma
             t2 = torch.arange(o + REP_LEN, o + 2 * REP_LEN - 1, device=a.device)  # the second copy, with a successor
-            self.extra["induction"][l] += a[:, :, t2, t2 - REP_LEN + 1].float().mean(-1).sum(0).cpu()
-            self.extra["duplicate"][l] += a[:, :, t2, t2 - REP_LEN].float().mean(-1).sum(0).cpu()
+            self.extra["induction"][l, :H] += a[:, :, t2, t2 - REP_LEN + 1].float().mean(-1).sum(0).cpu()
+            self.extra["duplicate"][l, :H] += a[:, :, t2, t2 - REP_LEN].float().mean(-1).sum(0).cpu()
             return
         if self.mode != "main":
             return
         z = self.stash.pop(l)  # [B, T, H·hd]
         B, T = z.shape[:2]
-        H, hd = self.H, self.geo[l].head_dim
+        hd = self.geo[l].head_dim
         hm = self.ctx["h_mask"]
         zh = z.view(B, T, H, hd).float()
         scale = arch.attn_scale(self.layers[l], attn_out)  # Gemma 4: the post-attention norm's scale
@@ -288,33 +347,33 @@ class Collector:
             zh = zh * scale[..., None, None]
         norm = torch.einsum("bthi,hij,bthj->bth", zh, self.gram[l].to(zh), zh).clamp_min(0).sqrt()
         nv = norm[hm]  # [P, H]
-        self.seg["h_sum"][l] += nv.sum(0)
-        self.seg["h_sumsq"][l] += nv.pow(2).sum(0)
-        self.count(self.seg["h_count"][l], nv)
+        self.seg["h_sum"][l, :H] += nv.sum(0)
+        self.seg["h_sumsq"][l, :H] += nv.pow(2).sum(0)
+        self.count(self.seg["h_count"][l], torch.nn.functional.pad(nv, (0, self.H - H)))  # (the grid's rest: zeros)
         v, t = norm.masked_fill(~hm[..., None], -1).max(1)  # [B, H]
         bi, hi = torch.arange(B, device=a.device)[:, None], torch.arange(H, device=a.device)[None, :]
         rows = a[bi, hi, t].float()  # [B, H, T]: the attention rows there
         rows[..., 0] = 0
         src = rows.argmax(-1)
         o = torch.einsum("bhi,dhi->bhd", zh[bi, t, hi], self.wo[l])
-        vals = torch.cat([self.top["h_val"][l], v.T], 1)  # [H, K + B]
+        vals = torch.cat([self.top["h_val"][l, :H], v.T], 1)  # [H, K + B]
         keep = vals.topk(TOP, dim=1).indices
         for k, new in (("h_val", v.T), ("h_doc", self.ctx["doc"][None, :].expand(H, -1)), ("h_pos", t.T.to(torch.int16)),
                        ("h_src", src.T.to(torch.int16))):
-            self.top[k][l] = torch.cat([self.top[k][l], new], 1).gather(1, keep)
-        cand = torch.cat([self.top["h_out"][l], o.transpose(0, 1).half()], 1)
-        self.top["h_out"][l] = cand.gather(1, keep[..., None].expand(-1, -1, self.d))
+            self.top[k][l, :H] = torch.cat([self.top[k][l, :H], new], 1).gather(1, keep)
+        cand = torch.cat([self.top["h_out"][l, :H], o.transpose(0, 1).half()], 1)
+        self.top["h_out"][l, :H] = cand.gather(1, keep[..., None].expand(-1, -1, self.d))
         qv, kv = self.ctx["qv"], self.ctx["kv"]  # [B, T] float
         af = a.float()
-        self.seg["sink"][l] += (af[..., 0] * qv[:, None]).sum((0, 2))
-        self.seg["self"][l] += (af.diagonal(dim1=2, dim2=3) * qv[:, None]).sum((0, 2))
-        self.seg["prev"][l] += (af.diagonal(-1, dim1=2, dim2=3) * qv[:, None, 1:]).sum((0, 2))
+        self.seg["sink"][l, :H] += (af[..., 0] * qv[:, None]).sum((0, 2))
+        self.seg["self"][l, :H] += (af.diagonal(dim1=2, dim2=3) * qv[:, None]).sum((0, 2))
+        self.seg["prev"][l, :H] += (af.diagonal(-1, dim1=2, dim2=3) * qv[:, None, 1:]).sum((0, 2))
         # Without the sink: divided by the rest's sum as stored, not 1 − a₀, which bf16 rounds to 0 for sink heads.
         rest = af[..., 1:].sum(-1, keepdim=True).clamp_min(1e-30)
         af = af * qv[:, None, :, None] * kv[:, None, None, :] / rest
         recv = (af * torch.arange(T, device=a.device)[None, None, :, None]).sum(2)  # [B, H, T]: per key, times t keys
-        self.seg["recv"][l].index_add_(1, self.ctx["ids"].flatten(), recv.transpose(0, 1).reshape(H, -1))
-        self.seg["offset"][l, :, :T].index_add_(1, self.ctx["delta"][:T, :T].flatten(), af.sum(0).reshape(H, -1))
+        self.seg["recv"][l, :H].index_add_(1, self.ctx["ids"].flatten(), recv.transpose(0, 1).reshape(H, -1))
+        self.seg["offset"][l, :H, :T].index_add_(1, self.ctx["delta"][:T, :T].flatten(), af.sum(0).reshape(H, -1))
 
     def hooks(self, model) -> list:
         hs = []
@@ -332,25 +391,28 @@ class Collector:
                 down.register_forward_pre_hook(lambda m, x, l=l: self.neuron(l, x[0]))]
 
     def mixer_hooks(self, l: int, layer, p) -> list:
-        """The heads' outputs (the output projection's input), the input norm's scaling, the q/k norms' sums and the
-        attention pattern."""
-        if p.deltanet:
-            raise NotImplementedError(f"layer {l}: DeltaNet heads are not in the catalog yet")
-        hs = []
-        at = attention(layer)
+        """The heads' outputs (the output projection's input), the input norm's scaling, the q/k norms' sums, an output
+        gate's factor and the attention pattern (a DeltaNet's: ``delta``)."""
         n1 = anatomy.module(layer, p.n1)
         if n1 is not None:
-            hs.append(n1.register_forward_pre_hook(lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m))))
+            hs = [n1.register_forward_pre_hook(lambda m, x, l=l: self.input_norm(l, x[0], arch.norm_eps(m)))]
         else:  # the heads read the residual itself (OLMo 2 and 3): no input norm's scaling
-            hs.append(layer.register_forward_pre_hook(lambda m, x, kw: self.no_input_norm(x[0] if x else kw["hidden_states"]),
-                                                      with_kwargs=True))
+            hs = [layer.register_forward_pre_hook(lambda m, x, kw: self.no_input_norm(x[0] if x else kw["hidden_states"]),
+                                                  with_kwargs=True)]
+        hs.append(anatomy.module(layer, p.out).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
+        if p.deltanet:  # after the output projection has run: the hook sees the mixer's input and the heads' outputs
+            hs.append(anatomy.module(layer, p.mixer).register_forward_hook(
+                lambda m, x, kw, out, l=l: self.delta(l, m, x[0] if x else kw["hidden_states"]), with_kwargs=True))
+            return hs
+        at = attention(layer)
+        if self.geo[l].gated:
+            hs.append(at.q_proj.register_forward_hook(lambda m, x, out, l=l: self.out_gate(l, out)))
         if hasattr(at, "query_key_value"):  # no q/k norms
             hs.append(at.query_key_value.register_forward_hook(lambda m, x, out, l=l: self.query(l, out)))
         else:
             for side, norm in (("q", at.q_norm), ("k", at.k_norm)) + ((("v", at.v_norm),) if hasattr(at, "v_norm") else ()):
                 hs.append(norm.register_forward_hook(
                     lambda m, x, out, l=l, side=side: self.qk_norm(l, side, x[0], out, arch.norm_eps(m))))
-        hs.append(anatomy.module(layer, p.out).register_forward_pre_hook(lambda m, x, l=l: self.stash.__setitem__(l, x[0])))
         hs.append(at.register_forward_hook(lambda m, x, out, l=l: self.attention(l, out[1], out[0])))
         return hs
 
@@ -617,7 +679,7 @@ def head_tables(saved: dict, device) -> None:
     E_s = past(st["h_count"].double().reshape(len(n_s), L, NB, H)).transpose(1, 2)  # [S, len(EDGES), L, H]
     E = E_s.sum(0)
     out_top = top["h_val"][..., :TYPICAL].median(-1).values.double()  # [L, H]
-    cols = head_keys(L, H, arch.groups(MODEL))
+    cols = head_keys()  # over the grid of heads; write_heads keeps those that exist
     cols["out_top"] = pa.array(out_top.flatten().float().numpy())
     cols["out_max"] = pa.array(top["h_val"][..., 0].flatten().numpy())
     flatE = E.reshape(len(EDGES), L * H)
@@ -651,18 +713,17 @@ def head_tables(saved: dict, device) -> None:
     unembed = head[nm["unembed"]][keep].to(device, torch.float16)
     gamma = arch.final_scale(MODEL, device)
     J = arch.head_write_lens(MODEL, "R", R_FIT)
-    ids, vals = [], []
-    for l in range(L):
-        O = top["h_out"][l].reshape(H * K, -1).to(device, torch.float32).T  # [d, H·K]
+    ids, vals = torch.full((L, H, TOP), -1), torch.full((L, H, TOP), float("nan"))
+    for l, g in enumerate(arch.layout(MODEL)):
+        O = top["h_out"][l, :g.q_heads].reshape(g.q_heads * K, -1).to(device, torch.float32).T  # [d, H·K]
         lg = arch.cap(MODEL, unembed @ rms_norm_columns(J[l].to(device) @ O, gamma, centre=arch.centred(MODEL)).half()).float()
         z = (lg - lg.mean(1, keepdim=True)) / lg.std(1, keepdim=True).clamp_min(1e-6)
-        mz = z.view(-1, H, K).mean(-1).T  # [H, V]
+        mz = z.view(-1, g.q_heads, K).mean(-1).T  # [H, V]
         v, i = mz.topk(TOP, dim=1)
-        ids.append(keep[i.cpu()])
-        vals.append(v.cpu())
-    put(cols, "out_R_z", torch.cat(ids), torch.cat(vals))
+        ids[l, :g.q_heads], vals[l, :g.q_heads] = keep[i.cpu()], v.cpu()
+    put(cols, "out_R_z", ids.flatten(0, 1), vals.flatten(0, 1))
     cols |= {k: pa.array(v.float().numpy()) for k, v in head_modes(saved).items()}
-    write(cols, head_table("acts"))
+    write_heads(cols, head_table("acts"))
     print(f"{time.strftime('%H:%M:%S')} heads/acts written", flush=True)
 
 

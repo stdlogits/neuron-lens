@@ -15,9 +15,13 @@ A head has three inputs where a neuron has one read direction, and at one firing
 residual entering its layer, at a position or several (``HeadSources``). The sources of each are the embedding, and
 the heads and neurons of earlier layers, at those positions.
 
-- **Value** (``v``, what it copies): with the attention pattern, the norms' scales and the head's own output ``o`` held,
-  ``o`` is linear in the residual at every position it attends to. A source's share is its part of ``o`` along ``o``,
-  and the shares sum to 1.
+- **Value** (``v``, what it copies): with the attention pattern, the norms' scales, an output gate and the head's own
+  output ``o`` held, ``o`` is linear in the residual at every position it attends to. A source's share is its part of
+  ``o`` along ``o``, and the shares sum to 1. A Gated DeltaNet's head mixes its values through ``A`` (``o = A v``,
+  ``layers.delta_pattern``), each value a SiLU of a causal convolution over the four positions up to it: with ``A``,
+  SiLU's ratio ``σ(c)`` and the output's gate (its norm's scale and ``silu(z)``) held, ``o`` is linear in the residual
+  at every position up to the query, and splits the same way. Its query, key, write strength and decay set ``A``
+  together, a split this table leaves for later: a DeltaNet head's ``q`` and ``k`` columns are empty.
 - **Query** and **key** (``q``, ``k``, why it looks there): the score ``q_t · k_s`` is bilinear. The number split is the
   most attended key's margin (past the sink) over the mean of the keys (past the sink), so ``q`` splits it over the
   sources at the query's position with the keys held, and ``k`` over the sources at the keys' positions with the query
@@ -43,6 +47,7 @@ from neuron_lens.catalog import (
     column,
     fixed,
     head_keys,
+    head_rows,
     head_table,
     neuron_keys,
     neuron_table,
@@ -98,7 +103,8 @@ class Stream:
 
     def __init__(self, stack):
         self.layers, self.embed = stack.layers, stack.get_input_embeddings()
-        self.n_heads = stack.config.num_attention_heads
+        geo = arch.layout(MODEL)
+        self.n_heads = arch.max_heads(MODEL)  # heads on the grid: head h of layer l is l · n_heads + h
         first = stack.layers[0]
         self.parallel = anatomy.parts(first).parallel
         self.centred = any(is_centred(anatomy.module(first, n)) for n in anatomy.parts(first).norms)
@@ -108,7 +114,7 @@ class Stream:
         self.neurons = self.all_neurons.split(stack.config.intermediate_size, 1)  # per layer, views of it
         dev = self.all_neurons.device
         self.head_end = torch.tensor([w.shape[1] for w in heads]).cumsum(0).tolist()  # layer l's heads end at this column
-        self.head_of = torch.cat([l * self.n_heads + torch.arange(w.shape[1], device=dev) // (w.shape[1] // self.n_heads)
+        self.head_of = torch.cat([l * self.n_heads + torch.arange(w.shape[1], device=dev) // geo[l].head_dim
                                   for l, w in enumerate(heads)])  # the head each column of all_heads belongs to
         self.scalars = torch.tensor([arch.layer_scale(lay) for lay in self.layers], device=dev)
         # the residual's constant (its writes' biases) entering each layer, and each MLP's input
@@ -137,7 +143,8 @@ class Stream:
         out = [self.embed.register_forward_hook(lambda mod, a, o: cap.__setitem__("emb", at(o).float()))]
         for l, lay in enumerate(self.layers[:None if upto is None else upto + 1]):
             out.append(anatomy.module(lay, anatomy.parts(lay).out).register_forward_pre_hook(store(("z", l))))
-            out.append(attention(lay).register_forward_hook(scale(("attn", l), lambda o, lay=lay: arch.attn_scale(lay, o))))
+            out.append(anatomy.module(lay, anatomy.parts(lay).mixer).register_forward_hook(  # (attention or a DeltaNet)
+                scale(("attn", l), lambda o, lay=lay: arch.attn_scale(lay, o))))
             out.append(arch.mid_point(lay).register_forward_pre_hook(store(("x", l))))
             if l != upto:
                 out.append(_down(lay).register_forward_pre_hook(store(("a", l))))
@@ -284,7 +291,7 @@ class Sources:
     def __init__(self, stack, layers: list[int], dev, positions: int):
         self.stack, self.layers, self.dev, self.flow = stack, layers, dev, Stream(stack)
         self.rate_floor = 1 / positions  # a pole seen firing at all fires at least once
-        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, stack.config.num_attention_heads
+        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, self.flow.n_heads
         self.P = arch.n_poles(MODEL)
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
         self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev).flatten()
@@ -398,13 +405,14 @@ class HeadSources:
 
     def __init__(self, stack, dev, positions: int):
         self.stack, self.dev, self.flow = stack, dev, Stream(stack)
-        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, stack.config.num_attention_heads
+        self.L, self.f, self.H = len(stack.layers), stack.config.intermediate_size, self.flow.n_heads  # heads on the grid
         self.P = arch.n_poles(MODEL)
         self.rate_floor = 1 / positions
         self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
         self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev).flatten()
         t = pq.read_table(head_table("acts"), columns=["top_doc", "top_pos", "top_val"])
-        self.doc, self.pos, self.row = firing_plan(column(t, "top_doc", N_CONTEXTS).long(), column(t, "top_pos", N_CONTEXTS).long(), column(t, "top_val", N_CONTEXTS))
+        self.doc, self.pos, row = firing_plan(column(t, "top_doc", N_CONTEXTS).long(), column(t, "top_pos", N_CONTEXTS).long(), column(t, "top_val", N_CONTEXTS))
+        self.row = head_rows()[row.long()]  # the table's rows on the grid
         n = self.L * self.H
         self.count = torch.zeros(n)
         self.dense = {c: {"emb": torch.zeros(n), "neurons": torch.zeros(n), "const": torch.zeros(n), "heads": torch.zeros(n, n)}
@@ -430,6 +438,8 @@ class HeadSources:
             return r - r.mean(-1, keepdim=True) if self.flow.centred else r
         start = self.flow.head_end[M - 1] if M else 0
         w = self.flow.all_heads[:, start + h * hd:start + (h + 1) * hd]
+        if m.sg is not None:  # gated attention: the gate at the query, held
+            w = w * m.sg[t, h * hd:(h + 1) * hd]
         o = w @ (p @ v)
         c = w.T @ o / o.pow(2).sum()
         if m.wqkv is not None:  # GPT-NeoX's fused projection: per head the query, key, value rows
@@ -438,7 +448,8 @@ class HeadSources:
             bq, bk, bv = (None, None, None) if B is None else B.float().view(-1, 3, hd)[[h, kv, kv], [0, 1, 2]]
         else:
             rows = lambda W, i: W[i * hd:(i + 1) * hd]
-            Wq, Wk, Wv = rows(m.wq, h), rows(m.wk, kv), rows(m.wk if m.wv is None else m.wv, kv)
+            Wq = m.wq[2 * h * hd:(2 * h + 1) * hd] if m.sg is not None else rows(m.wq, h)  # gated: the query rows, then the gate's
+            Wk, Wv = rows(m.wk, kv), rows(m.wk if m.wv is None else m.wv, kv)
             bias = lambda mod, i: None if mod is None or mod.bias is None else rows(mod.bias.float(), i)
             bq, bk, bv = bias(at.q_proj, h), bias(at.k_proj, kv), bias(getattr(at, "v_proj", None) or at.k_proj, kv)
         beta = getattr(ln, "bias", None) if ln is not None else None
@@ -466,6 +477,25 @@ class HeadSources:
         return {"v": (V, torch.arange(t + 1, device=dev), consts[0]), "q": (Q, torch.tensor([t], device=dev), consts[1]),
                 "k": (K, keys, consts[2])}
 
+    def delta_reads(self, d: layers.DeltaPattern, M: int, h: int, t: int, inv: torch.Tensor) -> dict:
+        """A DeltaNet head's value channel (module docstring), as ``reads``'s: the reads of the residual entering layer
+        ``M`` at every position up to ``t``. ``d``: the document's ``delta_pattern``, ``inv`` ``[T, 1]`` the input norm's
+        scale."""
+        lay = self.flow.layers[M]
+        la, ln, g = anatomy.module(lay, anatomy.parts(lay).mixer), _input_norm(lay), arch.layout(MODEL)[M]
+        gamma = 1.0 if ln is None else norm_weight(ln).float()
+        dv, kd2 = g.head_dim, 2 * la.key_dim
+        start = self.flow.head_end[M - 1] if M else 0
+        w = self.flow.all_heads[:, start + h * dv:start + (h + 1) * dv] * d.gate[0, t, h]  # the gate at the query, held
+        cols = slice(kd2 + h * dv, kd2 + (h + 1) * dv)  # the head's value channels of the convolution
+        sv = torch.sigmoid(d.c[0, :t + 1, cols])  # SiLU's ratio, held
+        v = sv * d.c[0, :t + 1, cols]
+        o = w @ (d.A[0, h, t, :t + 1] @ v)
+        c = w.T @ o / o.pow(2).sum()
+        coef = layers._conv_t((d.A[0, h, t, :t + 1, None] * sv)[None], la.conv1d.weight.squeeze(1)[cols].float())[0]
+        R = (coef * c) @ layers.delta_parts(la).qkv[cols].float() * gamma * inv[:t + 1]
+        return {"v": (R, torch.arange(t + 1, device=self.dev), torch.zeros((), device=self.dev))}
+
     def split(self, cap: dict, M: int, R: torch.Tensor, pos: torch.Tensor) -> tuple:
         """``(embedding, heads [M·H], neurons [M·P·f], const)``: each source's part of a read ``R`` at ``pos``, the neurons in
         the pole their activation's sign gives, and the residual's constant (its writes' biases)."""
@@ -484,9 +514,10 @@ class HeadSources:
             return e, heads, each.sum(0), b
         return e, heads, torch.cat([(each * (a > 0)).sum(0).view(M, self.f), (each * (a < 0)).sum(0).view(M, self.f)], 1).flatten(), b
 
-    def firing(self, cap: dict, m: layers.Attention, M: int, r: int, t: int, inv: torch.Tensor) -> None:
+    def firing(self, cap: dict, m: layers.Attention | layers.DeltaPattern, M: int, r: int, t: int, inv: torch.Tensor) -> None:
         self.count[r] += 1
-        for c, (R, pos, own) in self.reads(m, M, r % self.H, t, inv).items():
+        reads = self.delta_reads if isinstance(m, layers.DeltaPattern) else self.reads
+        for c, (R, pos, own) in reads(m, M, r % self.H, t, inv).items():
             e, heads, neurons, b = self.split(cap, M, R, pos)
             d = self.dense[c]
             d["emb"][r] += e.cpu()
@@ -528,7 +559,10 @@ class HeadSources:
                     y, ln = cap["y", M], _input_norm(flow.layers[M])
                     yc = y - y.mean(-1, keepdim=True) if flow.centred else y
                     inv = torch.ones_like(y[:, :1]) if ln is None else torch.rsqrt(yc.pow(2).mean(-1, keepdim=True) + norm_eps(ln))
-                    maps[M] = (layers.attention_map(self.stack, M, layers._normed(ln, y)[0]), inv)
+                    lay, xn = flow.layers[M], layers._normed(ln, y)[0]
+                    mix = (layers.delta_pattern(anatomy.module(lay, anatomy.parts(lay).mixer), xn[None]) if anatomy.parts(lay).deltanet
+                           else layers.attention_map(self.stack, M, xn))
+                    maps[M] = (mix, inv)
                 self.firing(cap, *maps[M][:1], M, r, t, maps[M][1])
             at += k
         for x in hooks:
@@ -537,14 +571,17 @@ class HeadSources:
     def table(self) -> dict:
         L, f, H = self.L, self.f, self.H
         n, silent = self.count.clamp_min(1), self.count == 0
-        cols = head_keys(L, H, arch.groups(MODEL)) | {"n_contexts": pa.array(self.count.numpy(), pa.int16())}
+        delta = torch.tensor([g.deltanet for g in arch.layout(MODEL)]).repeat_interleave(H)  # [L·H]: q, k not split
+        cols = head_keys() | {"n_contexts": pa.array(self.count.numpy(), pa.int16())}
         for c in CHANNELS:
             d = self.dense[c]
-            cols[f"{c}_emb_share"], cols[f"{c}_neurons_share"] = pa.array((d["emb"] / n).numpy()), pa.array((d["neurons"] / n).numpy())
-            cols[f"{c}_const_share"] = pa.array((d["const"] / n).numpy())
+            none = delta & (c != "v")
+            share = lambda x, none=none: pa.array(torch.where(none, float("nan"), x / n).numpy())
+            cols[f"{c}_emb_share"], cols[f"{c}_neurons_share"] = share(d["emb"]), share(d["neurons"])
+            cols[f"{c}_const_share"] = share(d["const"])
             mean = d["heads"] / n[:, None]
-            cols[f"{c}_heads_share"] = pa.array(mean.sum(1).numpy())
-            head_list(cols, f"{c}_driven", mean, H, silent)
+            cols[f"{c}_heads_share"] = share(d["heads"].sum(1))
+            head_list(cols, f"{c}_driven", mean, H, silent | none)
             ids, values = torch.full((L * H, TOP), -1), torch.full((L * H, TOP), float("nan"))
             if self.sparse[c]:
                 r = torch.cat([torch.full_like(i, x) for x, i, _ in self.sparse[c]])

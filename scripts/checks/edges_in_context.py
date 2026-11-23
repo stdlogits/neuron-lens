@@ -113,7 +113,7 @@ class Model:
         self.stack, self.dev = decoder_stack(lm), dev
         self.flow = Stream(self.stack)
         self.L, self.f = len(self.stack.layers), self.stack.config.intermediate_size
-        self.H = self.stack.config.num_attention_heads
+        self.H = self.flow.n_heads  # heads on the grid (arch.max_heads), each layer's first
         self.act_top = torch.stack([torch.from_numpy(pq.read_table(neuron_table("acts", l), columns=["act_top"])
                                                      .column(0).to_numpy().copy()).float() for l in range(self.L)]).to(dev)
         saved = json.loads((SUMMARY / f"edges_{STEM}.json").read_text())

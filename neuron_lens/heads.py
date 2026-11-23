@@ -56,3 +56,24 @@ def norm_derivative(weight: torch.Tensor, r: torch.Tensor, m: torch.Tensor, n: t
     hd = m.shape[-1]
     eye = torch.eye(hd, device=m.device)
     return weight[..., :, None] * (r[:, None, None] * eye - m / (width or hd)) / n
+
+
+def weights(model_id: str, lay, st: dict, dev) -> dict:
+    """A layer's head circuits' weights as the reads take them: ``arch.qk``'s (``Wq``, ``Wk``, ``bq``, the q/k norms) and
+    ``arch.ov``'s (``Wv``, ``Wo``), with the factors ``06_activations.py``'s sums ``st`` give, averaged over positions: a
+    Gated DeltaNet's SiLU ratio ``σ(c)`` per channel after its convolution (the identity rule's; on the queries at the
+    queries, on the keys and values at the keys), and an output gate's per channel on ``W_O`` (gated attention's
+    ``σ(gate)``, a DeltaNet's output norm's scale and ``silu(z)``), at the queries."""
+    from neuron_lens import arch
+    out = arch.qk(model_id, lay, dev)
+    out["Wv"], out["Wo"] = arch.ov(model_id, lay, dev)
+    n_q, n_k = float(st["n_q"]), float(st["n_k"])
+    H, kvh, hd, kd = lay.q_heads, lay.kv_heads, lay.head_dim, lay.kd
+    if lay.deltanet:
+        sig = st["sig"][lay.index].float().to(dev)
+        sq, sk, sv = sig[:kvh * kd] / n_q, sig[kvh * kd:2 * kvh * kd] / n_k, sig[2 * kvh * kd:2 * kvh * kd + H * hd] / n_k
+        out["Wq"] = out["Wq"] * sq.view(kvh, kd).repeat_interleave(H // kvh, 0).flatten()[:, None]
+        out["Wk"], out["Wv"] = out["Wk"] * sk[:, None], out["Wv"] * sv[:, None]
+    if lay.gated:
+        out["Wo"] = out["Wo"] * (st["og"][lay.index, :H, :hd].float().to(dev) / n_q).flatten()
+    return out
