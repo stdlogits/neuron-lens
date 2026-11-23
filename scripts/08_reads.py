@@ -61,6 +61,18 @@ MLP input (``neuron_lens.heads``).
 The per-token z of the five head reads go to ``data/heads/<model>-token-z.pt`` for
 the checks (``reads_at_firings.py``, ``head_seek.py``, ``head_census.py``); a summary to ``data/summary/reads_<model>.{log,json}``.
 
+**Experts** (``experts/reads.parquet``, a sparse model's, a row per layer and expert; ``neuron_lens.experts``): the
+router's row for the expert times the MLP input norm's scale, a read covector, read as a pole's (``router_R`` through the
+metric and the R-lens from the MLP input, ``router_S`` through the S-lens there): what the residual says, and which input
+tokens are there, where the router chooses the expert; and the expert's mean map, its neurons' maps added at their mean
+RelP factors over the positions routed to it (``06_activations.py``'s ``mean_cg``, ``mean_cu``, the routing weight
+included), ``M = W_down (diag(cg) W_gate + diag(cu) W_up)``, read as a head's OV map is: each input token's footprint at
+the MLP input (at unit length, as the norm takes it) through ``M``, against the R-lens's readout from the layer's
+output (``ov_R``) or the S-lens's footprints there (``ov_S``, through its polar factor), each token's z in its own column,
+the expert's copying score of each (``ov_R_copy``, ``ov_S_copy``). A mean over the routed positions, where a neuron's gate
+varies from position to position: what the expert does on average where it is chosen, as a head's OV map is what the head
+does per unit of attention.
+
 Gemma 4 12B (``NEURON_LENS_MODEL=google/gemma-4-12B``) reads its released lenses. A neuron's write is
 what reaches the residual, ``s · γ_post ⊙ W_down[:, n]``, and its read rows are times the
 pre-feedforward norm (``neuron_lens/neurons.py``); probabilities and logit statistics are the
@@ -69,20 +81,24 @@ times the post-attention norm weight, its full layers read keys as values, its v
 weightless ``v_norm`` (its true derivative averaged over positions, from ``06_activations.py``, as
 for ``q_norm`` and ``k_norm``), and RoPE is per layer type.
 
-    python scripts/08_reads.py [--parts neurons,heads] [--layers 0-35]
+    python scripts/08_reads.py [--parts neurons,heads,experts] [--layers 0-35]
 """
 import argparse
 import json
 import time
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 import torch
 
-from neuron_lens import arch, metric
+from neuron_lens import anatomy, arch, metric
 from neuron_lens.catalog import (
     MODEL,
     TOP,
     acts_path,
+    column,
+    expert_keys,
+    expert_table,
     head_keys,
     head_table,
     kept,
@@ -93,7 +109,7 @@ from neuron_lens.catalog import (
     write,
 )
 from neuron_lens.heads import copy_score, norm_derivative, own_token_z, rope_mean
-from neuron_lens.neurons import orthogonal_write, poles, softcap, write_cosines
+from neuron_lens.neurons import directions, orthogonal_write, poles, softcap, write_cosines
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads, s_tops
 from neuron_lens.stats import auroc, spearman
@@ -343,19 +359,101 @@ def heads(dev) -> None:
     (SUMMARY / f"reads_{STEM}.json").write_text(json.dumps(table))
 
 
+EXPERT_BLOCK = 2**31  # entries of an expert block's token maps, A and B ([V, experts, 2I] each), at a time
+
+
+def experts_reads(layers: list[int], dev) -> None:
+    """``experts/reads.parquet`` (module docstring), the rows of ``layers`` in place of the file's rows for them."""
+    keep = kept()
+    V = len(keep)
+    nm = arch.names(MODEL)
+    head = tensors(MODEL, sorted(set(nm.values())))
+    unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
+    gamma = arch.final_scale(MODEL, dev)
+    Wu = arch.centre(head[nm["unembed"]][keep].float() * arch.final_scale(MODEL), MODEL).to(dev)  # the readout, W_U diag(γ)
+    E0 = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)
+    E0 = (E0 - E0.mean(0)).to(dev)
+    del head
+    J_out, J_mid = arch.lens(MODEL, "R_out", R_FIT), arch.lens(MODEL, "R_mid", R_FIT)
+    K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)
+    acts = pq.read_table(expert_table("acts"), columns=["layer", "expert", "mean_cg", "mean_cu"])
+    geo = arch.layout(MODEL)
+    out = []
+    for layer in layers:
+        t0 = time.perf_counter()
+        rows = (acts.column("layer").to_numpy() == layer).nonzero()[0]
+        sub = acts.take(rows)
+        n_exp = len(rows)
+        cg, cu = column(sub, "mean_cg").to(dev), column(sub, "mean_cu").to(dev)  # [E, I]
+        I = cg.shape[1]
+        p = anatomy.layer_parts(MODEL, layer)
+        router = arch._weights(MODEL, geo[layer], {"r": ("mlp.gate", "weight")}, dev)["r"]  # [E, d]
+        g = arch.norm_scale(MODEL, geo[layer], p.n2, dev)
+        router = router if g is None else router * g
+        cols = expert_keys([layer], n_exp)
+        s2 = metric.s2(MODEL, "mid", layer, dev)
+        v = metric.vector(router, s2)
+        r = layer_reads((v / v.norm(dim=1, keepdim=True)).T, unembed, gamma, J_mid[layer], signs=(1,), k=TOP, kz=TOP,
+                        softcap=CAP, centre=CENTRE)
+        put(cols, "router_R", keep[r["ids"][1]], r["probs"][1])
+        put(cols, "router_R_z", keep[r["zids"][1]], r["z"][1])
+        cs = router @ K_mid[layer].to(dev)
+        s = s_tops(cs / cs.norm(dim=1, keepdim=True), E0.half(), (1,), TOP)
+        for kind, name in (("raw", "router_S"), ("z", "router_S_z")):
+            put(cols, name, keep[s[kind, 1][0]], s[kind, 1][1])
+        # the mean map: input footprints at the MLP input, at unit length, through the gate and up rows; the output side
+        # each token's readout through W_down at the mean factors
+        w = directions(MODEL, layer, dev)
+        X = E0 @ K_mid[layer].to(dev).T
+        X = X / X.norm(dim=1, keepdim=True)
+        Jl = J_out[layer].to(dev) if layer < len(J_out) else torch.eye(X.shape[1], device=dev)
+        Ko = K_out[layer].to(dev)
+        reads = {"ov_R": Wu @ Jl, "ov_S": E0 @ (Ko.T @ metric.polar(Ko))}  # [V, d]: each token's row on a write
+        z = {k: torch.zeros(n_exp, V, dtype=torch.float16) for k in reads}
+        score = {k: torch.zeros(n_exp) for k in reads}
+        step = max(1, EXPERT_BLOCK // (V * 2 * I))
+        for e0 in range(0, n_exp, step):
+            es = range(e0, min(e0 + step, n_exp))
+            sl = lambda x, e: x[e * I:(e + 1) * I]
+            B = torch.stack([torch.cat([X @ sl(w["gate"], e).T, X @ sl(w["up"], e).T], 1) for e in es], 1)  # [V, eb, 2I]
+            Wd = torch.stack([torch.cat([w["write"][:, e * I:(e + 1) * I] * cg[e], w["write"][:, e * I:(e + 1) * I] * cu[e]], 1)
+                              for e in es])  # [eb, d, 2I]
+            for k, R in reads.items():
+                A = torch.einsum("vd,edj->vej", R, Wd)
+                z[k][e0:e0 + len(es)] = own_token_z(A, B).T.half().cpu()
+                score[k][e0:e0 + len(es)] = copy_score(A, B)
+                del A
+            del B, Wd
+        for k in reads:
+            lists(cols, k, z[k][None].float(), keep)
+            cols[f"{k}_copy"] = pa.array(score[k].numpy())
+        out.append(pa.table(cols))
+        print(f"{time.strftime('%H:%M:%S')} experts L{layer}: {n_exp} in {time.perf_counter() - t0:.0f}s", flush=True)
+    table = pa.concat_tables(out)
+    path = expert_table("reads")
+    if path.exists():
+        import pyarrow.compute as pc
+        old = pq.read_table(path)
+        table = pa.concat_tables([old.filter(pc.invert(pc.is_in(old.column("layer"), pa.array(layers, pa.int16())))),
+                                  table]).sort_by([("layer", "ascending"), ("expert", "ascending")])
+    pq.write_table(table, path)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--parts", default="neurons,heads")
-    ap.add_argument("--layers", default=None, help="neuron layers, a-b (default all)")
+    ap.add_argument("--parts", default="neurons,heads,experts", help="experts: a sparse model's alone")
+    ap.add_argument("--layers", default=None, help="neuron and expert layers, a-b (default all)")
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cuda")
     args = ap.parse_args()
     parts = set(args.parts.split(","))
+    n = arch.text_config(MODEL).num_hidden_layers
+    lo, hi = (0, n - 1) if args.layers is None else map(int, args.layers.split("-"))
     if "neurons" in parts:
-        n = arch.text_config(MODEL).num_hidden_layers
-        lo, hi = (0, n - 1) if args.layers is None else map(int, args.layers.split("-"))
         neurons(list(range(lo, hi + 1)), args.device)
     if "heads" in parts:
         heads(args.device)
+    if "experts" in parts and expert_table("acts").exists():
+        experts_reads([l for l in range(lo, hi + 1) if anatomy.layer_parts(MODEL, l).sparse], args.device)
 
 
 if __name__ == "__main__":

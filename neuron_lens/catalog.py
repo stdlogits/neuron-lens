@@ -109,6 +109,23 @@ def head_table(table: str, model: str = MODEL):
     return catalog_dir(model) / "heads" / f"{table}.parquet"
 
 
+def expert_table(table: str, model: str = MODEL):
+    """A sparse model's expert table, a row per (layer, expert) (``06_activations.py``, ``08_reads.py``)."""
+    return catalog_dir(model) / "experts" / f"{table}.parquet"
+
+
+def expert_keys(layers: list[int], n_experts: int) -> dict:
+    """The key columns of an expert table, layer-major."""
+    return {"layer": pa.array(torch.tensor(layers).repeat_interleave(n_experts).numpy(), pa.int16()),
+            "expert": pa.array(torch.arange(n_experts).repeat(len(layers)).numpy(), pa.int16())}
+
+
+def neuron_type(f: int) -> pa.DataType:
+    """The type of a neuron index column (``neuron``, ``<name>_neuron``): int16, or int32 where a layer has 2¹⁵ neurons
+    or more (a sparse layer's experts side by side: Qwen3.5-35B-A3B's 131,584)."""
+    return pa.int16() if f < 2**15 else pa.int32()
+
+
 @functools.cache
 def tokenizer(model: str = MODEL):
     from transformers import AutoTokenizer
@@ -167,10 +184,11 @@ def put(cols: dict, name: str, ids: torch.Tensor, val: torch.Tensor) -> None:
 
 def neuron_keys(layer: int, f: int, model: str = MODEL) -> dict:
     """The key columns of a neuron table: ``+`` poles of neurons ``0..f-1``, then ``−`` poles (an ungated MLP's
-    neurons have the ``+`` pole only: ``arch.n_poles``)."""
+    neurons have the ``+`` pole only: ``arch.n_poles``). A sparse layer's neuron ``e · I + i`` is neuron ``i`` of expert
+    ``e``, and its shared expert's come after its experts' (``neuron_lens.experts``)."""
     from neuron_lens.arch import signs
     s = signs(model)
-    return {"layer": pa.array([layer] * len(s) * f, pa.int16()), "neuron": pa.array(list(range(f)) * len(s), pa.int16()),
+    return {"layer": pa.array([layer] * len(s) * f, pa.int16()), "neuron": pa.array(list(range(f)) * len(s), neuron_type(f)),
             "pole": pa.array([x for x in s for _ in range(f)], pa.int8())}
 
 
