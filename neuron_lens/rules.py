@@ -37,6 +37,7 @@ import contextlib
 import math
 import sys
 import types
+from typing import NamedTuple
 
 import torch
 
@@ -216,26 +217,48 @@ def _gated_attn(self, hidden_states, position_embeddings, attention_mask, past_k
     return self.o_proj(_half(o, torch.sigmoid(gate.reshape(*shape, -1)))), None
 
 
+class DeltaParts(NamedTuple):
+    qkv: torch.Tensor  # [C, d]: the q, k, v channels the convolution reads
+    z: torch.Tensor  # [Hv·dv, d]: the output gate
+    b: torch.Tensor  # [Hv, d]: write strength, β = beta · σ(b x)
+    a: torch.Tensor  # [Hv, d]: decay
+    out: torch.Tensor  # [d, Hv·dv]
+    norm: torch.nn.Module  # the gated output norm
+    beta: float  # 2 where β may reach 2 (Olmo Hybrid's ``allow_neg_eigval``: the delta rule's eigenvalues go negative)
+
+
+def delta_parts(la) -> DeltaParts:
+    """A Gated DeltaNet's weights: Qwen3.5's fused ``in_proj_qkv`` and ``in_proj_z``, ``in_proj_b``, ``in_proj_a``, or Olmo
+    Hybrid's separate ``q_proj``, ``k_proj``, ``v_proj`` (stacked) and ``g_proj``, ``b_proj``, ``a_proj``."""
+    if hasattr(la, "in_proj_qkv"):
+        return DeltaParts(la.in_proj_qkv.weight, la.in_proj_z.weight, la.in_proj_b.weight, la.in_proj_a.weight,
+                          la.out_proj.weight, la.norm, 1.0)
+    return DeltaParts(torch.cat((la.q_proj.weight, la.k_proj.weight, la.v_proj.weight)), la.g_proj.weight,
+                      la.b_proj.weight, la.a_proj.weight, la.o_proj.weight, la.o_norm,
+                      2.0 if getattr(la, "allow_neg_eigval", False) else 1.0)
+
+
 def _delta(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
     torch_chunk_gated_delta_rule = _hf(self, "torch_chunk_gated_delta_rule")
     F = torch.nn.functional
     B, T, _ = hidden_states.shape
-    mixed = self.in_proj_qkv(hidden_states).transpose(1, 2)
+    w = delta_parts(self)
+    mixed = F.linear(hidden_states, w.qkv).transpose(1, 2)
     K = self.conv_kernel_size
     mixed = _silu_id(F.conv1d(F.pad(mixed, (K - 1, 0)), self.conv1d.weight, groups=self.conv_dim)).transpose(1, 2)
     q, k, v = torch.split(mixed, [self.key_dim, self.key_dim, self.value_dim], dim=-1)
     q, k = q.reshape(B, T, -1, self.head_k_dim), k.reshape(B, T, -1, self.head_k_dim)
     v = v.reshape(B, T, -1, self.head_v_dim)
-    z = self.in_proj_z(hidden_states).reshape(B, T, -1, self.head_v_dim)
-    beta = self.in_proj_b(hidden_states).sigmoid()
-    g = -self.A_log.float().exp() * F.softplus(self.in_proj_a(hidden_states).float() + self.dt_bias)
+    z = F.linear(hidden_states, w.z).reshape(B, T, -1, self.head_v_dim)
+    beta = w.beta * F.linear(hidden_states, w.b).sigmoid()
+    g = -self.A_log.float().exp() * F.softplus(F.linear(hidden_states, w.a).float() + self.dt_bias)
     rep = self.num_v_heads // self.num_k_heads
     q, k = q.repeat_interleave(rep, dim=2), k.repeat_interleave(rep, dim=2)
     o, _ = torch_chunk_gated_delta_rule(q, k, v, g=g, beta=beta, use_qk_l2norm_in_kernel=True)
     o = o.float()
-    r = torch.rsqrt(o.pow(2).mean(-1, keepdim=True) + self.norm.variance_epsilon).detach()
-    y = _half(self.norm.weight.float() * o * r, _silu_id(z.float()))
-    return self.out_proj(y.reshape(B, T, -1).to(hidden_states.dtype))
+    r = torch.rsqrt(o.pow(2).mean(-1, keepdim=True) + w.norm.variance_epsilon).detach()
+    y = _half(w.norm.weight.float() * o * r, _silu_id(z.float()))
+    return F.linear(y.reshape(B, T, -1).to(hidden_states.dtype), w.out)
 
 
 def _moe(self, hidden_states):

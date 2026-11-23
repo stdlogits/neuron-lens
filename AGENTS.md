@@ -50,7 +50,7 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   release and the model.
 - `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models
   (`test_transport.py` Qwen3, dense and MoE, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5,
-  `test_pythia.py` GPT-NeoX), and
+  `test_pythia.py` GPT-NeoX, `test_olmo.py` OLMo 2 and 3, OLMoE and Olmo Hybrid), and
   `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA). Anything that fails loudly or
   reads wrong in the output gets fixed when it comes up; don't add tests for it.
 - **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
@@ -115,8 +115,8 @@ catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one car
   unit's top documents past the first `N_CONTEXTS`. Nothing on an evidence card may summarize them: no
   peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
   Scoring contexts end at the marked token. Findings §13 records why.
-- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py`, `tests/test_qwen35.py` and
-  `tests/test_pythia.py` to pass
+- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py`, `tests/test_qwen35.py`,
+  `tests/test_pythia.py` and `tests/test_olmo.py` to pass
   (and `tests/test_kernels.py` on a CUDA machine when the kernels change; CI runs the rest on CPU
   for pushes to main, pull requests and weekly, `.github/workflows/tests.yml`, as a signal, not a
   gate): both

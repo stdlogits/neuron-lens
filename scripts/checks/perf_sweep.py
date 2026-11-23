@@ -88,7 +88,7 @@ def parts(model, ids, dim_batch: int, repeat: int = 5) -> None:
     on the first layer of each kind, and seconds per document (every layer of the kind, every
     block of directions); ``layer`` is the whole layer step (``layers.jvp``, ``layers.vjp``)."""
     maps = layers.linearize(model, ids)
-    N, d = maps[0].n1.a.shape
+    N, d, _ = layers.rows(maps)
     dt = layers._dtype(maps[0])
     blocks = -(-d // dim_batch)
     fns = {"Attention": (layers._attn_jvp, layers._attn_vjp), "DeltaNet": (layers._delta_jvp, layers._delta_vjp),

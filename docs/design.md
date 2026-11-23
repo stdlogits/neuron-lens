@@ -85,11 +85,12 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   (other norms or activations, Qwen3-Next's fused DeltaNet projections, convolution biases).
   Supporting another architecture means composing it from these components, adding one where a part
   is new.
-- **Tests** (`tests/test_transport.py`, on a tiny Qwen3 model with grouped-query attention): both
+- **Tests** (`tests/test_transport.py`, on tiny Qwen3 models with grouped-query attention, dense and MoE): both
   lenses and both targets match brute-force Jacobians of the patched model (1e-4). `tests/test_gemma4.py` does the
   same for small random Gemma 4 models, the media fits' mode included, `tests/test_qwen35.py` for small Qwen3.5
-  models, MoE and dense, through HF's own delta-rule kernel, and `tests/test_pythia.py` for small GPT-NeoX models,
-  parallel and sequential. Estimator changes must pass them.
+  models, MoE and dense, through HF's own delta-rule kernel, `tests/test_pythia.py` for small GPT-NeoX models,
+  parallel and sequential, and `tests/test_olmo.py` for small OLMo 2, OLMo 3 (sliding layers, YaRN), OLMoE and Olmo
+  Hybrid models. Estimator changes must pass them.
 - **Fit files** (`data/fits/<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`, a revision for a
   training checkpoint) hold even- and odd-half sums per target. Fits save every 10 minutes, resume when rerun (also onto a longer prefix of the
   corpus), and shard across GPUs (`--shard i/n`); `lenses.load_fits` adds shards and halves.

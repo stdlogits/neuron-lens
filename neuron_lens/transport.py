@@ -100,6 +100,11 @@ def _maps(model):
     return layers.linearize, layers.jvp, layers.vjp
 
 
+def _rows(maps):
+    from neuron_lens.layers import rows
+    return rows(maps)
+
+
 def decoder_stack(model):
     """The decoder stack (``.layers``, ``.config``, ``get_input_embeddings()``) of a loaded model: a
     causal LM's base model (Qwen3's ``.model``, GPT-NeoX's ``.gpt_neox``), or a multimodal one's
@@ -176,8 +181,7 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     frames reach a 640-dimensional subspace); ``linearize_kw`` goes to the model's ``linearize``."""
     linearize, jvp, _ = _maps(model)
     maps = linearize(model, ids, **linearize_kw)
-    N, d = maps[0].n1.a.shape
-    dev = maps[0].n1.a.device
+    N, d, dev = _rows(maps)
 
     def step(m, X, w):  # the layer, and its tangents' means over the target rows (inside the compiled step)
         X, mid = jvp(m, X)
@@ -216,8 +220,7 @@ def r_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     positions ``t`` averaged; ``linearize_kw`` goes to the model's ``linearize``."""
     linearize, _, vjp = _maps(model)
     maps = linearize(model, ids, **linearize_kw)
-    N, d = maps[0].n1.a.shape
-    dev = maps[0].n1.a.device
+    N, d, dev = _rows(maps)
     vjp = _step(vjp, dev)
     kinds = {t for t, _ in acc.sums}
     last = 0 if "mid" in kinds else 1  # layer 0's map matters only for its mid
@@ -254,8 +257,7 @@ def input_reads_doc(model, ids: torch.Tensor, covectors: torch.Tensor, layers: l
     ``linearize`` (Gemma 4: ``embeds``, ``block``)."""
     linearize, _, vjp = _maps(model)
     maps = linearize(model, ids, **linearize_kw)
-    N, d = maps[0].n1.a.shape
-    dev = maps[0].n1.a.device
+    N, d, dev = _rows(maps)
     vjp = _step(vjp, dev)
     c = covectors.to(dev, torch.float32)
     at = torch.as_tensor(layers, device=dev)

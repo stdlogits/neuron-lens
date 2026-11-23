@@ -48,7 +48,7 @@ hf download "$MODEL" > /dev/null
 rows=$( [ -f data/corpus/dclm.jsonl ] && wc -l < data/corpus/dclm.jsonl || echo 0 )
 [ "$rows" -ge "$CORPUS_ROWS" ] || python scripts/01_lens_corpus.py --docs "$CORPUS_ROWS"
 
-python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py tests/test_pythia.py tests/test_kernels.py
+python -m pytest -q tests/test_transport.py tests/test_gemma4.py tests/test_qwen35.py tests/test_pythia.py tests/test_olmo.py tests/test_kernels.py
 if [ "$QWEN35" = 1 ]; then
     # Each component's time, then one document per lens; scripts/checks/perf_sweep.py's
     # docstring has the rest.

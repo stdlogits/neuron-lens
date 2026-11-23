@@ -20,6 +20,7 @@ import torch
 import torch.autograd.forward_ad as fwAD
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
+from neuron_lens import layers
 from neuron_lens.corpus import lens_docs
 from neuron_lens.paths import CORPUS_DIR, DATA
 from neuron_lens.rules import relp_rules
@@ -73,8 +74,8 @@ def few_dirs(maps, dirs, lens):
     """Our estimates for basis directions ``dirs`` only: S columns ``{(kind, L): [d, k]}``,
     R rows ``{(kind, L): [k, d]}``."""
     from neuron_lens import layers
-    N, d = maps[0].n1.a.shape
-    X = torch.zeros(len(dirs), N, d, device=maps[0].n1.a.device)
+    N, d, dev = layers.rows(maps)
+    X = torch.zeros(len(dirs), N, d, device=dev)
     X[torch.arange(len(dirs)), :, torch.tensor(dirs)] = 1
     out = {}
     if lens == "S":
