@@ -253,6 +253,7 @@ def embed(revs: list[str]) -> dict:
 STEPS = lambda r: 143000 if r == "main" else int(r.removeprefix("step"))
 GAPS = (1, 2, 3, 5, 9)  # layer-gap bins (lower edges) for matching random pairs to the linked ones
 MATCH = 3  # random pairs drawn per linked pair from its cell
+FIRST = 4  # a pole's strongest proposed inputs, for a per-pole share that doesn't grow with the number proposed
 
 
 def score(revs: list[str]) -> None:
@@ -367,11 +368,14 @@ def score(revs: list[str]) -> None:
     say("  median z (linked/random): " + ", ".join(f"{STEPS(r) // 1000}k {med([x['zk'][r] for x in lk]):.2f}/"
                                                  f"{med([x['zk'][r] for x in nu]):.2f}" for r in mid)
         + f"; retest {med([x['retest'] for x in lk]):.2f}/{med([x['retest'] for x in nu]):.2f}")
-    for name, rs in (("early", [r for r in mid if STEPS(r) <= 16000]), ("late", [r for r in mid if STEPS(r) >= 64000])):
-        mz = lambda xs: torch.tensor([sum(x["zk"][r] for r in rs) / len(rs) for x in xs]).nan_to_num(0)
-        a_, b_ = mz(lk), mz(nu)
-        say(f"  mean z {name} ({', '.join(f'{STEPS(r) // 1000}k' for r in rs)}): linked {a_.mean():.3f}, random {b_.mean():.3f} "
+    early, late = [r for r in mid if STEPS(r) <= 16000], [r for r in mid if STEPS(r) >= 64000]
+    mz = lambda xs, rs: torch.tensor([torch.tensor([x["zk"][r] for r in rs]).nanmean() for x in xs]).nan_to_num(0)
+    for name, f in (("early", lambda xs: mz(xs, early)), ("late", lambda xs: mz(xs, late)),
+                    ("early − late, per pair (a history the end doesn't share)", lambda xs: mz(xs, early) - mz(xs, late))):
+        a_, b_ = f(lk), f(nu)
+        say(f"  mean z {name}: linked {a_.mean():.3f}, random {b_.mean():.3f} "
             f"(difference {a_.mean() - b_.mean():+.3f} ± {(a_.var() / len(a_) + b_.var() / len(b_)) ** 0.5:.3f})")
+    say(f"    (early {', '.join(f'{STEPS(r) // 1000}k' for r in early)}; late {', '.join(f'{STEPS(r) // 1000}k' for r in late)})")
 
     def apart(u, v, r):
         """z of the mean cosine over context pairs from different documents (NaN when there are none)."""
@@ -397,22 +401,31 @@ def score(revs: list[str]) -> None:
     nfull = z(dot(M["main"], ui, vi), "main")
     ref = {g: float(nfull[torch.tensor([gbin(x) == g for x in ngap.tolist()])].median()) for g in range(len(GAPS))}
     own = z((M2[bi] * M3[bi]).sum(-1), "main")
-    own = own[~own.isnan()].median().item()
+    own = own[~own.isnan()]
+    floor = (own < nfull.median()).float().mean().item()  # how often the ruler calls a unit unlike itself
+    own = own.median().item()
     below = [float(full[i]) < ref[gbin(x["gap"])] for i, x in enumerate(rows)]
     rel = torch.tensor([(float(full[i]) - ref[gbin(x["gap"])]) / (own - ref[gbin(x["gap"])]) for i, x in enumerate(rows)])
     say(f"\nabsolute (all contexts at the end): random pairs' median z by layer gap "
-        + ", ".join(f"{GAPS[g]}+ {v:.2f}" for g, v in ref.items()) + f"; a unit against itself (2 contexts against 3) {own:.2f}")
+        + ", ".join(f"{GAPS[g]}+ {v:.2f}" for g, v in ref.items()) + f"; a unit against itself (2 contexts against 3) {own:.2f}, "
+        f"below the random median {floor:.3f} (the ruler's floor)")
+    sz = []
+    for r in revs:
+        x = z((means(r, 0, 2, 2)[bi] * means(r, 2, 5, 3)[bi]).sum(-1), r)
+        sz.append(f"{STEPS(r) // 1000}k {x[~x.isnan()].median():.2f}")
+    say("  a unit against itself, median z by checkpoint (baseline units with five contexts): " + ", ".join(sz))
     say(f"  confirmed pairs: median z {full.median():.2f}; as unlike as a typical random pair (below its gap's median) "
         f"{sum(below) / len(below):.3f}; likeness from random (0) to the same unit (1): quartiles "
         + ", ".join(f"{v:.2f}" for v in rel.quantile(torch.tensor([0.25, 0.5, 0.75])).tolist()))
-    nt = {}
-    for t_ in T:
-        nt[t_[0]] = nt.get(t_[0], 0) + 1
+    unlike = {keep[i] for i in range(len(rows)) if below[i]}
     for b in dict.fromkeys(x["band"] for x in rows):
         g = [i for i, x in enumerate(rows) if x["band"] == b]
-        poles = {keep[i][0] for i in g if below[i]}
-        say(f"  band {b}: confirmed inputs below random {sum(below[i] for i in g) / len(g):.3f} (n={len(g)}); poles with "
-            f"one {len(poles) / nt[b]:.3f} of {nt[b]}; median likeness (0-1) {rel[g].median():.2f}")
+        js = [j for j, t_ in enumerate(T) if t_[0] == b]
+        first = [{tuple(src) for src, _, _ in P["sources"][j][:FIRST]} for j in js]
+        say(f"  band {b}: confirmed inputs below random {sum(below[i] for i in g) / len(g):.3f} (n={len(g)}); median likeness "
+            f"(0-1) {rel[g].median():.2f}; poles with one among their {FIRST} strongest inputs "
+            f"{sum(any((j, X) in unlike for X in f) for j, f in zip(js, first)) / len(js):.3f} of {len(js)} "
+            f"({sum(len(f) == FIRST for f in first) / len(js):.2f} with {FIRST} proposed)")
 
 
 def check_main(t: dict) -> None:
