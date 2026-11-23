@@ -73,6 +73,12 @@ def tiny_model(kind: str):
     return model
 
 
+def close(a, b, *where) -> None:
+    worst = ((a - b).abs() - RTOL * b.abs()).argmax()
+    assert torch.allclose(a, b, atol=1e-4, rtol=RTOL), (*where, f"miss {(a - b).abs().max():.2e} at worst "
+                                                       f"{(a - b).flatten()[worst]:.2e} of {b.flatten()[worst]:.2e}")
+
+
 def pre_norm(block) -> bool:
     return hasattr(block, "input_layernorm")
 
@@ -122,20 +128,20 @@ def test_estimates_match_brute_force(kind, chunk, monkeypatch):
             h = outs[layer][0].detach()
             J = torch.autograd.functional.jacobian(
                 lambda x: run_with(model, ids, layer, x)[1][N_LAYERS - 1][0, valid].sum(0), h)
-            assert torch.allclose(r.mean("out")[layer], J[:, valid].mean(1), atol=1e-4, rtol=RTOL), ("out", layer)
+            close(r.mean("out")[layer], J[:, valid].mean(1), "out", layer)
         for layer in range(N_LAYERS):  # from layer L's MLP input
             block = model.layers[layer]
 
             def final_from_mid(x, layer=layer, block=block):
                 return run_with(model, ids, layer, mlp_out(block, x[None])[0])[1][N_LAYERS - 1][0, valid].sum(0)
             J = torch.autograd.functional.jacobian(final_from_mid, mids[layer][0].detach())
-            assert torch.allclose(r.mean("mid")[layer], J[:, valid].mean(1), atol=1e-4, rtol=RTOL), ("mid", layer)
+            close(r.mean("mid")[layer], J[:, valid].mean(1), "mid", layer)
         for layer in range(N_LAYERS):  # K_L = mean_t Σ_s ∂h_L(t)/∂e(s)
             for kind_ in ("mid", "out"):
                 K = torch.autograd.functional.jacobian(
                     lambda x, layer=layer, kind_=kind_: run_with(model, ids, None, x)[0 if kind_ == "mid" else 1]
                     [layer][0, valid].mean(0), emb)
-                assert torch.allclose(s.mean(kind_)[layer], K[:, valid].sum(1), atol=1e-4, rtol=RTOL), (kind_, layer)
+                close(s.mean(kind_)[layer], K[:, valid].sum(1), kind_, layer)
 
 
 
