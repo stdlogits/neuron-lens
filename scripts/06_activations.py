@@ -187,7 +187,7 @@ class Collector:
         self.extra = {**({"expert_width": self.I} if self.E else {}),"first_val": torch.full((nl, P, FIRST_K, f), -torch.inf), "first_tok": torch.zeros((nl, P, FIRST_K, f), dtype=torch.int32),
                       "first_chat": torch.zeros(nl, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
         self.layers = model.layers
-        self.wo = [arch.head_write(layer).view(d, H, g.head_dim) for layer, g in zip(model.layers, self.geo)]
+        self.wo = [arch.head_write(layer).view(d, H, g.head_dim) for layer, g in zip(model.layers, self.geo)] if heads else []
         self.gram = [torch.einsum("dhi,dhj->hij", w, w) for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
         self.first_pos = 0  # the token's position in the first-position and repeated passes (1 after <bos>)
         self.edges, self.bins = EDGES.to(device), bf16_bins().to(device)

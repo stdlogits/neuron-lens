@@ -140,7 +140,7 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
         for l in range(m):
             w, norm = unit(units[l][0].to(dev), s2)
             size = units[l][1].to(dev) * torch.cat([norm] * P)
-            gain = (mlp_scale[l] * scalars[l + 1:m].prod()).item() / rms[m].item()  # ``size`` holds A's own scalar
+            gain = (mlp_scale[l] * scalars[l + 1:m].prod()).item(), rms[m].item()  # ``size`` holds A's own scalar
             out_l = to(outs[l], dev)
             near = torch.full((2, P * f), -torch.inf, device=dev)
             for c0 in range(0, f, cb):  # a block of A's neurons, both its poles
@@ -151,7 +151,7 @@ def compute(k: int, dev) -> tuple[list, list, torch.Tensor, torch.Tensor, torch.
                 if l == m - 1:  # the rotation in the metric's orthonormal coordinates
                     near[0] = torch.maximum(near[0], cos.abs().amax(1))
                     near[1] = torch.maximum(near[1], ((read * s) @ (rot @ (w[:, c0:c0 + cb] / s[:, None]))).abs().amax(1))
-                push = cos * size[a_rows] * gain
+                push = cos * size[a_rows] * gain[0] / gain[1]
                 score = torch.where(cos.abs() >= floor, push.abs(), -1.0)
                 ids = l * P * f + a_rows
                 top = score.topk(min(k, score.shape[1]), dim=1).indices

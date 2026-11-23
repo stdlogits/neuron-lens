@@ -529,6 +529,46 @@ stages are not ported yet.
   both lenses fit with their sums on the GPU. A larger dim batch gains nothing: a step at 64 takes
   twice as long.
 
+### Sparse MLPs in the catalog
+
+Qwen3.5-35B-A3B, Qwen3-30B-A3B and OLMoE-1B-7B run through the catalog's neuron stages as dense models do
+(`neuron_lens/experts.py`).
+
+- **Neurons.** A sparse layer's neurons are its experts' side by side, then its shared expert's: neuron `e · I + i` is
+  neuron `i` of expert `e`, and `E · I + j` the shared expert's `j` (Qwen3.5-35B-A3B: 256 × 512 + 512 = 131,584 a
+  layer; Qwen3-30B-A3B 128 × 768; OLMoE 64 × 1024). The catalog needs one width for every layer, so a model with dense
+  layers between its sparse ones is refused. Index columns are int32 where a layer has 2¹⁵ neurons or more.
+- **Activations.** A neuron's activation is the coefficient of its write in the MLP's output, so that the output is
+  `Σ a_n w_n` as for a dense MLP: `ρ · silu(g) · u` where the router chooses its expert, `ρ` the routing weight there
+  (renormalised over the top `k`, or OLMoE's softmax value), 0 elsewhere; a shared neuron's is `σ(s) · silu(g) · u`. The
+  stages read the routing from the experts' own inputs and recompute the gate and up projections at the routed pairs
+  (the experts' forward pass keeps them), which reproduce the MLP's output to fp32 rounding (relative 10⁻⁶ on the tiny
+  test checkpoints). Rates and quantiles count every position, a routed neuron's unrouted ones at 0; its top documents
+  are those its expert reaches, padded where fewer than 64 do (`top_doc` −1, `top_val` NaN), and `07`'s drivers average
+  over the documents with the zeros where a token doesn't route to the expert.
+- **Sources and firings.** The split of a routed neuron's activation holds its routing weight, as it holds the norm's
+  scale; the weight multiplies the activation and every source's part alike, so it leaves the shares unchanged. As a
+  source, an upstream neuron's part is its activation (with its weight) times its write, read a layer at a time from the
+  experts' own weights rather than from a `[d, L·f]` matrix (43 GB in fp32 for the 35B-A3B). `parallel` and `orthogonal`
+  carry the routing weight at the firing: the neuron's map is `x → ρ w (c · x)`.
+- **Edges** are computed a block of source neurons at a time where a layer pair's cosines pass 2³¹ entries: a dense
+  model's pairs stay whole. Qwen3.5-35B-A3B's 780 pairs of 263,168 poles take about 26,000 blocks.
+- **Experts.** `experts/acts.parquet` (06), a row per layer and expert: the share of positions routed to it (`rate`, per
+  slice too), its mean routing weight there (`weight`), its top 64 documents by routing weight with their tokens and
+  contexts, and its neurons' mean RelP factors over its routed positions (`mean_cg`, `mean_cu`, the routing weight
+  included). `experts/reads.parquet` (08): the router's row for the expert (times the MLP input norm's scale), a read
+  covector, read as a pole's read is (`router_R`, `router_S`: what the residual says, and which input tokens are there,
+  where the router chooses it); and its mean map `W_down (diag(cg) W_gate + diag(cu) W_up)`, the expert's linear map at
+  its neurons' mean factors, read as a head's OV map (`ov_R`, `ov_S`, each token's z in its own column; `ov_R_copy`,
+  `ov_S_copy`). The mean averages over gates that vary from position to position: it says what the expert does on
+  average where it is chosen, as OV says what a head does per unit of attention.
+- **Scale.** The neuron stages grow with the neurons, twelve times Qwen3-8B's for the 35B-A3B. `06` keeps 290 MB of
+  device buffers a layer (11.6 GB for 40 layers beside 67 GB of weights and the heads' statistics) and runs in layer
+  groups (`--layers a-b`; the group from layer 0 collects the heads, the others stop each pass after their last layer);
+  `07` keeps 270 MB a layer and takes `--layers` too; `08` makes the unembedding products a chunk at a time past 2³²
+  entries; `17`'s state is 2.2 GB a site a layer on the CPU (run a few layers at a time) and its pass runs the model in
+  fp32, 140 GB for the 35B-A3B.
+
 ## Pythia (in progress)
 
 The Pythia suite (EleutherAI's GPT-NeoX models, 14M to 12B) trains every size on the same data in the
