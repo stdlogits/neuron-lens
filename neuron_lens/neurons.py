@@ -34,12 +34,62 @@ def mlp_names(model_id: str, layer: int) -> dict:
     return names
 
 
+def expert_weights(model_id: str, layer: int, dev="cpu") -> dict:
+    """A sparse MLP's weights from the checkpoint, in fp32: ``gate_up`` ``[E, 2I, d]`` (per expert its gate rows, then its
+    up rows) and ``down`` ``[E, d, I]``, from fused tensors (Qwen3.5's ``experts.gate_up_proj``) or one set per expert
+    (Qwen3-MoE's and OLMoE's ``experts.<e>.gate_proj``); the shared expert's ``shared_gate``, ``shared_up`` ``[Is, d]``,
+    ``shared_down`` ``[d, Is]`` and its sigmoid gate's row ``shared_gate_row`` ``[1, d]``, where the layer has them."""
+    keys, pre = anatomy.checkpoint_keys(model_id), f"{anatomy.stack_prefix(model_id)}layers.{layer}.mlp."
+    if pre + "experts.gate_up_proj" in keys:
+        names = {"gate_up": pre + "experts.gate_up_proj", "down": pre + "experts.down_proj"}
+        w = tensors(model_id, sorted(names.values()))
+        out = {k: w[n].float().to(dev) for k, n in names.items()}
+    else:
+        E = sum(1 for k in keys if k.startswith(pre + "experts.") and k.endswith(".gate_proj.weight"))
+        names = [pre + f"experts.{e}.{part}_proj.weight" for e in range(E) for part in ("gate", "up", "down")]
+        w = tensors(model_id, names)
+        get = lambda e, part: w[pre + f"experts.{e}.{part}_proj.weight"].float()
+        out = {"gate_up": torch.stack([torch.cat([get(e, "gate"), get(e, "up")]) for e in range(E)]).to(dev),
+               "down": torch.stack([get(e, "down") for e in range(E)]).to(dev)}
+    shared = {f"shared_{part}": pre + f"shared_expert.{part}_proj.weight" for part in ("gate", "up", "down")}
+    if shared["shared_gate"] in keys:
+        if pre + "shared_expert_gate.weight" in keys:
+            shared["shared_gate_row"] = pre + "shared_expert_gate.weight"
+        w = tensors(model_id, sorted(shared.values()))
+        out |= {k: w[n].float().to(dev) for k, n in shared.items()}
+    return out
+
+
+def n_neurons(model_id: str, layer: int) -> int:
+    """A layer's MLP neurons: a dense MLP's width, or a sparse one's experts side by side (``expert · I + i``), then its
+    shared expert's."""
+    from neuron_lens.arch import text_config
+    tc = text_config(model_id)
+    if not anatomy.layer_parts(model_id, layer).sparse:
+        return tc.intermediate_size
+    mlp = anatomy.skeleton(model_id)[1].layers[layer].mlp
+    shared = getattr(mlp, "shared_expert", None)
+    return mlp.experts.num_experts * mlp.experts.intermediate_dim + (0 if shared is None else shared.down_proj.in_features)
+
+
 def directions(model_id: str, layer: int, dev="cpu") -> dict:
     """``write`` ``[d, f]`` (the direction each neuron adds to the residual; where a norm follows the MLP, Gemma 4's
     and OLMo's, its size at a position also scales with that norm there), and the read rows ``gate``, ``up``
     ``[f, d]`` times the MLP input norm's scale (``arch.norm_scale``; none in OLMo 2 and 3), ``centre``d, in fp32; no
     ``up`` for an ungated MLP."""
     p, lay = anatomy.layer_parts(model_id, layer), layout(model_id)[layer]
+    if p.sparse:  # experts side by side, then the shared expert (n_neurons)
+        w = expert_weights(model_id, layer, dev)
+        E, I2, d = w["gate_up"].shape
+        g = norm_scale(model_id, lay, p.n2, dev)
+        gate, up = w["gate_up"][:, :I2 // 2].reshape(-1, d), w["gate_up"][:, I2 // 2:].reshape(-1, d)
+        write = w["down"].transpose(0, 1).reshape(d, -1)  # [d, E·I]
+        if "shared_gate" in w:
+            gate, up = torch.cat([gate, w["shared_gate"]]), torch.cat([up, w["shared_up"]])
+            write = torch.cat([write, w["shared_down"]], 1)
+        if g is not None:
+            gate, up = gate * g, up * g
+        return {"write": write, "gate": gate, "up": up}
     nm = mlp_names(model_id, layer)
     w = {k: v.float().to(dev) for k, v in tensors(model_id, sorted(nm.values())).items()}
     g = norm_scale(model_id, lay, p.n2, dev)
