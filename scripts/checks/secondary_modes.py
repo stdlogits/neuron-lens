@@ -1,5 +1,5 @@
 """A census of secondary modes (findings §24): weights propose, contexts check, a judge names the relation. Qwen3-8B
-(``MODEL``; any labelled catalog), bf16 on CUDA or MPS.
+(``MODEL``; any catalog, labelled for the judge), in its half dtype on CUDA or MPS.
 
 **Sample.** 500 firing poles (``act_top`` ≥ 0.05) per depth band, layers 1+ (seed 0). **Proposal.** Each pole's first
 16 positive in-edges (the ``edges`` table, weights only). **Check.** Every source's five top contexts (``acts``'
@@ -106,12 +106,34 @@ def verdicts(key, J):
 
 # measure
 
-def plan(rng):
+def in_edges(floor: float) -> list[dict]:
+    """Each layer's in-lists as the ``edges`` table holds them, recomputed by ``16_edges.py`` with the floor
+    ``|cos| ≥ floor/√d`` in place of its 5/√d: Pythia's weight graph is sparse (the median pole has no in-edge past
+    5/√d at 160M), and the context check, not the floor, keeps chance proposals out."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("edges16", Path(__file__).parents[1] / "16_edges.py")
+    e16 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(e16)
+    e16.SIGMAS = floor
+    ins = e16.compute(64, DEV)[0]
+    out = []
+    for score, ids, push, _ in ins:
+        f = score.shape[0] // e16.P
+        ok = score >= 0
+        row = ids % (e16.P * f)
+        out.append({"in_layer": torch.where(ok, ids.div(e16.P * f, rounding_mode="floor"), -1).tolist(),
+                    "in_neuron": torch.where(ok, row % f, -1).tolist(), "in_pole": torch.where(ok, 1 - 2 * (row // f), 0).tolist(),
+                    "in_push": torch.where(ok, push, float("nan")).tolist()})
+    return out
+
+
+def plan(rng, floor=None):
     L = arch.text_config(MODEL).num_hidden_layers
     rows = {}
+    edges = in_edges(floor) if floor else None
     for l in range(L):
         a = pq.read_table(neuron_table("acts", l), columns=["neuron", "pole", "act_top", "top_doc", "top_pos", "top_val"]).to_pydict()
-        e = pq.read_table(neuron_table("edges", l), columns=["in_layer", "in_neuron", "in_pole", "in_push"]).to_pydict()
+        e = edges[l] if edges else pq.read_table(neuron_table("edges", l), columns=["in_layer", "in_neuron", "in_pole", "in_push"]).to_pydict()
         rows[l] = {(n, p): dict(act_top=t, doc=d, pos=q, val=v, ins=list(zip(il, inn, ip, pu)))
                    for n, p, t, d, q, v, il, inn, ip, pu in zip(a["neuron"], a["pole"], a["act_top"], a["top_doc"], a["top_pos"],
                                                                  a["top_val"], e["in_layer"], e["in_neuron"], e["in_pole"], e["in_push"])}
@@ -140,7 +162,7 @@ def plan(rng):
         if c:
             control.append(add(c[0]))
     return dict(targets=targets, act_top=[rows[l][(n, p)]["act_top"] for _, l, n, p in targets], own=own, sources=sources,
-                control=control, contexts=sorted(ctx, key=ctx.get))
+                control=control, contexts=sorted(ctx, key=ctx.get), floor=floor or 5.0)
 
 
 def batch_ids(docs, batch):
@@ -159,22 +181,27 @@ def batch_ids(docs, batch):
     return ids, mask, win
 
 
-def lm_bf16():
-    from transformers import AutoModelForCausalLM
+def lm_half():
+    """The decoder stack in the model's half dtype (bf16; Pythia fp16, its checkpoints' dtype)."""
     torch.set_grad_enabled(False)
-    return AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map=DEV).eval().requires_grad_(False)
+    return arch.load_model(MODEL, DEV, eager=False)[1]
+
+
+def down(stack, l):
+    mlp = stack.layers[l].mlp
+    return mlp.down_proj if hasattr(mlp, "down_proj") else mlp.dense_4h_to_h
 
 
 def measure(args):
     OUT.mkdir(parents=True, exist_ok=True)
     if not (OUT / "plan.pt").exists():
-        torch.save(plan(random.Random(0)), OUT / "plan.pt")
+        torch.save(plan(random.Random(0), args.floor), OUT / "plan.pt")
     P = torch.load(OUT / "plan.pt", weights_only=False)
     T, C = P["targets"], P["contexts"]
     say(f"{len(T)} targets, {len(C)} unique contexts, {sum(len(s) for s in P['sources'])} proposed sources")
     sf = OUT / "state.pt"
     st = torch.load(sf) if sf.exists() else dict(done=0, win=torch.full((len(C), len(T)), float("nan"), dtype=torch.float16))
-    docs, lm = documents(), lm_bf16()
+    docs, lm = documents(), lm_half()
     cap, by_layer = {}, {}
     for j, (_, l, n, p) in enumerate(T):
         by_layer.setdefault(l, []).append((j, n, p))
@@ -182,19 +209,19 @@ def measure(args):
     for l, items in by_layer.items():
         js, ns = torch.tensor([j for j, _, _ in items], device=DEV), torch.tensor([n for _, n, _ in items], device=DEV)
         ps = torch.tensor([p for _, _, p in items], dtype=torch.float32, device=DEV)
-        lm.model.layers[l].mlp.down_proj.register_forward_pre_hook(lambda m, a, js=js, ns=ns, ps=ps: cap.__setitem__(int(js[0]), (js, a[0][..., ns].float() * ps)))
+        down(lm, l).register_forward_pre_hook(lambda m, a, js=js, ns=ns, ps=ps: cap.__setitem__(int(js[0]), (js, a[0][..., ns].float() * ps)))
     class Stop(Exception):
         pass
     def stop(m, a, o):
         raise Stop
-    lm.model.layers[max(by_layer)].mlp.register_forward_hook(stop)
+    lm.layers[max(by_layer)].mlp.register_forward_hook(stop)
     t0, saved, i0 = time.time(), time.time(), st["done"]
     while st["done"] < len(C):
         i = st["done"]
         ids, mask, win = batch_ids(docs, C[i:i + 32])
         cap.clear()
         try:
-            lm.model(input_ids=ids.to(DEV), attention_mask=mask.to(DEV))
+            lm(input_ids=ids.to(DEV), attention_mask=mask.to(DEV))
         except Stop:
             pass
         row = torch.empty(len(ids), len(T), device=DEV)
@@ -381,15 +408,15 @@ def inherit(args):
     if recf.exists():
         rec = torch.load(recf)
     else:
-        docs, lm = documents(), lm_bf16()
+        docs, lm = documents(), lm_half()
         cap = {}
         for l in range(L):
-            lm.model.layers[l].mlp.down_proj.register_forward_pre_hook(lambda m, a, l=l: cap.__setitem__(l, a[0]))
+            down(lm, l).register_forward_pre_hook(lambda m, a, l=l: cap.__setitem__(l, a[0]))
         rec = torch.zeros(len(rows), L, 2 * f, dtype=torch.float16)
         scale = act_top.clamp_min(1e-3).to(DEV)
         for i in range(0, len(rows), 16):
             ids, mask, w = batch_ids(docs, [C[r] for r in rows[i:i + 16]])
-            lm.model(input_ids=ids.to(DEV), attention_mask=mask.to(DEV))
+            lm(input_ids=ids.to(DEV), attention_mask=mask.to(DEV))
             wd = w.to(DEV)[..., None]
             for l in range(L):
                 a = cap[l].float()
@@ -599,6 +626,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("part", choices=("measure", "cards", "test", "submit", "collect", "score", "inherit", "weights", "labels"))
     ap.add_argument("n", nargs="?", type=int, default=2, help="test: cards to run")
+    ap.add_argument("--floor", type=float, default=None, help="measure: propose from in-edges past floor/√d (16_edges.py's "
+                    "computation) in place of the edges table's 5/√d")
     args = ap.parse_args()
     globals()[args.part](args)
     (SUMMARY / f"secondary_modes_{args.part}_{STEM}.log").write_text("\n".join(LOG) + "\n")

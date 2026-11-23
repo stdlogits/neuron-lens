@@ -265,15 +265,15 @@ def attn_implementation(dtype: torch.dtype) -> str:
     return EAGER_FP32
 
 
-def load_model(model_id: str, dev: str, eager: bool = True):
+def load_model(model_id: str, dev: str, eager: bool = True, revision: str | None = None):
     """``(lm, stack)``: the model in its half dtype (``half_dtype``; eager attention, for its patterns) and its decoder
-    stack."""
+    stack; ``revision``, a training checkpoint (Pythia's ``step<N>``)."""
     from transformers import AutoConfig, AutoModelForCausalLM
 
     from neuron_lens.transport import decoder_stack
     dt = half_dtype(AutoConfig.from_pretrained(model_id))
     kw = {"attn_implementation": attn_implementation(dt)} if eager else {}
-    lm = AutoModelForCausalLM.from_pretrained(model_id, dtype=dt, **kw).to(dev).eval().requires_grad_(False)
+    lm = AutoModelForCausalLM.from_pretrained(model_id, dtype=dt, revision=revision, **kw).to(dev).eval().requires_grad_(False)
     return lm, decoder_stack(lm)
 
 
