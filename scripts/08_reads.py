@@ -109,7 +109,13 @@ from neuron_lens.catalog import (
     write,
 )
 from neuron_lens.heads import copy_score, norm_derivative, own_token_z, rope_mean
-from neuron_lens.neurons import directions, orthogonal_write, poles, softcap, write_cosines
+from neuron_lens.neurons import (
+    directions,
+    orthogonal_write,
+    poles,
+    softcap,
+    write_cosines,
+)
 from neuron_lens.paths import DATA, SUMMARY
 from neuron_lens.readout import layer_reads, s_tops
 from neuron_lens.stats import auroc, spearman
@@ -414,8 +420,8 @@ def experts_reads(layers: list[int], dev) -> None:
         step = max(1, EXPERT_BLOCK // (V * 2 * I))
         for e0 in range(0, n_exp, step):
             es = range(e0, min(e0 + step, n_exp))
-            sl = lambda x, e: x[e * I:(e + 1) * I]
-            B = torch.stack([torch.cat([X @ sl(w["gate"], e).T, X @ sl(w["up"], e).T], 1) for e in es], 1)  # [V, eb, 2I]
+            B = torch.stack([torch.cat([X @ w["gate"][e * I:(e + 1) * I].T, X @ w["up"][e * I:(e + 1) * I].T], 1)
+                             for e in es], 1)  # [V, eb, 2I]
             Wd = torch.stack([torch.cat([w["write"][:, e * I:(e + 1) * I] * cg[e], w["write"][:, e * I:(e + 1) * I] * cu[e]], 1)
                               for e in es])  # [eb, d, 2I]
             for k, R in reads.items():

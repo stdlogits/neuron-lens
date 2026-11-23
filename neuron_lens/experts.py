@@ -68,6 +68,27 @@ class Routed(NamedTuple):
             out[:, self.E * self.I:] = self.shared[keep]
         return out
 
+    def at(self, rows: torch.Tensor) -> torch.Tensor:
+        """``[len(rows), f]``: ``dense`` at the rows ``rows``, in their order (a row may come more than once)."""
+        uniq, inv = rows.unique(return_inverse=True)
+        keep = torch.zeros(self.n, dtype=torch.bool, device=self.act.device)
+        keep[uniq] = True
+        return self.dense(keep)[inv]
+
+
+class Picked:
+    """A sparse layer's activations at the positions a stage keeps (``sources.Stream``): ``picked[u]`` ``[len(u), f]``
+    (or ``[f]`` for one index) at the kept positions ``u``, as a dense layer's ``[positions, f]`` tensor is indexed;
+    ``rows`` the kept positions' rows of the pass."""
+
+    def __init__(self, r: Routed, rows: torch.Tensor):
+        self.r, self.rows = r, rows
+
+    def __getitem__(self, u):
+        if isinstance(u, int):
+            return self.r.at(self.rows[u:u + 1])[0]
+        return self.r.at(self.rows[u])
+
 
 def routed(mlp, x: torch.Tensor, idx: torch.Tensor, w: torch.Tensor, rows: torch.Tensor | None = None,
            shared: tuple | None = None) -> Routed:
@@ -106,8 +127,8 @@ def routed(mlp, x: torch.Tensor, idx: torch.Tensor, w: torch.Tensor, rows: torch
 
 class Tap:
     """Hooks on a decoder layer's sparse MLP that call ``sink(Routed)`` after each of its forward passes. ``rows``
-    (optional): a callable giving, for the pass, the mask of the rows whose pairs to compute (17 keeps the positions some
-    firing sits at)."""
+    (optional): a callable taking the MLP input's leading shape (``[B, T]``) and giving the mask of the rows whose pairs
+    to compute (17 keeps the positions some firing sits at)."""
 
     def __init__(self, mlp, sink, rows=None):
         self.mlp, self.sink, self.rows, self.cap = mlp, sink, rows, {}
@@ -131,7 +152,7 @@ class Tap:
                                               c["a_s"].reshape(-1, c["a_s"].shape[-1]), c.get("s"))
         x = c["x"].reshape(-1, c["x"].shape[-1])
         self.sink(routed(self.mlp, x, c["idx"].reshape(len(x), -1), c["w"].reshape(len(x), -1),
-                         None if self.rows is None else self.rows(), shared))
+                         None if self.rows is None else self.rows(args[0].shape[:-1]), shared))
 
     def remove(self) -> None:
         for h in self.hooks:

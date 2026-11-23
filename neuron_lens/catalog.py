@@ -126,6 +126,11 @@ def neuron_type(f: int) -> pa.DataType:
     return pa.int16() if f < 2**15 else pa.int32()
 
 
+def neuron_dtype(f: int) -> torch.dtype:
+    """``neuron_type`` as a tensor's dtype."""
+    return torch.int16 if f < 2**15 else torch.int32
+
+
 @functools.cache
 def tokenizer(model: str = MODEL):
     from transformers import AutoTokenizer
