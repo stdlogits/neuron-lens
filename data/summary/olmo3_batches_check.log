@@ -1,0 +1,17 @@
+python scripts/checks/olmo3_batches.py index
+1016 files, 5,929,970,906,676 tokens, 723,872,890 windows: 1,413,814 steps of 512 (stage 1 ends at step 1,413,814: matches)
+order: np.random.Generator(PCG64(34521 + 1)).shuffle, numpy 2.5.5; first indices [228855828, 581714547, 192388120, 709520880]
+
+python scripts/checks/olmo3_batches.py check --ckpts 100000,99000 --steps 100000,99999,99500,100001,101000 (128 windows of 8,192 tokens a batch, bf16, H100)
+
+mean loss over 128 windows per batch (rows: checkpoints; a batch at or before a checkpoint's step it has seen)
+ckpt            100000       99999       99500      100001      101000
+100000         2.0105*     2.0344*     1.9699*     2.1963      2.1473 
+99000          2.0595      2.1340      2.0963      2.2069      2.1636 
+
+per window, ckpt 100000 − ckpt 99000: mean ± s.e.
+  batch    100000: -0.0490 ± 0.0058   seen by 100000 (0 steps before)
+  batch     99999: -0.0995 ± 0.0171   seen by 100000 (1 steps before)
+  batch     99500: -0.1263 ± 0.0032   seen by 100000 (500 steps before)
+  batch    100001: -0.0106 ± 0.0063   seen by neither
+  batch    101000: -0.0162 ± 0.0097   seen by neither
