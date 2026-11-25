@@ -37,8 +37,8 @@ whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-
 ``--from-branch`` releases the catalog a branch of the dataset holds instead of this machine's (a GPU box's, sent with
 ``--tables``): the model's whole folder is copied on the Hub, the card's numbers read from its parquet files' footers, and
 what the target has in that folder and the branch lacks is deleted. The Qwen3 family's other sizes (``LADDER``) get a
-section of each card. The Pythia suite, Qwen3.5 and Qwen3-30B-A3B (``LENS_ONLY``) have none yet: their ``lenses`` and
-``scale`` go up alone, the cards as they are, and Pythia's tables with ``--tables``.
+section of each card. The Pythia suite, Qwen3.5, Qwen3-30B-A3B and OLMo 3 7B (``LENS_ONLY``) have none yet: their ``lenses``
+and ``scale`` go up alone, the cards as they are, and their tables with ``--tables``.
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
@@ -75,9 +75,10 @@ QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwe
          "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
 LADDER = tuple(m for m in QWEN3 if m not in MODELS)
 PYTHIA = tuple(f"EleutherAI/pythia-{s}" for s in ("14m", "70m", "160m", "410m", "1b", "1.4b", "2.8b", "6.9b", "12b"))
-# Models whose lenses go up alone, the cards as they are, until the cards cover them: the Pythia suite, Qwen3.5 and
-# Qwen3-30B-A3B
-LENS_ONLY = PYTHIA + tuple(f"Qwen/Qwen3.5-{s}" for s in ("0.8B", "2B", "4B", "9B", "35B-A3B")) + ("Qwen/Qwen3-30B-A3B",)
+# Models whose lenses go up alone, the cards as they are, until the cards cover them: the Pythia suite, Qwen3.5,
+# Qwen3-30B-A3B and OLMo 3 7B
+LENS_ONLY = (PYTHIA + tuple(f"Qwen/Qwen3.5-{s}" for s in ("0.8B", "2B", "4B", "9B", "35B-A3B"))
+             + ("Qwen/Qwen3-30B-A3B", "allenai/Olmo-3-1025-7B"))
 PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
