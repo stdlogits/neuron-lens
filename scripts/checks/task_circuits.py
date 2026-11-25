@@ -79,6 +79,14 @@ def encode(tok, it: dict) -> tuple[torch.Tensor, list[str], list[str]]:
     ``instr``, ``post`` (the template after it, the empty think block), ``prefill``; the last token is ``last``."""
     head = tok.apply_chat_template([{"role": "user", "content": it["q"] + it["instr"]}], tokenize=False,
                                    add_generation_prompt=True, enable_thinking=False)
+    if "gen" in it:  # a free reply's prefix: the model's own tokens, exactly as it generated them
+        enc = tok(head, return_offsets_mapping=True, add_special_tokens=False)
+        q0 = head.index(it["q"])
+        spans = [("pre", 0), ("q", q0), ("post", q0 + len(it["q"]))]
+        roles = [[r for r, start in spans if s >= start][-1] for s, _ in enc["offset_mapping"]] + ["prefill"] * len(it["gen"])
+        roles[-1] = "last"
+        ids = torch.tensor(enc["input_ids"] + it["gen"])
+        return ids, [tok.decode([i]) for i in ids.tolist()], roles
     text = head + it["prefill"]
     enc = tok(text, return_offsets_mapping=True, add_special_tokens=False)
     q0 = text.index(it["q"])
@@ -110,6 +118,8 @@ def _frozen(module, query, key, value, attention_mask, scaling, dropout=0.0, **k
     cap, l = module._cap, module._l
     if cap is not None:
         cap["A"][l] = A.detach()[0]
+        if "q" in cap:  # a choice being traced: this layer's queries and keys, rotated, one per head
+            cap["q"][l], cap["k"][l] = query, k
     o = torch.matmul(A.detach() if FREEZE else A, v).transpose(1, 2).contiguous()  # [B, T, H, hd]
     if cap is not None:
         if o.requires_grad:
@@ -149,10 +159,24 @@ class Tracer:
     def logits(self, ids: torch.Tensor) -> torch.Tensor:
         return self.lm(input_ids=ids[None].to(self.dev)).logits[0, -1].float()
 
-    def run(self, ids: torch.Tensor, a: int, d: int) -> dict:
+    def run(self, ids: torch.Tensor, a: int, d: int, choice: tuple | None = None) -> dict:
         """One forward pass under RelP with the patterns held, and the backward pass from ``T``: everything a trace
-        reads (activations, per-head outputs, patterns, the residual at each norm's input) and their gradients."""
-        L, cap = self.L, {k: [None] * self.L for k in ("A", "z", "a", "g", "u", "x1", "x2", "x1g", "x2g")}
+        reads (activations, per-head outputs, patterns, the residual at each norm's input) and their gradients.
+
+        With ``choice`` (layer M, head h, query position p, positions a and b), the target is instead that head's score
+        margin ``s(p, a) − s(p, b)``: why it looks at a rather than b. Its query and keys read the residual entering
+        layer M through the input norm and the q/k norms, all held (the LN rule), and the score is bilinear in them, so
+        the half rule splits it: the relevances still sum to the margin at every cut below layer M."""
+        keys = ("A", "z", "a", "g", "u", "x1", "x2", "x1g", "x2g") + (("q", "k") if choice else ())
+        L, cap = self.L, {k: [None] * self.L for k in keys}
+        patched = []
+        if choice:  # the q/k norms of the chosen layer hold their scale, as the residual's norms do
+            from neuron_lens.rules import _norm
+            at = self.stack.layers[choice[0]].self_attn
+            for norm in (at.q_norm, at.k_norm):
+                norm._rules_orig_forward = norm.forward
+                norm.forward = _norm.__get__(norm)
+                patched.append(norm)
         hooks = []
 
         def emb(mod, inp, out):
@@ -191,8 +215,16 @@ class Tracer:
                 dvec = self.lm.lm_head.weight[a] - self.lm.lm_head.weight[d]
                 cap["cov_T"] = (dvec * self.stack.norm.weight * r[-1]).detach()  # the readout's covector at the last position
                 T = (self.stack.norm.weight * xf[-1] * r[-1]) @ dvec
+                if choice:
+                    M, h, p, pa, pb = choice
+                    q, k = cap["q"][M][0, h, p], cap["k"][M][0, h, pa] - cap["k"][M][0, h, pb]
+                    scale = self.stack.layers[M].self_attn.scaling
+                    T = (q @ k).detach() * scale + 0.5 * scale * ((q - q.detach()) @ k.detach() + q.detach() @ (k - k.detach()))
                 T.backward()
         finally:
+            for norm in patched:
+                del norm.forward
+                del norm._rules_orig_forward
             for h in hooks:
                 h.remove()
             for lay in self.stack.layers:
@@ -329,6 +361,24 @@ def check(args) -> None:
     (OUT / "check.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1))
 
 
+def key(it: dict) -> str:
+    return it.get("key") or f"{it['task']}_{it['i']:02d}"
+
+
+def all_items() -> dict:
+    """Every traced prompt by its key: the 120 (``checked``), the order control and the free replies, where run."""
+    out = {key(it): it for it in checked()}
+    for name in ("order", "free"):
+        path = OUT / name / "items.json"
+        if path.exists():
+            out.update({key(it): it for it in json.loads(path.read_text())})
+    return out
+
+
+def item_set(name: str) -> list[dict]:
+    return checked() if name == "main" else json.loads((OUT / name / "items.json").read_text())
+
+
 def checked() -> list[dict]:
     """``items()`` with the tokens and ``T`` that ``check`` chose."""
     got = {(r["task"], r["i"]): r for r in json.loads((OUT / "check.json").read_text())}
@@ -344,10 +394,13 @@ def trace(args) -> None:
     pole's relevance summed over positions (all poles), the ``TOPK`` largest (neuron, position) relevances, the direct
     relevances at the last position, and the checks (the embedding's relevances and the direct ones sum to ``T``)."""
     tr = Tracer(args.device, labels=False)
-    (OUT / "traces").mkdir(parents=True, exist_ok=True)
+    dest = OUT / "traces" if args.set == "main" else OUT / args.set / "traces"
+    dest.mkdir(parents=True, exist_ok=True)
     L, f = tr.L, tr.f
-    for it in checked():
-        path = OUT / "traces" / f"{it['task']}_{it['i']:02d}.pt"
+    for it in item_set(args.set):
+        if it.get("skip"):
+            continue
+        path = dest / f"{key(it)}.pt"
         if path.exists() and not args.force:
             continue
         ids, toks, roles = encode(tr.tok, it)
@@ -568,9 +621,8 @@ def compare(args) -> None:
               f"   other kind, same answer {mean(lambda i, j: task[i] != task[j] and ans[i] == ans[j]):+.2f}")
 
 
-GRAPHS = [("recall", 0), ("multihop", 0), ("arithmetic", 7), ("logic", 0), ("ioi", 0), ("theory_of_mind", 8),
-          ("self_knowledge", 0), ("metacognition", 0), ("metacognition", 8), ("metacognition", 3), ("translation", 12),
-          ("sentiment", 6)]
+GRAPHS = ["recall_00", "multihop_00", "arithmetic_07", "logic_00", "ioi_00", "theory_of_mind_08", "self_knowledge_00",
+          "metacognition_00", "metacognition_08", "metacognition_03", "translation_12", "sentiment_06"]
 NODE_MIN = 0.01  # of T: a graph keeps the units at least this relevant (outside the template's first tokens)
 MAX_NEURONS, MAX_HEADS = 160, 60
 FLOW_MIN = 0.004  # of T: flows kept for drawing
@@ -581,14 +633,15 @@ def graph(args) -> None:
     relevant outside the template's first tokens (the sink's, which every head reads by default: one node, ``start``),
     the embedding's, and the flows between them, each target's inflow split into its kept sources, ``start`` and the rest
     (which sum to its relevance: the check). Writes ``graphs/<task>_<i>.json`` and prints the nodes with their labels."""
-    todo = [(args.rest[k], int(args.rest[k + 1])) for k in range(0, len(args.rest), 2)] or GRAPHS
+    todo = args.rest or GRAPHS
     tr = Tracer(args.device)
-    its = {(it["task"], it["i"]): it for it in checked()}
+    its = all_items()
     hl = {(l, h): k for k, (l, h) in enumerate(zip(tr.head_labels["layer"], tr.head_labels["head"]))}
     (OUT / "graphs").mkdir(parents=True, exist_ok=True)
     L, H, f = tr.L, tr.H, tr.f
-    for task, i in todo:
-        it = its[task, i]
+    for gk in todo:
+        it = its[gk]
+        task, i = it["task"], it["i"]
         ids, toks, roles = encode(tr.tok, it)
         cap = tr.run(ids, it["answer_tok"], it["distractor_tok"])
         rel = tr.relevances(cap)
@@ -717,13 +770,13 @@ def graph(args) -> None:
                       f"{sp['margin']:+.2f} (query side {entry['q_total']:+.2f}; key side {entry['ka_total']:+.2f} at the answer, "
                       f"{entry['kb_total']:+.2f} at the distractor); "
                       f"query from " + ", ".join(f"{x['unit']} {x['v']:+.2f}" for x in entry["q"][:4]))
-        res = {"qk": qk, "item": {k: it[k] for k in ("task", "i", "q", "instr", "prefill", "answer", "distractor", "p_answer", "rank", "top")},
+        res = {"qk": qk, "key": gk, "item": {k: it.get(k) for k in ("task", "i", "q", "instr", "prefill", "answer", "distractor", "p_answer", "rank", "top", "set", "reply")},
                "T": T, "toks": toks, "roles": roles, "nodes": nodes, "edges": edges,
                "res": (rel["res"] / T).tolist(), "check": worst}
-        (OUT / "graphs" / f"{task}_{i:02d}.json").write_text(json.dumps(res, ensure_ascii=False))
+        (OUT / "graphs" / f"{gk}.json").write_text(json.dumps(res, ensure_ascii=False))
         nn_, nh_ = sum(nd["kind"] == "neuron" for nd in nodes), sum(nd["kind"] == "head" for nd in nodes)
         cover = nodes[0]["in_kept"] / T
-        print(f"\n=== {task} {i}: {it['q']!r} → {it['answer']!r} vs {it['distractor']!r}  T {T:+.2f}  "
+        print(f"\n=== {gk}: {it['q']!r} → {it['answer']!r} vs {it['distractor']!r}  T {T:+.2f}  "
               f"{nn_} neurons, {nh_} heads, {len(edges)} flows; logit's inflow from kept nodes {cover:.2f}; worst inflow check {worst:.1e}")
         for nd in sorted(nodes[2:], key=lambda x: -abs(x["R"]))[:45]:
             where = f"@{nd['pos']:2d} {toks[nd['pos']]!r:12s}"
@@ -780,10 +833,13 @@ def ablate(args) -> None:
     units at the same layers and positions (5 draws), and what the model then says. Writes ``ablate.json``."""
     tr = Tracer(args.device, labels=False)
     rng = np.random.default_rng(0)
-    out = {}
+    out = json.loads((OUT / "ablate.json").read_text()) if (OUT / "ablate.json").exists() and not args.force else {}
+    items = all_items()
     for path in sorted((OUT / "graphs").glob("*.json")):
+        if path.stem in out:
+            continue
         g = json.loads(path.read_text())
-        it = next(x for x in checked() if x["task"] == g["item"]["task"] and x["i"] == g["item"]["i"])
+        it = items[path.stem]
         ids, _, _ = encode(tr.tok, it)
         a, d = it["answer_tok"], it["distractor_tok"]
 
@@ -828,7 +884,9 @@ def ablate(args) -> None:
 
 NAMES = {"recall": "Recall", "arithmetic": "Arithmetic", "multihop": "Two-hop recall", "logic": "Logic",
          "theory_of_mind": "Theory of mind", "self_knowledge": "Self-knowledge", "metacognition": "Knowing what it knows",
-         "ioi": "Who gets the drink (IOI)", "translation": "Translation", "sentiment": "Sentiment"}
+         "ioi": "Who gets the drink (IOI)", "translation": "Translation", "sentiment": "Sentiment", "order": "Tallest or last"}
+ORDER_GRAPHS = ["order_00", "order_08", "order_12"]  # Tom, Sam, Ben, taller: told and asked the top; swapped, the top; swapped, the bottom
+FREE_GRAPHS = ["free_recall_00", "free_multihop_02", "free_arithmetic_07", "free_logic_00", "free_theory_of_mind_08", "free_self_knowledge_00"]
 
 
 def page(args) -> None:
@@ -866,11 +924,38 @@ def page(args) -> None:
             w = line.split()
             yn[w[0]] = {"same_kind": float(w[3]), "other_kind": float(w[6]), "same_answer": float(w[10]), "opposite": float(w[12])}
     ov["yesno"] = yn
-    (dest / "overview.json").write_text(json.dumps(ov, ensure_ascii=False))
     abl = json.loads((OUT / "ablate.json").read_text()) if (OUT / "ablate.json").exists() else {}
+    # the order control and the free replies, summarised
+    if (OUT / "order" / "items.json").exists():
+        rows = json.loads((OUT / "order" / "items.json").read_text())
+        hs = json.loads((OUT / "order" / "heads.json").read_text())
+        conds = []
+        for o in ("told", "swapped"):
+            for e in ("top", "bottom"):
+                sel = [r for r in rows if r["order"] == o and r["end"] == e]
+                hsel = [h for h in hs if h["order"] == o and h["end"] == e]
+                conds.append({"order": o, "end": e, "n": len(sel), "right": sum(r["pick"] == "answer" for r in sel),
+                              "T": float(np.mean([r["T"] for r in sel])), "T_middle": float(np.mean([r["T_middle"] for r in sel])),
+                              "att": {k: float(np.mean([h["att"][k] for h in hsel])) for k in ("answer", "other end", "middle")},
+                              "example": next(r["q"] for r in sel if r["names"][0] == "Tom" and r["rel"] == "taller")})
+        ov["order"] = {"conds": conds, "n": len(rows)}
+    if (OUT / "free" / "compare.json").exists():
+        fc = json.loads((OUT / "free" / "compare.json").read_text())
+        ov["free"] = {"bands": fc["bands"], "prompts": [{k: (round(v, 3) if isinstance(v, float) else v) for k, v in e.items() if k != "flow"} |
+                      ({"gen": round(e["flow"]["generated"][29], 3), "gen21": round(e["flow"]["generated"][21], 3),
+                        "flow": {k: [round(x, 3) for x in v] for k, v in e["flow"].items()}} if "flow" in e else {}) for e in fc["prompts"]]}
+    if (OUT / "decide.json").exists():
+        ov["decide"] = {k: {**{x: v[x] for x in ("head", "pos_a", "pos_b", "margin", "A_a", "A_b", "toks", "roles")},
+                            "res": [[round(x, 3) for x in row] for row in v["res"]],
+                            "units": [{**u, "R": round(u["R"], 4)} for u in v["units"][:24]]}
+                        for k, v in json.loads((OUT / "decide.json").read_text()).items()}
+    (dest / "overview.json").write_text(json.dumps(ov, ensure_ascii=False).replace("\ufffd", ""))
     graphs = []
-    for task, i in GRAPHS:
-        g = json.loads((OUT / "graphs" / f"{task}_{i:02d}.json").read_text())
+    for gk in GRAPHS + ORDER_GRAPHS + FREE_GRAPHS:
+        if not (OUT / "graphs" / f"{gk}.json").exists():
+            continue
+        g = json.loads((OUT / "graphs" / f"{gk}.json").read_text())
+        task, i, kind = g["item"]["task"], g["item"]["i"], g["item"].get("set") or "constrained"
         T = g["T"]
         nodes = []
         for nd in g["nodes"]:
@@ -889,8 +974,9 @@ def page(args) -> None:
         for q in g.get("qk", []):
             qk.append({k: q[k] for k in ("head", "margin", "A_a", "A_b", "pos_a", "pos_b", "q_total", "ka_total", "kb_total")} |
                       {side: [{**u, "v": round(u["v"], 3)} for u in q[side][:8]] for side in ("q", "ka", "kb")})
-        ab = abl.get(f"{task}_{i:02d}", {})
-        graphs.append({"key": f"{task}_{i:02d}", "task": task, "name": NAMES[task], "i": i, "q": g["item"]["q"], "instr": g["item"]["instr"],
+        ab = abl.get(gk, {})
+        graphs.append({"key": gk, "task": task, "set": kind, "name": NAMES[task], "i": i, "q": g["item"]["q"], "instr": g["item"]["instr"],
+                       "reply": g["item"].get("reply"),
                        "prefill": g["item"]["prefill"], "answer": g["item"]["answer"], "distractor": g["item"]["distractor"],
                        "T": round(T, 2), "p": round(g["item"]["p_answer"], 3), "top": g["item"]["top"][:3], "toks": g["toks"],
                        "roles": g["roles"], "nodes": nodes, "edges": edges, "qk": qk,
@@ -903,12 +989,432 @@ def page(args) -> None:
     print(f"wrote {dest}: overview {(dest / 'overview.json').stat().st_size / 1e3:.0f} kB, graphs {(dest / 'graphs.json').stat().st_size / 1e3:.0f} kB")
 
 
+# --------------------------------------------------------------------------------------------- the order control
+
+ORDER_NAMES = [("Tom", "Sam", "Ben"), ("Anna", "Lisa", "Mark"), ("Jack", "Kate", "Emma"), ("Paul", "Mary", "John")]
+ORDER_ATTRS = {"height": ("taller", "shorter", "tallest", "shortest"), "age": ("older", "younger", "oldest", "youngest")}
+
+
+def order_items() -> list[dict]:
+    """The tallest-or-last control: three names in a chain (A R B, B R C), told in order or with the two statements
+    swapped, asked for either end: 2 attributes × 2 relations × 2 orders × 2 ends × 4 name sets. Told in order, the
+    chain's top is named first and its bottom last; swapped (B R C, A R B), the top is the third name told, the bottom
+    the second, and the last name told is always the middle one, never the answer."""
+    suffix = json.loads(PROMPTS.read_text())["suffix"]
+    out = []
+    for attr, (up, down, most, least) in ORDER_ATTRS.items():
+        for word, top_w, bot_w in ((up, most, least), (down, least, most)):
+            for order in ("told", "swapped"):
+                for end in ("top", "bottom"):
+                    for A, B, C in ORDER_NAMES:
+                        s1, s2 = f"{A} is {word} than {B}.", f"{B} is {word} than {C}."
+                        text = f"{s1} {s2}" if order == "told" else f"{s2} {s1}"
+                        ans, dis = (A, C) if end == "top" else (C, A)
+                        k = len(out)
+                        out.append({"task": "order", "i": k, "key": f"order_{k:02d}", "set": "order",
+                                    "q": f"{text} Who is the {top_w if end == 'top' else bot_w}?", "instr": suffix,
+                                    "prefill": "Answer:", "answer": " " + ans, "distractor": " " + dis, "middle": " " + B,
+                                    "attr": attr, "rel": word, "order": order, "end": end, "names": [A, B, C]})
+    return out
+
+
+def order(args) -> None:
+    """The order control: each prompt's answer against the other end and the middle name, and for the six heads at the
+    last position most relevant to T, where they look (each name's mentions) and why they look at the answer rather
+    than the other end (the QK split, summed over prompts by the unit that builds the query). Writes ``order/items.json``
+    and ``order/heads.json``; ``trace --set order`` then traces them."""
+    tr = Tracer(args.device)
+    hl = {(l, h): k for k, (l, h) in enumerate(zip(tr.head_labels["layer"], tr.head_labels["head"]))}
+    (OUT / "order").mkdir(parents=True, exist_ok=True)
+    rows, heads = [], []
+    for it in order_items():
+        ids, toks, roles = encode(tr.tok, it)
+        a, d, m = (first_token(tr.tok, it[k]) for k in ("answer", "distractor", "middle"))
+        lg = tr.logits(ids)
+        names = torch.tensor([a, m, d])
+        it.update(answer_tok=a, distractor_tok=d, middle_tok=m, T=(lg[a] - lg[d]).item(), T_middle=(lg[a] - lg[m]).item(),
+                  p_answer=lg.softmax(-1)[a].item(), rank=int((lg > lg[a]).sum()), pick=["answer", "middle", "other end"][int(lg[names].argmax())],
+                  top=[(tr.tok.decode([i]), round(v, 3)) for v, i in zip(*[x.tolist() for x in lg.softmax(-1).topk(3)])])
+        rows.append(it)
+        # where each name is mentioned
+        P = len(toks)
+        def at(word):
+            return [q for q in range(P - 1) if toks[q].strip() == word.strip() and roles[q] == "q"]
+        pos = {"answer": at(it["answer"]), "other end": at(it["distractor"]), "middle": at(it["middle"])}
+        cap = tr.run(ids, a, d)
+        R = torch.stack([(z[0, -1] * z.grad[0, -1]).sum(-1) for z in cap["z"]])  # [L, H] at the last position
+        top = R.flatten().abs().topk(6).indices.tolist()
+        for k in top:
+            l, h = divmod(k, tr.H)
+            A_ = cap["A"][l][h, -1]
+            att = {name: float(A_[ps].sum()) for name, ps in pos.items()}
+            sp = tr.qk_split(cap, l, h, P - 1, pos["answer"][0], pos["other end"][0])
+            qn = sp["q"]["neurons"][:, 0]
+            qh = sp["q"]["heads"][:, 0]
+            heads.append({"key": it["key"], "order": it["order"], "end": it["end"], "head": f"L{l}h{h}", "R": R[l, h].item() / it["T"] if it["T"] else 0.0,
+                          "att": att, "margin": sp["margin"], "q_total": sp["q"]["emb"].sum().item() + qn.sum().item() + qh.sum().item(),
+                          "ka": sum(v.sum().item() for v in sp["ka"].values() if v is not None),
+                          "kb": sum(v.sum().item() for v in sp["kb"].values() if v is not None),
+                          "q_heads": {f"L{l2}h{h2}": qh[l2, h2].item() for l2, h2 in [divmod(j, tr.H) for j in qh.flatten().abs().topk(6).indices.tolist()]},
+                          "q_neurons": {f"L{l2} n{n2} {'+' if cap['a'][l2][0, -1, n2] > 0 else '−'}": qn[l2, n2].item()
+                                        for l2, n2 in [divmod(j, tr.f) for j in qn.flatten().abs().topk(6).indices.tolist()]},
+                          "writes": tr.head_labels["writes"][hl[(l, h)]] if (l, h) in hl else ""})
+        del cap
+        if args.device == "mps":
+            torch.mps.empty_cache()
+        print(f"{it['key']} {it['order']:7s} {it['end']:6s} {it['q'][:70]!r:72s} picks {it['pick']:9s} T {it['T']:+6.2f} "
+              f"vs middle {it['T_middle']:+6.2f}", flush=True)
+    (OUT / "order" / "items.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+    (OUT / "order" / "heads.json").write_text(json.dumps(heads, ensure_ascii=False))
+    order_report(rows, heads)
+
+
+def order_report(rows=None, heads=None) -> None:
+    rows = rows or json.loads((OUT / "order" / "items.json").read_text())
+    heads = heads or json.loads((OUT / "order" / "heads.json").read_text())
+    print("\ncondition (answer's place among the names told)      right  middle  other end   mean T   T vs middle")
+    where = {("told", "top"): "first", ("told", "bottom"): "last", ("swapped", "top"): "third", ("swapped", "bottom"): "second"}
+    for o in ("told", "swapped"):
+        for e in ("top", "bottom"):
+            sel = [r for r in rows if r["order"] == o and r["end"] == e]
+            c = {k: sum(r["pick"] == k for r in sel) for k in ("answer", "middle", "other end")}
+            print(f"  {o:8s} {e:7s} (answer told {where[o, e]:6s})                  {c['answer']:3d}/{len(sel)}  {c['middle']:5d}  {c['other end']:8d}"
+                  f"   {np.mean([r['T'] for r in sel]):+6.2f}   {np.mean([r['T_middle'] for r in sel]):+6.2f}")
+    for attr in ORDER_ATTRS:
+        for rel in sorted({r["rel"] for r in rows if r["attr"] == attr}):
+            sel = [r for r in rows if r["rel"] == rel]
+            print(f"  {rel:8s} right {sum(r['pick'] == 'answer' for r in sel):2d}/{len(sel)}")
+    print("\nthe heads at the last position most relevant to T: attention to each name's mentions, by condition")
+    for o in ("told", "swapped"):
+        for e in ("top", "bottom"):
+            sel = [h for h in heads if h["order"] == o and h["end"] == e]
+            print(f"  {o:8s} {e:7s} answer {np.mean([h['att']['answer'] for h in sel]):.2f}  other end {np.mean([h['att']['other end'] for h in sel]):.2f}"
+                  f"  middle {np.mean([h['att']['middle'] for h in sel]):.2f}   QK margin answer − other end {np.mean([h['margin'] for h in sel]):+.2f}")
+    from collections import Counter
+    cnt = Counter(h["head"] for h in heads)
+    print("  most frequent:", ", ".join(f"{k} ×{v}" for k, v in cnt.most_common(10)))
+    print("\nwhat builds their queries' preference for the answer over the other end (summed over prompts and heads)")
+    for o in ("told", "swapped"):
+        for e in ("top", "bottom"):
+            sel = [h for h in heads if h["order"] == o and h["end"] == e]
+            acc = Counter()
+            for h in sel:
+                for u, v in {**h["q_heads"], **h["q_neurons"]}.items():
+                    acc[u] += v / len(sel)
+            print(f"  {o:8s} {e:7s} " + ", ".join(f"{u} {v:+.2f}" for u, v in sorted(acc.items(), key=lambda x: -abs(x[1]))[:8]))
+
+
+
+# --------------------------------------------------------------------------------------------- free replies
+
+FREE_TOKENS = 96
+
+
+def free(args) -> None:
+    """Free replies: each question as a user would ask it (no format instruction, no prefill, "Answer yes or no."
+    dropped), answered greedily with thinking off, up to ``FREE_TOKENS`` tokens. The answer's first appearance in the
+    reply is found (a number's last digit, a word's first token), and the reply up to it becomes the prompt to trace,
+    with the constrained trace's contrast: the answer's token against the distractor's in the same form (case, leading
+    space). IOI is left out: its prompt is already a free continuation. Writes ``free/items.json``; ``trace --set free``
+    then traces them."""
+    import re
+    tr = Tracer(args.device, labels=False)
+    (OUT / "free").mkdir(parents=True, exist_ok=True)
+    path = OUT / "free" / "items.json"
+    done = {key(x): x for x in json.loads(path.read_text())} if path.exists() and not args.force else {}
+    stop = {tr.tok.convert_tokens_to_ids("<|im_end|>"), tr.tok.eos_token_id}
+    rows = []
+    for it in checked():
+        if it["task"] == "ioi":
+            continue
+        k = f"free_{it['task']}_{it['i']:02d}"
+        if k in done:
+            rows.append(done[k])
+            continue
+        q = it["q"].replace(" Answer yes or no.", "")
+        head = tr.tok.apply_chat_template([{"role": "user", "content": q}], tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        hid = tr.tok(head, add_special_tokens=False)["input_ids"]
+        with torch.no_grad():
+            out = tr.lm.generate(torch.tensor([hid], device=tr.dev), attention_mask=torch.ones(1, len(hid), dtype=torch.long, device=tr.dev),
+                                 max_new_tokens=FREE_TOKENS, do_sample=False, pad_token_id=tr.tok.eos_token_id)
+        gen = out[0, len(hid):].tolist()
+        cut = [j for j, t in enumerate(gen) if t in stop]
+        gen = gen[:cut[0]] if cut else gen
+        pieces = [tr.tok.decode([t]) for t in gen]
+        reply = "".join(pieces)
+        starts = np.cumsum([0] + [len(x) for x in pieces])
+        ans = it["answer"].strip()
+        row = {"task": it["task"], "i": it["i"], "key": k, "set": "free", "q": q, "instr": "", "reply": reply, "constrained": key(it)}
+        if ans.isdigit():
+            extra = it["prefill"][len("Answer:"):].strip()
+            m = re.search(rf"(?<!\d){extra}{ans}(?!\d)", reply)
+            char = m.start() + len(extra) if m else None
+        else:
+            m = re.search(rf"\b{re.escape(ans)}\b", reply, flags=re.I)
+            char = m.start() if m else None
+        if char is None:
+            row.update(skip=True, reason="the answer is not in the reply")
+        else:
+            j = int(np.searchsorted(starts, char, side="right") - 1)
+            piece = pieces[j]
+            lead = piece[:len(piece) - len(piece.lstrip())]
+            if starts[j] + len(lead) != char:
+                row.update(skip=True, reason=f"the answer starts inside the token {piece!r}")
+            else:
+                word = reply[char:char + len(ans)]
+                dis = it["distractor"].strip()
+                if not ans.isdigit():
+                    dis = (dis[0].upper() if word[0].isupper() else dis[0].lower()) + dis[1:]
+                a_tok, d_tok = gen[j], first_token(tr.tok, lead + dis)
+                lg = tr.logits(torch.tensor(hid + gen[:j]))
+                p = lg.softmax(-1)
+                row.update(gen=gen[:j], at=j, answer_tok=a_tok, distractor_tok=d_tok, answer=tr.tok.decode([a_tok]),
+                           distractor=tr.tok.decode([d_tok]), T=(lg[a_tok] - lg[d_tok]).item(), p_answer=p[a_tok].item(),
+                           rank=int((lg > lg[a_tok]).sum()), prefill="", aligned=first_token(tr.tok, lead + word) == a_tok,
+                           top=[(tr.tok.decode([i]), round(v, 3)) for v, i in zip(*[x.tolist() for x in p.topk(3)])])
+        rows.append(row)
+        path.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+        shown = reply.replace("\n", " ⏎ ")
+        print(f"{k:26s} {'skip: ' + row['reason'] if row.get('skip') else 'at token %3d  T %+6.2f' % (row['at'], row['T'])}  {shown[:90]!r}", flush=True)
+    path.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+
+
+# By hand, after reading every reply: which of the answer's appearances answers (0-based), where the first that isn't a
+# restated sentence is a restated chain ("Sam > Ben"), working ("a red box and a blue box"), or a name ("National
+# Basketball Association"); and the replies left out.
+FREE_AT = {"free_logic_00": 3, "free_logic_01": 3, "free_logic_02": 2, "free_logic_03": 2, "free_logic_08": 1, "free_multihop_11": 1}
+FREE_SKIP = {"free_logic_06": "its constrained target was a number's first digit", "free_logic_07": "its constrained target was a number's first digit",
+             "free_logic_10": "the reply stops before it answers", "free_theory_of_mind_00": "the reply stops before it answers"}
+
+
+def _plain(text: str) -> str:
+    import re
+    text = re.sub(r"[*_`$]", "", text.lower())
+    text = re.sub(r"^\s*(\d+\.|[-•])\s*", "", text)
+    return re.sub(r"\s+", " ", text).strip(" .,:;!?\"'")
+
+
+def free_locate(args) -> None:
+    """Where each free reply answers: the answer's appearances in the reply, less those inside a sentence that only
+    restates the question (its plain text a part of the question's), or the one ``FREE_AT`` names. The reply is
+    tokenized again, and the prefix up to that appearance kept only if the model's own greedy pick there is the answer's
+    token, so the prefix is the one it generated. Rewrites ``free/items.json`` and prints each answer in context."""
+    import re
+    tr = Tracer(args.device, labels=False)
+    path = OUT / "free" / "items.json"
+    rows = json.loads(path.read_text())
+    main = {key(it): it for it in checked()}
+    for row in rows:
+        it = main[row["constrained"]]
+        reply, q = row["reply"], row["q"]
+        ans = it["answer"].strip()
+        if ans.isdigit():
+            extra = it["prefill"][len("Answer:"):].strip()
+            occ = [m.start() + len(extra) for m in re.finditer(rf"(?<!\d){extra}{ans}(?!\d)", reply)]
+        else:
+            occ = [m.start() for m in re.finditer(rf"\b{re.escape(ans)}\b", reply, flags=re.I)]
+            if ans in ("Yes", "No"):  # a yes or a no answers only where it opens a sentence ("No, I don't…"), not "there is no…"
+                occ = [c for c in occ if (c == 0 or re.search(r"[.!?\n]\s*$", reply[:c])) and re.match(r"(yes|no)\b[,.!]", reply[c:], flags=re.I)]
+        plainq = _plain(q)
+        spans = [(m.start(), m.end()) for m in re.finditer(r"[^\n.!?]+[.!?]?", reply)]
+        def restated(c):
+            for a, b in spans:
+                if a <= c < b:
+                    seg = _plain(reply[a:b])
+                    return len(seg) >= 10 and seg in plainq
+            return False
+        keep = [c for c in occ if not restated(c)]
+        row.pop("skip", None); row.pop("reason", None)
+        if row["key"] in FREE_AT:
+            keep = occ[FREE_AT[row["key"]]:FREE_AT[row["key"]] + 1]
+        if row["key"] in FREE_SKIP:
+            row.update(skip=True, reason=FREE_SKIP[row["key"]])
+            print(f"{row['key']:28s} skip: {row['reason']}")
+            continue
+        if not keep:
+            row.update(skip=True, reason="the answer is not in the reply" if not occ else "the answer only restates the question")
+            print(f"{row['key']:28s} skip: {row['reason']}")
+            continue
+        char = keep[0]
+        head = tr.tok.apply_chat_template([{"role": "user", "content": q}], tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        hid = tr.tok(head, add_special_tokens=False)["input_ids"]
+        enc = tr.tok(reply, return_offsets_mapping=True, add_special_tokens=False)
+        ids, offs = enc["input_ids"], enc["offset_mapping"]
+        j = next((k for k, (a, b) in enumerate(offs) if a <= char < b), None)
+        piece = reply[offs[j][0]:offs[j][1]] if j is not None else ""
+        lead = piece[:len(piece) - len(piece.lstrip())]
+        if j is None or offs[j][0] + len(lead) != char:
+            row.update(skip=True, reason=f"the answer starts inside the token {piece!r}")
+            print(f"{row['key']:28s} skip: {row['reason']}")
+            continue
+        word = reply[char:char + len(ans)]
+        dis = it["distractor"].strip()
+        if not ans.isdigit():
+            dis = (dis[0].upper() if word[0].isupper() else dis[0].lower()) + dis[1:]
+        a_tok, d_tok = ids[j], first_token(tr.tok, lead + dis)
+        lg = tr.logits(torch.tensor(hid + ids[:j]))
+        p = lg.softmax(-1)
+        greedy = int(lg.argmax()) == a_tok
+        row.update(gen=ids[:j], at=j, answer_tok=a_tok, distractor_tok=d_tok, answer=tr.tok.decode([a_tok]), distractor=tr.tok.decode([d_tok]),
+                   T=(lg[a_tok] - lg[d_tok]).item(), p_answer=p[a_tok].item(), rank=int((lg > lg[a_tok]).sum()), prefill="", greedy=greedy,
+                   occurrence=occ.index(char), n_occ=len(occ), char=char,
+                   top=[(tr.tok.decode([i]), round(v, 3)) for v, i in zip(*[x.tolist() for x in p.topk(3)])])
+        if not greedy:
+            row.update(skip=True, reason="tokenized again, the reply's prefix isn't what the model generated")
+        ctx = (reply[max(0, char - 60):char] + "⟦" + reply[char:char + len(ans)] + "⟧" + reply[char + len(ans):char + len(ans) + 25]).replace("\n", " ⏎ ")
+        print(f"{row['key']:28s} {occ.index(char)}/{len(occ)} tok {j:3d} T {row['T']:+6.2f}{'' if greedy else ' NOT GREEDY'}  …{ctx}", flush=True)
+    path.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+
+
+FREE_PARTS = ("start", "content", "template", "generated", "last")
+
+
+def free_compare(args) -> None:
+    """Free replies against their constrained traces: where in the reply the answer comes, how much of T the model's
+    own words carry by depth, and how alike the two traces' units are (centred cosine by band, against other prompts of
+    the same kind traced constrained). Writes ``free/compare.json``."""
+    frees = [x for x in json.loads((OUT / "free" / "items.json").read_text())]
+    main = {r["item"]["task"] + f"_{r['item']['i']:02d}": r for r in loaded()}
+    tasks = list(dict.fromkeys(r["item"]["task"] for r in main.values()))
+    fr = {}
+    for x in frees:
+        path = OUT / "free" / "traces" / f"{x['key']}.pt"
+        if not x.get("skip") and path.exists():
+            fr[x["key"]] = torch.load(path, weights_only=False)
+    keys_m = list(main)
+    Vm, L, f, H = unit_vectors([main[k] for k in keys_m])
+    Vm = Vm / Vm.sum(1, keepdim=True)
+    keys_f = list(fr)
+    Vf, *_ = unit_vectors([fr[k] for k in keys_f])
+    Vf = Vf / Vf.sum(1, keepdim=True)
+    mean = torch.cat([Vm, Vf]).mean(0)
+    band_of = torch.cat([torch.arange(L).repeat_interleave(2 * f), torch.arange(L).repeat_interleave(H)])
+    out = {"prompts": [], "bands": {}}
+    for x in frees:
+        e = {k: x.get(k) for k in ("key", "task", "i", "q", "reply", "at", "T", "p_answer", "skip", "reason", "constrained", "answer", "distractor",
+                                   "char", "occurrence", "n_occ")}
+        if x["key"] in fr:
+            r = fr[x["key"]]
+            roles = r["roles"]
+            part = ["start" if q == "pre" else "content" if q == "q" else "generated" if q == "prefill" else "last" if q == "last" else "template" for q in roles]
+            e["flow"] = {pt: (r["res"][:, torch.tensor([y == pt for y in part])].sum(1) / r["T"]).tolist() for pt in FREE_PARTS}
+            e["T_constrained"] = main[x["constrained"]]["T"]
+        out["prompts"].append(e)
+    for name, lo, hi in BANDS:
+        m = (band_of >= lo) & (band_of < hi)
+        A = Vm[:, m] - mean[m]
+        B = Vf[:, m] - mean[m]
+        A = A / A.norm(dim=1, keepdim=True)
+        B = B / B.norm(dim=1, keepdim=True)
+        S = B @ A.T  # free × constrained
+        same, kind, other = [], [], []
+        for a, kf in enumerate(keys_f):
+            c = fr[kf]["item"]["constrained"]
+            t = fr[kf]["item"]["task"]
+            for b, km in enumerate(keys_m):
+                (same if km == c else kind if main[km]["item"]["task"] == t else other).append(S[a, b].item())
+        out["bands"][name] = {"same": float(np.mean(same)), "kind": float(np.mean(kind)), "other": float(np.mean(other))}
+        per = {}
+        for a, kf in enumerate(keys_f):
+            t = fr[kf]["item"]["task"]
+            b = keys_m.index(fr[kf]["item"]["constrained"])
+            per.setdefault(t, []).append((S[a, b].item(), np.mean([S[a, j].item() for j, km in enumerate(keys_m) if main[km]["item"]["task"] == t and km != keys_m[b]])))
+        out["bands"][name]["by_task"] = {t: [float(np.mean([v[0] for v in vs])), float(np.mean([v[1] for v in vs]))] for t, vs in per.items()}
+    (OUT / "free" / "compare.json").write_text(json.dumps(out, ensure_ascii=False))
+    print(f"{len(frees)} free replies, {len(fr)} traced")
+    print(f"{'kind':15s} found  right  answer at token (median)  T free / constrained   on its own words L21 / L29   last L29")
+    for t in tasks:
+        ps = [e for e in out["prompts"] if e["task"] == t]
+        if not ps:
+            continue
+        tr_ = [e for e in ps if "flow" in e]
+        if not tr_:
+            print(f"{t:15s} {0:5d}/{len(ps)}")
+            continue
+        print(f"{t:15s} {len(tr_):5d}/{len(ps)} {sum(e['T'] > 0 for e in tr_):5d}  {np.median([e['at'] for e in tr_]):10.0f}"
+              f"            {np.mean([e['T'] for e in tr_]):6.1f} / {np.mean([e['T_constrained'] for e in tr_]):5.1f}"
+              f"              {np.mean([e['flow']['generated'][21] for e in tr_]):5.2f} / {np.mean([e['flow']['generated'][29] for e in tr_]):5.2f}"
+              f"     {np.mean([e['flow']['last'][29] for e in tr_]):5.2f}")
+    print("units, free against constrained (centred cosine): the same question / other questions of its kind / other kinds")
+    for name, *_ in BANDS:
+        b = out["bands"][name]
+        print(f"  {name:12s} {b['same']:+.2f} / {b['kind']:+.2f} / {b['other']:+.2f}   by kind (same, kind): " +
+              ", ".join(f"{t[:6]} {v[0]:+.2f} {v[1]:+.2f}" for t, v in b["by_task"].items()))
+
+
+# --------------------------------------------------------------------------------------------- where a choice is made
+
+DECIDE = ["order_00", "order_08", "order_12", "ioi_00", "logic_00", "self_knowledge_00"]
+
+
+def decide(args) -> None:
+    """Where a head's choice is made: for each graph (``rest``, default ``DECIDE``), the head at the last position that
+    most prefers the answer's position over the distractor's (attention, from the graph's QK splits) has its score
+    margin traced instead of T. The residual's relevance to the margin by depth and position (it sums to the margin
+    at every cut below the head's layer) and the most relevant units. Writes ``decide.json``."""
+    tr = Tracer(args.device)
+    items = all_items()
+    path = OUT / "decide.json"
+    out = json.loads(path.read_text()) if path.exists() and not args.force else {}
+    hl = {(l, h): k for k, (l, h) in enumerate(zip(tr.head_labels["layer"], tr.head_labels["head"]))}
+    for name in args.rest or DECIDE:
+        gk, _, chosen = name.partition("@")  # "order_08@h24.29.35": that head instead of the strongest mover
+        g = json.loads((OUT / "graphs" / f"{gk}.json").read_text())
+        if not g.get("qk"):
+            continue
+        best = dict(max(g["qk"], key=lambda q: q["A_a"] - q["A_b"]))
+        if chosen:
+            best["head"] = chosen
+        M, h, p = (int(x) for x in best["head"][1:].split("."))
+        it = items[gk]
+        ids, toks, roles = encode(tr.tok, it)
+        cap = tr.run(ids, it["answer_tok"], it["distractor_tok"], choice=(M, h, p, best["pos_a"], best["pos_b"]))
+        margin = cap["T"]
+        best["A_a"], best["A_b"] = cap["A"][M][h, p, best["pos_a"]].item(), cap["A"][M][h, p, best["pos_b"]].item()
+        res = torch.stack([(x[0] * x.grad[0]).sum(-1) for x in cap["x1g"][:M + 1]])  # [M + 1, P]
+        Rn = torch.stack([a[0].detach() * a.grad[0] for a in cap["a"][:M]])  # [M, P, f]
+        Rh = torch.stack([(z[0] * z.grad[0]).sum(-1) for z in cap["z"][:M]])  # [M, P, H]
+        acts = torch.stack([a[0].detach() for a in cap["a"][:M]])
+        units = []
+        for k in Rn.flatten().abs().topk(30).indices.tolist():
+            l, rest = divmod(k, Rn.shape[1] * tr.f)
+            q, n = divmod(rest, tr.f)
+            a_ = acts[l, q, n].item()
+            row = n if a_ > 0 else tr.f + n
+            units.append({"unit": f"L{l} n{n} {'+' if a_ > 0 else '−'}", "id": f"n{l}.{n}.{q}", "pos": q, "R": Rn[l, q, n].item() / margin,
+                          "fires": tr.labels[l]["fires"][row], "writes": tr.labels[l]["writes"][row]})
+        for k in Rh.flatten().abs().topk(15).indices.tolist():
+            l, rest = divmod(k, Rh.shape[1] * tr.H)
+            q, hh = divmod(rest, tr.H)
+            units.append({"unit": f"L{l}h{hh}", "id": f"h{l}.{hh}.{q}", "pos": q, "R": Rh[l, q, hh].item() / margin,
+                          "writes": tr.head_labels["writes"][hl[(l, hh)]] if (l, hh) in hl else "",
+                          "attn": [[int(i), round(float(v), 2)] for v, i in zip(*[x.tolist() for x in cap["A"][l][hh, q].topk(3)])]})
+        units.sort(key=lambda u: -abs(u["R"]))
+        emb = (cap["emb"][0] * cap["emb"].grad[0]).sum(-1)
+        out[name] = {"head": best["head"], "pos_a": best["pos_a"], "pos_b": best["pos_b"], "margin": margin, "A_a": best["A_a"], "A_b": best["A_b"],
+                   "res": (res / margin).tolist(), "emb": (emb / margin).tolist(), "units": units[:36], "toks": toks, "roles": roles,
+                   "check": (emb.sum().item() - margin) / abs(margin)}
+        print(f"\n=== {name}: why {best['head']} looks at {toks[best['pos_a']]!r} rather than {toks[best['pos_b']]!r}: margin {margin:+.2f}, "
+              f"embedding sum {emb.sum().item():+.2f}")
+        for L_ in sorted({0, M // 3, M // 2, 2 * M // 3, M}):
+            r = res[L_] / margin
+            top = r.abs().topk(5).indices.tolist()
+            print(f"   entering L{L_:2d}: " + ", ".join(f"{toks[q]!r}@{q} {r[q]:+.2f}" for q in top))
+        for u in units[:14]:
+            print(f"   {u['R']:+.3f}  {u['unit']:15s} @{u['pos']:2d} {toks[u['pos']]!r:12s} {(u.get('fires') or u.get('writes') or '')[:70]}")
+        del cap
+        if args.device == "mps":
+            torch.mps.empty_cache()
+        path.write_text(json.dumps(out, ensure_ascii=False))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=("check", "trace", "compare", "graph", "ablate", "page"))
+    ap.add_argument("what", choices=("check", "trace", "compare", "graph", "ablate", "page", "order", "free", "free_compare", "decide", "free_locate"))
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps")
-    ap.add_argument("--force", action="store_true", help="trace: redo prompts already traced")
+    ap.add_argument("--force", action="store_true", help="trace, ablate: redo prompts already done")
+    ap.add_argument("--set", default="main", choices=("main", "order", "free"), help="trace: which prompts")
     args = ap.parse_args()
     globals()[args.what](args)
 
