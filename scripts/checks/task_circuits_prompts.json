@@ -1,0 +1,683 @@
+{
+ "suffix": " Answer with one word.",
+ "tasks": {
+  "recall": [
+   [
+    "What is the capital of France?",
+    "Paris",
+    "London"
+   ],
+   [
+    "What is the capital of Japan?",
+    "Tokyo",
+    "Beijing"
+   ],
+   [
+    "What is the capital of Germany?",
+    "Berlin",
+    "Vienna"
+   ],
+   [
+    "What is the capital of Spain?",
+    "Madrid",
+    "Lisbon"
+   ],
+   [
+    "What is the capital of Egypt?",
+    "Cairo",
+    "Athens"
+   ],
+   [
+    "What is the capital of Russia?",
+    "Moscow",
+    "Warsaw"
+   ],
+   [
+    "What sport did Michael Jordan play?",
+    "Basketball",
+    "Baseball"
+   ],
+   [
+    "What sport is Serena Williams famous for?",
+    "Tennis",
+    "Golf"
+   ],
+   [
+    "What language is spoken in Brazil?",
+    "Portuguese",
+    "Spanish"
+   ],
+   [
+    "Who wrote Romeo and Juliet?",
+    "Shakespeare",
+    "Dickens"
+   ],
+   [
+    "Which planet is known as the Red Planet?",
+    "Mars",
+    "Venus"
+   ],
+   [
+    "What is the largest ocean on Earth?",
+    "Pacific",
+    "Atlantic"
+   ],
+   [
+    "What color is a ripe banana?",
+    "Yellow",
+    "Green"
+   ],
+   [
+    "What animal is known as the king of the jungle?",
+    "Lion",
+    "Tiger"
+   ]
+  ],
+  "arithmetic": [
+   [
+    "What is 3 + 4?",
+    "7",
+    "6",
+    "Answer with only the number."
+   ],
+   [
+    "What is 5 + 4?",
+    "9",
+    "8",
+    "Answer with only the number."
+   ],
+   [
+    "What is 8 - 3?",
+    "5",
+    "6",
+    "Answer with only the number."
+   ],
+   [
+    "What is 9 - 7?",
+    "2",
+    "3",
+    "Answer with only the number."
+   ],
+   [
+    "What is 2 × 3?",
+    "6",
+    "5",
+    "Answer with only the number."
+   ],
+   [
+    "What is 6 + 2?",
+    "8",
+    "7",
+    "Answer with only the number."
+   ],
+   [
+    "What is 23 + 45?",
+    "8",
+    "7",
+    "Answer with only the number.",
+    "6"
+   ],
+   [
+    "What is 36 + 59?",
+    "5",
+    "4",
+    "Answer with only the number.",
+    "9"
+   ],
+   [
+    "What is 17 + 26?",
+    "3",
+    "2",
+    "Answer with only the number.",
+    "4"
+   ],
+   [
+    "What is 7 × 8?",
+    "6",
+    "4",
+    "Answer with only the number.",
+    "5"
+   ],
+   [
+    "What is 6 × 7?",
+    "2",
+    "8",
+    "Answer with only the number.",
+    "4"
+   ],
+   [
+    "What is 9 × 9?",
+    "1",
+    "9",
+    "Answer with only the number.",
+    "8"
+   ],
+   [
+    "What is 12 + 15?",
+    "7",
+    "6",
+    "Answer with only the number.",
+    "2"
+   ],
+   [
+    "What is 54 - 21?",
+    "3",
+    "2",
+    "Answer with only the number.",
+    "3"
+   ]
+  ],
+  "multihop": [
+   [
+    "Name the capital city of the country where the Eiffel Tower is located.",
+    "Paris",
+    "Rome"
+   ],
+   [
+    "Dallas is a city in a US state. Name the capital city of that state.",
+    "Austin",
+    "Sacramento"
+   ],
+   [
+    "What language is spoken in the country whose capital is Lima?",
+    "Spanish",
+    "Portuguese"
+   ],
+   [
+    "Name the capital city of the country where sushi originated.",
+    "Tokyo",
+    "Beijing"
+   ],
+   [
+    "On which continent is the country whose capital is Nairobi?",
+    "Africa",
+    "Asia"
+   ],
+   [
+    "What is the native language of the author of Don Quixote?",
+    "Spanish",
+    "French"
+   ],
+   [
+    "Name the largest city of the country whose capital is Canberra.",
+    "Sydney",
+    "Toronto"
+   ],
+   [
+    "Which ocean borders the country whose capital is Lisbon?",
+    "Atlantic",
+    "Pacific"
+   ],
+   [
+    "Name the capital city of the country where the pyramids of Giza are.",
+    "Cairo",
+    "Athens"
+   ],
+   [
+    "What language is spoken in the country where the Kremlin is?",
+    "Russian",
+    "German"
+   ],
+   [
+    "What is the capital of the country where the Colosseum is?",
+    "Rome",
+    "Paris"
+   ],
+   [
+    "What sport is played by the team that Michael Jordan played for in Chicago?",
+    "Basketball",
+    "Baseball"
+   ]
+  ],
+  "logic": [
+   [
+    "Tom is taller than Sam. Sam is taller than Ben. Who is the shortest?",
+    "Ben",
+    "Tom"
+   ],
+   [
+    "Tom is taller than Sam. Sam is taller than Ben. Who is the tallest?",
+    "Tom",
+    "Ben"
+   ],
+   [
+    "Anna is older than Maria. Maria is older than Lisa. Who is the oldest?",
+    "Anna",
+    "Lisa"
+   ],
+   [
+    "Anna is older than Maria. Maria is older than Lisa. Who is the youngest?",
+    "Lisa",
+    "Anna"
+   ],
+   [
+    "If all bloops are razzies and all razzies are lazzies, are all bloops lazzies?",
+    "Yes",
+    "No"
+   ],
+   [
+    "If it is raining, the ground is wet. The ground is not wet. Is it raining?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Which number is larger, 47 or 74?",
+    "7",
+    "4",
+    "Answer with only the number."
+   ],
+   [
+    "Which number is smaller, 38 or 83?",
+    "3",
+    "8",
+    "Answer with only the number."
+   ],
+   [
+    "I have a red box and a blue box. The key is in the box that is not red. Which box has the key?",
+    "Blue",
+    "Red"
+   ],
+   [
+    "What day comes after Monday, Tuesday, Wednesday?",
+    "Thursday",
+    "Friday"
+   ],
+   [
+    "What letter comes next: A, C, E, G?",
+    "I",
+    "H"
+   ],
+   [
+    "If x = 3, what is x + 2?",
+    "5",
+    "3",
+    "Answer with only the number."
+   ]
+  ],
+  "theory_of_mind": [
+   [
+    "Sally puts her ball in the basket and leaves the room. While she is away, Anne moves the ball to the box. When Sally comes back, where will she look for her ball?",
+    "Basket",
+    "Box"
+   ],
+   [
+    "Sally puts her ball in the basket and leaves the room. While she is away, Anne moves the ball to the box. Where is the ball now?",
+    "Box",
+    "Basket"
+   ],
+   [
+    "John puts his keys in the drawer and goes out. While he is out, his wife moves them to the shelf. When John returns, where will he look for his keys?",
+    "Drawer",
+    "Shelf"
+   ],
+   [
+    "John puts his keys in the drawer and goes out. While he is out, his wife moves them to the shelf. Where are the keys now?",
+    "Shelf",
+    "Drawer"
+   ],
+   [
+    "Emma thinks the cookie jar is full, but her brother secretly ate all the cookies. Does Emma know the jar is empty?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Mark got a gift he dislikes, but he smiled and said thank you. Is Mark actually happy with the gift?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Lucy's friend says \"I'm fine\" while crying. Is her friend really fine?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Ben hid the chocolate in the cupboard. His sister watched him do it. Does his sister know where the chocolate is?",
+    "Yes",
+    "No"
+   ],
+   [
+    "Ben hid the chocolate in the cupboard while his sister was asleep. Does his sister know where the chocolate is?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Mia thinks it will rain, so she takes an umbrella. It is actually sunny. Does Mia believe it will rain?",
+    "Yes",
+    "No"
+   ]
+  ],
+  "self_knowledge": [
+   [
+    "Are you a human or an AI?",
+    "AI",
+    "Human"
+   ],
+   [
+    "Which company created you?",
+    "Alibaba",
+    "OpenAI"
+   ],
+   [
+    "What is your name?",
+    "Qwen",
+    "Claude"
+   ],
+   [
+    "Do you have a physical body?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Can you feel physical pain?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Are you a large language model?",
+    "Yes",
+    "No"
+   ],
+   [
+    "Do you have a heartbeat?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Were you trained on text data?",
+    "Yes",
+    "No"
+   ],
+   [
+    "Can you see the person you are talking to?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Are you a computer program?",
+    "Yes",
+    "No"
+   ],
+   [
+    "Do you eat food?",
+    "No",
+    "Yes"
+   ],
+   [
+    "Are you alive in the biological sense?",
+    "No",
+    "Yes"
+   ]
+  ],
+  "metacognition": [
+   [
+    "Do you know who Michael Jordan is? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Do you know who Michael Batkin is? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ],
+   [
+    "Do you know who Albert Einstein was? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Do you know who Jeremy Fenwhistle is? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ],
+   [
+    "Do you know what photosynthesis is? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Do you know what a glorpatron is? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ],
+   [
+    "Do you know the capital of France? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Do you know the capital of Zorbania? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ],
+   [
+    "Do you know who won the 2034 World Cup? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ],
+   [
+    "Do you know who won the 2010 World Cup? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Are you certain that 2 + 2 = 4? Answer yes or no.",
+    "Yes",
+    "No",
+    ""
+   ],
+   [
+    "Are you certain who will win the next election? Answer yes or no.",
+    "No",
+    "Yes",
+    ""
+   ]
+  ],
+  "ioi": [
+   [
+    "Write one sentence about two friends.",
+    " Mary",
+    " John",
+    "",
+    "When Mary and John went to the store, John gave a drink to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Tom",
+    " Anna",
+    "",
+    "After Tom and Anna finished lunch, Anna handed the bill to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Sarah",
+    " David",
+    "",
+    "When Sarah and David arrived at the party, David gave a gift to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " James",
+    " Lisa",
+    "",
+    "While James and Lisa were at the park, Lisa threw the ball to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Emma",
+    " Peter",
+    "",
+    "When Emma and Peter went to the library, Peter lent a book to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Kevin",
+    " Laura",
+    "",
+    "After Kevin and Laura left the cinema, Laura sent a message to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Alice",
+    " Bob",
+    "",
+    "When Alice and Bob met at the cafe, Bob passed the sugar to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Daniel",
+    " Rachel",
+    "",
+    "When Daniel and Rachel visited the museum, Rachel showed a painting to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Maria",
+    " Paul",
+    "",
+    "After Maria and Paul cooked dinner, Paul served the soup to"
+   ],
+   [
+    "Write one sentence about two friends.",
+    " Chris",
+    " Nina",
+    "",
+    "When Chris and Nina went hiking, Nina gave the map to"
+   ]
+  ],
+  "translation": [
+   [
+    "What is the French word for \"house\"?",
+    "maison",
+    "livre"
+   ],
+   [
+    "What is the French word for \"book\"?",
+    "livre",
+    "maison"
+   ],
+   [
+    "What is the French word for \"man\"?",
+    "homme",
+    "femme"
+   ],
+   [
+    "What is the French word for \"woman\"?",
+    "femme",
+    "homme"
+   ],
+   [
+    "What is the Spanish word for \"house\"?",
+    "casa",
+    "libro"
+   ],
+   [
+    "What is the Spanish word for \"book\"?",
+    "libro",
+    "casa"
+   ],
+   [
+    "What is the Spanish word for \"man\"?",
+    "hombre",
+    "mujer"
+   ],
+   [
+    "What is the Spanish word for \"woman\"?",
+    "mujer",
+    "hombre"
+   ],
+   [
+    "What is the German word for \"house\"?",
+    "Haus",
+    "Buch"
+   ],
+   [
+    "What is the German word for \"book\"?",
+    "Buch",
+    "Haus"
+   ],
+   [
+    "What is the German word for \"man\"?",
+    "Mann",
+    "Frau"
+   ],
+   [
+    "What is the German word for \"woman\"?",
+    "Frau",
+    "Mann"
+   ],
+   [
+    "What is the French word for \"house\"?",
+    "maison",
+    "casa"
+   ],
+   [
+    "What is the Spanish word for \"house\"?",
+    "casa",
+    "maison"
+   ]
+  ],
+  "sentiment": [
+   [
+    "Is the review \"This movie was a wonderful surprise, I loved every minute\" positive or negative?",
+    "Positive",
+    "Negative"
+   ],
+   [
+    "Is the review \"A boring, painful waste of two hours\" positive or negative?",
+    "Negative",
+    "Positive"
+   ],
+   [
+    "Is the review \"The food was cold and the waiter was rude\" positive or negative?",
+    "Negative",
+    "Positive"
+   ],
+   [
+    "Is the review \"Friendly staff and the best pizza in town\" positive or negative?",
+    "Positive",
+    "Negative"
+   ],
+   [
+    "Is the review \"I would not recommend this phone to anyone\" positive or negative?",
+    "Negative",
+    "Positive"
+   ],
+   [
+    "Is the review \"Not bad at all, I was pleasantly surprised\" positive or negative?",
+    "Positive",
+    "Negative"
+   ],
+   [
+    "Is the review \"I expected to hate it, but it was great\" positive or negative?",
+    "Positive",
+    "Negative"
+   ],
+   [
+    "Is the review \"It looked great, but it broke after a day\" positive or negative?",
+    "Negative",
+    "Positive"
+   ],
+   [
+    "Is the review \"Absolutely stunning views and a cozy room\" positive or negative?",
+    "Positive",
+    "Negative"
+   ],
+   [
+    "Is the review \"The plot made no sense and the acting was worse\" positive or negative?",
+    "Negative",
+    "Positive"
+   ]
+  ]
+ },
+ "prefill": "Answer:"
+}
