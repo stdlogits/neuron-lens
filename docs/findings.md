@@ -29,7 +29,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§20](#20-qwen3-4b-and-06b-are-pruned-from-the-8b-and-the-17b) | the 4B and 0.6B are width-pruned from the 8B and 1.7B: three lineages, not five sizes |
 | **VII. What the lenses miss** | [§21](#21-the-dark-sector-what-the-r-lens-barely-reads) | the dark sector matters 300-5,700 times more than the lens predicts; what prompts differ in turns bright, and the rest is inert |
 | | [§22](#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read) | the R-lens reads a block of raw coordinates that the writes avoid; where it meets the S-lens's, a core carries each position's token through mid-depth, and late the prediction moves into the rest |
-| **VIII. Mixed units** | [§23](#23-a-colorado-neurons-tornado-mode-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses |
+| **VIII. Mixed units** | [§23](#23-two-mixed-units-and-their-fossils-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses. A baseball and blood-glucose unit is fed by a baseball unit that fires as hard on SSH, and their reads keep the senses between (credentials, yeast) with no working route |
 | | [§24](#24-secondary-modes-weights-propose-contexts-check) | 15-33% of Qwen3-8B's poles have a weight-wired input from an unrelated domain at a third of their peak, 2-4% at half; weights propose them, but only contexts and labels say which are unrelated |
 | | [§25](#25-secondary-modes-over-pythias-training-a-first-look) | a first look over Pythia's checkpoints (160M-6.9B): half of the confirmed inputs look unrelated at the end, and their histories run both ways with no net drift; noisy, needs manual review |
 
@@ -2049,10 +2049,11 @@ outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*
 
 ## VIII. Mixed units
 
-A unit is mixed when it serves two jobs that share no feature. §23 traces one, from Qwen3-32B back to the 14B, to where
-the mixing enters; §24 counts such second jobs across Qwen3-8B; §25 follows them through Pythia's training.
+A unit is mixed when it serves two jobs that share no feature. §23 traces two in Qwen3-14B, one of them from Qwen3-32B
+back, to where the mixing enters; §24 counts such second jobs across Qwen3-8B; §25 follows them through Pythia's
+training.
 
-### §23. A Colorado neuron's Tornado mode: relict generalization
+### §23. Two mixed units and their fossils: relict generalization
 
 Cammarata (2026, [Neural networks are already clean](https://already-clean.goodfire.com/)) described a Qwen3-32B
 neuron that tracks Colorado (L55 n11703); Brangus (2026, [X](https://x.com/RatOrthodox/status/2110976835089809678)) found that
@@ -2060,7 +2061,8 @@ it also fires on code using Tornado, a Python web framework, and that zeroing it
 was developed away from Colorado. Tigges et al. (2026, [Neurons as an interpretable
 basis](https://www.goodfire.com/research/neurons-as-an-interpretable-basis)) found the Tornado mode rare (98.5% of the
 neuron's strong firings on ordinary text are about places) and supposed it came from copying the 14B's layers. Its parent
-is 14B L31 n11703 (§20).
+is 14B L31 n11703 (§20). A second unit of the 14B, L33 n4648, fires on baseball and on blood glucose; it is traced after
+the first.
 
 **Setup** (`checks/colorado_tornado.py`; Qwen3-14B, bf16 on an M5 Max, the released lenses). A unit's activation on a
 text is its pole-signed peak over positions, as a share of its `act_top`. The texts are 32 short hand-written passages
@@ -2115,6 +2117,58 @@ pre-norm, so a layer's MLP input is the sum of the embedding, every head's write
   no output token names. Chinese comments neither drive it (Flask code with them, 0.02) nor add to Tornado's (1.16 against
   1.15).
 
+**A second case: baseball and blood glucose** (`checks/baseball_glucose.py`; the same model, precision and lenses; 87
+hand-written passages in `checks/baseball_glucose_texts.json`, the code slice's files and 8,000 random activation
+documents). Both poles of 14B L33 n4648 share its gate and both jobs. The + pole's top documents are baseball games and,
+in 15 of 64, diabetes, glucose and sugar chemistry; the − pole's are baseball, much of it the front office (drafts,
+general managers, contracts), and a few on sugars.
+
+- **Two topics and nothing between.** The + pole fires at 0.16-1.05 of its `act_top` on baseball and softball prose, box
+  scores and Chinese baseball news. It fires at 0.36-1.13 on diabetes, glycolysis, D- and L-glucose, metformin and A1C.
+  It stays at 0.01-0.11 on cricket, basketball, football, golf and tennis (hockey 0.20). It also stays low on recipe
+  sugar, candy and sports drinks, on hypertension, cancer, thyroid disease and blood-pressure numbers, and on growth
+  hormone and steroids without insulin (0.01-0.05). The − pole leans to baseball's transactions (0.80-0.96 on a trade and
+  a scouting report) and fires more weakly on glucose (up to 0.52). Of 8,000 random activation documents, 26 reach 0.3 on
+  the + pole and 36 on the −. All are baseball or glucose but two, at 0.30-0.33 (children in Havana, a fungus importing
+  copper). The neuron is the same in Qwen3-14B-Base (rows at cosine 0.996) and at Qwen3-32B's L57 (0.63, against the
+  layer's median of 0.70).
+- **The mix forms at L33.** Its strongest weight inputs read one topic each: a sugar unit (L32 n15513+), a diabetes and
+  insulin unit (L32 n1921−) and baseball units (L32 n2063+, L31 n6703−, L29 n16174+). Each fires at 0.00-0.10 on the
+  other topic. Every pole in the model was run on six baseball and six glucose texts. It is the only one at a median of
+  0.3 or more on both whose controls' 90th percentile stays under 0.15 (0.47 and 0.57, controls 0.10). Qwen3-8B has none.
+- **One input has a second job: SSH.** L29 n16174+ fires at a median 0.83 on the baseball texts and 0.73 on SSH configs
+  and code, and at 0.02 on the controls. It is the only pole in the model at half its peak on both, the base model has it
+  too, and Qwen3-8B has none. The code slice has 39 files that use SSH (paramiko, Twisted Conch, `known_hosts`). On
+  them it peaks at a median 0.66, with 85% at 0.3 or more. On files that hold passwords, run shell `pwd`, mention
+  baseball, or none of these, its median is 0.01-0.02. The mode needs no path or dot (`ssh deploy@…` 1.25). Senses the two
+  might share don't drive it: dotfiles, `.gitignore`, p-values and calibers (`.05`, `.308`) give 0.00-0.05, and
+  network, web and party hosts 0.00-0.03. L33 n4648's − pole inherits a weak copy, a median 0.14 on the SSH files with
+  15% at 0.3 or more, against 0.03-0.04 and none on the other files.
+- **The SSH unit's read is a halo of baseball's other senses.** Beside baseball and ` ssh` (2nd), each of these families
+  ranks within the top 0.2-0.8% of 4,096 random L29 poles' reads (R-lens, z-scored):
+  - brewing and beer (酿酒 49th), the sense of the Brewers;
+  - yeast, fungi and fermentation (` yeast` 17th);
+  - banks and mortgages (` bank` 69th);
+  - Havana and cigars (79th), and Harry Potter (` Rowling` 29th);
+  - devops: `bash`, `Jenkins`, `.bat`, `git` and FTP (25th);
+  - credentials: `passwd`, `pwd`, `username`, `bcrypt` (50th);
+  - glucose (108th).
+
+  The other baseball inputs carry these families more weakly, most past the top 2%. Only two of them drive the unit.
+  SSH drives it at full strength, and yeast weakly: 0.21-0.26 on pitching yeast into wort, on fungi and on fermentation,
+  against 0.01 on a brewery's menu and on wine. Banks, sailing, trout, a Jenkins pipeline, a bash script, a `.bat` file
+  and git with FTP give 0.00-0.04.
+- **Credentials join the two sides.** Outside its two topics, the target's read ranks credentials highest (` PWD` 34th
+  on the + pole, `pwd` 16th on the −), beside `gl`-tokens (OpenGL's, spelled like glucose), git, `Repo` and FTP
+  (99th-146th) and `_ssh` (119th on the −). Under 1% of random L33 poles reach those ranks for credentials or `_ssh`.
+  The glucose inputs carry the credentials too: the diabetes unit ranks `(pwd` 28th and the sugar unit ` password` 36th.
+  That is the spelling the shell's `pwd` shares with PWD, a person with diabetes. The SSH unit ranks them 50th. Nothing
+  drives along them. Files with passwords or shell `pwd` drive none of these units (medians 0.04 or less). Projecting
+  the SSH, credential or git directions out of the target's MLP input leaves its + pole's baseball and glucose firings at
+  0.96-1.01 of themselves (the − pole's at 0.83-1.03). Projecting out each topic's own directions cuts them to 0.57-0.76.
+  Yeast reaches the target's read as well (` yeast` 207th on the + pole). The gate keeps 12.5% of its squared norm in its
+  64 strongest inputs' writes, and with its two topics' 109 token directions removed what is left reads as no topic.
+
 **What this suggests.** One unit, L11 n6575−, mixes two jobs at full strength, high plateaus and Tornado code, and the
 units after it read its write as a plateau signal: they inherit a weaker copy of the mode while reading one thing each.
 Projected that far, a mixed unit early makes several units look mixed late. The fossils suggest how it formed: Tornado
@@ -2127,10 +2181,30 @@ once connected it. In the final model it looks like the arbitrary packing superp
 of the missing step. Without checkpoints the history is inferred: the final model shows that the fossils are there and
 that the route is gone.
 
-**Limits.** One unit and its chain. Hand-written texts and 23 files, in bf16. A lens read is an average over contexts, and
-the fossils are R-lens ranks of read rows. The code slice can't say how often Tornado, MongoDB or both occur in Qwen's
-training data (23 and 15 files of 8,000, none with both). Compact outputs are
-`data/summary/colorado_tornado_{lineage,probe,files,split,wiring,mongo}.log`.
+The baseball unit has the same shape across two units. L29 n16174+ joins baseball to SSH at full strength, and L33
+n4648 joins its baseball inputs to glucose's. Neither the SSH nor the glucose end has a working route to baseball. The
+reads keep the steps between:
+- a halo of baseball's other senses, one of which, SSH, became a second job;
+- the credentials that SSH and PWD both spell;
+- yeast, which ferments glucose.
+
+Two routes fit the fossils. In one, baseball reaches the shell and SSH, SSH reaches passwords and `pwd`, and `pwd` is
+PWD's spelling. In the other, the Brewers reach brewing, yeast and fermentation. The second is a tree grown from
+baseball. The first needs two ends that grew from separate roots (baseball, and diabetes through PWD) and met on
+credentials: a merge. The fossils tell neither the routes nor the shapes apart.
+
+Together the two cases suggest a limited superposition. Units do carry unrelated concepts, but each concept stays legible
+on its own: a read, a context or a driver names it. Relict generalization would join this to recursive generalization.
+Concepts grow along chains of related steps, further training cuts the roots, and the concepts left sharing a unit look
+superposed.
+
+**Limits.** Two units and their chains, in one model. Hand-written texts and a few dozen files, in bf16. A lens read is
+an average over contexts, and the fossils are R-lens ranks of read rows. The R-lens at L29-L32 also sees through L33's
+mixed unit, which may lift glucose in the baseball inputs' reads. The routes tried for the baseball unit were chosen
+by hand from its reads. Qwen has no checkpoints, so the history is inferred twice over. The code slice can't say how
+often Tornado, MongoDB or both occur in Qwen's training data (23 and 15 files of 8,000, none with both). Compact outputs
+are `data/summary/colorado_tornado_{lineage,probe,files,split,wiring,mongo}.log` and
+`data/summary/baseball_glucose_{lineage,probe,scan,files,routes,reads,sweep}.log`, with `baseball_glucose_scan_qwen3-8b.log`.
 
 ### §24. Secondary modes: weights propose, contexts check
 
@@ -2369,7 +2443,9 @@ Outputs are in `data/summary/relict_{census,score,judge,judge_score}_pythia-*.lo
 - Whether relict generalization happens as §23 infers. §25's first look at Pythia's checkpoints finds no net drift of
   inputs away from their targets' jobs, but its verdicts need a manual review, labels, onsets after the units form and
   finer checkpoints. Open too: whether an unrelated mode's link forms through an intermediate that drives the unit at
-  first and later falls away, and whether the step that survives is the one its data exercises least.
+  first and later falls away, and whether the step that survives is the one its data exercises least. Whether a mixed
+  unit's two ends grow from one root (a tree) or from separate roots that meet on a shared middle (a merge), as the
+  credentials route of §23's baseball unit would need, and which of its routes (credentials or fermentation) carried it.
 - §24's census with head inputs, more than one hop back and a second model, and what weight-level quantity, if any, tells
   a related input from an unrelated one (§24 found none among twelve). Whether Pythia's share of unrelated inputs falls
   with size once the judge's rising floor is understood, and how much of it is inputs that feed a mixed target's minor

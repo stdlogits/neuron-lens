@@ -412,7 +412,7 @@ read and write the sectors near chance, and the few that lean on one are sink, d
 
 ### VIII. Mixed units
 
-**23. A Colorado neuron's Tornado mode: relict generalization.** Qwen3-32B is Qwen3-14B grown: its layers match the 14B's
+**23. Two mixed units and their fossils: relict generalization.** Qwen3-32B is Qwen3-14B grown: its layers match the 14B's
 neuron for neuron, with the 14B's L8-L31 used twice. Its well-known Colorado neuron, which also fires on code using the
 Tornado web framework, is the 14B's L31 n11703, which already has the Tornado mode. The mode enters at L11, in a unit
 that fires as hard on Tornado code as on Bolivia's Altiplano and wires in Tornado-library units beside place units; the
@@ -420,8 +420,16 @@ Colorado units after it read its write as a plateau signal and inherit a weaker 
 MongoDB tokens (` bson` 6th of 124k), as do the Tornado units' writes, and Motor, MongoDB's driver for Tornado, drives the
 Tornado unit; yet MongoDB code doesn't drive it, MongoDB units don't wire into it, and removing MongoDB's directions
 doesn't touch its Tornado firing. This suggests relict generalization: a chain of related steps (Tornado, MongoDB,
-Mongolia, high plateaus) whose middle training pruned, leaving the ends joined, with fossils of the missing step
-([§23](docs/findings.md#23-a-colorado-neurons-tornado-mode-relict-generalization)).
+Mongolia, high plateaus) whose middle training pruned, leaving the ends joined, with fossils of the missing step.
+
+A second unit of the 14B, L33 n4648, fires on baseball and on blood glucose and nothing between. It mixes at L33, from
+inputs that read one topic each. One of those, a baseball unit at L29, fires as hard on SSH. Its read is a halo of
+baseball's other senses: brewing and yeast, banks, `bash` and `Jenkins`, git, credentials. The glucose units' reads carry
+the same credentials (`pwd`, the spelling of PWD, a person with diabetes). Of these only SSH, and weakly yeast, still
+drive anything, and removing the credential and SSH directions leaves both of the unit's jobs intact. Qwen3-8B has none of
+these mixes. The two cases suggest a limited superposition: units carry unrelated concepts that each stay legible, grown
+by recursive generalization and left side by side when later training cuts the steps between
+([§23](docs/findings.md#23-two-mixed-units-and-their-fossils-relict-generalization)).
 
 **24. Secondary modes: weights propose, contexts check.** For 2,000 of Qwen3-8B's poles, each pole's strongest weight
 inputs were checked on those inputs' own top contexts and a judge said whether what they share is the pole's job. 13% of
