@@ -1,0 +1,26 @@
+{
+ "model": "allenai/Olmo-3-1025-7B",
+ "dir": "olmo-3-1025-7b",
+ "layers": 32,
+ "d_model": 4096,
+ "neurons": 11008,
+ "heads": 32,
+ "lenses": {
+  "text": {
+   "R_docs": 1000,
+   "S_docs": 1000,
+   "R": "0.01-0.07",
+   "R_mid": "0.00-0.07",
+   "S_mid": "0.00-0.07",
+   "S_out": "0.00-0.07",
+   "corpus": "HuggingFaceFW/dclm_100BT-shuffled",
+   "revision": "2fa015e4044ec442a0734e89658cdcc538d10dd4",
+   "rows_sha": "5dc00a9f2a45c6f7",
+   "t_max": 128
+  }
+ },
+ "scale": {
+  "docs": 1000,
+  "split": "0.01-0.01"
+ }
+}
