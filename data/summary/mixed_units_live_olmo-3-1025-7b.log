@@ -1,0 +1,81 @@
+allenai/Olmo-3-1025-7B: 1453 panel poles with ordered onsets over 36 revisions (stage1-step1000 to main), and stage1-step0 by revision; a set's rank among 20 held-out sets of other poles of its kind as like the pole's other group (chance 0.5), live where 90%+
+
+topic (245 poles): mean rank, aligned on the later group's onset (revision offsets)
+  later held   -8:0.85 -7:0.86 -6:0.87 -5:0.88 -4:0.88 -3:0.88 -2:0.89 -1:0.91 +0:0.93 +1:0.93 +2:0.94 +3:0.95 +4:0.95 +5:0.96 +6:0.96 +7:0.97 +8:0.97
+  later own    -8:0.93 -7:0.95 -6:0.96 -5:0.97 -4:0.97 -3:0.98 -2:0.98 -1:0.99 +0:0.99 +1:1.00 +2:1.00 +3:1.00 +4:1.00 +5:1.00 +6:1.00 +7:1.00 +8:1.00
+  earlier held -8:0.93 -7:0.93 -6:0.93 -5:0.93 -4:0.94 -3:0.94 -2:0.94 -1:0.95 +0:0.94 +1:0.95 +2:0.96 +3:0.97 +4:0.97 +5:0.97 +6:0.98 +7:0.98 +8:0.98
+  earlier own  -8:0.97 -7:0.98 -6:0.99 -5:0.99 -4:0.98 -3:0.99 -2:0.99 -1:0.99 +0:0.99 +1:0.99 +2:1.00 +3:1.00 +4:1.00 +5:1.00 +6:1.00 +7:1.00 +8:1.00
+  later group live before its onset by 0 revisions 0.33, 1-2 0.13, 3+ 0.54; never 21; live by the pole's formation 0.20; median steps at onset over steps when live 2.67
+  earlier group live before its onset by 0 revisions 0.65, 1-2 0.16, 3+ 0.19; never 19; live by the pole's formation 0.47; median steps at onset over steps when live 1.00
+  of 206 poles with both groups live, the later live after the earlier 0.61, at the same revision 0.15, before 0.25; steps when the later is live over the earlier's, median 2.00 (quartiles 1.00-12.00)
+  mean rank by revision: 0 1000 2000 4000 8000 16000 32000 64000 128000 256000 512000 1024000 s2:47684 main
+    later onset to step 64k  later held    101  0.42 0.71 0.81 0.89 0.93 0.96 0.96 0.97 0.97 0.97 0.98 0.97 0.97 0.98
+    later onset to step 64k  earlier held  101  0.52 0.84 0.91 0.94 0.96 0.97 0.97 0.98 0.98 0.98 0.98 0.99 0.98 0.99
+                             later live         0.09 0.35 0.54 0.79 0.78 0.88 0.91 0.94 0.93 0.95 0.96 0.93 0.95 0.97
+    64k-256k                 later held     76  0.48 0.70 0.74 0.84 0.86 0.87 0.89 0.91 0.92 0.96 0.97 0.97 0.97 0.97
+    64k-256k                 earlier held   76  0.56 0.73 0.83 0.87 0.89 0.92 0.92 0.95 0.97 0.97 0.97 0.98 0.98 0.98
+                             later live         0.08 0.36 0.41 0.61 0.66 0.62 0.70 0.82 0.79 0.92 0.93 0.95 0.95 0.96
+    after 256k               later held     68  0.49 0.59 0.63 0.64 0.72 0.71 0.75 0.75 0.80 0.82 0.87 0.89 0.89 0.88
+    after 256k               earlier held   68  0.51 0.64 0.73 0.78 0.81 0.86 0.87 0.89 0.92 0.92 0.90 0.90 0.93 0.93
+                             later live         0.16 0.32 0.31 0.37 0.46 0.38 0.49 0.53 0.59 0.59 0.71 0.69 0.75 0.78
+  at stage1-step0: later held 0.46 ± 0.02, later own 0.51 ± 0.02, earlier held 0.53 ± 0.02, earlier own 0.52 ± 0.02; its later held against the final, r -0.01
+
+code (375 poles): mean rank, aligned on the later group's onset (revision offsets)
+  later held   -8:0.79 -7:0.79 -6:0.79 -5:0.81 -4:0.81 -3:0.82 -2:0.83 -1:0.83 +0:0.86 +1:0.86 +2:0.89 +3:0.90 +4:0.90 +5:0.91 +6:0.91 +7:0.91 +8:0.94
+  later own    -8:0.93 -7:0.93 -6:0.94 -5:0.96 -4:0.97 -3:0.98 -2:0.98 -1:0.99 +0:1.00 +1:1.00 +2:1.00 +3:1.00 +4:1.00 +5:1.00 +6:1.00 +7:1.00 +8:1.00
+  earlier held -8:0.86 -7:0.86 -6:0.88 -5:0.88 -4:0.88 -3:0.89 -2:0.90 -1:0.90 +0:0.90 +1:0.90 +2:0.91 +3:0.91 +4:0.93 +5:0.95 +6:0.93 +7:0.94 +8:0.96
+  earlier own  -8:0.95 -7:0.95 -6:0.96 -5:0.97 -4:0.98 -3:0.99 -2:0.99 -1:0.99 +0:1.00 +1:1.00 +2:1.00 +3:1.00 +4:1.00 +5:1.00 +6:1.00 +7:1.00 +8:1.00
+  later group live before its onset by 0 revisions 0.44, 1-2 0.09, 3+ 0.47; never 118; live by the pole's formation 0.07; median steps at onset over steps when live 1.43
+  earlier group live before its onset by 0 revisions 0.62, 1-2 0.09, 3+ 0.29; never 94; live by the pole's formation 0.25; median steps at onset over steps when live 1.00
+  of 205 poles with both groups live, the later live after the earlier 0.67, at the same revision 0.07, before 0.26; steps when the later is live over the earlier's, median 4.00 (quartiles 0.99-64.00)
+  mean rank by revision: 0 1000 2000 4000 8000 16000 32000 64000 128000 256000 512000 1024000 s2:47684 main
+    later onset to step 64k  later held     41  0.51 0.63 0.80 0.88 0.91 0.93 0.96 0.96 0.95 0.93 0.95 0.95 0.94 0.94
+    later onset to step 64k  earlier held   41  0.54 0.82 0.86 0.86 0.92 0.93 0.94 0.94 0.95 0.95 0.96 0.95 0.95 0.96
+                             later live         0.15 0.27 0.46 0.71 0.76 0.83 0.88 0.90 0.88 0.85 0.93 0.85 0.85 0.88
+    64k-256k                 later held     86  0.49 0.66 0.71 0.76 0.80 0.82 0.84 0.87 0.87 0.90 0.89 0.91 0.90 0.92
+    64k-256k                 earlier held   86  0.48 0.66 0.79 0.86 0.89 0.88 0.90 0.93 0.93 0.94 0.93 0.94 0.94 0.94
+                             later live         0.19 0.27 0.37 0.41 0.53 0.62 0.65 0.64 0.72 0.76 0.78 0.79 0.80 0.86
+    after 256k               later held    248  0.48 0.55 0.58 0.62 0.63 0.66 0.68 0.74 0.76 0.79 0.81 0.82 0.82 0.84
+    after 256k               earlier held  248  0.49 0.61 0.67 0.72 0.75 0.77 0.77 0.80 0.83 0.87 0.89 0.89 0.88 0.89
+                             later live         0.12 0.17 0.19 0.22 0.28 0.27 0.35 0.45 0.47 0.49 0.56 0.56 0.58 0.59
+  at stage1-step0: later held 0.48 ± 0.02, later own 0.49 ± 0.02, earlier held 0.49 ± 0.02, earlier own 0.51 ± 0.02; its later held against the final, r -0.02
+
+token (514 poles): mean rank, aligned on the later group's onset (revision offsets)
+  later held   -8:0.65 -7:0.67 -6:0.67 -5:0.68 -4:0.69 -3:0.70 -2:0.72 -1:0.71 +0:0.73 +1:0.73 +2:0.75 +3:0.77 +4:0.80 +5:0.81 +6:0.83 +7:0.84 +8:0.84
+  later own    -8:0.84 -7:0.84 -6:0.88 -5:0.92 -4:0.93 -3:0.95 -2:0.98 -1:0.99 +0:1.00 +1:1.00 +2:1.00 +3:1.00 +4:0.99 +5:0.99 +6:1.00 +7:0.99 +8:0.99
+  earlier held -8:0.73 -7:0.75 -6:0.75 -5:0.75 -4:0.76 -3:0.75 -2:0.76 -1:0.76 +0:0.77 +1:0.78 +2:0.81 +3:0.83 +4:0.83 +5:0.84 +6:0.85 +7:0.85 +8:0.83
+  earlier own  -8:0.88 -7:0.88 -6:0.91 -5:0.93 -4:0.96 -3:0.97 -2:0.98 -1:0.99 +0:0.99 +1:0.99 +2:0.99 +3:0.98 +4:0.99 +5:0.98 +6:0.99 +7:0.99 +8:0.98
+  later group live before its onset by 0 revisions 0.38, 1-2 0.19, 3+ 0.43; never 284; live by the pole's formation 0.04; median steps at onset over steps when live 1.39
+  earlier group live before its onset by 0 revisions 0.63, 1-2 0.12, 3+ 0.25; never 232; live by the pole's formation 0.13; median steps at onset over steps when live 0.96
+  of 146 poles with both groups live, the later live after the earlier 0.62, at the same revision 0.09, before 0.29; steps when the later is live over the earlier's, median 2.88 (quartiles 0.75-16.56)
+  mean rank by revision: 0 1000 2000 4000 8000 16000 32000 64000 128000 256000 512000 1024000 s2:47684 main
+    later onset to step 64k  later held      6  0.46 0.64 0.81 0.76 0.81 0.72 0.78 0.78 0.73 0.81 0.82 0.78 0.76 0.76
+    later onset to step 64k  earlier held    6  0.48 0.68 0.65 0.78 0.78 0.83 0.71 0.79 0.80 0.73 0.73 0.78 0.74 0.81
+                             later live         0.00 0.17 0.33 0.50 0.67 0.33 0.67 0.67 0.33 0.67 0.67 0.67 0.50 0.67
+    64k-256k                 later held     37  0.47 0.56 0.63 0.68 0.69 0.69 0.71 0.76 0.80 0.84 0.89 0.87 0.90 0.89
+    64k-256k                 earlier held   37  0.52 0.68 0.70 0.75 0.72 0.76 0.76 0.80 0.84 0.87 0.88 0.88 0.88 0.88
+                             later live         0.16 0.30 0.30 0.35 0.38 0.49 0.49 0.51 0.59 0.68 0.76 0.73 0.76 0.78
+    after 256k               later held    471  0.48 0.52 0.54 0.55 0.58 0.60 0.59 0.61 0.62 0.66 0.67 0.69 0.71 0.72
+    after 256k               earlier held  471  0.47 0.56 0.59 0.63 0.62 0.66 0.66 0.69 0.70 0.75 0.74 0.74 0.76 0.77
+                             later live         0.14 0.18 0.19 0.19 0.19 0.23 0.23 0.26 0.28 0.32 0.35 0.38 0.39 0.42
+  at stage1-step0: later held 0.48 ± 0.01, later own 0.50 ± 0.02, earlier held 0.47 ± 0.01, earlier own 0.50 ± 0.01; its later held against the final, r +0.03
+
+control (319 poles): mean rank, aligned on the later group's onset (revision offsets)
+  later held   -8:0.61 -7:0.61 -6:0.61 -5:0.61 -4:0.63 -3:0.64 -2:0.65 -1:0.65 +0:0.66 +1:0.66 +2:0.69 +3:0.70 +4:0.68 +5:0.70 +6:0.73 +7:0.73 +8:0.73
+  later own    -8:0.88 -7:0.90 -6:0.90 -5:0.91 -4:0.94 -3:0.95 -2:0.95 -1:0.97 +0:0.98 +1:0.98 +2:0.99 +3:0.99 +4:0.99 +5:0.99 +6:0.99 +7:0.99 +8:0.99
+  earlier held -8:0.71 -7:0.73 -6:0.71 -5:0.74 -4:0.75 -3:0.78 -2:0.76 -1:0.76 +0:0.77 +1:0.78 +2:0.79 +3:0.81 +4:0.81 +5:0.82 +6:0.82 +7:0.85 +8:0.84
+  earlier own  -8:0.89 -7:0.91 -6:0.91 -5:0.93 -4:0.95 -3:0.96 -2:0.95 -1:0.96 +0:0.98 +1:0.99 +2:0.99 +3:0.99 +4:0.99 +5:0.99 +6:1.00 +7:1.00 +8:0.99
+  later group live before its onset by 0 revisions 0.76, 1-2 0.06, 3+ 0.18; never 183; live by the pole's formation 0.03; median steps at onset over steps when live 0.43
+  earlier group live before its onset by 0 revisions 0.75, 1-2 0.08, 3+ 0.17; never 142; live by the pole's formation 0.12; median steps at onset over steps when live 0.26
+  of 85 poles with both groups live, the later live after the earlier 0.60, at the same revision 0.14, before 0.26; steps when the later is live over the earlier's, median 2.88 (quartiles 0.99-21.33)
+  mean rank by revision: 0 1000 2000 4000 8000 16000 32000 64000 128000 256000 512000 1024000 s2:47684 main
+    later onset to step 64k  later held     70  0.55 0.55 0.57 0.65 0.69 0.69 0.75 0.74 0.75 0.78 0.80 0.81 0.80 0.84
+    later onset to step 64k  earlier held   70  0.52 0.67 0.79 0.78 0.83 0.81 0.83 0.86 0.86 0.87 0.88 0.85 0.89 0.87
+                             later live         0.19 0.19 0.26 0.34 0.39 0.41 0.49 0.50 0.54 0.59 0.59 0.63 0.64 0.66
+    64k-256k                 later held    104  0.49 0.51 0.53 0.58 0.58 0.63 0.65 0.63 0.67 0.70 0.70 0.72 0.72 0.73
+    64k-256k                 earlier held  104  0.49 0.58 0.61 0.67 0.68 0.71 0.74 0.69 0.79 0.81 0.84 0.83 0.83 0.83
+                             later live         0.09 0.15 0.16 0.20 0.26 0.35 0.36 0.29 0.35 0.33 0.38 0.38 0.38 0.42
+    after 256k               later held    145  0.51 0.48 0.52 0.53 0.57 0.56 0.54 0.56 0.60 0.60 0.61 0.65 0.64 0.66
+    after 256k               earlier held  145  0.48 0.56 0.57 0.59 0.58 0.61 0.62 0.65 0.65 0.72 0.71 0.73 0.75 0.76
+                             later live         0.14 0.15 0.13 0.15 0.17 0.20 0.19 0.21 0.23 0.25 0.26 0.31 0.32 0.32
+  at stage1-step0: later held 0.52 ± 0.02, later own 0.53 ± 0.02, earlier held 0.49 ± 0.02, earlier own 0.54 ± 0.02; its later held against the final, r +0.07

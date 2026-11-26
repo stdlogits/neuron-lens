@@ -439,13 +439,22 @@ modes rarely spread to the units that share the pole's job. No weight-only score
 (AUROC 0.52-0.61), but the similarity of the two units' catalog labels does (0.74)
 ([§24](docs/findings.md#24-secondary-modes-weights-propose-contexts-check)).
 
-**25. Secondary modes over Pythia's training: a first look.** The same census ran on four Pythia sizes (160M-6.9B), and
+**25. Secondary modes over training: Pythia and OLMo 3 7B.** The same census ran on four Pythia sizes (160M-6.9B), and
 on 13 training checkpoints of three of them. At the end, a judge calls about half of a sample's confirmed inputs unrelated to the
 neuron's main job: 59% at 160M, 50% at 1.4B and 6.9B. Most of those were unrelated when the link formed, too. The ones
 that were related then are matched by inputs that became related later, so the checkpoints show no net drift away from
 the target's job. A reading of the cards shows the verdicts are noisy, most of all early in training, so these numbers
-need manual review before they can support a conclusion
-([§25](docs/findings.md#25-secondary-modes-over-pythias-training-a-first-look)).
+need manual review before they can support a conclusion.
+
+OLMo 3 7B keeps a checkpoint every 1,000 training steps. 1,268 of its 704,508 firing poles have top documents in two
+unrelated groups. In their top 64 documents the two jobs arrive one at a time, far more often than two halves of one
+topic do. Fixed documents run at every checkpoint show more: on average neither job is told apart at initialization,
+both are by step 1k, and the second, weaker, strengthens steadily until it reaches the top, so its arrival there is
+mostly a change in prominence. No shared token or string falls away around it, and passing modes are only a little
+more common than in controls. The one trace of a common root is that a topic pole's two groups share slightly more of
+their firing tokens in the first 8k steps than at the end. A relict path could still hide in the first thousand steps
+or in local steps a document embedding doesn't resolve
+([§25](docs/findings.md#25-secondary-modes-over-training-pythia-and-olmo-3-7b)).
 
 ### IX. Circuits by task
 

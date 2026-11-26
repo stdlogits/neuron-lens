@@ -1,4 +1,4 @@
-"""Mixed units (findings §23): poles whose top documents fall into two topics, each coherent, as unlike as random
+"""Mixed units (findings §23, §25): poles whose top documents fall into two topics, each coherent, as unlike as random
 documents. Any catalog model (``MODEL``); the embeddings on CUDA or MPS.
 
 §23's two cases (Qwen3-32B's Colorado and Tornado unit, Qwen3-14B's baseball and blood glucose unit) were found by
@@ -37,7 +37,8 @@ can have its cases traced back.
   documents before *b*'s onset are like both groups (a bridge) more than like a matched stranger's *b* (``bridge``: the
   mean, over a pole's other documents before its *b* onset, of the smaller of their two likenesses, less the same with
   another mixed pole's *b* at a similar distance from *a*); a bridge through a shared token, that *b*'s firing tokens
-  are *a*'s early on (``shared``) and part later. Per kind and checkpoint, the means of *b*'s share, ``shared`` and the
+  are *a*'s early on (``shared``) and part later (paired per pole, the checkpoints to step ``EARLY`` against the end).
+  Per kind and checkpoint, the means of *b*'s share, ``shared`` and the
   other documents' share (these mix cohorts: few poles hold both groups early); the onset order by *b*'s final size, and
   *solo* phases, where one group holds the pole alone before the other arrives (``order``); the bridge tests aligned on
   the later group's onset, each pole against itself at the end (``aligned``); per pole for the ``n`` most mixed: each
@@ -49,8 +50,8 @@ can have its cases traced back.
   documents before its onset. A fixed panel per pole (its own *a* and *b* documents, held-out documents like each, random
   documents), each pole's peak on it at each revision (no ``tops`` needed, so the revisions can be dense:
   download-bound), and per group the revision from which its held-out documents rank above ``LIVE`` of other poles'
-  held-out sets of its kind, against its onset in the top documents (``live``; the onsets from ``history`` over the
-  same revisions).
+  held-out sets of its kind that are as like the pole's other group, against its onset in the top documents (``live``;
+  the onsets from ``history`` over the same revisions, and initialisation by revision).
 
 Data in ``data/mixed_units/<model>/``, the summary in ``data/summary/mixed_units_<model>.log``.
 
@@ -94,7 +95,8 @@ CONTROLS, TRANSIENT, RANDOM, FALSE_PASS = 4, 16, 4096, 0.01
 PANEL_OWN, PANEL_HELD, PANEL_RANDOM, PANEL_CONTROLS, STRANGERS, LIVE = 12, 12, 1024, 400, 20, 0.9
 SETS = ("own_a", "own_b", "held_a", "held_b")
 WRITE_RANDOM = 32
-STAGE1, STAGE2 = 1_413_814, 47_684  # OLMo 3 7B's stage-1 and stage-2 steps, for ``step``
+STAGE1, STAGE2, STAGE3 = 1_413_814, 47_684, 11_921  # OLMo 3 7B's steps by stage (main is stage 3's last), for ``step``
+EARLY = 8_000  # history's token-root test: the checkpoints to this step against the end
 LOG = []
 
 
@@ -520,6 +522,20 @@ def history(revs: list[str], n: int) -> None:
             v = torch.tensor([[fn(x) for x in u["hist"]] for u in us]) if us else torch.zeros(0, len(revs))
             say(f"  {k_:8s} {name:8s} " + " ".join(f"{x:.2f}" for x in v.nanmean(0).tolist())
                 + ("" if name == "other" else "   (n " + " ".join(str(int(c)) for c in (~v.isnan()).sum(0)) + ")"))
+    early = [k for k, rv in enumerate(revs[:-1]) if step(rv) <= EARLY]
+    say(f"\nb's firing tokens among a's (where both hold {half}+), early (to step {EARLY:,}) against the end, paired per "
+        "pole: a token root that the two jobs later leave")
+    for k_ in kinds:
+        e, l = [], []
+        for u in units:
+            v = torch.tensor([u["hist"][k]["shared"] for k in early] or [nan])
+            if u["kind"] == k_ and not v.isnan().all() and u["hist"][last]["shared"] == u["hist"][last]["shared"]:
+                e.append(float(v.nanmean()))
+                l.append(u["hist"][last]["shared"])
+        if len(e) > 1:
+            e, l = torch.tensor(e), torch.tensor(l)
+            say(f"  {k_:8s} {len(e):5d} poles: early {e.mean():.3f}, at the end {l.mean():.3f}, paired "
+                f"{(e - l).mean():+.3f} ± {(e - l).std() / len(e) ** 0.5:.3f}")
     say("\nonsets (checkpoint indices), formation and transients")
     for k_ in kinds:
         us = [u for u in units if u["kind"] == k_ and u["on_a"] is not None and u["on_b"] is not None]
@@ -663,81 +679,142 @@ def probe(revs: list[str]) -> None:
 
 
 def step(rev: str) -> int:
-    """Training steps seen at a revision (stage 2 after stage 1's last, the final model after both)."""
+    """Training steps seen at a revision: pretraining (stage 1), then midtraining (stage 2) and the long-context stage
+    (stage 3), whose last checkpoint is the final model."""
     if rev == "main":
-        return STAGE1 + STAGE2 + 1
+        return STAGE1 + STAGE2 + STAGE3
     n = int(rev.split("step")[1])
-    return n if rev.startswith("stage1") else STAGE1 + n
+    return {"stage1": 0, "stage2": STAGE1, "stage3": STAGE1 + STAGE2}[rev.split("-")[0]] + n
 
 
 def live(revs: list[str]) -> None:
     """Whether a pole's later group was there below its top documents before its onset (two responses of unequal
-    strength from the start) or absent until it joined. Per pole, revision and panel set: the set's median peak ranked
-    among the pole's median peaks on ``STRANGERS`` other panel poles' held-out sets of the same kind (both groups each,
-    so documents of the same register and slice: against random documents, any English prose would pass for a prose
-    pole). A group is *live* from the first revision from which its held-out set's rank stays ``LIVE``+; its onset
-    (``history``'s, over the same revisions) needs its documents in the pole's top ``TOP``."""
+    strength from the start) or absent until it joined. Per pole with ordered onsets, revision and panel set: the set's
+    median peak ranked among the pole's median peaks on ``STRANGERS`` held-out sets of other panel poles of its kind
+    (documents of the same register and slice: against random documents, any English prose passes for a prose pole),
+    those as like the pole's other group (embedding likeness to its centroid) as the set's own group's held-out set is,
+    so that a response carried by the other group's features doesn't count. A group is *live* from the first revision
+    from which its held-out set's rank stays ``LIVE``+; its onset (``history``'s) needs its documents in the pole's top
+    ``TOP``. ``revs`` holds history's revisions and may add earlier ones (initialisation, ``stage1-step0``), which are
+    reported by revision only."""
     P = torch.load(OUT / "panel.pt")
     H = torch.load(OUT / "history.pt", weights_only=False)
+    S = torch.load(OUT / "scan.pt", weights_only=False)
     hrev = H["revs"]
-    on = {(u["layer"], u["neuron"], u["pole"]): u for u in H["units"]}
-    if set(revs) != set(hrev):
+    if not set(hrev) <= set(revs):
         raise SystemExit(f"live needs the probe at history's revisions: {', '.join(hrev)}")
-    revs = hrev
-    K, U = len(revs), P["units"]
-    g = torch.Generator().manual_seed(3)
+    extra = sorted(set(revs) - set(hrev), key=step)
+    if extra and step(extra[-1]) >= step(hrev[0]):
+        raise SystemExit(f"revisions outside history's must come before its first ({hrev[0]}): {', '.join(extra)}")
+    allrevs, K, U = extra + hrev, len(hrev), P["units"]
+    E, _, _ = load_docs()
+    R = E[torch.randint(len(E), (RANDOM,), generator=torch.Generator().manual_seed(0))]
+    L_ = {r["layer"]: r for r in S["layers"]}
+    on = {(u["layer"], u["neuron"], u["pole"]): u for u in H["units"]}
     pool = collections.defaultdict(list)
     for j, x in enumerate(U):
-        pool[x["kind"]].append(j)
-    strangers = []
-    for j, x in enumerate(U):
-        c = torch.tensor([i for i in pool[x["kind"]] if i != j])
-        strangers.append(c[torch.randperm(len(c), generator=g)[:STRANGERS]])
-    pct = {s: torch.full((len(U), K), float("nan")) for s in SETS}
-    for k, rev in enumerate(revs):
-        d = torch.load(OUT / f"probe-{rev}.pt")
-        row = {x: j for j, x in enumerate(d["ids"])}
-        pk = d["peak"].float()
-        held = torch.tensor([[[row[q] for q in x["held_" + side]] for side in "ab"] for x in U])  # [units, 2, PANEL_HELD]
-        for j, x in enumerate(U):
-            null = pk[:, j][held[strangers[j]]].median(-1).values.flatten().sort().values
-            for s in SETS:
-                m = pk[[row[q] for q in x[s]], j].median()
-                pct[s][j, k] = float(torch.searchsorted(null, m.reshape(1))) / len(null)
+        pool[x["kind"]] += [(j, "a"), (j, "b")]
+    sets = {key: n for n, key in enumerate(k for kind in pool for k in pool[kind])}
+    held_mean = torch.stack([E[U[j]["held_" + side]].mean(0) for j, side in sets])  # likeness is linear in the documents
     rows = []
-    for j, x in enumerate(P["units"]):
+    for j, x in enumerate(U):
         u = on[(x["layer"], x["neuron"], x["pole"])]
         if u["on_a"] is None or u["on_b"] is None or u["on_a"] == u["on_b"]:
             continue
-        ia, ib = revs.index(hrev[u["on_a"]]), revs.index(hrev[u["on_b"]])
-        rt, sc = ("a", "b") if ia < ib else ("b", "a")
-        first = lambda h: next((k for k in range(K) if (h[k:] >= LIVE).all()), K)
-        rows.append({"kind": x["kind"], "j": j, "rt": rt, "sc": sc, "on_rt": min(ia, ib), "on_sc": max(ia, ib),
-                     "live_rt": first(pct["held_" + rt][j]), "live_sc": first(pct["held_" + sc][j]),
-                     "form": revs.index(hrev[u["form"]])})
-    say(f"{MODEL}: {len(rows)} panel poles with ordered onsets over {K} revisions ({revs[0]} to {revs[-1]}); a set's rank "
-        f"among {2 * STRANGERS} held-out sets of other poles of its kind (chance 0.5), live where {LIVE:.0%}+")
+        rt, sc = ("a", "b") if u["on_a"] < u["on_b"] else ("b", "a")
+        r = L_[x["layer"]]
+        i = int(((r["neuron"] == x["neuron"]) & (r["pole"] == x["pole"])).nonzero()[0, 0])
+        v = r["doc"][i] >= 0
+        c = {side: centroid(E[r["doc"][i][sel & v]], R) for side, sel in (("a", r["group"][i]), ("b", ~r["group"][i]))}
+        cands = [k for k in pool[x["kind"]] if k[0] != j]
+        z = {side: (held_mean[[sets[k] for k in cands]] @ c[side][0] - c[side][1]) / c[side][2] for side in "ab"}
+        match = {}
+        for side, other in ((sc, rt), (rt, sc)):  # a group's sets against strangers as like the pole's other group
+            z0 = (held_mean[sets[(j, side)]] @ c[other][0] - c[other][1]) / c[other][2]
+            match[side] = [cands[k] for k in (z[other] - z0).abs().argsort()[:STRANGERS].tolist()]
+        rows.append({"kind": x["kind"], "j": j, "rt": rt, "sc": sc, "on_rt": min(u["on_a"], u["on_b"]),
+                     "on_sc": max(u["on_a"], u["on_b"]), "form": u["form"], "match": match})
+    jj = torch.tensor([r["j"] for r in rows])
+    rank = {s: torch.full((len(rows), len(allrevs)), float("nan")) for s in SETS}
+    for k, rev in enumerate(allrevs):
+        d = torch.load(OUT / f"probe-{rev}.pt")
+        if k == 0:
+            row = {x: n for n, x in enumerate(d["ids"])}
+            pad = len(row)  # own sets hold PANEL_OWN or fewer: padded to a row of NaN
+            idx = {s: torch.tensor([[row[q] for q in U[r["j"]][s]] + [pad] * (PANEL_OWN - len(U[r["j"]][s]))
+                                    for r in rows]) for s in SETS}
+            nul = {side: torch.tensor([[[row[q] for q in U[i]["held_" + sd]] for i, sd in r["match"][r[side]]]
+                                       for r in rows]) for side in ("rt", "sc")}
+        pk = torch.cat([d["peak"].float(), torch.full((1, d["peak"].shape[1]), float("nan"))])
+        null = {side: pk[nul[side], jj[:, None, None]].median(-1).values for side in nul}  # [rows, STRANGERS]
+        for s in SETS:
+            m = pk[idx[s], jj[:, None]].nanmedian(-1).values
+            is_sc = torch.tensor([s.endswith(r["sc"]) for r in rows])
+            rank[s][:, k] = (torch.where(is_sc[:, None], null["sc"], null["rt"]) < m[:, None]).float().mean(-1)
+    pct = {s: rank[s][:, len(extra):] for s in SETS}
+    first = lambda h: next((k for k in range(K) if (h[k:] >= LIVE).all()), K)
+    for n, r in enumerate(rows):
+        r["live_rt"], r["live_sc"] = first(pct["held_" + r["rt"]][n]), first(pct["held_" + r["sc"]][n])
+    grp = lambda n, s, side: rank[f"{s}_{rows[n][side]}"][n]  # a pole's root (rt) or second (sc) set, every revision
+    say(f"{MODEL}: {len(rows)} panel poles with ordered onsets over {K} revisions ({hrev[0]} to {hrev[-1]})"
+        + (f", and {', '.join(extra)} by revision" if extra else "") + f"; a set's rank among {STRANGERS} held-out sets "
+        f"of other poles of its kind as like the pole's other group (chance 0.5), live where {LIVE:.0%}+")
+    show_ = [rv for rv in extra + [f"stage1-step{s}" for s in (1000, 2000, 4000, 8000, 16_000, 32_000, 64_000, 128_000,
+                                                               256_000, 512_000, 1_024_000)] + [hrev[-2], hrev[-1]]
+             if rv in allrevs]
+    bins = ((0, 64_000, "later onset to step 64k"), (64_001, 256_000, "64k-256k"), (256_001, 10 ** 9, "after 256k"))
     for k_ in (*KINDS, "control"):
-        rs = [r for r in rows if r["kind"] == k_]
-        if not rs:
+        ns = [n for n, r in enumerate(rows) if r["kind"] == k_]
+        if not ns:
             continue
-        say(f"\n{k_} ({len(rs)} poles): mean rank, aligned on the later group's onset (revision offsets)")
+        say(f"\n{k_} ({len(ns)} poles): mean rank, aligned on the later group's onset (revision offsets)")
         for name, s, side in (("later held", "held", "sc"), ("later own", "own", "sc"), ("earlier held", "held", "rt"),
                               ("earlier own", "own", "rt")):
             line = []
             for o in OFFSETS:
-                v = torch.tensor([float(pct[s + "_" + r[side]][r["j"], r["on_sc"] + o]) for r in rs if 0 <= r["on_sc"] + o < K])
+                v = torch.tensor([float(grp(n, s, side)[len(extra) + rows[n]["on_sc"] + o]) for n in ns
+                                  if 0 <= rows[n]["on_sc"] + o < K])
                 line.append(f"{o:+d}:{v.mean():.2f}" if len(v) else f"{o:+d}:-")
             say(f"  {name:12s} " + " ".join(line))
+        rs = [rows[n] for n in ns]
         for name, side in (("later", "sc"), ("earlier", "rt")):
             lag = torch.tensor([r["on_" + side] - r["live_" + side] for r in rs if r["live_" + side] < K], dtype=torch.float)
-            ratio = torch.tensor([step(revs[r["on_" + side]]) / step(revs[r["live_" + side]]) for r in rs if r["live_" + side] < K])
+            ratio = torch.tensor([step(hrev[r["on_" + side]]) / step(hrev[r["live_" + side]]) for r in rs if r["live_" + side] < K])
             at_form = sum(r["live_" + side] <= r["form"] for r in rs) / len(rs)
             say(f"  {name} group live before its onset by 0 revisions {(lag <= 0).float().mean():.2f}, 1-2 "
                 f"{((lag >= 1) & (lag <= 2)).float().mean():.2f}, 3+ {(lag >= 3).float().mean():.2f}; never "
                 f"{sum(r['live_' + side] >= K for r in rs)}; live by the pole's formation {at_form:.2f}; median steps at "
                 f"onset over steps when live {ratio.median():.2f}")
-    torch.save({"revs": revs, "pct": pct, "rows": rows}, OUT / "live.pt")
+        both = [r for r in rs if max(r["live_rt"], r["live_sc"]) < K]
+        if both:
+            d = torch.tensor([r["live_sc"] - r["live_rt"] for r in both])
+            q = torch.tensor([step(hrev[r["live_sc"]]) / step(hrev[r["live_rt"]]) for r in both])
+            say(f"  of {len(both)} poles with both groups live, the later live after the earlier {(d > 0).float().mean():.2f}, "
+                f"at the same revision {(d == 0).float().mean():.2f}, before {(d < 0).float().mean():.2f}; steps when "
+                f"the later is live over the earlier's, median {q.median():.2f} (quartiles {q.quantile(.25):.2f}-"
+                f"{q.quantile(.75):.2f})")
+        say("  mean rank by revision: " + " ".join(rv.replace("stage1-step", "").replace("stage2-step", "s2:")
+                                                    for rv in show_))
+        ix = [allrevs.index(rv) for rv in show_]
+        for lo, hi, name in bins:
+            b = [n for n in ns if lo <= step(hrev[rows[n]["on_sc"]]) <= hi]
+            if not b:
+                continue
+            for gname, side in (("later held", "sc"), ("earlier held", "rt")):
+                v = torch.stack([grp(n, "held", side)[ix] for n in b])
+                say(f"    {name:24s} {gname:12s} {len(b):4d}  " + " ".join(f"{x:.2f}" for x in v.nanmean(0)))
+            v = torch.stack([grp(n, "held", "sc")[ix] >= LIVE for n in b]).float()
+            say(f"    {'':24s} {'later live':12s}       " + " ".join(f"{x:.2f}" for x in v.mean(0)))
+        for k, rv in enumerate(extra):
+            fin = torch.stack([grp(n, "held", "sc")[-1] for n in ns])
+            parts = []
+            for name, s, side in (("later held", "held", "sc"), ("later own", "own", "sc"),
+                                  ("earlier held", "held", "rt"), ("earlier own", "own", "rt")):
+                v = torch.stack([grp(n, s, side)[k] for n in ns])
+                parts.append(f"{name} {v.mean():.2f} ± {v.std() / len(v) ** 0.5:.2f}")
+            v = torch.stack([grp(n, "held", "sc")[k] for n in ns])
+            say(f"  at {rv}: " + ", ".join(parts) + f"; its later held against the final, r {torch.corrcoef(torch.stack([v, fin]))[0, 1]:+.2f}")
+    torch.save({"revs": allrevs, "rank": rank, "rows": rows}, OUT / "live.pt")
     (SUMMARY / f"mixed_units_live_{STEM}.log").write_text("\n".join(LOG) + "\n")
 
 

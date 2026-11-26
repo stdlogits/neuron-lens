@@ -31,7 +31,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | | [§22](#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read) | the R-lens reads a block of raw coordinates that the writes avoid; where it meets the S-lens's, a core carries each position's token through mid-depth, and late the prediction moves into the rest |
 | **VIII. Mixed units** | [§23](#23-two-mixed-units-and-their-fossils-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses. A baseball and blood-glucose unit is fed by a baseball unit that fires as hard on SSH, and their reads keep the senses between (credentials, yeast) with no working route |
 | | [§24](#24-secondary-modes-weights-propose-contexts-check) | 15-33% of Qwen3-8B's poles have a weight-wired input from an unrelated domain at a third of their peak, 2-4% at half; weights propose them, but only contexts and labels say which are unrelated |
-| | [§25](#25-secondary-modes-over-pythias-training-a-first-look) | a first look over Pythia's checkpoints (160M-6.9B): half of the confirmed inputs look unrelated at the end, and their histories run both ways with no net drift; noisy, needs manual review |
+| | [§25](#25-secondary-modes-over-training-pythia-and-olmo-3-7b) | over Pythia's checkpoints (160M-6.9B), half of the confirmed inputs look unrelated at the end, with no net drift (a noisy first look); in OLMo 3 7B a mixed pole's two jobs both respond by step 1k, at chance at initialization, the second weaker, and no bridge the measures see comes and goes as it rises |
 | **IX. Circuits by task** | [§26](#26-circuits-by-task-ten-kinds-of-question-traced) | ten kinds of question traced whole: the middle layers sort them by kind, the late by answer; choices travel where the readout is blind and attention reads |
 
 Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
@@ -2051,8 +2051,8 @@ outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*
 ## VIII. Mixed units
 
 A unit is mixed when it serves two jobs that share no feature. §23 traces two in Qwen3-14B, one of them from Qwen3-32B
-back, to where the mixing enters; §24 counts such second jobs across Qwen3-8B; §25 follows them through Pythia's
-training.
+back, to where the mixing enters; §24 counts such second jobs across Qwen3-8B; §25 follows them through Pythia's and
+OLMo 3 7B's training.
 
 ### §23. Two mixed units and their fossils: relict generalization
 
@@ -2276,20 +2276,22 @@ so a narrow label inflates "unrelated" (its floor is measured on own contexts, n
 thresholds and the window are choices. Outputs are in `data/summary/secondary_modes_{score,inherit,weights,labels}_qwen3-8b.log`;
 the matrix and the judge's verdicts stay local (`data/secondary_modes/qwen3-8b/`).
 
-### §25. Secondary modes over Pythia's training: a first look
+### §25. Secondary modes over training: Pythia and OLMo 3 7B
 
-§23 inferred a mode's history from fossils in the final model. Pythia trains every size on one data order and keeps its
-checkpoints, so the history can be watched. Two questions:
-- Was an input that is unrelated to its unit at the end related when the link formed (relict generalization), or
+§23 inferred a mode's history from fossils in the final model. Pythia and OLMo 3 train on one recorded data order and keep
+their checkpoints, so the history can be watched. Two questions:
+- Was a second job that is unrelated to its unit at the end related when it formed (relict generalization), or
   unrelated from the start (packing)?
 - Does the share of unrelated inputs fall with size? Cammarata's argument that larger models give each neuron more room
   to specialize predicts it should.
 
-The measures below disagree in places, and their verdicts are noisy, most of all early in training. They are a first look,
-and they need manual review before they can support a conclusion.
+Pythia's part is a census of weight-wired inputs over four sizes. Its measures disagree in places, and their verdicts
+are noisy, most of all early in training: it is a first look, and needs manual review before it can support a
+conclusion. OLMo 3 7B's part asks the first question of every pole whose top documents hold two unrelated topics, from
+initialization to the end, and checks the top documents against fixed documents at every checkpoint.
 
-**Setup** (`checks/secondary_modes.py`, `checks/relict.py`; Pythia-160M, 1.4B, 2.8B and 6.9B in fp16; 160M on an M5 Max,
-the others on one H100).
+**Pythia: setup** (`checks/secondary_modes.py`, `checks/relict.py`; Pythia-160M, 1.4B, 2.8B and 6.9B in fp16; 160M on an
+M5 Max, the others on one H100).
 - **The census.** §24's census runs on each model's final checkpoint (step 143,000). It takes 500 firing neurons from
   each quarter of depth, each proposing its first 16 positive in-edges. Pythia's GELU gives each neuron one pole, so units
   are named without a sign.
@@ -2311,7 +2313,7 @@ the others on one H100).
   For 70 targets per model with an unrelated input at the end, every input is also judged at its onset, on both units' top
   contexts there.
 
-**Results.**
+**Pythia: results.**
 
 - **The census at the end.**
 
@@ -2378,7 +2380,7 @@ the others on one H100).
     beginning at 4k and of ending at the end. L14 n5273's top contexts are mostly recipes, but they include "begins to
     brown" at 4k and `DTEND:` (an iCalendar event's end time) at the end. The judge calls this input unrelated both times.
 
-**What this suggests.**
+**Pythia: what this suggests.**
 - **No net drift.** On these measures, most inputs that are unrelated at the end were unrelated at their onset too.
   Inputs that were related at onset and unrelated at the end are matched by the reverse. So the checkpoints show no net
   drift of inputs away from their targets' jobs. If relict generalization happens, it isn't the main source of unrelated
@@ -2388,7 +2390,7 @@ the others on one H100).
 - **The caveat.** Both readings rest on verdicts that the cards show to be noisy, and on a judge that sees a target's job
   only through five contexts.
 
-**Limits.**
+**Pythia: limits.**
 - One census per model, with 200 judged targets per model and 70 at onset.
 - The onset sample is chosen by the end verdict, and the reweighted rate corrects for that only in part.
 - There are 13 checkpoints, so an onset is placed no finer than the gap before it. Links that form by step 2k form while
@@ -2402,7 +2404,7 @@ the others on one H100).
   - Some branches keep the real checkpoint in sharded files (step 512) or in `pytorch_model.bin` (step 120k).
   - `relict.py` refuses a checkpoint whose top documents are the final model's.
 
-**What it needs.** Before these results can support a conclusion:
+**What Pythia's part needs.** Before these results can support a conclusion:
 - a manual review of the cards in each transition: do the verdicts hold, and is the target's job well defined?
 - labels for Pythia's units, so the judge compares against a described job;
 - a test against each of a target's own modes, not only its main job;
@@ -2412,6 +2414,148 @@ the others on one H100).
 Outputs are in `data/summary/relict_{census,score,judge,judge_score}_pythia-*.log` and
 `data/summary/secondary_modes_measure_pythia-*.log`. The top documents, matrices, embeddings and verdicts stay local
 (`data/relict/`, `data/secondary_modes/`).
+
+**OLMo 3 7B: setup** (`checks/mixed_units.py`, `checks/relict.py`; OLMo-3-1025-7B in bf16 on one H100, with the catalog's
+tables for its final model). OLMo 3 7B keeps a checkpoint every 1,000 steps of its 1,413,814 pretraining steps (a step is
+about 4.2M tokens), then its midtraining (47,684 steps) and a long-context stage (11,921 steps) whose last checkpoint is
+the final model.
+- **Mixed poles.** Each firing pole's 64 top documents in the final model are embedded (Qwen3-Embedding-0.6B, centred on
+  the documents' mean) and split in two (spherical 2-means with restarts). A pole is *mixed* when both groups hold 8+
+  distinct documents, each is coherent (its documents' mean pairwise likeness 1.5 z or more over random pairs) and the two
+  are no more alike than 0.5 z. A *token* mix peaks on one token in half of a group's documents, a *code* mix has one group
+  from the code slice and the other not, and the rest are *topic* mixes. §23's Qwen3-14B L33 n4648+ passes as a topic mix
+  (39 and 12 distinct documents, 2.0 and 1.9 z, 0.1 across). The *controls* are 5,072 poles whose two groups are as
+  coherent but alike (1.5 z or more across): one topic split in two, four per mixed pole from its layer.
+- **Histories.** At 35 checkpoints and the final model, every pole's top 64 documents are recomputed over the catalog's
+  63,990 activation documents (in the final model they match the catalog's, overlap 0.98-1.00). The checkpoints are steps
+  1k, 2k, 3k, 4k, 6k, 8k, 12k, 16k, 24k, 32k, 48k, 64k, every 8k from 72k to 192k, 256k, 384k, 512k, 768k and 1,024k, and
+  the ends of pretraining and midtraining. A document counts as the final group *a*'s or *b*'s when its likeness to that
+  group's centroid passes all but 1% of random documents and beats the other's, else as *other*. A group's *onset* is the
+  first checkpoint from which it holds 4+ of the 64 at every later one. Of a pole's two groups the earlier to arrive is its
+  *root*, the later its *second*.
+- **A fixed panel.** A group can drive its pole without reaching the top 64, where its documents compete with the other
+  group's. So every mixed pole and 400 controls are also run, at initialization (step 0) and at every checkpoint, on fixed
+  sets of documents. Each group has two sets: 12 of its own documents, and 12 *held-out* documents like it (the nearest to
+  its centroid outside the pole's top 64 and short of the other group's cutoff).
+  - A set's median peak is ranked among the pole's medians on 20 held-out sets of other poles of its kind (chance 0.5).
+    Against random documents, any prose would pass for a prose pole.
+  - The 20 are chosen to be as like the pole's other group as the set's own group is, so a response carried by the other
+    group's features doesn't count.
+  - A group is *live* from the first checkpoint from which its held-out set ranks 0.9 or more at every later one.
+
+**OLMo 3 7B: results.**
+- **The scan.** 1,268 of 704,508 firing poles are mixed (0.18%; Qwen3-14B's scan finds 0.42%): 266 topic, 389 code and
+  613 token mixes. Token mixes sit early (339 at L0-L7) and topic mixes late (130 at L24-L31). In the final model the
+  cutoff counts a median 80-82% of a topic mix's documents in their own group (51-74% for the other kinds, 58-63% for the
+  controls).
+- **In the top 64 the two jobs arrive one at a time.** Often one group holds the pole alone (8+ of the 64, the other 1
+  or none) before the other's onset:
+
+  | | poles (b of 8-23 / 24-64 documents) | b alone before a arrives | a alone before b arrives |
+  |---|---|---|---|
+  | topic | 116 / 150 | 0.28 / 0.33 | 0.50 / 0.38 |
+  | code | 192 / 197 | 0.39 / 0.43 | 0.61 / 0.48 |
+  | token | 288 / 325 | 0.39 / 0.36 | 0.59 / 0.40 |
+  | control | 227 / 4,842 | 0.12 / 0.14 | 0.19 / 0.19 |
+
+  The second's onsets spread over training for topic mixes (from step 2k to the final model, 128 of 245 by step 128k).
+  Code and token mixes' seconds mostly arrive late: of the token mixes', 149 are first counted at the end of midtraining
+  and 182 only in the final model.
+- **Below the top 64 both jobs respond from the first checkpoint.** At initialization the panel sets' mean ranks are
+  at chance (0.46-0.54 for each kind of pole and set), and the second's rank there doesn't predict its final rank (r
+  −0.02 to +0.07). By step 1k the root's and the second's held-out sets both rank above chance on average, the second's
+  lower. Their mean rank in topic mixes, by when the second reaches the top 64:
+
+  | second's onset | poles | | step 0 | 1k | 4k | 16k | 64k | 256k | final |
+  |---|---|---|---|---|---|---|---|---|---|
+  | to step 64k | 101 | second | 0.42 | 0.71 | 0.89 | 0.96 | 0.97 | 0.97 | 0.98 |
+  | | | root | 0.52 | 0.84 | 0.94 | 0.97 | 0.98 | 0.98 | 0.99 |
+  | 64k-256k | 76 | second | 0.48 | 0.70 | 0.84 | 0.87 | 0.91 | 0.96 | 0.97 |
+  | | | root | 0.56 | 0.73 | 0.87 | 0.92 | 0.95 | 0.97 | 0.98 |
+  | after 256k | 68 | second | 0.49 | 0.59 | 0.64 | 0.71 | 0.75 | 0.82 | 0.88 |
+  | | | root | 0.51 | 0.64 | 0.78 | 0.86 | 0.89 | 0.92 | 0.93 |
+
+  - At step 1k the second's held-out set ranks 0.9 or more in a third of topic poles, whenever its onset (0.32-0.36;
+    0.08-0.16 at initialization).
+  - It then strengthens steadily rather than switching on. Of the topic poles whose second becomes live, 54% have it
+    live three or more checkpoints before its top-64 onset, at a median 2.7 times fewer steps (the root: 19%, 1.0).
+    Over the eight checkpoints before its onset its rank climbs from 0.85 to 0.91, with no jump at the onset.
+  - Where both groups become live, the order is much as in controls: the second follows the root in 61% of 206 topic
+    poles, at a median of twice the steps, and in 60% of 85 controls, at 2.9 times.
+  - Code and token mixes follow the same course, more weakly: at step 1k their seconds rank 0.58 and 0.52 (topic 0.67).
+    A token mix's held-out documents needn't hold its token, so they test it least (its second's held-out set ranks 0.73
+    in the final model).
+- **No bridge comes and goes.** Relict generalization predicts documents between the two jobs before the second arrives,
+  or a passing mode, a shared token or a shared string that falls away.
+  - **Documents like the second before its onset.** Of the pole's documents like the second (past random documents' 90th
+    percentile), 43-45% are like the root too. For a stranger's second at the same distance from the root, 58-64% are.
+    Both shares rise one checkpoint before the onset (to 0.50 and 0.69), which the count of second-like documents
+    selects (fewer than four pass the strict cutoff there, by the onset's definition).
+  - **Other documents before b's onset** (b is the second in 56% of topic poles and arrives first in 36%) are more like
+    b than like a matched stranger's b (+0.31 ± 0.03 z, topic). The smaller of their likenesses to the two jobs exceeds
+    the same with the stranger's b in place of the pole's by +0.13 ± 0.02 z (topic; code +0.04, token +0.06): a
+    precursor of b, of unclear nature.
+  - **Passing modes.** A coherent mode of its own (16+ other documents unlike both jobs) at a checkpoint between
+    formation and the end occurs in 5.3 ± 1.4% of topic poles and 6.0 ± 1.0% of token mixes (code 2.8 ± 0.8%), against
+    3.6 ± 0.3% of controls: a small excess. A topic pole's passing modes are like its group b (0.38 z) and not its a
+    (0.00).
+  - **Tokens and strings.** In a cohort of poles taken two and three checkpoints before the second's onset and again at
+    the end, the share of the second's firing tokens among the root's is +0.02 ± 0.02 higher before (topic). The share
+    that shares four letters in a row with a different root firing token is 0.016 ± 0.008 lower before.
+  - **A token root.** Paired over checkpoints to step 8k against the end, a topic pole's two groups share slightly more
+    of their firing tokens early: 0.26 against 0.21, +0.056 ± 0.021 over the 131 poles with both groups in the top 64
+    that early (code and token mixes flat). The controls move the other way, −0.097 ± 0.008: alike groups converge on
+    their tokens. A detector shared early by both jobs is one reading; changes in which documents and tokens reach the
+    top 64 are another.
+- **Drift.** The second's documents at its onset are more like the root than at the end: +0.13 ± 0.02 z for topic mixes,
+  +0.01-0.02 for code and token mixes. A weak response enters the top 64 on documents that carry some of the root's
+  features, as two additive responses would.
+- **Both jobs are served at the end.** At L16-L31, the next tokens after a topic pole's firings appear in its write
+  (R-lens, top 64) more than in 32 random poles' writes of its layer, for both groups. The smaller group's excess is
+  0.73-0.76 of the larger's (0.69-0.73 over next tokens unique to each group; controls 1.00-1.01). Pooled over the kinds
+  of mix, both groups keep an excess whichever arrived first.
+- **Two cases.**
+  - L26 n9044+: baseball documents hold the pole alone from step 8k to 128k (up to 45 of the 64). Stand mixers and
+    dough arrive from 96k, with motors and drives around them. No batter documents come between.
+  - L19 n6340+ fires on criminal sentencing and on chilling times in recipes. From 24k to 96k its commonest firing
+    token is ` or` ("the death penalty or imprisonment for life", "4 hours or overnight"), and 46-90% of the second's
+    firing tokens are among the root's. In the final model it fires on durations in both, six and a half days in jail
+    before being charged, at least an hour in the fridge, and 5% are shared: a token root of the kind above.
+
+**OLMo 3 7B: what this suggests.**
+- **No relict path the measures can see.** In OLMo 3 7B a mixed pole's second job doesn't show a chain that comes and
+  falls away. On average neither job is told apart from strangers at initialization, and both are by the first
+  checkpoint, 1,000 steps in, the second more weakly (a third of them already at 0.9). The second then strengthens
+  steadily until it reaches the top documents.
+- **Prominence more than recruitment.** Through the top 64 alone the history looks like recruitment, a working unit
+  taking on a second job. The panel shows the second responding long before it reaches the top, so a top-64 onset mostly
+  records a change in prominence, and the solo phases are at least partly a competition for the top. Whether the second
+  was taken on before step 1k, refined later, or driven by a feature both jobs share, the panel doesn't say. The bridge
+  measures don't agree on an intermediate: passing modes are a little more common than in controls, but they lean to
+  one job, and no shared token or string falls away around the second's arrival.
+- **Where a relict could still hide.** Within the first thousand steps; as a refinement of a response already there at
+  1k; or through local steps near either end that a document embedding doesn't resolve. The one trace in the
+  population is the token root.
+- **§23's cases.** Units mixed at full strength with fossils of a pruned step, like §23's, would be a tail that this
+  population doesn't show.
+- **Pythia agrees.** Pythia's census (above) finds no net drift either.
+
+**OLMo 3 7B: limits.**
+- One model and one training run.
+- Mixes are defined in the final model by an embedding of whole documents. That misses a step within one topic's
+  vocabulary or at the level of tokens, and a mode pruned before the end.
+- The first checkpoint is at step 1k (about 4B tokens), and they are 1k-16k steps apart to 192k, wider after. A bridge
+  inside the first thousand steps, or shorter than a gap, isn't resolved.
+- The panel's sets are chosen by the final groups' centroids, and each is scored by its documents' median peak. Its null
+  matches one similarity, the sets' mean embedding likeness to the pole's other group, so shared local cues, firing
+  positions and the feature itself are left open. Ranks are relative to the strangers: a rising rank is a sharper
+  preference, not a larger activation. The cutoff counts 51-82% of a final group's documents as its own at the end.
+- No lens was fitted at the checkpoints. The writes are read in the final model only, and their alignment with what
+  follows isn't a causal test.
+
+Outputs are in `data/summary/mixed_units_{,history_,writes_,live_}olmo-3-1025-7b.log` and
+`data/summary/relict_tops_olmo-3-1025-7b.log`. The top documents, the panel and its peaks stay local (`data/relict/`,
+`data/mixed_units/`).
 
 ## IX. Circuits by task
 
@@ -2524,10 +2668,14 @@ names.
 - Gemma 4's labels with its image and sound exemplars on the cards (§16), and media reads per slot, which would say where
   in an image a neuron looks.
 - Weight edges for heads (OV writes into neurons, neurons into QK); heads are covered in context (`heads/sources`, §12).
-- Whether relict generalization happens as §23 infers. §25's first look at Pythia's checkpoints finds no net drift of
-  inputs away from their targets' jobs, but its verdicts need a manual review, labels, onsets after the units form and
-  finer checkpoints. Open too: whether an unrelated mode's link forms through an intermediate that drives the unit at
-  first and later falls away, and whether the step that survives is the one its data exercises least. Whether a mixed
+- Whether relict generalization happens as §23 infers. In OLMo 3 7B (§25) a mixed pole's two jobs are both there by
+  the first checkpoint, step 1k, with no bridge as the second rises; what happens in the first thousand steps, where the
+  only trace is a token root, would need finer early checkpoints (Pythia's are log-spaced to step 512). Whether units
+  mixed at full strength with fossils, like §23's, have the same history, and whether a relay of local contexts, each
+  related to the next, joins the two ends below what a document embedding resolves. §25's first look at Pythia's
+  checkpoints finds no net drift of inputs away from their targets' jobs either, but its verdicts need a manual review,
+  labels, onsets after the units form and finer checkpoints. Open too: whether the step that survives is the one its
+  data exercises least. Whether a mixed
   unit's two ends grow from one root (a tree) or from separate roots that meet on a shared middle (a merge), as the
   credentials route of §23's baseball unit would need, and which of its routes (credentials or fermentation) carried it.
 - §24's census with head inputs, more than one hop back and a second model, and what weight-level quantity, if any, tells

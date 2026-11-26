@@ -1,0 +1,487 @@
+allenai/Olmo-3-1025-7B: poles with act_top ≥ 0.05; mixed: both groups 8+ distinct of 64 documents, each coherent ≥ 1.5 z, across ≤ 0.5 z (z over random documents' cosine, 0.000 ± 0.082); a token mix peaks on one token in 50%+ of a group
+  L0-L7        L0-L7: 497 of 176,124 firing poles mixed (0.28%): 51 topic, 107 code, 339 token mixes, 96 peak on one token in both groups
+  L8-L15       L8-L15: 236 of 176,128 firing poles mixed (0.13%): 10 topic, 87 code, 139 token mixes, 25 peak on one token in both groups
+  L16-L23      L16-L23: 277 of 176,128 firing poles mixed (0.16%): 75 topic, 113 code, 89 token mixes, 18 peak on one token in both groups
+  L24-L31      L24-L31: 258 of 176,128 firing poles mixed (0.15%): 130 topic, 82 code, 46 token mixes, 21 peak on one token in both groups
+
+the most mixed (the weaker group's coherence less the cross likeness): 40 topic mixes, then 10 code and 10 token mixes
+
+L25 n4804− act_top 22.88: groups 35/29 (23/25 distinct), coherence 2.2/1.8 z, across -0.5 z; peaks ' implements' 26% / ' a' 7%
+   a:  sorted in ascending or descending order.⏎    The function implementation uses⟦ the⟧ appropriate sorting algorithm
+   a: """⏎Providing iterator functions that are not in all version⟦ of⟧ Python we support
+   a:  prompts the user to input a sorted array of characters and then⟦ implements⟧ a binary search
+   b:  blotches with anterior and posterior projections on the corners. Black⟦ phase⟧ hog-nosed
+   b:  a drawer, she was greeted by a five-and-a-half⟦-foot⟧ ball python.⏎⏎
+   b: in a toxic arms race. The combatants: death-def⟦ying⟧ Garter Sn
+
+L25 n1721+ act_top 27.12: groups 50/14 (39/9 distinct), coherence 1.8/1.9 z, across -0.4 z; peaks ' use' 10% / ' had' 14%
+   a: 1. create table with fill factor x⏎  2⟦.⟧ import the data
+   a:  a local database. I think I would have normally chosen to⟦ use⟧ mysqld
+   a:  database converted so that I can import the tables into my database⟦ using⟧ phpMyAdmin
+   b:  1: It's best to start with mostly straight,⟦ smooth⟧ hair, but
+   b: ⏎⏎In general, straight hair is longer than curly hair,⟦ because⟧ it lies completely
+   b:  to spit it down the middle and comb the sides. This⟦ creates⟧ a part,
+
+L21 n1107− act_top 8.88: groups 50/14 (29/9 distinct), coherence 2.3/2.1 z, across -0.1 z; peaks ' to' 12% / '.\n\n' 7%
+   a: , turning the bag at least once.⏎4Prepare your grill⟦ for⟧ indirect grilling
+   a: 4 hours.⏎⏎5. Preheat a grill or grill pan⟦ to⟧ medium-high heat
+   a:  marks the yearly launch of a pillar of American society – the⟦ cook⟧out.⏎⏎While
+   b: . Those who are skilled in the game can win money consistently⟦.⏎⏎⟧Poker is
+   b:  tidak sembarangan dalam memilih dan mencari para ag⟦en⟧ on-line Indonesia
+   b:  line with their bankroll. You cannot go for online sit⟦us⟧ poker idn
+
+L29 n6067+ act_top 28.50: groups 43/21 (30/17 distinct), coherence 2.2/2.0 z, across -0.1 z; peaks ' ISIS' 14% / ' rubber' 14%
+   a:  missiles, rockets and shells have been fired at "Islamic State⟦"⟧ (IS)
+   a:  Assad Regime. But parliament did agree to air strikes on⟦ IS⟧-held regions of
+   a:  Turkish artillery and fighter jets which are still striking ⟦ISIS⟧ positions in 
+   b:  fan. It also boasts Nike?€™s Dri-F⟦IT⟧ technology that pulls
+   b:  Shower Pass have just the ticket with their Transit Backpack. T⟦PU⟧-coated 
+   b:  the most convenient method of transporting the case.⏎The neop⟦rene⟧ shoulder strap has
+
+L24 n4135− act_top 13.56: groups 43/21 (30/13 distinct), coherence 1.7/2.3 z, across -0.3 z; peaks ' for' 19% / ' dough' 19%
+   a:  free response college essay   mla style citation research paper  ⟦⏎⏎⟧Dissertation
+   a:  assign so much homework   app to write essay on ipad  ⟦⏎⏎⟧Dissertation
+   a:  2018⏎⏎Custom research paper and Professional essay writing services⟦⏎⏎⟧Hbs case
+   b: Should I⟦ Pay⟧ an Account Balance
+   b:  it just a limitation with taking the shortcut method of not kne⟦ading⟧ for an extended
+   b:  complexities of running a business takes patience and attention to detail.⟦ Pay⟧roll tax,
+
+L28 n9630− act_top 41.25: groups 43/21 (32/19 distinct), coherence 1.8/2.1 z, across -0.2 z; peaks ',' 26% / ',' 19%
+   a:  plants that thrive in the type of shade your mulberry offers⟦.⟧ If the sun
+   a: My garden is stubbornly hanging on. I love fall blo⟦oming⟧ plants. They
+   a: Duranta, hamelia, angel's trumpet and root-hard⟦y⟧ hibisc
+   b: ’t count as earned credit and isn’t considered in progress standards⟦ for⟧ graduation. When
+   b: Invite all of your advisees together at specific times to cover⟦ general⟧ information and then
+   b: SA and notify you of your eligibility by mid-March.⏎⏎⟦What⟧ if our taxes
+
+L5 n2742+ act_top 1.12: groups 41/23 (29/17 distinct), coherence 2.2/2.5 z, across 0.2 z; peaks '感' 24% / 'ara' 26%
+   a:  frequently, birds are infected with C. jejuni. Di⟦arr⟧hoea or
+   a: ella⏎Pneumococcal Tetanus/Diph⟦ther⟧ia⏎T
+   a:  illness, even during an outbreak.However, coxsack⟦iev⟧iruses notoriously
+   b: al congestion⏎  • Vomiting⏎  • Di⟦arr⟧hea⏎ 
+   b:  instructions for making a vegetarian vegetable lasagna with homemade béch⟦amel⟧ sauce from scratch
+   b: illinterrupted.com -⏎⏎Vegetarian Spaghetti alla Carbon⟦ara⟧⏎⏎⏎This vegetarian
+
+L23 n9812+ act_top 39.50: groups 48/16 (37/12 distinct), coherence 2.1/2.0 z, across -0.0 z; peaks ' receiver' 12% / ' of' 12%
+   a:  Wayne is good if I did a top 15 list Wayne⟦,⟧ would definitely be
+   a:  Ben Edwards proved again that he's one of the top receivers⟦,⟧ tallying nearly
+   a:  are my eyes, which tell me Steve Largent was better⟦ than⟧ Tim Brown no
+   b:  to 3 feet wide. It lives in deep waters and⟦ eats⟧ plankton.
+   b: ino telescopes can detect neutrinos by observing the faint flashes⟦ of⟧ light produced when
+   b: inescent critter, which is much smaller, is the⟦ microscopic⟧ phytoplank
+
+L28 n7060+ act_top 24.12: groups 49/15 (43/13 distinct), coherence 1.8/1.7 z, across -0.3 z; peaks ',' 10% / 'ylinder' 27%
+   a: ⏎⏎⏎Erin’s Posts⏎⏎⏎In traditional row-mode execution plans⟦,⟧ SQL Server may
+   a: E version, and thus⏎ this backend will not work on⟦ such⟧ platforms. 
+   a: , reads a range of change data from change tables and delivers⟦ the⟧ changes downstream to
+   b: . It has a 148-horsepower 4-c⟦ylinder⟧ engine, but
+   b:  had enough of seeing E30 BMWs with carburetor⟦ fed⟧ Chevy V8
+   b: The base model gets a 1.6-liter four-c⟦ylinder⟧ making 130
+
+L23 n1537+ act_top 35.75: groups 43/21 (27/16 distinct), coherence 2.2/2.0 z, across 0.0 z; peaks ' cialis' 14% / ' domain' 24%
+   a:  pat the maltese falcon former occurs its epic the⟦ cialis⟧ and levitra online
+   a: Canadian⟦ cialis⟧ professional Canadian Pharm
+   a: izations and 1 purchase cialis online in jupiter's generic⟦ cialis⟧. That is
+   b:  23:27⏎but if I'm buying a cert⟦ from⟧ a recognized CA
+   b:  register.  I bought it for $12.88⟦ through⟧ NameCheap 
+   b: ⏎⏎docker run --rm -it -v$PWD:/⟦cert⟧s -v
+
+L19 n6340+ act_top 10.50: groups 34/30 (30/20 distinct), coherence 1.7/2.2 z, across -0.2 z; peaks ' and' 44% / ' least' 27%
+   a:  jail, where he stayed for six and a half days before⟦ being⟧ charged and brought
+   a: destroy evidence). He is being held on a $20,⟦000⟧ bond.⏎⏎“The
+   a:  New York City police said.⏎⏎Corey Dunton was arrested⟦ and⟧ charged with attempted
+   b:  mixture. Place on a baking sheet and chill for 1⟦ hour⟧ (this is
+   b:  sugar. Mix well and marinate in the refrigerator for at⟦ least⟧ 1 hour
+   b:  the spices to penetrate by letting the goose rest in the refrigerator⟦ overnight⟧, with a
+
+L22 n10830− act_top 10.38: groups 44/20 (28/18 distinct), coherence 2.1/1.5 z, across -0.4 z; peaks ' to' 11% / '   ' 30%
+   a:  its current situation?⏎⏎Greece has been struggling hard to meet⟦ the⟧ requirements needed to
+   a:  that of the Samaras shortfall of €4bn to qualify⟦ for⟧ the next bailout
+   a: .⏎⏎If the European Union and the European Central Bank force us⟦ to⟧ make this payment
+   b:  usage of the function:⏎⏎```rust⏎fn main() {⏎⟦   ⟧ let numbers =
+   b:  to use a pyramid of if let statements, like this:⏎⏎⟦if⟧ let superview
+   b: // Get input from user⏎print("Enter a number:")⏎⟦if⟧ let input =
+
+L22 n9444+ act_top 9.50: groups 46/18 (30/13 distinct), coherence 2.0/2.1 z, across 0.1 z; peaks ' the' 15% / 'ared' 11%
+   a:  of astronomy is to find and characterize habitable worlds orbiting⟦ nearby⟧ stars. Character
+   a:  K and 5,200 K.⏎⏎Our sun⟦ is⟧ a G V
+   a: atory that’s hunting for Earth-like planets in Earth-like orbits⟦ around⟧ 150,
+   b: Linnet - 5⏎Goldfinch - 2⟦⏎⟧Red-thro
+   b:  the tree bark at night outside my bedroom door), bat-e⟦ared⟧ foxes,
+   b: , Who are these fellas? Are they dark morphs⟦ of⟧ red tails (
+
+L7 n1542− act_top 0.62: groups 45/19 (28/15 distinct), coherence 1.9/1.6 z, across -0.3 z; peaks ' sheet' 47% / ',status' 37%
+   a:  pie filling.⏎Pour batter into a resealable plastic⟦ bag⟧ with a small
+   a:  Zeiten sind UTC+02:00⏎⏎Ein neues⟦ Thema⟧ erstellen 
+   a:  Combine chickpeas and remaining ingredients. Arrange on a baking⟦ sheet⟧.⏎⏎  
+   b:  CVE-2020-3495⏎⏎댓글⟦ �⟧�기기
+   b:  ]⏎版主: *空缺中*⏎本�⟦�⟧域�
+   b:  into problems again, please report them at tea.mathoverflow.net⟦/disc⟧ussion/65
+
+L26 n9044+ act_top 24.88: groups 41/23 (23/21 distinct), coherence 2.4/2.1 z, across 0.2 z; peaks ' the' 12% / '6' 9%
+   a:  Place eggs, milk, salt and pepper into stand mixer with⟦ the⟧ whisk attachment in
+   a:  10″ springform pan.⏎In a stand mixer fitted⟦ with⟧ paddle attachment,
+   a:  and attachments (paddle attachment, the food processor attachment,⟦ and⟧ immersion blenders
+   b:  runs in the seventh inning, and it stayed intact because Jim⟦ Johnson⟧ escaped a jam
+   b:  runs in 2.3 innings. One of those runs⟦ was⟧ charged to H
+   b:   Hammaker would be able to the next 3 three⟦ hitters⟧ to line out
+
+L22 n2814− act_top 15.38: groups 47/17 (41/16 distinct), coherence 1.6/1.5 z, across -0.4 z; peaks ' =' 15% / ' UK' 12%
+   a:  equitities are true:⏎#    leftChild(index)⟦ =⟧ 2*
+   a:  i) {⏎    int largest = i;⏎    int l⟦ =⟧ 2*i
+   a: (J):⏎    L = int(((1+sqrt(1⟦+⟧8*J
+   b:  we note that $a+b$ is between $0$⟦ and⟧ $2N
+   b: . Both requests are accepted, leading to a overall resource usage⟦ of⟧ Nmax +
+   b: -left alliance won 68 percent of seats in Dec. ⟦9⟧ parliamentary elections.⏎⏎
+
+L8 n8775+ act_top 0.57: groups 35/29 (27/12 distinct), coherence 1.7/2.9 z, across -0.2 z; peaks ' syrup' 11% / '439' 3%
+   a: : One winner selected at random will receive a $500 gift⟦ card⟧ to the company
+   a:  corn flour and ground peanuts and set aside.⏎Make a sugar⟦ syrup⟧ with 20
+   a:  Iron Oxides, Ultramarines, St. John's⟦ Wort⟧ Extract, Gr
+   b: �位（每晚）： NT$3,⟦439⟧ - 4
+   b: �位（每晚）： NT$21,⟦302⟧ - 27
+   b: �位（每晚）： NT$5,⟦087⟧ - 9
+
+L22 n10958+ act_top 15.25: groups 36/28 (18/16 distinct), coherence 2.4/2.2 z, across 0.3 z; peaks 'weet' 8% / ' •' 18%
+   a:  beauty from within.⏎⏎  1. Chocolate: Rich in⟦ antioxidant⟧ substances, it
+   a:  two!⏎⏎⏎2 1/2 ounces bittersweet (⟦not⟧ unsweetened
+   a:  this weekend. The cupcakes have a hidden layer of bitters⟦weet⟧ chocolate ganache
+   b:  [D]time⏎⏎⏎A7 = x02020⏎⟦B⟧7
+   b: This guitar guitar cords for beginers certainly⏎⏎Minor Chords⟦ are⟧ those that produce
+   b: . This is classified as the anhemitonic scale⏎⏎⟦The⟧ two basic forms
+
+L26 n4057+ act_top 21.62: groups 49/15 (29/13 distinct), coherence 2.3/1.8 z, across -0.1 z; peaks ',' 27% / ' your' 13%
+   a: 9. It's 1/3 cup of olives⟦,⟧ sliced.⏎ 
+   a: eta cheese⏎- 1 cup Kalamata olives⟦,⟧ pitted and
+   a:  cabbage⏎2 small raw tomatoes⏎12 large black olives⟦,⟧ sliced⏎⏎T
+   b:  useful in building out a sitemap for pages that need to⟦ be⟧ designed and coded
+   b:  to this leaf node.⏎⏎For example, suppose we have the⟦ following⟧ binary search tree
+   b: Sitemaps⟦ and⟧ SEO⏎⏎El
+
+L12 n5957− act_top 1.55: groups 38/26 (26/18 distinct), coherence 2.1/2.0 z, across 0.1 z; peaks ' on' 11% / ' roast' 23%
+   a:  count = new Array(range).fill(0);⏎⏎  //⟦ Count⟧ing the frequency
+   a:  0⏎	recallt = 0⏎	⏎	#⟦Calculate⟧ measures:⏎	for
+   a:  empty dictionary to store word counts⏎word_counts = {}⏎⏎#⟦ Count⟧ occurrences of each
+   b:  Brussels sprouts on a baking sheet in a single layer and⟦ roast⟧ for 20
+   b:  chicken from marinade, and discard marinade.⏎⏎7.⟦ Grill⟧ chicken for 
+   b:  wrench (if the wheel is bolted on).⏎2.⟦ Use⟧ the wrench to
+
+L19 n9293+ act_top 3.77: groups 36/28 (25/15 distinct), coherence 2.1/2.1 z, across 0.2 z; peaks ' Next' 11% / ' Whereas' 36%
+   a: erves: 2⏎⏎Serves: 2decrease⟦ servings⟧increase servings⏎⏎⏎⏎
+   a: 中20秒，輕輕一�⟦�⟧就清�
+   a:  oil, yogurt, maple syrup, and vanilla) in another⟦,⟧ and then combine
+   b:  Price Qty Total⏎Subtotal $ 0.00⏎⏎⟦Shipping⟧ Address⏎⏎Shipping
+   b: , the magic can start. The inks become a⟦ gas⟧ and are infused
+   b:  last bus depart from Coimbatore ?⏎A: The⟦ last⟧
+
+L24 n2508+ act_top 21.00: groups 50/14 (39/12 distinct), coherence 1.8/1.8 z, across -0.0 z; peaks ',' 12% / ' Director' 14%
+   a:  and are trained to craft a great story? Does it belong⟦ to⟧ advertisers because,
+   a:  part of the work. Business development professionals are also obligated to⟦ write⟧ reports and provide
+   a:  your branding aligns.⏎Creative elements in the mailpiece and⟦ subsequent⟧ emails should match
+   b: estand, closer Craig Kimbrel has a win and⟦ three⟧ saves.⏎⏎"We
+   b:  Johnson escaped a jam in the ninth to record his 31⟦st⟧ save.⏎⏎Here
+   b:  they won those three titles in six years. With a lights⟦ out⟧ bully.⏎⏎But
+
+L24 n7897− act_top 12.88: groups 37/27 (34/23 distinct), coherence 1.7/1.7 z, across -0.2 z; peaks "'s" 16% / ' in' 26%
+   a:  number one issue in the Middle East other than discussions of Iran⟦'s⟧ nuclear program is
+   a:  of a rhetorical device used often in the past to portray Iran⟦’s⟧ gas centrifuge
+   a: ” security bug discovered in early 2014. Similarly,⟦ the⟧ targeted effects of
+   b:  possibility to “roll back” these changes.⏎⏎Did you know⟦ that⟧ you could make
+   b:  Sybase Central Database Migration Tool to move tables between SQL Any⟦where⟧ databases. I
+   b:  including Oracle, Microsoft SQL Server, IBM DB2, Sy⟦base⟧, Informix
+
+L24 n2373− act_top 12.50: groups 38/26 (32/20 distinct), coherence 1.6/2.2 z, across -0.2 z; peaks ' is' 8% / ' nut' 15%
+   a:  drop-down list:⏎⏎In the Customize comparison key window, all⟦ available⟧ paired columns are
+   a:  since SQL Server 2005 shipped is "how do I⟦ expose⟧ my custom data
+   a:  is a common practice. But did you know that you can⟦ base⟧ a column in
+   b: Thank you again for your advice and help,⏎⏎Fruits and⟦ nut⟧ both are sweet
+   b:  minutes, or up to 1 hour in the refrigerator,⟦ to⟧ allow the flavors
+   b:  biloba, Ginseng, Saw Palmetto, Pumpkin⟦ Seed⟧ Powder and L
+
+L7 n9620− act_top 1.55: groups 43/21 (32/16 distinct), coherence 1.5/1.5 z, across -0.3 z; peaks 'pon' 14% / ' salt' 19%
+   a:  fruits, vegetables, and herbs. The garden will have raised⟦ beds⟧ for planting,
+   a:  Schools have joined together to create the Mullica Township Schoolyard⟦ Garden⟧.  
+   a: Hydro⟦pon⟧ics Explained
+   b: atively little is said about the Brix-values ​​within hydro⟦pon⟧ics cultivation.
+   b: Create a separate table that stores user email and password hash +⟦ salt⟧ for login.
+   b:  troubleshooting advice, and a list of recommended plants suitable for hydro⟦pon⟧ic cultivation.
+
+L23 n9555− act_top 12.94: groups 47/17 (29/16 distinct), coherence 2.3/1.7 z, across -0.2 z; peaks ' egg' 26% / ' copy' 12%
+   a:  milk⏎7. Vegan buttermilk (plant-based milk⟦ with⟧ vinegar or lemon
+   a:  2 tsp milk.⏎Heat milk in a vessel and then⟦ add⟧ a few drops
+   a:  custard differs from baked custard in that it uses only⟦ egg⟧ yolks and
+   b: I've checked out docs, forum, stack exchange and tried⟦ changing⟧ in mysql via
+   b:  the `app/design/frontend` directory.⏎⏎step 2:⟦ create⟧ a new xml
+   b: To solve this issue, you need to rename or remove the⟦ .⟧ htaccess file
+
+L24 n4575+ act_top 15.56: groups 43/21 (34/18 distinct), coherence 1.7/2.1 z, across -0.2 z; peaks ',' 16% / ' the' 19%
+   a:  are the most common navigation paths, and how do they vary⟦ by⟧ segment? ⏎
+   a:  segmentation based on a number of values, such as traffic channel⟦,⟧ device type,
+   a:  came from, how they got to the point of conversion and⟦ what⟧ percentage of visitors
+   b:  landing on your site, their behavior around browsing and booking,⟦ which⟧ will, in
+   b: .⏎⏎While Poyet believes the Morocco star could prove an⟦ exciting⟧ addition to the
+   b:  with Fulham?: Tottenham Hotspur are preparing a bid⟦ for⟧ Fulham teenager
+
+L24 n10877+ act_top 27.50: groups 41/23 (34/20 distinct), coherence 1.9/1.6 z, across -0.3 z; peaks '.command' 10% / ' the' 26%
+   a:  the news administrator (the argument to --with-news-master given⟦ at⟧ configure time,
+   a:  INSTALLATION To install this module, run the following commands:⟦ perl⟧ Makefile.PL
+   a: 5.tar.gz⏎cd tsocks-1.8⟦⏎⟧make install⏎
+   b: /2 cabbage, chopped⏎- 2 ears of corn⟦,⟧ each cut into
+   b: .⏎Mix all ingredients in small bowl. May add corn off⟦ the⟧ cob and cucumber
+   b: , ripe but firm⏎⏎Corn salsa⏎⏎Kernels from ⟦1⟧ ear of corn
+
+L23 n8021+ act_top 12.06: groups 42/22 (39/17 distinct), coherence 1.9/1.8 z, across -0.0 z; peaks ' voted' 10% / ' printing' 18%
+   a:  Clinton in 2016. That includes not only those who⟦ voted⟧ for Donald Trump
+   a:  student loans could spur nearly half of Americans in key battleground states⟦ to⟧ vote in November
+   a:  aren’t enough white voters without college degrees to elect Trump.⟦ Black⟧ voters aren’t
+   b:  prints was William Henry Fox Talbot, who developed the cal⟦otype⟧ process in the
+   b:  back to the late 19th century. They were originally⟦ created⟧ by coating specially
+   b:  numerous fake pictures were created with the “wet glass plate⟦”⟧ technique, because
+
+L23 n2346+ act_top 12.50: groups 37/27 (31/24 distinct), coherence 1.6/1.6 z, across -0.2 z; peaks 'from' 14% / 'GB' 26%
+   a:  year ago, I also had to move the email being handled⟦ by⟧ my server.
+   a:  SMTP ip address.⏎⏎    When I try to send an email⟦ using⟧ PHP's mail
+   a:  via a so called 'smarthost'.⏎⏎In the case⟦ of⟧ postfix, that
+   b:  in 1976. In his opening remarks, Soviet K⟦GB⟧ counterintelligence chief
+   b: , 2012⏎⏎⏎- A warning from a former K⟦GB⟧ agent.⏎⏎⏎The
+   b:  track and started to generate significant returns for shareholders," said chairman⟦ Z⟧oltán Á
+
+L21 n1323+ act_top 17.00: groups 34/30 (20/22 distinct), coherence 2.6/1.8 z, across -0.0 z; peaks '-' 6% / '.org' 13%
+   a: able zones. One that closely resembles Earth is known as Kepler⟦-⟧22b.
+   a: ?⏎⏎Spread the love⏎Kepler has been looking for rocky⟦ worlds⟧ that could possibly
+   a:  more massive and close-in giant planets are not associated with small⟦ inner⟧ planets. Specifically
+   b: :03⏎cjwatson(This is often automatable.)⟦12⟧:04⏎
+   b: ('Update packages')⏎    if not run_command("apt-get⟦ -⟧y upgrade"):⏎
+   b: ) # sys.stderr⏎⏎apt_args = []  # ["⟦-⟧o","Debug
+
+L7 n5657+ act_top 1.76: groups 38/26 (29/21 distinct), coherence 2.0/1.8 z, across 0.0 z; peaks 'el' 13% / ' deduct' 23%
+   a: , we were presented with a platter of Veggie Sam⟦osas⟧ which were crunchy
+   a:  recipes that are paleo and gluten-free besides the sweet potato⟦ pancakes⟧? Answer according
+   a:  food! Never cooked nor have I had papas rell⟦enas⟧. Video of
+   b:  business owner who takes their family to a business meeting can’t⟦ deduct⟧ the cost of
+   b: ize your deductions to take a tax credit.⏎⏎The American Opportunity⟦ Credit⟧⏎⏎The American
+   b: question.jpgIn Federal Income Tax⏎⏎Can I⟦ deduct⟧ income tax?⏎⏎
+
+L23 n10681+ act_top 18.62: groups 36/28 (28/26 distinct), coherence 1.6/1.5 z, across -0.3 z; peaks ' to' 14% / ' to' 18%
+   a: supertaster" is an individual who has a heightened ability⟦ to⟧ taste certain flavors
+   a: The Riedel line is that the glass you drink from⟦ alters⟧ your perceptions of
+   a:  the skin like nicoderm etc, sublingual (⟦under⟧ the tongue),
+   b:  of a larger site giving examples of how to install Windows+⟦Ubuntu⟧ Linux operating systems
+   b: 7 home premium. I want to try ubuntu without changing my⟦ original⟧ OS windows 
+   b:  utility (not bootcamp assistant as it wants a windows ⟦7⟧ disk). I
+
+L17 n5145− act_top 5.38: groups 38/26 (35/25 distinct), coherence 1.5/1.7 z, across -0.3 z; peaks '6' 8% / '\n' 23%
+   a:  Johnson⏎⏎NEW YORK - The Orioles improved to 20-⟦6⟧ in one-run
+   a:  their past nine games, although they remain eight games under .⟦500⟧ and eight-and
+   a: oley's Friars. They started the season 6-⟦6⟧ with four sub
+   b: ubSorted :: Eq a => [a] -> [a⟦]⏎⟧>     n
+   b:     fib_code = """⏎                    int fib2( int a⟦ )⏎⟧                    {⏎                       
+   b:  CurveLoop convert2loop(IList<CurveElement> Loop⟦)⏎⟧            CurveLoop
+
+L18 n791− act_top 11.25: groups 47/17 (36/14 distinct), coherence 1.8/1.8 z, across -0.0 z; peaks ' on' 13% / ' he' 12%
+   a: GBURN) to a blank CD-R. Boot your laptop⟦ using⟧ this CD-R
+   a:  version misleadingly called "windows," I chose the EFI one⟦),⟧ and first thing
+   a:     1. After the Power On Self Test (POST⟦),⟧ press the F
+   b: ivety.  The very night he was born,⟦ he⟧ woke up after
+   b:  son’s diagnosis come about?⏎⏎“When Enzo was born,⟦ he⟧ had clubfoot
+   b:  labor and delivery. I do remember our daughter not responding right⟦ away⟧ and our mid
+
+L27 n4143− act_top 27.25: groups 41/23 (35/18 distinct), coherence 1.7/1.8 z, across -0.0 z; peaks "'s" 17% / '是' 13%
+   a:  Ravens.⏎If it's truly only a matter of weeks before⟦ Bell⟧'s knee is
+   a:  Durant continue to carry the load if Curry's ankle prohibits him⟦ from⟧ playing or is
+   a:  returning, and the team wasn't optimistic Monday about their chances⟦ to⟧ face the Ravens
+   b: �的夢想就是到其他國⟦家⟧，以自
+   b: �好享受比賽，首要每⟦位⟧球員
+   b: �，從小就渴望�⟦�⟧一個
+
+L8 n2546− act_top 1.58: groups 46/18 (36/15 distinct), coherence 1.9/1.5 z, across -0.3 z; peaks ' payment' 30% / ' Spoon' 11%
+   a:  is important that you strike a fine balance between your monthly E⟦MI⟧ commitments and Loan
+   a: ARMs).⏎⏎These types of mortgages vary in duration, monthly⟦ payment⟧ and the total
+   a:  made for interest purposes. Because you are paying a fixed monthly⟦ payment⟧ against your mortgage
+   b:  2 minutes then divide the cooked noodles between individual bowls,⟦ spoon⟧ over the tofu
+   b: , mint, spring onions and tomato. Add 5 he⟦aped⟧ tablespoons of the
+   b: . It really goes well with yogurt or you can even dol⟦lop⟧ some sour cream
+
+L22 n221+ act_top 12.12: groups 35/29 (28/24 distinct), coherence 1.7/1.7 z, across -0.1 z; peaks ' bees' 23% / ' and' 7%
+   a: is.⏎⏎3. Comb building: Worker bees are responsible for⟦ building⟧ and maintaining the
+   a: : Honey Bees consume honey during the winter for survival.⟦ They⟧ group up and
+   a:  by simply taking the queen away from a colony, when the⟦ bees⟧ will build queen
+   b:  as the source code for the pipeline.⏎- Choose a Code⟦Build⟧ project to build
+   b: ):⏎    def __init__(self, namespace, name,⟦ value⟧, dimensions):⏎
+   b:  namespace and rendering them as a vertical line with Graphite’s⟦ draw⟧AsInfinite
+
+L25 n7567+ act_top 27.75: groups 38/26 (29/19 distinct), coherence 1.8/1.9 z, across 0.1 z; peaks ' your' 18% / '�' 8%
+   a:  many fail. If the plan is to get people to Like⟦ your⟧ business’s Facebook
+   a:  out to them as frequently as possible. If they simply like⟦ your⟧ Facebook page,
+   a:  your social media marketing plan will be to create mission statements for⟦ each⟧ social network profile
+   b: , featuring a 2.46-inch, 326pp⟦i⟧ screen that goes
+   b: 77g, it features a 2.4-inch resist⟦ive⟧ touchscreen display around
+   b:  and Nexus 4 both come with a 4-7⟦-inch⟧ screen, making
+
+L5 n4655− act_top 1.94: groups 40/24 (33/19 distinct), coherence 1.6/1.7 z, across -0.1 z; peaks 'en' 12% / ' Apache' 12%
+   a: For a coil of wire in a changing magnetic field, Far⟦aday⟧'s law of
+   a:  symbol for a transformer.⏎⏎A transformer consists of two or more⟦ coils⟧ of wire wound
+   a:  per coil, but I assume this is a resistance/ind⟦uct⟧ance issue due
+   b: .append('kubernetes-master')⏎    if not is_state('⟦cert⟧ificates.available'):⏎
+   b: :⏎⏎  • create your server key⏎  • create your⟦ certificate⟧ authority (CA
+   b: php_flag apc.cache_by_default On" to the Virtual⟦Host⟧ settings for sites
+
+L31 n5167+ act_top 85.00: groups 34/30 (24/19 distinct), coherence 2.6/2.4 z, across -0.6 z; peaks 'ina' 6% / ',' 27%
+   a:  your⏎⏎Moon joo yeon fucking Czeck br⟦une⟧ate parties⏎⏎
+   a:  club karlsruhe transgender shop berlin pornokino kassel tribad⟦ie⟧ sandee west
+   a:  dad son uncle⏎⏎son dad3 mam Interracial threesome amate⟦ure⟧⏎⏎son dad
+   b: [3]⏎⏎            if eolFlag == 1:⏎⟦               ⟧ break⏎⏎           
+   b:     def addFixSeq(self, seq, length):⏎       ⟦ for⟧ e in seq
+   b: 0, rcx, rcx, flags=(EZF⟦,),⟧ dataSize=asz
+
+L22 n4652+ act_top 11.12: groups 43/21 (26/9 distinct), coherence 2.7/3.3 z, across -0.2 z; peaks 'Vector' 16% / ',' 10%
+   a: import arcpy⏎import os, json⏎⏎def make⟦Feature⟧(geo,
+   a: : current, intersect, union⏎Default: current⏎File⟦ containing⟧ expression(s)
+   a:  see fields in the table. Just the fields in the point⟦ feature⟧ class.⏎⏎How
+   b: .⏎2. Spread the almonds, cashews, and pumpkin⟦ seeds⟧ out on a
+   b:  with 1 tablespoon of olive oil.⏎3. Place the⟦ vegetables⟧ on a baking
+   b:  is a highly available file system, that automatically replicates and⟦ distributes⟧ file data across
+
+L8 n1454− act_top 1.20: groups 37/27 (27/18 distinct), coherence 2.4/3.0 z, across -0.5 z; peaks ' getopt' 46% / ' READ' 4%
+   a: import RPi⟦.GPIO⟧ as gpio⏎
+   a:  global output_dir⏎⏎    try:⏎        opts, args =⟦ getopt⟧.getopt(
+   a: py')⏎    logger.setLevel(level)⏎    logfmt = logging⟦.Formatter⟧("[%(asctime
+   b: . discretely, the part of your status second-order will⟦ READ⟧ a sampling of
+   b:  run your problem revelation. I need network can Be. I⟦ provided⟧ this philosophical order
+   b:  though it increased a workers within which Established online signatures could persuade⟦ discussed⟧ out their Sub
+
+L10 n1859− act_top 1.31: groups 38/26 (29/14 distinct), coherence 2.3/2.2 z, across -0.6 z; peaks ' warnings' 37% / '?\n\n' 42%
+   a: '''⏎⏎    def setup_method(self, method):⏎        warnings.reset⟦warnings⟧()⏎⏎    def
+   a: , eq_⏎from mpl_ic import image_comparison⏎warnings.reset⟦warnings⟧()⏎warnings.simple
+   a: ):⏎        return "MPMenuGeneric()"⏎⏎    def __⟦repr⟧__(self):⏎
+   b: Already insured⟦?⏎⏎⟧Home Free Auto
+   b:  most important things for a free life insurance, auto insurance agent⟦.⟧ The answer,
+   b: Where in the U.S.A. Is Carmen Sand⟦iego⟧?⏎⏎From Wikipedia
+
+L24 n6322− act_top 12.50: groups 51/13 (29/11 distinct), coherence 2.7/2.3 z, across -0.4 z; peaks ',' 39% / ',' 23%
+   a: . :)⏎"""⏎⏎def populate_xheaders(request, response, model⟦,⟧ object_id):⏎
+   a:     """⏎    model = None⏎    queryset = None⏎⟦   ⟧ slug_field =
+   a: ⏎⏎⏎def top_authors(request):⏎    return object_list(⏎⟦       ⟧ request,⏎       
+   b: 3 6-3 in the second round. Bouch⟦ard⟧ was playing her
+   b:  to get Williams on the board going into singles play, with⟦ a⟧ close 8
+   b: iprix Stadium.⏎⏎Goffin, seeded 13th⟦,⟧ topped Steve Johnson
+
+L4 n9524− act_top 1.16: groups 46/18 (31/16 distinct), coherence 2.6/2.3 z, across -0.5 z; peaks ' provisioning' 9% / ' manifestation' 22%
+   a:  resource to perform an action on. pods (po), replication⟦Controllers⟧ (rc),
+   a: ', 'deploymentconfig',⏎                               'rc', 'replication⟦controller⟧',⏎                               '
+   a:  a public IP address or special software. Once the service is⟦ provision⟧ed, the
+   b: āṅphara—confused.⏎Seeing Lord⟦ Cait⟧anya Mahā
+   b:  after the death of the physical body, the soul (at⟦man⟧) is released
+   b: . Not only that, you are Krsnas⟦ manifestation⟧; you are
+
+L28 n743− act_top 30.50: groups 36/28 (24/23 distinct), coherence 2.3/2.4 z, across -0.3 z; peaks "',\n" 22% / '一' 18%
+   a: .Site')),⏎            ],⏎            options={⏎                'abstract': False⟦,⏎⟧            },⏎           
+   a: '.join(environ['HTTP_REFERER'].split('/')[:3⟦]),⏎⟧            ),⏎           
+   a:  $largest) {⏎                $largest = $element⟦;⏎⟧            }⏎       
+   b: 專業技術人員能及⟦時⟧協�
+   b: �助袁術與孫�⟦�⟧一同�
+   b: 苟偃原以為十二�⟦�⟧聯�
+
+L23 n4389+ act_top 21.12: groups 52/12 (33/9 distinct), coherence 2.6/2.6 z, across -0.1 z; peaks '_logging' 35% / '’s' 25%
+   a: .import_module(name)⏎  except ImportError as e:⏎    tf⟦_logging⟧.warning("Could
+   a: from tensorflow.contrib.learn.python.learn.estimators import dnn_linear⟦_combined⟧⏎from tensorflow
+   a: _function⏎⏎from tensorflow.contrib.tensor_forest.python import tensor_fore⟦st⟧⏎⏎⏎class Hybrid
+   b:  Is Not For The Western World⏎⏎Google recently began rolling out⟦ its⟧ new mobile-friendly
+   b: Google Webmaster⟦ Central⟧⏎⏎Monday,
+   b: ts, the head of the Googleâ€™s Websp⟦am⟧ team, said
+
+L18 n840+ act_top 8.81: groups 39/25 (18/17 distinct), coherence 3.0/2.6 z, across -0.0 z; peaks ',' 26% / ' import' 16%
+   a:  1 tsp salt⏎- Optional toppings: paprika,⟦ chopped⟧ parsley⏎⏎Instructions
+   a:  consistency)⏎⏎Optional Garnishes:⏎- Paprika⏎- Ch⟦opped⟧ parsley⏎-
+   a:  you can add mayo.  Also, salt.⏎pepper⟦,⟧ garlic salt,
+   b: (title):⏎    if title == None: return⏎    title⟦ =⟧ str(title)⏎
+   b:  reddit post and returns a formatted sting """⏎    item["title⟦"]⟧ = formatting.tr
+   b: ⏎from ..utils import (⏎    js_to_json,⏎   ⟦ remove⟧_end,⏎)⏎⏎⏎
+
+L29 n2783+ act_top 25.88: groups 50/14 (39/11 distinct), coherence 1.9/2.0 z, across -0.6 z; peaks ']*' 6% / ' this' 29%
+   a: match" href="text-emphasis-line-height-{index:⟦03⟧}-ref.html
+   a: (r'\s*(?:E|N): (\S*)⟦ .⟧*$')⏎⏎⏎def
+   a:  return "${pageContext.request.scheme}://${pageContext.request.server⟦Name⟧}:${pageContext
+   b:  bodies, so that they can return to their hometowns,⟦ This⟧ is the god
+   b:  out where to customize, cost-effective and fast, because there⟦ are⟧ also certain risks
+   b: , and the change in this teenager’s emotions in the audition⟦ was⟧ really… it
+
+L12 n3342+ act_top 0.80: groups 34/30 (16/15 distinct), coherence 3.8/3.2 z, across -0.0 z; peaks ',input' 50% / ' boil' 83%
+   a:   """⏎  dom = minidom.parseString(xml_string⟦)⏎⏎⟧  # min
+   a: :⏎            if line.startswith('__version__'):⏎                ret =⟦ eval⟧(line.strip().
+   a: 		#create gui elements⏎		self._app = wx⟦.App⟧()⏎		self
+   b:  in some water and buillon for more taste. Let it⟦ boil⟧ slowly with a
+   b:  the uncooked rice.⏎6. Bring the mixture to a⟦ boil⟧, then reduce
+   b: .⏎Place water and oats in saucepan. Bring to a⟦ boil⟧. Stir.⏎
+
+L9 n3321− act_top 2.50: groups 48/16 (21/11 distinct), coherence 3.5/3.3 z, across 0.1 z; peaks ' times' 62% / ' Extension' 38%
+   a:  sweet potato wedges with rosemary, including the temperature and⟦ duration⟧ for roasting
+   a: -style bagels, including information on ingredients, measurements, baking⟦ times⟧ and temperatures,
+   a:  pie crust. Can you also tell me how long I should⟦ bake⟧ the pie and
+   b: (build_webkit_command, self._options.quiet,⏎           ⟦ cwd⟧=self._tool
+   b:  it can't."""⏎⏎⏎def default_subprocess_runner(cmd,⟦ cwd⟧=None, extra
+   b:  return sys.platform == 'darwin'⏎⏎def run_shell(cmd,⟦ cwd⟧=None):⏎   
+
+L8 n6041− act_top 0.95: groups 45/19 (29/10 distinct), coherence 2.6/2.7 z, across -0.4 z; peaks 'Factory' 80% / ' diced' 58%
+   a: 	super(MainGUI,self).__init__(parent)⏎		self.setup⟦Ui⟧(self)⏎	
+   a:  self.ui = Ui_StyleSheetEditor()⏎        self.ui.setup⟦Ui⟧(self)⏎⏎       
+   a:  APITestCase⏎⏎from data.tests.factories import Department⟦Factory⟧⏎from registration
+   b:  mentioned in the text material:⏎⏎Ingredients:⏎- 1 pizza⟦ crust⟧ (homemade
+   b: 2 tablespoons of olive oil over medium heat.⏎⏎3. Add⟦ diced⟧ onions and minced
+   b: ⏎⏎  2. 2 chicken breast fillets,⟦ diced⟧⏎⏎  
+
+L27 n8397− act_top 23.75: groups 39/25 (23/13 distinct), coherence 2.9/3.2 z, across -0.0 z; peaks ' ImportError' 77% / ' bowl' 20%
+   a:  from this, including SystemError and⏎# ImportError.⏎except⟦ Exception⟧:⏎    color
+   a: ⏎⏎            _SQLALCHEMY_INSTALLED = True⏎        except⟦ ImportError⟧:⏎            _
+   a:         codecs.lookup(name)⏎        return True⏎    except Lookup⟦Error⟧:⏎        return
+   b:  process until dough comes together in a ball. Shape into a⟦ disk⟧, cover with
+   b:  3. Spread halved green onions on a heatproof⟦ plate⟧ large enough to
+   b: 2. Place flour, salt and pepper in a shallow large⟦ bowl⟧. Lightly
+
+L9 n2782− act_top 0.66: groups 42/22 (21/8 distinct), coherence 2.6/3.5 z, across -0.3 z; peaks ' cloves' 19% / '�' 86%
+   a:  gin⏎3 oz J sparkling wine⏎3 each Fresh cran⟦berries⟧⏎1 each
+   a: ⏎⏎  • Bongkeun Song ,⏎⏎    Contributed⟦ equally⟧ to this work
+   a:  17. 2 pounds New Zealand green-lip m⟦ussels⟧ or black m
+   b: /NT)⏎Pentium 350 MHz⏎128 MB⟦ RAM⟧⏎上市
+   b: Use tremble in a⟦ sentence⟧⏎⏎This page
+   b:  A Novel Measure of Willingness to Expend Cognitive Eff⟦ort⟧⏎⏎    loading
+
+L2 n1553+ act_top 0.38: groups 44/20 (15/11 distinct), coherence 3.3/2.5 z, across -0.4 z; peaks 'igor' 93% / '.ext' 70%
+   a:  women's collegiate gymnastics dual meet at Brougham Pav⟦illion⟧ Friday. The
+   a: mary.⏎⏎⏎As another option, treat your face to an inv⟦igor⟧ating cleansing.⏎⏎
+   a: !⏎⏎Here are a few fun memory pics:⏎⏎2013 Hamm⟦ock⟧ Beach Vacation 
+   b: ��片。右下角是Dorothy Chandler Pav⟦illion⟧.⏎从D
+   b:  feeders, particularly on Compositae.⏎"Pteroph⟦orida⟧e." A
+   b:  nourish skin leaving it feeling soft and smooth. An inv⟦igor⟧ating combination of
+
+L5 n7244− act_top 0.54: groups 37/27 (22/16 distinct), coherence 2.4/2.9 z, across -0.4 z; peaks '.plugins' 41% / ' Korea' 85%
+   a:  Configure profile groups in Fortinet's FortiOS and Forti⟦Gate⟧.⏎description:⏎
+   a: , division, print_function)⏎# Copyright 2019 Fort⟦inet⟧, Inc.⏎
+   a: , division, print_function)⏎# Copyright 2018 Fort⟦inet⟧, Inc.⏎
+   b: A Way Forward On North K⟦orea⟧⏎⏎With North
+   b:  as extremely unlikely, and there are no overt signs that North⟦ Korea⟧’s 1
+   b: UL (Reuters) - South Korea on Monday condemned rival North⟦ Korea⟧'s planned rocket
+
+L15 n10006− act_top 2.30: groups 44/20 (19/17 distinct), coherence 3.1/2.6 z, across -0.2 z; peaks ' garlic' 98% / ' ansible' 60%
+   a:  ⏎⏎7. In the same skillet, add chopped onions,⟦ garlic⟧, and herbs
+   a:  from oil and cool. In a food processor add basil,⟦ garlic⟧, pecor
+   a:  for roasting the squash and incorporating ingredients such as onion,⟦ garlic⟧, vegetable broth
+   b: (status)⏎            self.ingress = statuses⏎⏎    #⟦ --------------------------------------------------------------------------------⟧----- ingress⏎⏎
+   b: ⏎import traceback⏎⏎from ansible import constants as C⏎from⟦ ansible⟧.compat.six
+   b:  itertools import chain⏎⏎from ansible import constants as C⏎from⟦ ansible⟧.errors import Ans
+
+L16 n10419− act_top 1.99: groups 41/23 (23/11 distinct), coherence 2.4/2.9 z, across -0.4 z; peaks ' Stir' 24% / "'," 74%
+   a:  Red Mill chia seeds and 3 tablespoons of water.⟦ Stir⟧ well and let
+   a:  oats, milk, yogurt, and fruits in a jar or⟦ bowl⟧ and leave it
+   a:  in the chicken or vegetable broth, and salt to taste.⟦ Stir⟧ well.⏎⏎8
+   b:  the terminal. These data are stored and can be accessed and⟦ handled⟧ for a specific
+   b:  resp: bot.privmsg(reply_to, resp), self)⏎⟦           ⟧ t.start()⏎⏎⏎
+   b:  FOREVER! Once you place one of them in your cafe⟦,⟧ you don't
+
+L5 n7358+ act_top 0.40: groups 43/21 (22/13 distinct), coherence 2.3/2.3 z, across -0.4 z; peaks '流' 86% / ' errno' 43%
+   a:  is a talented, versatile, beautiful and char⟦ismatic⟧ entrepreneur
+   a: 。⏎最新商品熱門商品⏎一⟦流⟧的品�
+   a: �一直致力于为您提供一⟦流⟧的设�
+   b: from __future__ import unicode_literals⏎import⟦ unic⟧odedata⏎⏎⏎
+   b: from __future__ import unicode_literals⏎⏎import re⏎import⟦ unic⟧odedata⏎
+   b: from django.core.validators import EMPTY_VALUES⏎from django.forms import⟦ ValidationError⟧⏎from django

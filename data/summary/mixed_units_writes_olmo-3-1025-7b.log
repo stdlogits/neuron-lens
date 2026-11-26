@@ -1,0 +1,22 @@
+allenai/Olmo-3-1025-7B: next tokens after a's and b's firings in the pole's write_R (top 64), less 32 random poles' writes; b / a; then next tokens unique to their group
+  topic    L0-L7:    51  a +0.003 ± 0.007  b -0.004 ± 0.006  b/a -1.59;  unique: a +0.015 b +0.002  b/a 0.13
+  topic    L8-L15:    10  a -0.005 ± 0.003  b -0.009 ± 0.007  b/a 1.68;  unique: a -0.000 b +0.002  b/a -9.10
+  topic    L16-L23:    75  a +0.059 ± 0.012  b +0.044 ± 0.011  b/a 0.76;  unique: a +0.057 b +0.039  b/a 0.69
+  topic    L24-L31:   130  a +0.038 ± 0.008  b +0.028 ± 0.007  b/a 0.73;  unique: a +0.040 b +0.029  b/a 0.73
+  code     L0-L7:   107  a +0.008 ± 0.006  b +0.008 ± 0.008  b/a 0.97;  unique: a +0.007 b +0.007  b/a 0.93
+  code     L8-L15:    87  a -0.004 ± 0.005  b -0.000 ± 0.008  b/a 0.00;  unique: a -0.002 b -0.001  b/a 0.53
+  code     L16-L23:   113  a +0.042 ± 0.010  b +0.035 ± 0.009  b/a 0.84;  unique: a +0.040 b +0.030  b/a 0.76
+  code     L24-L31:    82  a +0.041 ± 0.014  b +0.016 ± 0.006  b/a 0.39;  unique: a +0.042 b +0.012  b/a 0.28
+  token    L0-L7:   339  a +0.010 ± 0.006  b +0.009 ± 0.006  b/a 0.83;  unique: a +0.006 b +0.001  b/a 0.16
+  token    L8-L15:   139  a +0.006 ± 0.007  b +0.008 ± 0.010  b/a 1.36;  unique: a +0.006 b +0.006  b/a 0.98
+  token    L16-L23:    89  a +0.021 ± 0.007  b +0.029 ± 0.011  b/a 1.37;  unique: a +0.022 b +0.029  b/a 1.31
+  token    L24-L31:    46  a +0.070 ± 0.023  b +0.088 ± 0.035  b/a 1.26;  unique: a +0.029 b +0.030  b/a 1.02
+  control  L0-L7:  1988  a +0.001 ± 0.002  b +0.002 ± 0.002  b/a 1.86;  unique: a +0.000 b +0.002  b/a 9.70
+  control  L8-L15:   944  a +0.008 ± 0.003  b +0.008 ± 0.003  b/a 0.96;  unique: a +0.006 b +0.003  b/a 0.57
+  control  L16-L23:  1108  a +0.092 ± 0.006  b +0.092 ± 0.006  b/a 1.00;  unique: a +0.042 b +0.042  b/a 1.01
+  control  L24-L31:  1032  a +0.133 ± 0.008  b +0.134 ± 0.008  b/a 1.01;  unique: a +0.065 b +0.061  b/a 0.94
+  by which group's onset came first (mixed kinds pooled, the latter half of the layers)
+    mixed   a first:   289  a +0.036  b +0.029
+    mixed   b first:   219  a +0.048  b +0.041
+    control a first:   998  a +0.110  b +0.112
+    control b first:   731  a +0.101  b +0.101
