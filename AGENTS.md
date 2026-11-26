@@ -1,300 +1,221 @@
 # AGENTS.md
 
-Working notes for coding agents and contributors. [README.md](README.md) is the overview,
-[docs/design.md](docs/design.md) the methods, [docs/findings.md](docs/findings.md) the results
-and their limits. Read the findings before making a claim about a neuron or a lens.
+Working notes for coding agents and contributors: what the repo holds, the rules a change must keep, and how to run
+and record work. [README.md](README.md) is the overview, [docs/design.md](docs/design.md) the methods (each model's
+differences included), [docs/findings.md](docs/findings.md) the results and their limits. Read the findings before
+making a claim about a neuron or a lens.
 
 ## What this is
 
-A catalog of what every MLP neuron (two poles each) and attention head means, for two models in depth, Qwen3-8B (36
-layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads), and the rest of the Qwen3 family to 14B,
-post-trained and base (labels for the post-trained ones). Each unit is
-read from three sides: the weights through two lenses (a neuron's write and read direction; a head's
-OV and QK circuits, per token), activations over 15M positions, and exact token drivers. Neurons and
-heads get the same tables: `acts`, `drivers`, `reads`, `labels` and `sources` (what drives them when
-they fire; for a head, through its value, query and key); neurons also get `firings` (what the residual holds where
-they fire) and `edges` (direct weight edges between poles); the pruned Qwen3 pairs' neurons get `lineage` (each pole's
-parent in the model it was pruned from, or its child; findings §20).
-Gemma 4 also takes images and sound, so it adds lenses fitted on images and sounds, and `image` and `audio` tables per
-neuron and per head. `NEURON_LENS_MODEL` selects the model for every stage (Qwen3-8B by default). The lenses and the
-catalog are released on the Hugging Face Hub by `scripts/12_release.py`, one card per repo covering every model.
+A catalog of what every MLP neuron (two poles each) and attention head means. Two models are read in depth, Qwen3-8B
+(36 layers × 12,288 neurons, 32 heads) and Gemma 4 12B (48 × 15,360, 16 heads, and images and sound), and the rest of
+the Qwen3 family to 14B, post-trained and base, the same way (labels for the post-trained ones). Each unit is read
+from three sides: its weights through two lenses (the R-lens forward to the output, the S-lens back to the input
+embeddings), its activations over 15M positions, and its exact token drivers. `NEURON_LENS_MODEL` selects the model
+for every stage (Qwen3-8B by default). `scripts/12_release.py` releases the lenses (`stdlogits/rs-lenses`) and the
+catalog (`stdlogits/neuron-lens`) on the Hugging Face Hub, one card per repo covering every model; the models in its
+`LENS_ONLY` (the Pythia suite, Qwen3.5, Qwen3-30B-A3B, OLMo 3 7B) get lenses alone.
+
+Neurons and heads share the tables `acts`, `drivers`, `reads`, `labels` and `sources`; neurons add `firings` and
+`edges`, the pruned Qwen3 pairs `lineage`, Gemma 4 `image` and `audio`, and sparse models `experts/acts` and
+`experts/reads`. The dataset card documents every column.
 
 ## Layout
 
-- `neuron_lens/`: the package. `transport.py` is the lens estimator; `layers.py` writes every
-  model's decoder layers as RelP linear maps and their transposes, one implementation per component
-  (RMSNorms and LayerNorms, softmax attention with sliding windows, gates or a fused projection,
-  Gated DeltaNet, dense MLPs gated or not, sparse MLPs, sequential and parallel blocks), composed
-  from what each layer holds; `kernels.py` runs its hot spots on CUDA as Triton kernels
-  (DeltaNet's derivative, the sparse MLP's experts), with `layers.py`'s torch passes as their
-  reference; `rules.py` states the same rules as autograd patches, by operation, and is the test
-  reference; `arch.py` holds each model's geometry (head layouts, weight
-  names, token counts, which fits are of record) and its reading plan and depth bands and `neurons.py` its neurons' read and write
-  directions (`poles`: in the residual's metric); `metric.py` the residual's metric, which turns a covector into a
-  vector and back (`02_fit.py --lens scale`); `readout.py` reads vectors through a lens; `heads.py` reads head circuits as token
-  maps; `lenses.py` loads fits, released lenses and Drowse lenses; `media.py` builds Gemma's image and
-  audio documents and reads its embedders backwards, `media_sets.py` streams the labelled image and
-  audio collections; `corpus.py` the corpora (`act_file` names each slice's file); `catalog.py` holds
-  the catalog's layout, the kept tokens and the table helpers (and browses it:
-  `python -m neuron_lens.catalog`); `firings.py` and `sources.py` the activation-side passes (the residual at a pole's firings; the exact split of
-  an activation over its sources); `stats.py` the shared statistics; `known.py` named neurons; `experts.py` a sparse MLP's neurons on the activation side (the model's own routing, the
-  routed pairs' activations, per-neuron rows gathered from the experts' weights) for 06, 07, 17 and the checks.
-- `scripts/NN_*.py`: the pipeline, numbered in run order (`06` activations → `07` drivers → `08`
-  reads → `10` labels; for Gemma 4, `13` media exemplars → `checks/crossmodal.py` →
-  `14` media tables → `15` optimised media reads; `16` edges, and `17` firings and sources, after `06`; then `11` figures
-  → `12` release; there is no `09`). `checks/reads_at_firings.py`, after `07` and `08`, gives the per-band shares the
-  figures and the depth guidance rest on.
-  `scripts/prompts/`: the labellers' prompts. `scripts/checks/`: analyses, each behind a findings or
-  design section (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files).
-  Every script the findings name is here. Checks read the catalog's tables and get documents from
-  `catalog.documents` (the activations file, else rebuilt from the corpus), so most run from the
-  release and the model.
-- `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models
-  (`test_transport.py` Qwen3, dense and MoE, `test_gemma4.py` Gemma 4 and its media fits' mode, `test_qwen35.py` Qwen3.5,
-  `test_pythia.py` GPT-NeoX, `test_olmo.py` OLMo 2 and 3, OLMoE and Olmo Hybrid), and
-  `test_kernels.py` (the CUDA kernels against their torch passes; skipped without CUDA). Anything that fails loudly or
-  reads wrong in the output gets fixed when it comes up; don't add tests for it.
-- **Qwen3.5 (in progress):** `layers.py` covers Qwen3.5-35B-A3B's layers (Gated DeltaNet, gated
-  attention, MoE with a shared expert; Qwen3.5-9B's dense MLP too). RelP's rules apply by operation (elementwise gates take
-  the half rule; scalar weights, DeltaNet's mixing matrix, the router and the shared expert's gate,
-  keep their true derivative, as softmax attention's do); design.md's Qwen3.5 section lists how this
-  differs from the published R-lens. Fits use 512-token
-  documents (`--seq-len 512 --full-length`) so the DeltaNet memories fill (`arch.seq_tag`: their fits are `-T512`). In
-  the catalog a DeltaNet layer's heads are its value heads, mixing through `A` (`o = A v`, `layers.delta_pattern`): 06
-  reads `|A|` as their attention pattern, 08 their OV and QK maps through the convolution's summed taps and their own
-  `beta_S` and `decay_S` reads, 17 splits their value channel (design.md's Qwen3.5 section). The Triton kernels take
-  heads of powers of two (`kernels.supports`); Olmo Hybrid's run the torch passes. A sparse layer's neurons are its
-  experts' side by side, then its shared expert's (design.md's "Sparse MLPs in the catalog"), with expert tables of their
-  own. No catalog has run on a full Qwen3.5 model yet.
-- **OLMo (in progress):** `layers.py` and the stages cover OLMo 2 and 3 (norms on the sublayers' outputs only, so each
-  sublayer reads the residual itself: `anatomy`'s third layout; q/k norms over the whole projection, one rsqrt a
-  position; OLMo 3's sliding windows and per-type RoPE with YaRN), OLMoE (64 experts, top 8, the router's weights not
-  renormalised, so their derivative runs through every expert's logit: `MoE.p_all`) and Olmo Hybrid (DeltaNet layers
-  with separate projections and `β` up to 2, NoPE attention layers in OLMo's layout). Tested on tiny models
-  (`test_olmo.py`) and OLMo-2-0425-1B through every stage on smoke fits; no fits of record yet.
-- **Pythia (in progress):** `layers.py` covers GPT-NeoX (LayerNorms, which keep their centring under
-  the LN rule; the fused QKV with biases; RoPE on a quarter of each head; the ungated GELU MLP,
-  identity rule; parallel blocks, where `mid` is the layer's input, so `mid[L]` = `out[L − 1]`).
-  Checkpoints are revisions (`02_fit.py --revision step<N>`, `fit_queue.sh model@step<N>`), fitted
-  locally until the release has a place for them; `checks/relict.py` follows §24's census across them (findings §25). The catalog stages run on it through three facts in `arch.py`:
-  `n_poles` (one pole per neuron: GELU's negative side is a dip, not a second direction), `parallel` (head writes
-  read where the heads write, `arch.head_write_lens`: the layer's `out`) and `centred` (LayerNorms: read rows,
-  writes and the readout centred). Its attention has no q/k norms, so the queries and keys read their input norm's
-  true derivative and the values its LN rule (`layers._scores_norm`, and the catalog's QK reads through its average over positions, 06's `in_r`, `in_m`; no change for models with q/k norms). Sources gain a `const_share` (the biases). Fits and passes run in fp16, its
-  checkpoints' dtype (`arch.half_dtype`). Design.md's Pythia section has the rest.
-- `data/` is ignored except `data/summary/` (compact results and logs, tracked) and
-  `data/corpus/*.provenance.json`. Locally it holds corpora, fits (`data/fits/`), Drowse homes
-  (`data/lenses/<name>/`), catalog shards (`data/catalog/<model>/`), activation stores, the
-  release staging folders, and outside data (`data/external/`). `neuron_lens/paths.py` names
-  them. The catalog lives in `data/catalog/<model>/`, laid out as the release:
-  `neurons/<table>/L<layer>.parquet` (a row per pole, the + poles first) and
-  `heads/<table>.parquet` (a row per head), key columns in front; a sparse model's experts also get
-  `experts/acts.parquet` and `experts/reads.parquet`, a row per (layer, expert). Per model: `token_counts-<model>.pt` and
-  the chat slice `act-chat-<model>.jsonl`, the other slices shared; Gemma's media sources in
-  `data/corpus/media-<modality>.provenance.json`. `data/summary/release_<model>.json` holds what the
-  Hub cards say about each model's release, so either model's run rebuilds both cards.
+- `neuron_lens/`, the package:
+  - the estimator: `transport.py` (the lenses), `layers.py` (every model's decoder layers as RelP linear maps and
+    their transposes, one implementation per component, composed from what each layer holds), `rules.py` (the same
+    rules as autograd patches, by operation: the tests' reference), `kernels.py` (Triton kernels for the CUDA hot
+    spots, with `layers.py`'s torch passes as their reference);
+  - each model: `anatomy.py` (a layer's norms, mixer and MLP by attribute path), `arch.py` (geometry, weight names,
+    fits of record, reading plans, depth bands), `neurons.py` (poles' read and write directions), `metric.py` (the
+    residual's metric), `experts.py` (a sparse MLP's neurons on the activation side), `weights.py` (named tensors
+    without loading the model);
+  - reading: `readout.py` (vectors through a lens), `heads.py` (head circuits as token maps), `lenses.py` (fits,
+    released lenses, Drowse lenses);
+  - data: `corpus.py`, `catalog.py` (the catalog's layout, kept tokens and table helpers; browse it with
+    `python -m neuron_lens.catalog`), `firings.py` and `sources.py` (the passes at a pole's firings), `stats.py`,
+    `known.py` (named neurons), `media.py` and `media_sets.py` (Gemma's images and sounds), `paths.py`.
+- `scripts/NN_*.py`, the pipeline: `01`-`05` build the corpora, fit and export the lenses and count tokens; the
+  catalog runs `06` activations, `17` firings and sources, `07` drivers, `08` reads, `checks/reads_at_firings.py`,
+  `16` edges, then `10` labels; Gemma 4's media run `13`, `checks/crossmodal.py`, `14`, `15`; `11` draws the figures
+  and `12` releases (there is no `09`). The README's Reproducing table has costs. The `*.sh` scripts set up GPU boxes
+  and queue runs (Running jobs). `scripts/prompts/` holds the labellers' prompts.
+- `scripts/checks/`: analyses, each behind a findings or design section; every script the findings name is here
+  (`causal_lens.py`, `crossmodal.py` and `head_media.py` also make released files). Checks read the catalog's tables
+  and get documents from `catalog.documents`, so most run from the release and the model.
+- `tests/`: only what a run can't show. The estimators against brute-force Jacobians on tiny random models, a file per
+  family (`test_transport.py` Qwen3 dense and MoE, `test_gemma4.py`, `test_qwen35.py`, `test_pythia.py`,
+  `test_olmo.py`), and `test_kernels.py` (skipped without CUDA). What fails loudly or reads wrong in the output gets
+  fixed when it comes up, without a test.
+- `data/` is ignored except `data/summary/` (compact results and logs) and `data/corpus/*.provenance.json`;
+  `paths.py` names the rest. The catalog, `data/catalog/<model>/`, is laid out as the release:
+  `neurons/<table>/L<layer>.parquet` (a row per pole, the + poles first), `heads/<table>.parquet` (a row per head),
+  key columns in front. `data/summary/release_<model>.json` holds what the cards say about each model, so a catalogued
+  model's release rebuilds every card.
+
+## Architectures
+
+The stages read what differs between models from `anatomy.py`, `arch.py` and `neurons.py` and never branch on the
+model (Invariants). design.md has a section for each family beyond Qwen3. Labels (`10`) need a reading plan in
+`arch.PLANS`, which only the Qwen3 models and Gemma 4 have.
+
+- **Qwen3** (0.6B-14B, post-trained and base): catalogued. Qwen3-4B and 0.6B are pruned from the 8B and the 1.7B, so
+  the sizes are three lineages, not five points (findings §20).
+- **Gemma 4 12B:** catalogued, with media lenses and tables. Every document starts with `<bos>`, the sink, so
+  statistics start at position 1, and its logits pass a softcap that R-lens probabilities include.
+- **Pythia:** estimator and stages; lenses released for 14M-6.9B. Training checkpoints are revisions
+  (`02_fit.py --revision step<N>`, `fit_queue.sh model@step<N>`), fitted locally, since the release has no place for
+  them. `arch` carries its differences as `n_poles` (one pole), `parallel` (blocks), `centred` (LayerNorms) and
+  `half_dtype` (fp16).
+- **OLMo 2 and 3, OLMoE, Olmo Hybrid:** estimator and stages; lenses released for OLMo 3 7B, whose checkpoints back
+  findings §25.
+- **Qwen3.5** (Gated DeltaNet layers beside gated attention; sparse MLPs in the 35B-A3B) **and Qwen3-30B-A3B**
+  (Qwen3's attention with sparse MLPs): estimator and stages, with Triton kernels for DeltaNet; no catalog has run on a
+  full Qwen3.5 model yet. DeltaNet models' lenses fit 512-token documents (`--seq-len 512 --full-length`: `-T512`
+  fits, `arch.seq_tag`), and a DeltaNet layer's heads are its value heads. A sparse layer's neurons are its experts'
+  side by side, then its shared expert's.
 
 ## Invariants
 
-- **The lens rule.** A lens's `out` target reads MLP outputs and attention inputs; its `mid` target
-  reads MLP inputs and attention outputs. Don't fit or ship a lens for a point it isn't built for,
-  and don't ship borrowed lenses (the J-lens, the logit lens) in the catalog; comparisons belong in
-  checks. A head's keys and values are read with the S-lens (what a position holds); its query with the S-lens, or for
-  `qk_self_R` with the R-lens at `L − 1`'s output (what the position is about to say; findings §10).
-- **Vectors and covectors.** The R-lens transports vectors (writes), the S-lens pulls back covectors (read rows). A
-  read that feeds a covector to the R-lens, or takes a cosine or a projection between a covector and a vector, goes
-  through the residual's metric (`neuron_lens.metric`: `v = s² ⊙ c`, `s² = σ / |γ|`, σ the
-  scale fit's): the raw basis carries a unit per coordinate (Gemma 4's span 80-1,600×), and a Euclidean read there
-  weighs coordinates by their units (findings §15). A read that sets a vector against the S-lens's footprints (a write
-  in `write_S`, `write_orth_S`; a head's output in `ov_S`; the residual at the firings in `before_S`, `mlp_S`) goes
-  through the lens's polar factor (`metric.polar`: `w · U ē`, `K = (K Kᵀ)^½ U`), the footprints with the lens's
-  stretch removed: it asks which input token would put the vector there, which the transpose answers only where `K`
-  doesn't stretch (§15). Pairing a covector with a vector needs no metric, and a length the model takes itself (an
-  RMSNorm's rms: a QK footprint's size, a write's energy at the final norm) stays Euclidean.
-- **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores: token reads, top
-  firings, edges, sources, media labels and documents. `_str` previews (8) and `N_CONTEXTS` (5, the firings a
-  card shows) are views, and analysis windows in `scripts/checks/` stay what their findings section recorded (`HELD_OUT`
-  for the label checks' held-out firings).
-- **One format.** A token list is `<name>_ids`, `_val`, `_str`; a list of poles is `<name>_layer`, `_neuron`, `_pole`; shorter lists
-  are padded with −1, NaN and an empty preview. Parallel sources get parallel names: R-lens and S-lens reads differ only by
-  `_R` / `_S`, weight reads and firing reads share their `_z` meaning, modalities get a table each, and every model has the same
-  columns and the same file names, so nothing is special-cased for the default model.
-- **Another model in the catalog** comes through `anatomy.py`, `arch.py` and `neurons.py`: `anatomy.parts` reads a decoder
-  layer's norms, mixer and MLP by attribute path (nothing else reads a norm by name: `post_attention_layernorm` is the MLP's
-  input norm in Qwen3 and the attention output's norm in OLMo), and `arch` what a layer's heads and neurons write as the
-  residual sees them, and what rescales that on the way (`attn_norm`, `mlp_norm`, `layer_scale`). The stages read those instead of
-  branching on the model. Heads sit in a grid of `arch.max_heads` a layer, each layer's first (Qwen3.5's DeltaNet layers have
-  twice its attention layers' heads); a head table lists the heads that exist (`catalog.write_heads`), and `catalog.gridded`
-  puts a column back on the grid. Analyses in `scripts/checks/` tied to one model's named units or findings section may stay that model's.
-- **One token mask.** Every token read covers `catalog.kept()`: tokens seen 5+ times in the
-  activation corpora, without byte-fallback pieces.
-- **Description cards stay leak-free.** `10_labels.py check` and `checks/lens_blind.py` hold out a
-  unit's top documents past the first `N_CONTEXTS`. Nothing on an evidence card may summarize them: no
-  peak-token counts or agreement shares over all top documents, no ablation run in top contexts.
-  Scoring contexts end at the marked token. Findings §13 records why.
-- **Estimator changes** need `tests/test_transport.py`, `tests/test_gemma4.py`, `tests/test_qwen35.py`,
-  `tests/test_pythia.py` and `tests/test_olmo.py` to pass
-  (and `tests/test_kernels.py` on a CUDA machine when the kernels change; CI runs the rest on CPU
-  for pushes to main, pull requests and weekly, `.github/workflows/tests.yml`, as a signal, not a
-  gate): both
-  lenses against brute-force Jacobians of the model under `relp_rules`. Supporting another architecture
-  means composing its layers from `layers.py`'s components, adding a component (its map, transpose
-  and autograd rule) where one is missing, and its geometry in `arch.py`, with a test file of tiny
-  random models; `layers.check` refuses what the components don't cover.
-- **Both lenses sum over positions** (as the J-lens does) and use RelP. These are fixed, not
-  options. More generally, keep one current code path: delete superseded options and formats
-  rather than keeping compatibility.
-- **Fit files** in `data/fits/` are the authoritative lens format:
-  `<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt` (`-<revision>`: a training checkpoint,
-  `--revision`; `-T<len>`: documents of exactly that many tokens, `--full-length`), holding even- and odd-document sums per
-  target. `scale-<model>-L<layers>-dclm.pt` (`02_fit.py --lens scale`, forward passes over the text lens's corpus,
-  minutes) holds the residual's per-coordinate sums at every norm's input, the metric's σ; the release ships it as
-  `<model>/scale.pt`. Both lenses have an `out` target (layer outputs) and a `mid` target (each layer's MLP
-  input): R `out` reads MLP writes, R `mid` reads MLP read directions and attention writes, S
-  `mid` reads read directions, S `out` reads writes. `lenses.load_fits` adds shards and halves;
-  `Accumulator.mean` averages the halves.
-- **Section numbers in findings are stable.** Code docstrings, figure footers and the Hub cards cite
-  them. Fold a new result into the section it belongs to, or add a section at the end (in the last
-  part, or a new one); don't renumber.
+- **The lens rule.** A lens's `out` target reads MLP outputs and attention inputs, its `mid` target MLP inputs and
+  attention outputs (in a parallel block, where both sublayers write `out`, a head's write takes `out`:
+  `arch.head_write_lens`). Don't fit or ship a lens for a point it isn't built for, and don't ship borrowed lenses (the
+  J-lens, the logit lens) in the catalog; comparisons belong in checks. A head's keys and values are read with the
+  S-lens (what a position holds); its query with the S-lens, or for `qk_self_R` with the R-lens at `L − 1`'s output
+  (what the position is about to say; findings §10).
+- **Vectors and covectors.** The R-lens transports vectors (writes); the S-lens pulls back covectors (read rows).
+  Turning one kind into the other, or comparing two of a kind, goes through the residual's metric (`metric`:
+  `v = s² ⊙ c`, `s² = σ / |γ|`), since the raw basis gives each coordinate its own unit (Gemma 4's span 80-1,600×).
+  A vector set against the S-lens's footprints (`write_S`, `write_orth_S`, `ov_S`, `before_S`, `mlp_S`) goes through
+  the lens's polar factor (`metric.polar`). Pairing a covector with a vector needs no metric, and a length the model
+  takes itself (an RMSNorm's rms) stays Euclidean (design.md's Reading neurons; findings §15).
+- **Both lenses sum over positions** (as the J-lens does) **and use RelP.** These are fixed, not options.
+- **One code path.** Delete superseded options and formats rather than keeping compatibility.
+- **One top-k.** `catalog.TOP` (64) is the length of every ranked list the catalog stores. `_str` previews (8) and
+  `N_CONTEXTS` (5, the firings a card shows) are views; analysis windows in `scripts/checks/` stay what their findings
+  section recorded.
+- **One format.** A token list is `<name>_ids`, `_val`, `_str`; a list of poles `<name>_layer`, `_neuron`, `_pole`;
+  short lists are padded with −1, NaN and an empty preview. Parallel sources get parallel names (R and S reads differ
+  only by `_R` / `_S`; weight and firing reads share their `_z` meaning), each modality gets a table, and every model
+  has the same columns and file names.
+- **Another model** comes in through `anatomy.py`, `arch.py` and `neurons.py`, never a branch in a stage. Only
+  `anatomy.parts` reads a norm by name (`post_attention_layernorm` is the MLP's input norm in Qwen3 and the attention
+  output's norm in OLMo). Heads sit in a grid of `arch.max_heads` a layer; head tables list the heads that exist
+  (`catalog.write_heads`, `catalog.gridded`). Supporting an architecture means composing its layers from `layers.py`'s
+  components, adding a component (map, transpose and autograd rule) where one is missing, and a test file of tiny
+  random models; `layers.check` refuses what the components don't cover. Checks tied to one model's named units or
+  findings section may stay that model's.
+- **One token mask.** Every token read covers `catalog.kept()`: tokens seen 5+ times in the activation corpora
+  (`03_token_counts.py`), without byte-fallback pieces. Undertrained tokens push some early neurons to huge
+  activations.
+- **Description cards stay leak-free.** `10_labels.py check` and `checks/lens_blind.py` hold out a unit's top
+  documents past the first `N_CONTEXTS`, so nothing on an evidence card may summarize them: no peak-token counts or agreement shares over all top documents, no ablation in top
+  contexts. Scoring contexts end at the marked token (findings §13).
+- **Estimator changes** pass every `tests/` file (and `test_kernels.py` on a CUDA machine when the kernels change).
+  CI runs the rest on CPU for pushes to main, pull requests and weekly, as a signal, not a gate.
+- **Fit files** in `data/fits/` are the lens format of record:
+  `<lens>-<model>[-<revision>]-L<layers>-<corpus>[-T<len>][-s<i>of<n>].pt`, even- and odd-document sums per target
+  (`lenses.load_fits` sums shards, each half apart; `Accumulator.mean` divides by the documents). Each lens has an `out`
+  target (layer outputs) and a `mid` target (each layer's MLP input). `scale-<model>-L<layers>-dclm.pt` holds the
+  residual's sums at every norm's input, from which the release computes the metric's σ (`<model>/scale.pt`).
+- **Findings section numbers are stable.** Docstrings, figure footers and the Hub cards cite them. Fold a new result
+  into its section or add one at the end; don't renumber.
 
 ## The lenses of record
 
-- **R-lens:** fitted on the first 1,000 rows of DCLM-shuffled (`01_lens_corpus.py`, one
-  extendable file at a pinned revision) with `02_fit.py --lens R`; exported by
-  `04_export_rlens.py` to `data/lenses/dclm`, with its halves in `dclm-even` and `dclm-odd`.
-  Split-half 0.06 or less at every layer (findings §1).
-- **S-lens:** the same documents, `02_fit.py --lens S` (`data/fits/s-qwen3-8b-L36-dclm.pt`),
-  split-half 0.00-0.05. Its reads are legible at L0-L8; past L8 use the exact drivers for the
-  input side (findings §7).
-- Kept for comparison: an R-lens fitted on 500 chat conversations (`data/lenses/chat`; findings
-  §1).
-- **The scale:** for each model, `02_fit.py --lens scale --docs 1000 --seq-len 128` over the same documents
-  (split-half 0.01-0.04). A new lens of record gets its scale fit beside it.
-- **Gemma 4 12B:** both lenses on the same 1,000 DCLM documents (`<lens>-gemma-4-12b-L48-dclm`), and
-  image and audio lenses (`02_fit.py --modality image|audio`: COCO 2014 val, 1,000 for S and 512 for
-  R; ESC-50, 1,615 kept clips for S and 512 for R; fits `...-coco`, `...-esc50`). The media S-lenses
-  are seeded in the embedder's subspace and carry a `basis`. The pipeline reads local fits when they
-  are in `data/fits/`, else the released lenses (`arch.fits`, the `hub` lens spec).
-- **Replacing the lens of record:** fit, export to a new home under `data/lenses/`, rerun
-  `08_reads.py` and the stages after it, record the comparison in findings, and rerun
-  `12_release.py`.
-- **Drowse** ([github.com/stdlogits/drowse](https://github.com/stdlogits/drowse)) loads exported R-lenses
-  (`R:<name>` specs in `lens_compare.py`), both targets with their split-half differences, and
-  fetches the released ones (`drowse lens fetch <model> rs-r`, `rs-s`). It always writes an R-lens
-  to `local/r` under `$DROWSE_HOME` (lens format v7, Drowse 6.0), so each export gets its own home
-  under `data/lenses/<name>/` and never overwrites another, or the user's default home. Fitting
-  lives here; exact agreement with Drowse's fit is not required.
+- For each model, the R-lens, the S-lens and the scale are fitted on the first 1,000 rows of DCLM-shuffled
+  (`01_lens_corpus.py`, one extendable file at a pinned revision) with `02_fit.py --model <id> --lens R|S|scale --docs
+  1000` (its defaults, Qwen3-0.6B and 12 documents, are a smoke test; `--full-length` takes the first 1,000 documents
+  long enough). Qwen3-8B's split-half: R 0.06 or less at every layer, S 0.00-0.05, scale 0.01-0.04 (findings §1).
+  The S-lens's reads are legible at L0-L8; past L8 use the exact drivers for the input side (§7).
+- Qwen3-8B's R-lens is exported by `04_export_rlens.py` to `data/lenses/dclm`, its halves to `dclm-even` and
+  `dclm-odd`. An R-lens fitted on 500 chat conversations (`data/lenses/chat`) is kept for comparison (§1).
+- Gemma 4 adds image and audio lenses (`02_fit.py --modality image|audio`, on COCO and ESC-50; design.md's Images
+  and sound).
+- The pipeline reads local fits when they are in `data/fits/`, else the released lenses (`arch.fits`).
+- **Replacing a lens of record:** fit (with its scale), export to a new home under `data/lenses/`, rerun the stages
+  that read the lenses (`17_firings.py --parts neurons`, `08_reads.py` and the stages after it), record the comparison
+  in findings, and rerun `12_release.py`.
+- **Lens specs** (`lenses.load_lens`, for `checks/lens_compare.py` and the checks): `logit`, `J` (Neuronpedia's
+  J-lens), `R` (the default Drowse home), `R:<name>[+<name>]` (homes in `data/lenses/`, merged), `fit:<stem>[@mid]`,
+  `hub[@mid]` (the release) and `record[@mid]` (`arch.fits`).
+- **Drowse** ([github.com/stdlogits/drowse](https://github.com/stdlogits/drowse), 6.0 or later) loads exported R-lenses
+  and fetches the released ones (`drowse lens fetch <model> rs-r`, `rs-s`). It always writes to `local/r` under
+  `$DROWSE_HOME`, so each export gets its own home under `data/lenses/<name>/`, never another's or the user's default.
+  Fitting lives here; exact agreement with Drowse's fit is not required.
 
-## Method notes
+## Reading units
 
-- **Indexing.** Neuron `n` of layer `L` is coordinate `n` of `down_proj`'s input, 0-indexed. Qwen3-4B and 0.6B are
-  pruned from the 8B and the 1.7B, and their neurons sit in order of the parent's activation, most active first
-  (findings §20). In those two models a range of indices is a slice by activation rank, not a sample, so draw neurons at
-  random. Qwen3's sizes to 14B are three lineages (the 1.7B's, the 8B's and the 14B's), not five independent points.
-  `checks/lineage.py` maps each neuron to its parent; its `table` part writes the catalog's `lineage` table. A sparse
-  layer's neuron `e·I + i` is neuron `i` of expert `e`, and its shared expert's neurons follow its experts'. Its
-  activation includes the routing weight (the shared expert's gate), and a routed pole's top lists hold the positions
-  its expert is chosen for, padded.
-- **Gemma 4.** A neuron's write is what reaches the residual, `s · γ_post ⊙ W_down[:, n]` (the
-  post-feedforward norm's scale held constant, `layer_scalar` `s`); its read rows are scaled by the
-  pre-feedforward norm. Logits pass a softcap (`30 · tanh(x / 30)`), which R-lens probabilities
-  include. Every document starts with `<bos>` (the sink): statistics start at position 1. Its bands
-  are its plan's, L0-L19, L20-L32 and L33-L47. With 16 heads a layer, head tests can't pass BH, so
-  `checks/reads_at_firings.py` reports uncorrected p too (findings §15). Design.md's Gemma section has the rest.
-- **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a
-  `−` pole, read and described separately. From weights, a pole's read direction is `â ± b̂`: the
-  gate and up rows times the post-attention norm weight, normalized (a heuristic; activations give
-  the true poles); a pole whose top firings ride SiLU's negative lobe (`acts`' `neg_lobe` past a half) reads the up row
-  alone, `∓b̂` (`neurons.read_rows`, §7). Catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles.
-- **Scale.** A lens read is scale-free (RMSNorm), so its probabilities describe a direction, not an
-  effect. Effect sizes need the activation scale (`act_top`); don't rank neurons by lens
-  probability across layers.
-- **Which side, which depth** (findings §8). `arch.PLANS` holds each model's reading plan: which input, write and head
-  read a label card shows at each depth. Its input edges were rated blind for coherence (`checks/depth_reads.py`), the
-  write read is the R-lens's everywhere, and the head lines follow the head census (§10, §11). The same edges cut the
-  depth bands every summary, label check and the site use (`arch.depth_bands`; `data/summary/depth.json`, rewritten by
-  `python -m neuron_lens.arch` after a change to `PLANS`): sensory while the input read is the S-lens's, association while
-  the R-lens's carries the line that it often names an associated concept, workspace, and motor from where writes often
-  name the next word. Qwen3-8B: L0-L3, L4-L8, L9-L20, L21-L35; Gemma 4 has no sensory band; a base model takes its
-  post-trained model's plan, and a model without one quarters. QK, outside the plans: `qk_S` throughout (uninformative
-  at L13-L20), its diagonal as `qk_self_S` through L20 (duplicate-token heads) and `qk_self_R` late (L28-L35, mixed at
-  L21-L27; Gemma 4 from L24; findings §10, §15). The plan is a prior, and it follows coherence where the firing census
-  differs (§8: in·S names Qwen3-8B's firing token more often through L8): weigh a unit's sides by its reads, contexts and
-  drivers together. Don't force a word reading where a side is uninformative, and say which side a description rests on.
-- **Firings are a sample, not a ground truth.** A top firing is one context, summarized by a token. Where a read and a
-  firing's token differ, that alone doesn't make the read wrong: the causal test of a write is steering (§3), a pole's firings
-  need not predict each other (§4), and an R-lens read reads forward. `checks/reads_at_firings.py` counts how often each read
-  names what is counted at the firings, a population result about the reads; the catalog keeps no per-unit test. Don't turn a
-  mismatch into a verdict on a unit, or write it up as a limit of the lens.
-- **Three relations between units** (§12): wired to (`edges`), driven by and fires with (`sources`). Keep them
-  apart; none is the others. Into a head only driven by and fires with exist (`heads/sources`): two heads meet through a
-  matrix, not a dot product, so there is no signed weight edge to list.
-- **Edges** (`edges`, findings §12) are wiring, not traffic: what a pole's firing would push into each
-  later pole, directly at one position. What drives a pole when it fires is mostly units firing with it,
-  which the edges rarely list; `checks/edges_in_context.py explain` gives a pole's sources in context.
-  Rank edges within a pole, not across the model (early hub neurons top many lists).
-- **In context.** Before about L21, a firing's effect varies by context, and a write read describes
-  the pole's average push (what steering shows), not what one firing does (findings §4).
-- **Undertrained tokens.** Token reads cover `catalog.kept()`: tokens seen 5+ times in
-  `data/token_counts-<model>.pt` (`03_token_counts.py`, over the activation corpora), without byte-fallback
-  pieces. Undertrained tokens push some early neurons to huge activations.
-- **Descriptions are soft:** weighted labels with a confidence and scores, not one hard label.
-  In the docs, let the wording say what is measured and what is interpretation ("suggests",
-  "likely"), without labels.
-- **Outside labels** (`known.EXTERNAL`) are cross-references, not ground truth; our reads,
-  activations and causal checks arbitrate. `known.KNOWN` holds steering-verified persona neurons
-  from an earlier experiment on the same model.
-- **Judging a lens:** by whether its reads are coherent and make sense in context, not by matching
-  a benchmark. Report the split-half difference `02_fit.py` prints. Many neurons reading alike can
-  be the shared workspace subspace (the J-space), not a flaw.
-- **Lens specs** for `scripts/checks/lens_compare.py`: `logit`, `J` (Neuronpedia's J-lens), `R`
-  (the default Drowse home), `R:<name>` (`data/lenses/<name>`), `R:<a>+<b>` (merged).
+- **Indexing.** Neuron `n` of layer `L` is coordinate `n` of `down_proj`'s input, 0-indexed; in a sparse layer,
+  neuron `e·I + i` is neuron `i` of expert `e`, and its activation includes the routing weight. In Qwen3-4B and 0.6B
+  neurons sit in order of the parent's activation (findings §20), so an index range is a slice by activation rank:
+  draw neurons at random. `checks/lineage.py` maps each to its parent and writes the `lineage` table.
+- **Poles.** SwiGLU activations take both signs (`up` is linear), so each neuron has a `+` and a `−` pole, read and
+  described separately; catalog shards list the `+` poles of neurons `0..n-1`, then the `−` poles. From the weights a
+  pole's read direction is `â ± b̂` (a heuristic; activations give the true poles), or the up row alone, `∓b̂`, for a
+  pole whose firings ride SiLU's negative lobe (`neurons.read_rows`, §7). Pythia's GELU gives one pole.
+- **Scale.** A lens read is scale-free, so it describes a direction, not an effect. Effect sizes need the activation
+  scale (`act_top`); don't rank neurons by lens probability across layers.
+- **Which read at which depth** (§8). `arch.PLANS` holds each model's reading plan, the input, write and head read a
+  label card shows at each depth, and its edges cut the depth bands every summary, label check and the site use
+  (`arch.depth_bands`; after changing `PLANS`, `python -m neuron_lens.arch` rewrites `data/summary/depth.json`).
+  Qwen3-8B's bands: sensory L0-L3, association L4-L8, workspace L9-L20, motor L21-L35. A base model takes its
+  post-trained model's plan, and a model without one quarters. QK sits outside the plans: `qk_S` throughout
+  (uninformative at L13-L20), `qk_self_S` through L20, `qk_self_R` late (L28-L35; Gemma 4 from L24; §10, §15). The
+  plan is a prior: weigh a unit's sides by its reads, contexts and drivers together, don't force a word reading where
+  a side is uninformative, and say which side a description rests on.
+- **Firings are a sample, not a ground truth.** A top firing is one context. Where a read and a firing's token differ,
+  that alone doesn't make the read wrong: steering is the causal test of a write (§3), a pole's firings need not
+  predict each other (§4), and an R-lens read reads forward. Before about L21 a write read is the pole's average push,
+  not what one firing does. `checks/reads_at_firings.py` gives population results about the reads; the catalog keeps
+  no per-unit test, so don't turn a mismatch into a verdict on a unit or a limit of the lens.
+- **Three relations between units** (§12), kept apart: wired to (`edges`), driven by and fires with (`sources`).
+  Edges are wiring, not traffic: what drives a firing pole is mostly units firing with it, which the edges rarely
+  list (`checks/edges_in_context.py explain`). Rank edges within a pole, not across the model. Into a head only
+  driven-by and fires-with exist: two heads meet through a matrix, so there is no signed edge.
+- **Descriptions are soft:** weighted labels with a confidence and scores. In the docs, let the wording say what is
+  measured and what is interpretation ("suggests", "likely").
+- **Outside labels** (`known.EXTERNAL`) are cross-references, not ground truth; our reads, activations and causal
+  checks arbitrate. `known.KNOWN` holds steering-verified persona neurons from an earlier experiment.
+- **Judging a lens:** by whether its reads are coherent and make sense in context, not by a benchmark. Report the
+  split-half difference `02_fit.py` prints. Many neurons reading alike can be the shared workspace subspace (the
+  J-space), not a flaw.
 
 ## Running jobs
 
-- A Mac with Apple silicon (MPS) runs everything except the lens fits and the GPU passes; the fits
-  take about 2.5-3 hours (Qwen3-8B), 5 hours (Qwen3-14B), 12 hours (Qwen3-32B), 4.5 hours (Gemma 4)
-  or 5.5 hours (Qwen3.5-35B-A3B, 512-token documents, `--dim-batch 32`) per text lens per 1,000
-  documents on one H100 (`02_fit.py --device cuda`, bf16 with fp32 sums), 45-90 minutes per media
-  lens. A stack whose layers don't fit on the GPU beside a fit's working set keeps its first layers
-  there and streams the rest from pinned host memory (`02_fit.py --offload N`; the sums come out the
-  same to the bit): Qwen3-32B's 62 GB of layers meet about 50 GB of sums, tangents and multiplied-out
-  MLPs, so it keeps 20 of its 64 (67 GiB at the peak, 43 s a document).
-- `13_media_activations.py` keeps every document's activations for all of Gemma's neurons in RAM
-  (about 220 GB for the images): run the two modalities one at a time.
-- Sparse models with large widths run 06 and 07 in layer groups (`--layers a-b`; the group from layer 0 collects the
-  heads) and 17 a few layers at a time; 17 runs the model in fp32 (Qwen3.5-35B-A3B: 140 GB, more than one 80 GB GPU
-  holds, and no offload path is built for it yet).
-- One GPU process per GPU. Before GPU work, check for running jobs (`ps`, `nvidia-smi`); on a
-  shared machine, never run beside or stop a job that isn't yours. Light CPU work (weight-only
-  reads, tests) can run beside a GPU job; heavy CPU work slows it on unified memory.
-- Long jobs run detached (`02_fit.py --detach` and `06_activations.py --detach` start a new
-  session, under `caffeinate` on macOS) and log to `logs/`. Both save every `--save-minutes`
-  (default 10) and resume when rerun; `06_activations.py` rerun after a complete pass rebuilds the
-  `acts` tables. The activation pass needs about 21 GB of GPU memory with eager attention (a
-  24 GB card fits it at the default 32 documents a batch).
-- The catalog's GPU stages: `scripts/catalog_box.sh` installs on a GPU machine and starts
-  `scripts/catalog_queue.sh` for `MODELS`, detached and resumable, model by model: `06`, `17`, `07`, then
-  `08`, `checks/reads_at_firings.py`, `16`, the `measure` half of `checks/edges_in_context.py` and `checks/causal_lens.py` with the released R-lens (`MEDIA=1` adds `13`, `14`);
-  with several GPUs, one queue per GPU. Each table goes to the
-  `UPLOAD` branch of the Hub dataset as soon as its stage has run (`12_release.py --tables`). The release is a full `12_release.py` to that branch, then the same without `--branch` for `main`; it deletes what this machine's catalog lacks, so bring the catalog up to date and run it with `--dry-run` first, which lists the deletions. `catalog_box.sh`'s header has the
-  commands to copy the results back. The `score` half runs where the comparison lenses are.
-- New CUDA boxes: `scripts/gpu_box.sh` installs the package, downloads the models and corpus,
-  runs the estimator tests and benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines:
-  torch's default of one thread per core makes CPU ops on small tensors spin for minutes. If Hub
-  downloads stall (a burst, then minutes at 0 B/s, as Xet did on a vast.ai box), export
-  `HF_HUB_DISABLE_XET=1`: plain HTTP ran at 170 MB/s there. Run one
-  process per GPU (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`) and copy `data/fits/` off a
-  temporary machine before it goes. `scripts/fit_queue.sh` fits a list of models on a two-GPU box
-  (the scale and the R-lens on GPU 0, the S-lens on GPU 1), downloading each model at its turn and
-  dropping it from the cache after.
+- An Apple-silicon Mac runs everything but the lens fits and the GPU passes. A text lens takes about 2.5-3 hours per
+  1,000 documents on one H100 for Qwen3-8B (Qwen3-14B 5 h, Qwen3-32B 12 h, Gemma 4 4.5 h, Qwen3.5-35B-A3B 5.5 h with
+  `--dim-batch 32`), a media lens 45-90 minutes. A model whose layers don't fit beside a fit's working set keeps its
+  first `--offload N` layers on the GPU and streams the rest from pinned host memory, with the same sums (Qwen3-32B:
+  `--offload 20`).
+- **One GPU process per GPU.** Check for running jobs first (`ps`, `nvidia-smi`); on a shared machine, never run
+  beside or stop a job that isn't yours. Light CPU work (weight-only reads, tests) can run beside a GPU job; heavy CPU
+  work slows it on unified memory.
+- **Long jobs run detached** (`02_fit.py --detach`, `06_activations.py --detach`; under `caffeinate` on macOS), log to
+  `logs/`, save every `--save-minutes` (10) and resume when rerun. `06` needs about 21 GB of GPU memory with eager
+  attention at its default 32 documents a batch, and rerun after a complete pass it rebuilds the `acts` tables. `13_media_activations.py` holds about 220 GB of RAM for the images: run
+  the modalities one at a time. Sparse models run `06` and `07` in layer groups (`--layers a-b`; the group from layer 0
+  collects the heads) and `17` a few layers at a time, in fp32.
+- **New boxes:** `scripts/gpu_box.sh` installs the package, downloads the models and corpus, and runs the tests and
+  benchmarks. Export `OMP_NUM_THREADS=8` on many-core machines, and `HF_HUB_DISABLE_XET=1` if Hub downloads stall.
+  Several GPUs take one process each (`CUDA_VISIBLE_DEVICES=i ... --shard i/n`). `scripts/fit_queue.sh` fits a list of
+  models (the scale and the R-lens on GPU 0, the S-lens on GPU 1). Copy `data/fits/` off a temporary machine before it
+  goes.
+- **The catalog's GPU stages:** `scripts/catalog_box.sh` installs on a GPU machine and starts `scripts/catalog_queue.sh`
+  for `MODELS` (`MEDIA=1` adds Gemma 4's media stages), detached and resumable, one queue per GPU. With `UPLOAD` set,
+  each table goes to that branch of the Hub dataset when its stage finishes (`12_release.py --tables`). The queue's header lists the
+  stages; the box script's has the commands to copy the results back.
+- **Releasing:** a full `12_release.py --branch <b>`, then the same without `--branch` for `main`. It deletes what this
+  machine's catalog lacks, so bring the catalog up to date and run `--dry-run` first, which lists the deletions. A
+  `LENS_ONLY` model takes `--parts lenses` (its scale included); its catalog goes to a branch with `--tables`.
 
 ## Recording results
 
-Whoever runs an analysis adds it to the section of `docs/findings.md` it belongs to (or a new section
-at the end): setup (script, hardware, precision, lens), results with controls, and limits, as
-concisely as the result allows. Write what was measured, not how the run went: no dates, run costs,
-earlier versions or fixed bugs, unless a comparison with a variant is itself the result. A result that
-changes the overview goes into the README's matching findings paragraph too. Compact outputs go in `data/summary/`, figures through
-`scripts/11_figures.py`. The code and docs are MIT; the lenses and catalog on the Hub are CC BY 4.0
-(set in `12_release.py`'s cards). Contributions come as branches and pull requests.
+Whoever runs an analysis adds it to its section of `docs/findings.md` (or a new section at the end): setup (script,
+hardware, precision, lens), results with controls, and limits, as concisely as the result allows. Write what was
+measured, not how the run went: no dates, run costs, earlier versions or fixed bugs, unless a comparison with a
+variant is itself the result. A result that changes the overview goes into the README's matching finding too.
+Compact outputs go in `data/summary/`, figures through `scripts/11_figures.py`. The code and docs are MIT; the lenses
+and catalog on the Hub are CC BY 4.0 (set in `12_release.py`'s cards). Contributions come as branches and pull
+requests.

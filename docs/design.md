@@ -77,7 +77,7 @@ outputs. A read anywhere else extrapolates, and the catalog ships none.
   grouped heads or one fused projection, projection biases, q/k and value norms, partial RoPE,
   sliding-window and bidirectional masks and an output gate, Gated DeltaNet, dense MLPs gated or not,
   sparse MLPs, sequential and parallel blocks) and composes every model's layers from what they hold,
-  so Qwen3, Gemma 4, Qwen3.5 and GPT-NeoX share one implementation. `linearize` runs the model once per
+  so Qwen3, Gemma 4, Qwen3.5, GPT-NeoX and the OLMo family share one implementation. `linearize` runs the model once per
   document and keeps those constants; `jvp` applies a layer's map to a block of tangents and `vjp` its
   transpose to cotangents, as a few matrix products. The R-lens's map is exactly the transpose of the
   S-lens's. `neuron_lens/rules.py` applies the same rules to the model as autograd patches, by
@@ -134,6 +134,10 @@ Fused projections and CUDA graphs gave nothing more.
   mean of four keeps 3.6% of the 3.8%). At equal time it ends worse than bf16.
 - **Multiplying out the gated MLP (`layers.contract`) saves 20-30%.** One `[d, d]` matrix per row, `W_d (diag(cg) W_g + diag(cu) W_u)`, built 16 rows at a time, makes each tangent one `d × d` product where the map costs three
   through `d_ff`. On one H100, s per document with and without: Qwen3-8B R 13.65 / 17.06, S 13.81 / 17.28; Gemma 4 R 18.79 / 25.13, S 17.89 / 25.53. Dense `GatedMLP`s only, at Gemma 4's S-lens peak of 52 GiB (the same as without).
+- **Offload.** A stack whose layers don't fit on the GPU beside a fit's working set keeps its first `--offload N`
+  layers there and streams the rest from pinned host memory; the sums come out the same to the bit. Qwen3-32B's 62 GB
+  of layers meet about 50 GB of sums, tangents and multiplied-out MLPs, so it keeps 20 of its 64 (67 GiB at the peak,
+  43 s a document).
 - **Random-probe sketching doesn't pay** (an argument from Monte Carlo variance, not a measurement):
   each document's sketch noise scales with its whole Jacobian, not its deviation from the mean, so at
   equal compute it loses to exact probing.
@@ -403,6 +407,9 @@ tables, tests and conventions are Qwen3-8B's, with these differences:
 - **Corpora.** The activation slices are Qwen3-8B's rows at the same revisions, except that the chat
   slice is rendered as plain `User:` / `Assistant:` turns (the base model has no chat template), in
   its own file, `act-chat-gemma-4-12b.jsonl`; `first_chat` is on the first token of `User:`.
+- **Head tests.** A head test's p is bounded below by `1/(H(H − 1) + 1)`, its layer's mismatched pairs, which is 1/241
+  with 16 heads a layer, so BH over all heads passes only when many heads sit near that floor; `checks/reads_at_firings.py` also reports the share at an
+  uncorrected p of 0.05 (`_p05`, 5% by chance; §15).
 - **The causal sample** (`checks/causal_lens.py`) is 24 random neurons a layer, both poles, with the
   write added after the post-feedforward norm at its scale.
 - **Versions.** `google/gemma-4-12B` at revision `023679ed`, transformers 5.22.0 and PyTorch 2.13.0.
@@ -474,7 +481,8 @@ been run on a full model yet.
   and `L⁻¹` is a forward substitution with each chunk's `(I + diag(β) C)⁻¹` held, so cost and
   memory grow linearly with length. On CUDA the passes run as Triton kernels
   (`neuron_lens/kernels.py`, products in TF32); the torch passes in `layers.py` are their
-  reference and run elsewhere. Against the same kernels with exact fp32 products, one
+  reference and run elsewhere, and on CUDA too for heads whose sizes aren't powers of two (`kernels.supports`: Olmo
+  Hybrid's keys of 96 and values of 192). Against the same kernels with exact fp32 products, one
   document's estimates move by a median 0.5% per layer for the R-lens and 0.2% for the S-lens
   (bf16 operands: 2.2% for the R-lens, for 3% more speed). The tests check the maps against autograd through HF's chunked
   kernel, and the kernels against the torch passes. The width-4 causal convolution is linear and
@@ -582,7 +590,7 @@ Qwen3.5-35B-A3B, Qwen3-30B-A3B and OLMoE-1B-7B run through the catalog's neuron 
   groups (`--layers a-b`; the group from layer 0 collects the heads, the others stop each pass after their last layer);
   `07` keeps 270 MB a layer and takes `--layers` too; `08` makes the unembedding products a chunk at a time past 2³²
   entries; `17`'s state is 2.2 GB a site a layer on the CPU (run a few layers at a time) and its pass runs the model in
-  fp32, 140 GB for the 35B-A3B.
+  fp32, 140 GB for the 35B-A3B, more than one 80 GB GPU holds (no offload path is built for it yet).
 
 ## Pythia (in progress)
 
@@ -623,7 +631,7 @@ the model.
   is the layer's input: `mid[L]` is `out[L − 1]` for both lenses (the R-lens's `mid[0]` is its
   read of the embeddings, the S-lens's the identity). The fits keep both targets, so every
   stage reads Pythia's lenses as it reads the others'. Both sublayers write `out`, so a read of a
-  head's write that takes the R-lens's `mid` on the other models takes its `out` here.
+  head's write that takes the R-lens's `mid` on the other models takes its `out` here (`arch.head_write_lens`).
 - **Checkpoints.** `02_fit.py --revision step<N>` fits a checkpoint, written as
   `<lens>-pythia-<size>-step<N>-L<layers>-dclm.pt`; `fit_queue.sh` takes `model@step<N>`.
   The release has no place for checkpoints yet, so the queue keeps them local.
@@ -645,6 +653,28 @@ the model.
 - **Running it.** Each GPU pass loads the model in fp16 (`arch.half_dtype`); HF's eager attention forms `q·k` in
   fp16, which overflows on Pythia (NaN loss), so the passes that need attention weights score them in fp32
   (`arch.attn_implementation`). 17 runs in fp32 as for every model.
+
+## OLMo (in progress)
+
+OLMo 2 and 3, OLMoE and Olmo Hybrid (AI2's open models, which publish their data and their training checkpoints) are
+composed from `layers.py`'s components and run through every stage but the labels, which need a reading plan
+(`arch.PLANS`). `tests/test_olmo.py` checks tiny random models of
+all four against brute-force Jacobians, and OLMo-2-0425-1B has run every stage on smoke fits. OLMo 3 7B's lenses are
+released (split-half 0.00-0.07 for both lenses, 0.01 for the scale), and findings §25 follows its checkpoints
+(`checks/mixed_units.py`).
+
+- **Norms on the outputs.** OLMo 2 and 3 norm only their sublayers' outputs (`h + norm(attn(h))`), so each sublayer
+  reads the residual itself, the third layout `anatomy.parts` knows, and `post_attention_layernorm` is the attention
+  output's norm rather than the MLP's input norm. A layer's input norms are optional in `layers.py`.
+- **q/k norms over the whole projection:** one rsqrt a position across every head, with its true derivative, where
+  Qwen3's and Gemma 4's run per head.
+- **RoPE per layer type.** OLMo 3's sliding-window layers and its YaRN-scaled full layers each get their own table,
+  through the per-type path Gemma 4 uses; Olmo Hybrid's attention layers have none (NoPE).
+- **OLMoE's router** (64 experts, top 8) keeps the chosen experts' softmax weights without renormalising over the top
+  `k`, so the weights' derivative runs through every expert's logit (`MoE.p_all`).
+- **Olmo Hybrid's Gated DeltaNet** comes through separate projections (Qwen3.5's are fused; `rules.delta_parts` reads
+  both), with values wider than keys and `β = 2σ(W_b x)` up to 2 (`allow_neg_eigval`). Near 2 the triangular solve
+  carries fp32 roundoff to about 2·10⁻⁵ of the largest entry, which the tests' tolerance (10⁻⁴) leaves room for.
 
 ## Related work
 

@@ -388,47 +388,39 @@ the catalog's `lineage` table holds them
 ### VII. What the lenses miss
 
 **21. The dark sector.** At each layer of Qwen3-8B a few directions carry 90% of what the R-lens reads from the layer's
-neurons, 60-200 of 4,096 at L0-L3; the rest, the dark sector, holds 87-95% of the residual early and 71-81% at L4-L15.
-Removing one layer's dark sector moves the predictions 300-5,700 times more than the lens predicts, and over a band of
-layers it breaks something different at each depth: early, word forms, the kind of document and the sentences only syntax
-decides; in the middle, facts and the use of context; late, the pieces that finish a word ("I am Q, a large language
-model"). Yet what two prompts differ in (which country, the answer's language, the next word piece, story or small talk)
-moves with the bright sector from L4-L12, and the dark part of the difference changes nothing: the dark sector likely holds
-what prompts share. About 3,000 directions are quieter than chance to both lenses; this doubly dark sector carries a half
-to two thirds of the dark sector's cost, and the named failures appear only with it and the S-lens's bright part removed
-together ([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
+neurons (60-200 of 4,096 at L0-L3); the rest, the dark sector, holds 87-95% of the residual early and 71-81% at L4-L15.
+Removing one layer's dark sector moves the predictions 300-5,700 times more than the lens predicts, and breaks something
+different at each depth: word forms, the kind of document and syntax early, facts and the use of context in the middle,
+the pieces that finish a word late. Yet what two prompts differ in (which country, the answer's language, story or
+small talk) moves with the bright sector from L4-L12, and the dark part of the difference changes nothing: the dark
+sector likely holds what prompts share. About 3,000 directions are quieter than chance to both lenses, and this doubly
+dark sector carries a half to two thirds of the dark sector's cost
+([§21](docs/findings.md#21-the-dark-sector-what-the-r-lens-barely-reads)).
 
 **22. Coordinate sectors.** In Qwen3-8B and Gemma 4, as Briggs (2026) found in a larger Gemma, the R-lens reads the
-residual mostly off a block of its raw coordinates: the top 11% carry 0.74-0.97 of the readout through the middle layers,
-against 0.17-0.33 for the best 11% of a random basis, and the layers' writes avoid them. Single coordinates are not units,
-though: inside the block the features are rotated, and the sparse directions found there name the current token. Where
-the R-lens's block meets the S-lens's lies a persistent core of 190-365 coordinates; with the norm coordinates, which the
-norms divide out, and the rest, d, the residual splits into five sectors. Removing the core at L8-L12 adds 3 nats a token
-and dissolves the text into function words, while keeping only the core costs 0.6 at L11-L17. The two cross at L21, and
-late the prediction moves into d, spread over its coordinates. §21's doubly dark sector avoids the core and spreads over
-d. The layout is set by per-coordinate scales, the residual's in Qwen and the norms' weights in Gemma: the units' rows
-read and write the sectors near chance, and the few that lean on one are sink, duplicate-token and spelling units
+residual mostly off a block of its raw coordinates: the top 11% carry 0.74-0.97 of the readout through the middle
+layers, against 0.17-0.33 for the best 11% of a random basis, and the layers' writes avoid them. Inside the block the
+features are rotated, so single coordinates are not units. Where the R-lens's block meets the S-lens's lies a
+persistent core of 190-365 coordinates; removing it at L8-L12 adds 3 nats a token and dissolves the text into function
+words. Late, the prediction moves to the remaining coordinates and spreads over them. Per-coordinate scales set the
+layout (the residual's in Qwen, the norms' weights in Gemma): units read and write the sectors near chance, apart from
+a few sink, duplicate-token and spelling units
 ([§22](docs/findings.md#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read)).
 
 ### VIII. Mixed units
 
-**23. Two mixed units and their fossils: relict generalization.** Qwen3-32B is Qwen3-14B grown: its layers match the 14B's
-neuron for neuron, with the 14B's L8-L31 used twice. Its well-known Colorado neuron, which also fires on code using the
-Tornado web framework, is the 14B's L31 n11703, which already has the Tornado mode. The mode enters at L11, in a unit
-that fires as hard on Tornado code as on Bolivia's Altiplano and wires in Tornado-library units beside place units; the
-Colorado units after it read its write as a plateau signal and inherit a weaker copy. That unit's read still predicts
-MongoDB tokens (` bson` 6th of 124k), as do the Tornado units' writes, and Motor, MongoDB's driver for Tornado, drives the
-Tornado unit; yet MongoDB code doesn't drive it, MongoDB units don't wire into it, and removing MongoDB's directions
-doesn't touch its Tornado firing. This suggests relict generalization: a chain of related steps (Tornado, MongoDB,
-Mongolia, high plateaus) whose middle training pruned, leaving the ends joined, with fossils of the missing step.
-
-A second unit of the 14B, L33 n4648, fires on baseball and on blood glucose and nothing between. It mixes at L33, from
-inputs that read one topic each. One of those, a baseball unit at L29, fires as hard on SSH. Its read is a halo of
-baseball's other senses: brewing and yeast, banks, `bash` and `Jenkins`, git, credentials. The glucose units' reads carry
-the same credentials (`pwd`, the spelling of PWD, a person with diabetes). Of these only SSH, and weakly yeast, still
-drive anything, and removing the credential and SSH directions leaves both of the unit's jobs intact. Qwen3-8B has none of
-these mixes. The two cases suggest a limited superposition: units carry unrelated concepts that each stay legible, grown
-by recursive generalization and left side by side when later training cuts the steps between
+**23. Two mixed units and their fossils: relict generalization.** Qwen3-32B is Qwen3-14B grown, its layers matching
+the 14B's neuron for neuron, and its well-known Colorado neuron, which also fires on code using the Tornado web
+framework, is the 14B's L31 n11703, Tornado mode included. The mode enters at L11, in a unit that fires as hard on
+Tornado code as on Bolivia's Altiplano; the Colorado units after it read its write as a plateau signal and inherit a
+weaker copy. That unit keeps fossils of MongoDB (its read still predicts ` bson`, 6th of 124k, and Motor, MongoDB's
+driver for Tornado, drives it), yet MongoDB code doesn't drive it and removing MongoDB's directions leaves its Tornado
+firing intact. This suggests relict generalization: a chain of related steps (Tornado, MongoDB, Mongolia, high
+plateaus) whose middle training pruned, leaving the ends joined. A second 14B unit, L33 n4648, fires on baseball and on
+blood glucose and nothing between. One of its inputs, a baseball unit at L29, fires as hard on SSH and reads a halo of
+baseball's other senses (brewing, banks, `bash`, credentials), and the glucose units' reads carry the same credentials;
+only SSH, and weakly yeast, still drive anything. Qwen3-8B has none of these mixes. The two cases suggest a limited
+superposition: unrelated concepts that each stay legible, left side by side when later training cuts the steps between
 ([§23](docs/findings.md#23-two-mixed-units-and-their-fossils-relict-generalization)).
 
 **24. Secondary modes: weights propose, contexts check.** For 2,000 of Qwen3-8B's poles, each pole's strongest weight
@@ -439,35 +431,27 @@ modes rarely spread to the units that share the pole's job. No weight-only score
 (AUROC 0.52-0.61), but the similarity of the two units' catalog labels does (0.74)
 ([§24](docs/findings.md#24-secondary-modes-weights-propose-contexts-check)).
 
-**25. Secondary modes over training: Pythia and OLMo 3 7B.** The same census ran on four Pythia sizes (160M-6.9B), and
-on 13 training checkpoints of three of them. At the end, a judge calls about half of a sample's confirmed inputs unrelated to the
-neuron's main job: 59% at 160M, 50% at 1.4B and 6.9B. Most of those were unrelated when the link formed, too. The ones
-that were related then are matched by inputs that became related later, so the checkpoints show no net drift away from
-the target's job. A reading of the cards shows the verdicts are noisy, most of all early in training, so these numbers
-need manual review before they can support a conclusion.
-
-OLMo 3 7B keeps a checkpoint every 1,000 training steps. 1,268 of its 704,508 firing poles have top documents in two
-unrelated groups. In their top 64 documents the two jobs arrive one at a time, far more often than two halves of one
-topic do. Fixed documents run at every checkpoint show more: on average neither job is told apart at initialization,
-both are by step 1k, and the second, weaker, strengthens steadily until it reaches the top, so its arrival there is
-mostly a change in prominence. No shared token or string falls away around it, and passing modes are only a little
-more common than in controls. The one trace of a common root is that a topic pole's two groups share slightly more of
-their firing tokens in the first 8k steps than at the end. A relict path could still hide in the first thousand steps
-or in local steps a document embedding doesn't resolve
-([§25](docs/findings.md#25-secondary-modes-over-training-pythia-and-olmo-3-7b)).
+**25. Secondary modes over training: Pythia and OLMo 3 7B.** On four Pythia sizes (160M-6.9B) and 13 checkpoints of
+three of them, a judge calls about half of the confirmed inputs unrelated to the neuron's main job at the end (59% at
+160M, 50% at 1.4B and 6.9B), most of them unrelated when the link formed too, with no net drift; the verdicts are noisy,
+most of all early, so these numbers need manual review. OLMo 3 7B keeps a checkpoint every 1,000 steps. 1,268 of its
+704,508 firing poles have top documents in two unrelated groups, and the two jobs reach the top 64 one at a time far more
+often than two halves of one topic do. Fixed documents run at every checkpoint show neither job above chance at initialization,
+both by step 1k, and the second, weaker, strengthening steadily until it reaches the top: its arrival is mostly a change in
+prominence. No shared token or string falls away around it; the one trace of a common root is that a topic pole's two
+groups share slightly more firing tokens in the first 8k steps than at the end. A relict path could still hide before
+step 1k ([§25](docs/findings.md#25-secondary-modes-over-training-pythia-and-olmo-3-7b)).
 
 ### IX. Circuits by task
 
 **26. Ten kinds of question, traced.** 120 questions of ten kinds (recall, arithmetic, two-hop recall, logic, theory of
-mind, self-knowledge, knowing what it knows, IOI, translation, sentiment) were traced from the answer's margin over a
-distractor back through Qwen3-8B's neurons and heads, exactly and without a replacement model. The graphs recover known
+mind, self-knowledge, knowing what it knows, IOI, translation, sentiment) were traced exactly from the answer's margin
+over a distractor back through Qwen3-8B's neurons and heads, without a replacement model. The graphs recover known
 circuits (IOI's name movers and S-inhibition head, two-hop recall resolving its bridge at the landmark), and removing
 their top units flips the answers where random units don't. The middle layers sort questions by kind and the late ones
-by their answer. A logic control shows the model tracks order, not recency, and free replies mostly reuse the constrained
-circuit while reading about half the margin off the steps they write. The choice among candidates travels largely in
-the directions the output readout can't see: attention's queries and keys read them at 2-12 times chance, and swapping
-that 5% of the residual between two names makes the model answer the other name, while a random 5% never does. At
-mid-depth it holds the token's identity, late the routing. Exploratory
+by their answer. The choice among candidates travels largely in directions the output readout can't see: attention's
+queries and keys read them at 2-12 times chance, and swapping that 5% of the residual between two names makes the model
+answer the other name, where a random 5% never does. Exploratory
 ([§26](docs/findings.md#26-circuits-by-task-ten-kinds-of-question-traced)).
 
 ### Limits
@@ -606,11 +590,8 @@ Qwen3-8B's unless marked; Gemma 4's lens fits take about 1.5× as long.
 
 An Apple-silicon Mac runs everything but the lens fits and the GPU passes, which want a CUDA card (24 GB is enough for the
 text passes); `scripts/catalog_box.sh` sets up a GPU machine and runs them in order. `scripts/checks/` holds the analyses
-behind the findings, each named in its findings section, and `neuron_lens/` the package: the estimator (`transport.py`,
-every model's layer maps in `layers.py`, `rules.py` as their test reference), each model's geometry and reading plan
-(`arch.py`, `neurons.py`, `metric.py`), the readouts (`readout.py`, `heads.py`), the firing and source passes
-(`firings.py`, `sources.py`), lens loading (`lenses.py`), images and sound (`media.py`, `media_sets.py`) and the catalog
-(`catalog.py`). [AGENTS.md](AGENTS.md) has the working notes.
+behind the findings, each named in its findings section. [AGENTS.md](AGENTS.md) describes the package and has the working
+notes.
 
 <details><summary>Gemma 4 12B, in order</summary>
 
