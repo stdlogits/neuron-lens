@@ -1,13 +1,13 @@
 """Secondary modes across training checkpoints (findings §25; §23's relict generalization, §24's census): was an input
-that is unrelated to its unit at the end related when the link formed? Pythia (``MODEL``, one data order, checkpoints as
-revisions), fp16 on MPS or CUDA.
+that is unrelated to its unit at the end related when the link formed? A model with one data order and its checkpoints
+as revisions (``MODEL``: Pythia's ``step<N>``, OLMo 3's ``stage1-step<N>``), in its half dtype on MPS or CUDA.
 
 Parts (data in ``data/relict/<model>/``, summaries in ``data/summary/relict_<part>_<model>.log``):
 
 - ``census``: the census at the final checkpoint by band (``secondary_modes.py measure``, with ``--floor``).
-- ``tops <rev>...``: every neuron's top documents at each checkpoint, over the catalog's activation documents as
+- ``tops <rev>...``: every pole's top documents at each checkpoint, over the catalog's activation documents as
   ``06_activations.py`` keeps them (per document its peak position from 1, the ``TOP`` highest documents, ``act_top``
-  the median of the first ``TYPICAL``).
+  the median of the first ``TYPICAL``), a column per pole in the catalog's row order (``col``).
 - ``matrix <rev>...``: at each checkpoint, every census target's (``secondary_modes.py``'s plan, run on the final
   checkpoint) peak over positions [t − 2, t + 8] on the census's contexts (the targets' own, the confirmed sources'
   and the control) and on the ``N_CTX`` top contexts at that checkpoint of the targets and their confirmed sources;
@@ -72,13 +72,16 @@ def load(rev: str):
 
 @torch.inference_mode()
 def tops(rev: str, stack=None) -> dict:
-    """``{"val", "doc", "pos"}`` ``[L, TOP, f]`` and ``act_top`` ``[L, f]`` at checkpoint ``rev`` (one pole a neuron)."""
+    """``{"val", "doc", "pos"}`` ``[L, TOP, P·f]`` and ``act_top`` ``[L, P·f]`` at checkpoint ``rev``: the + poles of
+    neurons ``0..f-1``, then the − poles (``arch.signs``), as the catalog's rows."""
     path = OUT / f"tops-{rev}.pt"
     if path.exists():
         return torch.load(path)
     stack = stack or load(rev)
     docs = documents()
-    L, f = len(stack.layers), arch.text_config(MODEL).intermediate_size
+    L = len(stack.layers)
+    sg = torch.tensor(arch.signs(MODEL), dtype=torch.float32, device=DEV)
+    f = len(sg) * arch.text_config(MODEL).intermediate_size
     val = torch.full((L, TOP, f), -torch.inf, device=DEV)
     doc = torch.full((L, TOP, f), -1, dtype=torch.int32, device=DEV)
     pos = torch.full((L, TOP, f), -1, dtype=torch.int16, device=DEV)
@@ -86,7 +89,8 @@ def tops(rev: str, stack=None) -> dict:
 
     def hook(l):
         def f_(m, a):
-            x = a[0].float().masked_fill(~ctx["mask"][..., None], -torch.inf)
+            x = (a[0].float()[..., None, :] * sg[:, None]).flatten(-2)  # [B, T, P·f]
+            x = x.masked_fill(~ctx["mask"][..., None], -torch.inf)
             ext, at = x.max(1)  # [B, f]
             v, i = torch.cat([val[l], ext]).topk(TOP, dim=0)
             val[l] = v
@@ -131,9 +135,14 @@ def units(P: dict) -> list[tuple]:
     return list(us)
 
 
+def col(t: dict, u: tuple) -> int:
+    """Pole ``u`` = ``(layer, neuron, ±1)``'s column in ``tops``: the + poles, then the − poles."""
+    return u[1] + (u[2] < 0) * (t["doc"].shape[-1] // len(arch.signs(MODEL)))
+
+
 def top_contexts(t: dict, u: tuple, k: int = sm.N_CTX) -> list[tuple[int, int]]:
-    l, n, _ = u
-    return [(int(d), int(q)) for d, q, v in zip(t["doc"][l, :k, n], t["pos"][l, :k, n], t["val"][l, :k, n]) if d >= 0 and v > 0]
+    l, c = u[0], col(t, u)
+    return [(int(d), int(q)) for d, q, v in zip(t["doc"][l, :k, c], t["pos"][l, :k, c], t["val"][l, :k, c]) if d >= 0 and v > 0]
 
 
 @torch.inference_mode()
@@ -229,7 +238,7 @@ def link_at(P: dict, pairs: list, t: dict, m: dict) -> dict:
     there drive the target (≥ max(0.3, the control's q95 there) on two), and those contexts in order of the target's
     peak on them."""
     T = P["targets"]
-    a = torch.tensor([float(t["act_top"][l, n]) for _, l, n, _ in T]).clamp_min(1e-3)
+    a = torch.tensor([float(t["act_top"][u[1], col(t, u[1:])]) for u in T]).clamp_min(1e-3)
     pk = m["peak"].float() / a
     row = m.get("plan_row", torch.arange(len(P["contexts"])))
     thr = torch.maximum(torch.full((len(T),), sm.THRESH), pk[row[P["control"]]].quantile(0.95, dim=0))

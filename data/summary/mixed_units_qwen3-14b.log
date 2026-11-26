@@ -1,0 +1,407 @@
+Qwen/Qwen3-14B: poles with act_top ≥ 0.05; mixed: both groups 8+ distinct of 64 documents, each coherent ≥ 1.5 z, across ≤ 0.5 z (z over random documents' cosine, 0.000 ± 0.081); a token mix peaks on one token in 50%+ of a group
+  sensory      L0-L8: 925 of 244,766 firing poles mixed (0.38%): 487 topic, 438 token mixes, 57 peak on one token in both groups
+  association  L9-L11: 342 of 104,448 firing poles mixed (0.33%): 201 topic, 141 token mixes, 26 peak on one token in both groups
+  workspace    L12-L22: 1,325 of 382,966 firing poles mixed (0.35%): 798 topic, 527 token mixes, 79 peak on one token in both groups
+  motor        L23-L39: 3,002 of 591,871 firing poles mixed (0.51%): 2,012 topic, 990 token mixes, 209 peak on one token in both groups
+
+the most mixed (the weaker group's coherence less the cross likeness): 40 topic mixes, then 10 token mixes
+
+L9 n8678− act_top 23.38: groups 52/12 (20/8 distinct), coherence 3.5/3.7 z, across 0.1 z; peaks '�' 44% / '-hand' 42%
+   a: 的舒適休憩空間，部分客房配有禁�⟦�⟧房, �
+   a: 間精美的客房，其中部分房型配有禁�⟦�⟧房, �
+   a: 无烟区，这就意味着酒店内各处均禁止⟦吸烟⟧。若您违反
+   b:  second-hand smoke in the car."⏎⏎"Children exposed to second⟦-hand⟧ smoke have higher
+   b: Passive⟦ smoking⟧: how e
+   b: Passive⟦ Smoking⟧ - Have The
+
+L32 n15933+ act_top 17.12: groups 48/16 (22/11 distinct), coherence 3.0/2.8 z, across -0.5 z; peaks '�' 40% / ' =' 19%
+   a: 神經系統，在寧靜的場所或住商⟦混合⟧區，容易
+   a: 究，配有电视, 浴室, 禁⟦烟⟧房, �
+   a: 裝水, 電視, 禁�⟦�⟧房, �
+   b: :⏎    tb = sys.exc_info()[2]⏎    Trace⟦back⟧Type = type
+   b: , Poly, Function, Derivative, Number, pi,⟦ Number⟧Symbol, zoo
+   b: """⏎⏎import os ⏎from gppylib.gplog import⟦ get⟧_default_logger⏎
+
+L25 n15649− act_top 4.28: groups 38/26 (10/11 distinct), coherence 5.0/2.7 z, across -0.5 z; peaks '，' 39% / ',' 31%
+   a: �桌，給住客更完整的服務。 除此之外⟦，⟧飯店各種娛樂
+   a: 更舒適和更便利的服務，飯店配備⟦了⟧餐廳, 
+   a: 周到服务和一流设施会让您此行终生难忘⟦。⟧ 保险箱
+   b:  these different solutions together to give a single approximate solution that is⟦ valid⟧ for the whole
+   b:  pot with 2 cups of water. Bring to a boil⟦,⟧ reduce the heat
+   b:  2 cups of water.⏎3. Bring to a boil⟦,⟧ reduce heat to
+
+L22 n2778+ act_top 5.91: groups 42/22 (28/10 distinct), coherence 2.6/3.2 z, across -0.5 z; peaks ']' 36% / '您' 18%
+   a:  in range(len(lst) - gap):⏎            if lst[i⟦]⟧ > lst[i
+   a:  - 1; i++) {⏎      if (arr[i⟦]⟧ > arr[i
+   a: -1)⏎      ⏎      #check if element at j index⟦ is⟧ greater than element
+   b: 声明 |⏎网站地图⏎⏎⏎冀ICP备0904⟦9⟧753
+   b:  houses in 5 different colors⏎In each house lives a⟦ person⟧ with a different
+   b: ，享受健康生活。⏎京ICP备091⟦1⟧334
+
+L14 n14414+ act_top 3.44: groups 38/26 (11/17 distinct), coherence 3.9/2.8 z, across -0.3 z; peaks '）' 39% / 'HBoxLayout' 12%
+   a: ，好好享受浴室, 無線上網（免費⟦）⟧, �
+   a: , 浴室, 寬頻上網（免費⟦）⟧, 書
+   a:  微波爐, 無線上網（免費⟦）⟧, 衛
+   b:  355)⏎        self.verticalLayout = QtGui.Q⟦VBoxLayout⟧(Wizard)⏎
+   b: 91)⏎        self.horizontalLayout_2 = QtGui.Q⟦HBoxLayout⟧(Dialog)⏎       
+   b: .setObjectName(u"configGroupBox")⏎        self.gridLayout_2⟦ =⟧ QGridLayout(self
+
+L8 n16837+ act_top 18.88: groups 55/9 (34/8 distinct), coherence 2.7/2.9 z, across -0.4 z; peaks ' breast' 18% / '.attrs' 22%
+   a: ⏎- 1 1/2 cups panko bread⟦ crumbs⟧⏎- 
+   a: 10. Once the oil is hot, add the bread⟦ed⟧ chicken breasts to
+   a:  chopped fresh parsley⏎⏎Instructions:⏎1. Prepare chicken breasts by⟦ pounding⟧ them until they
+   b:  (⏎    CData,⏎    Doctype,⏎    Navig⟦able⟧String,⏎   
+   b: __(self, tag):⏎        ''' @tag: a BeautifulSoup⟦ Tag⟧ representing a track
+   b: _all("font")⏎            return found[5].parent.parent⟦.contents⟧[1]⏎
+
+L34 n10017+ act_top 81.00: groups 52/12 (34/11 distinct), coherence 2.6/2.3 z, across -0.7 z; peaks ' %' 15% / '遠' 8%
+   a:  in USER_SDO_GEOM_METADATA corresponding to "%s"."⟦%⟧s"\n
+   a: _from_json_exception(error):⏎        match = re.search(r':⟦ line⟧ (?P<
+   a: ':'Basic %s'%(b64encode(("%s⟦:%⟧s"%(a
+   b: 。⏎▲苟芸慧身形與剛出道時相差好⟦遠⟧。(圖／
+   b: 、希美真由(右)都是知名AV女⟦優⟧。(圖／
+   b:  knife-point robbery on a man in his PokÈmon ones⟦ie⟧ who they ordered
+
+L33 n11115− act_top 26.25: groups 35/29 (15/23 distinct), coherence 2.7/2.5 z, across -0.6 z; peaks '1' 14% / '2' 21%
+   a: 圈外緣鑲嵌明亮切割美鑽，⟦防⟧眩光藍
+   a:  hours to reveal discreet and sophisticated elegance. Its automatic movement,⟦ the⟧ Jaeger-Le
+   a: 毫米不銹鋼磨砂錶殼，⟦防⟧眩光藍
+   b:  be a non-empty string between 1 and⏎      ⟦2⟧55 characters
+   b: .factories import ClientFactory⏎from provider.constants import CONFIDENT⟦IAL⟧⏎⏎from opened
+   b: .models import User⏎from django.contrib.auth.password_validation import (⏎⟦   ⟧ CommonPasswordValidator
+
+L30 n14864+ act_top 52.00: groups 54/10 (19/8 distinct), coherence 3.5/2.8 z, across -0.2 z; peaks ' cups' 28% / 'ottle' 20%
+   a:  1 teaspoon ginger, grated ⏎- 6 cups chicken⟦ or⟧ vegetable broth ⏎
+   a: 1 pound Arborio rice⏎- 6 cups of chicken⟦ or⟧ vegetable stock⏎
+   a:  3 garlic cloves, minced⏎- 4 cups chicken⟦ or⟧ vegetable broth⏎
+   b:  = __devmine_version__⏎⏎        self.app = bottle.B⟦ottle⟧()⏎⏎        routes
+   b:  werkzeug.serving import run_simple⏎⏎        app = make⟦_app⟧(...)⏎        run
+   b: BasicAuth()⏎jsonrpc = JSONRPC(app, '/api⟦',⟧ enable_web_b
+
+L8 n17271+ act_top 13.44: groups 44/20 (23/12 distinct), coherence 2.7/3.6 z, across -0.3 z; peaks '水晶' 11% / ' C' 20%
+   a:  Monobloc middle case, screw_down case back and winding⟦ crown⟧ 劳力
+   a: ，银色表盘，耐划伤性宝石水晶⟦底⟧盖，不锈钢
+   a: 显示窗的腕表。⏎数年后，腕表的⟦水晶⟧表面增设小
+   b: 256, hash160, sha25⟦6⟧, CScript
+   b: import bitcoin.script⏎from .⟦var⟧len import var
+   b:  b2a_hex⏎import bitcoin.txn⏎import bitcoin⟦.var⟧len⏎import
+
+L20 n5134+ act_top 4.31: groups 39/25 (22/9 distinct), coherence 2.5/3.1 z, across -0.5 z; peaks '.encoding' 15% / ' have' 16%
+   a: .core.basic import Basic, C⏎from sympy.core.com⟦patibility⟧ import is_sequence
+   a:     'fetch_aparc_sub_parcellation', 'fetch⟦_fs⟧average',⏎   
+   a: _prefix⏎from django.utils import six⏎from django.utils.data⟦structures⟧ import MultiValue
+   b:  with 800 telephone numbers, spend hours talking to⟦ other⟧ property, including
+   b: strapped estimates of the principle to uncover causal paths leading to⟦ a⟧ car with three
+   b:  immediately find quotes that will be able to afford the insurance you⟦ have⟧ had with any
+
+L15 n4799+ act_top 4.97: groups 48/16 (29/13 distinct), coherence 2.5/2.0 z, across -1.0 z; peaks 'kwargs' 31% / ' par' 12%
+   a:  your payment details"))⏎⏎    def get_context_data(self, **⟦kwargs⟧):⏎        ctx
+   a: .build_form_class()⏎⏎    def get_context_data(self, **⟦kwargs⟧):⏎        if
+   a:  booking = None⏎⏎    def get_context_data(self, **⟦kwargs⟧):⏎        context
+   b:  times was when He was invited for dinner to the home of⟦ Simon⟧ the Pharise
+   b: As Jesus sat at dinner in Levi's (dad's)⟦ house⟧, many tax
+   b:  is a veritable cook book! And Jesus – through various⟦ par⟧ables and miracles
+
+L30 n1594− act_top 38.50: groups 35/29 (18/19 distinct), coherence 2.9/2.4 z, across -0.6 z; peaks '   ' 37% / ' of' 14%
+   a:  And pepcid how long before side effects go last metron⟦id⟧azole gum boil
+   a: 0 certificate request and certificate generating utility SYNOPSIS⏎openssl req⟦ [-⟧help] [-
+   a: SCALL⏎SSL_ERROR_SSL⏎SSL_ERROR_WANT_CONNECT⏎⏎⟦SSL⟧_ERROR_EOF⏎
+   b:  Outpatient Alcohol Detox Centers⏎⏎The services provided at outpatient⟦ alcohol⟧ detox centers generally
+   b:  part, to become tolerant to alcohol [or drugs].⏎⏎About⟦ ⟧25 years
+   b: , what is a hangover? It can basically be a⟦ variety⟧ of different symptoms
+
+L10 n5808+ act_top 11.44: groups 37/27 (17/15 distinct), coherence 3.1/2.8 z, across -0.1 z; peaks 'Reference' 16% / ' sand' 44%
+   a: """⏎  The Spatial Reference class, represents OGR Spatial⟦ Reference⟧ objects.⏎⏎ 
+   a: """⏎  The Spatial Reference class, represents OGR Spatial⟦ Reference⟧ objects.⏎⏎ 
+   a:  The Spatial Reference class, represensents OGR Spatial⟦ Reference⟧ objects.⏎⏎ 
+   b: ⏎- Saw⏎- Drill⏎- Screws⏎-⟦ Sand⟧paper⏎-
+   b: .⏎⏎Step 2: Sand and smooth the edges⏎Use⟦ sand⟧paper to smooth
+   b:  to get rid of the black rings.⏎  4.⟦ Sand⟧ the table.⏎
+
+L16 n3043− act_top 8.12: groups 41/23 (17/15 distinct), coherence 3.1/2.5 z, across -0.5 z; peaks 'ig' 41% / '(filters' 26%
+   a: ⏎Please provide a detailed recipe for a blueberry vina⟦ig⟧rette dressing with
+   a:  of mixed greens with strawberries and raspberry-shallot vina⟦ig⟧rette, served
+   a: user⏎6. Toss the arugula, red⟦ onion⟧, and avocado
+   b: (osv.osv_memory):⏎    _inherit = "account⟦.common⟧.journal.report
+   b:  = 'Account Central Journal'⏎    _inherit = "account⟦.common⟧.journal.report
+   b: ⏎⏎import frappe⏎from frappe import _⏎⏎def execute⟦(filters⟧=None):⏎	column
+
+L21 n16567+ act_top 14.06: groups 38/26 (22/13 distinct), coherence 2.6/2.8 z, across -0.3 z; peaks ' oil' 16% / ' false' 8%
+   a:  2. Stir in cottage cheese, and half the Parm⟦esan⟧ cheese.⏎ 
+   a: . Heat 1 oz (25 g) of the⟦ butter⟧ in a small
+   a:  and mash until smooth. Add the leeks, 1⟦ egg⟧, cheese,
+   b: _,⏎    except_all,⏎    exists,⏎    extract,⏎   ⟦ false⟧,⏎    func
+   b: _,⏎    except_all,⏎    exists,⏎    extract,⏎   ⟦ false⟧,⏎    func
+   b: |during|each|eg|eight|either|ele⟦ven⟧|else|⏎
+
+L32 n5464+ act_top 37.75: groups 40/24 (24/12 distinct), coherence 2.8/2.5 z, across -0.5 z; peaks '0' 8% / '處' 21%
+   a: ()⏎⏎    def test_partial_pipeline(self):⏎        self.do_partial⟦_pipeline⟧()⏎⏎⏎class Stock
+   a:  autoload=True)⏎⏎    image_locations_table.columns['meta_data'].⟦drop⟧()⏎
+   a: (self, spec, prefix):⏎        make('install', parallel⟦=False⟧)⏎
+   b: 是來柏林探索城市魅力，放鬆身心的理想住⟦處⟧。
+   b: 尚飯店是來峇里島旅遊的明智選擇⟦之一⟧,飯店氣
+   b: 河內大飯店是來河內旅遊的明智選擇⟦之一⟧,飯店氣
+
+L19 n11267− act_top 4.62: groups 46/18 (29/12 distinct), coherence 2.6/2.9 z, across -0.3 z; peaks '1' 9% / '啖' 11%
+   a: 500))⏎⏎    Z = classifier.decision_function(np⟦.c⟧_[xx.ravel
+   a:  test_data.⏎train = x[:,:50].reshape(-⟦1⟧,40
+   a: ], mesh_num))⏎⏎    Z = classifier.decision_function(np⟦.c⟧_[xx.ravel
+   b: 笑沙鷗，一身都是愁。」「日⟦啖⟧荔枝三百顆
+   b: 欲說宮中事⏎鸚鵡前⟦頭⟧不敢言⏎
+   b: 情人怨遥夜，竟夕起相思。⏎灭⟦烛⟧怜光满
+
+L27 n16680+ act_top 12.06: groups 36/28 (22/18 distinct), coherence 3.0/2.7 z, across -0.2 z; peaks ' ...)\n' 28% / ' cool' 39%
+   a: ' or 'oracle'.⏎        'NAME': '',                     ⟦ #⟧ Or path to
+   a: 3' or 'oracle'.⏎        'NAME': '',                     ⟦ #⟧ Or path to
+   a: oracle'.⏎        'NAME': 'test.sqlite3',                     ⟦ #⟧ Or path to
+   b:  are fragrant and slightly golden.⏎3) Let the almonds⟦ cool⟧ down for a
+   b:  to ensure even roasting.⏎⏎4. Let the cashews⟦ cool⟧ for 5
+   b:  tender and the water is absorbed. Remove from heat and let⟦ cool⟧.⏎ ⏎2
+
+L31 n11111− act_top 26.00: groups 52/12 (37/12 distinct), coherence 2.2/2.2 z, across -0.7 z; peaks ' JSON' 25% / '樹' 17%
+   a:  username, password)⏎⏎        self.url = self.host + '⟦json⟧'⏎⏎    def
+   a: _LIST_URL = 'http://localhost:9221⟦/json⟧'⏎⏎  def
+   a: ERROR: ( argument --data-format: Invalid choice: '⟦json⟧'.⏎⏎This
+   b: 喬木，胸徑可達4米，幼樹⟦樹⟧皮近平
+   b: 春天種的是桃樹、李樹，夏天就可以在⟦樹⟧蔭下
+   b:  continuous production.⏎⏎⏎4 thoughts on “Pole Beans⏎⏎ ⟦ ⟧1. I
+
+L21 n7692+ act_top 4.59: groups 41/23 (29/12 distinct), coherence 2.4/2.5 z, across -0.4 z; peaks '\n' 37% / '点' 30%
+   a: .test.client import RequestFactory⏎⏎from util.testing import UrlReset⟦Mixin⟧⏎from student
+   a: _without_render')⏎    request.addfinalizer(fin_remove_test_dir⟦)⏎⏎⏎⟧@pytest.mark.use
+   a: .utils.state import State⏎from airflow.utils.db import provide_session⟦⏎⟧from airflow.utils
+   b: 洗衣服务和电梯。不管是出差还是度假，都花⟦点⟧时间尽情放松
+   b: 洗衣服务和电梯。不管是出差还是度假，都花⟦点⟧时间尽情放松
+   b: 分⏎主題⏎酒店類別⏎所有房價均⟦為⟧每晚每
+
+L29 n7124+ act_top 20.62: groups 45/19 (31/14 distinct), coherence 2.4/2.4 z, across -0.5 z; peaks '.orm' 49% / '舒' 47%
+   a: from sqlalchemy.ext.declarative import declared_attr⏎from sqlalchemy⟦.orm⟧ import sessionmaker
+   a:  create_engine⏎from sqlalchemy.pool import NullPool⏎from sqlalchemy⟦.orm⟧ import scoped_session
+   a: ⏎from celery.utils.log import get_task_logger⏎from sqlalchemy⟦.orm⟧.attributes import flag
+   b: 0余米高的尖塔、米黄色的城墙、⟦郁⟧郁葱葱
+   b: 蒙用户名并登入网站以检索您的所有在线预订。⏎⟦郁⟧郁葱葱
+   b: 等一系列頂級設施。⏎共有64間溫馨⟦舒⟧適的客房
+
+L34 n5919− act_top 27.88: groups 49/15 (26/8 distinct), coherence 2.4/2.8 z, across -0.4 z; peaks ',' 16% / ' "' 20%
+   a: : ⏎⏎- 2-3 pounds of cucumbers⟦ (⟧or other vegetables
+   a: , peeled and sliced⏎- 1 cucumber (pickling⟦ or⟧ Kirby), sliced
+   a: %), pollock oil (5%), whole red lentils,⟦ whole⟧ chickpeas
+   b:  challenged in accordance with section 116.19⟦0⟧. The attorney
+   b:         'binary': 'fake-service',⏎        'topic':⟦ '⟧fake-service-topic
+   b: ."""⏎        version_objs = [⏎            {⏎                "id":⟦ "⟧v2.
+
+L26 n11626− act_top 23.62: groups 52/12 (30/9 distinct), coherence 2.8/2.5 z, across -0.3 z; peaks 'from' 23% / '2' 17%
+   a: """Platform⟦ for⟧ Time of Flight
+   a: """Platform⟦ for⟧ Flexit AC
+   a: """Component⟦ to⟧ allow users to
+   b:  CCIR points to the difficulty of quantifying the risks of⟦ C⟧AVs for
+   b:  not humans. Annually more than 30,0⟦0⟧0 Americans die
+   b:  fatal Tesla Model X crash⏎⏎08 June 20⟦1⟧8, 
+
+L35 n3187+ act_top 60.00: groups 47/17 (32/12 distinct), coherence 2.2/2.2 z, across -0.6 z; peaks '_config' 15% / ' to' 18%
+   a:         default: null⏎        choices: [ 'started',⟦ '⟧stopped', '
+   a:  C(started), synonym for C(running).⏎      -⟦ C⟧(stopped),
+   a: Why didn't the port show it was open when the server⟦ was⟧ offline?⏎⏎ 
+   b:  in England, with approximately 30% of those using⟦ a⟧ product to help
+   b: �啟動，急停機，特別適合頻繁⟦啟⟧動的場合
+   b: ,  Psychiatric &  Psychologist expenses, Sm⟦oking⟧ cessation programs.⏎⏎
+
+L19 n6338+ act_top 3.73: groups 40/24 (19/15 distinct), coherence 2.8/2.5 z, across -0.2 z; peaks 'ed' 20% / 'kwargs' 12%
+   a: 2. If the consistency is too thick, add more almond⟦ milk⟧ until it reaches
+   a: 量洗面霜先置於手掌心加少許⟦水⟧、搓揉
+   a: ⏎  19. 1 tbs cornst⟦arch⟧⏎  
+   b:  # an optional sign, then⏎    (?=\d|\⟦.\⟧d)               
+   b:  *(?:\d+(?:\.\d*)?|\⟦.\⟧d+)')⏎
+   b:  "Execute the command"⏎        if len(args) == ⟦0⟧:⏎            raise
+
+L22 n2626+ act_top 3.28: groups 48/16 (25/12 distinct), coherence 2.8/2.3 z, across -0.5 z; peaks '旨在' 21% / ' =' 25%
+   a: 上一盅花式巧克力芳度(小火锅),⟦带来⟧一身的温暖
+   a: 带我们走进人间天堂，青稞酒酥油茶⟦会⟧更加香甜
+   a: , 可带宠物, 礼宾接待服务，⟦旨在⟧为客人提供
+   b: import sys⏎sys.path.insert(0, "../../python⟦/")⏎⟧import mxnet
+   b: Felipe Borges'⏎⏎import sys⏎sys.path.append("..⟦")⏎⟧import getopt⏎⏎
+   b: ⏎import sys⏎sys.path.insert(0, "../../python⟦")⏎⟧import time⏎
+
+L9 n7579+ act_top 10.19: groups 36/28 (25/17 distinct), coherence 2.6/2.6 z, across -0.2 z; peaks ' inches' 11% / ' accuracy' 25%
+   a:  cable was 'jogged' over a stitch from the⟦ rib⟧, and wasn
+   a:  ?⏎22 stitches and 30 rows = 4⟦ inches⟧⏎US 
+   a:  ?⏎26 stitches and 34 rows = 4⟦ inches⟧⏎in Stock
+   b: .int32, shape=[None])⏎      acc = classification⟦.accuracy⟧(pred, labels
+   b: (nsilberman): move into metrics/python/ops/⏎⏎⏎def⟦ accuracy⟧(predictions, labels
+   b:  p: (model.predict(p.features), p.label))⏎   ⟦ accuracy⟧ = 1
+
+L11 n6194+ act_top 3.44: groups 40/24 (24/10 distinct), coherence 2.5/3.3 z, across -0.2 z; peaks '*' 17% / ' �' 29%
+   a: .input:⏎    m = re.match(r'^//\s⟦*⟧BEGIN\s+
+   a: ', 'block_comment'),⏎    (r'//#\s⟦*⟧{{(.*)
+   a:  <root>⏎        something something⏎        <sometag⟦>⟧something something</
+   b: >  ⟦ home⟧   >
+   b: 文章了。請點入：http://tw.myblog⟦.yahoo⟧.com/yuy
+   b: 位置：⟦ �⟧��萄
+
+L13 n1441− act_top 4.62: groups 42/22 (26/18 distinct), coherence 2.5/2.5 z, across -0.2 z; peaks 'status' 10% / 'arch' 36%
+   a:  username and password:⏎            auth = '%s@%s⟦:'⟧ % (username
+   a: _string⏎from .utils import parse_dict_header⏎from .⟦status⟧_codes import codes
+   a: utils import parse_dict_header, to_native_string⏎from .⟦status⟧_codes import codes
+   b:  honey or maple syrup, garlic, ginger, and cornst⟦arch⟧. Heat the
+   b:  and 1 part cold water. Mix to make "sl⟦urry⟧."⏎2.
+   b:  chicken bouillon granules⏎* 1 tablespoon cornst⟦arch⟧⏎* 
+
+L26 n11711− act_top 6.69: groups 42/22 (29/20 distinct), coherence 2.1/2.6 z, across -0.6 z; peaks ' ' 19% / '(self' 23%
+   a:  rule of thumb is to purchase about 1 pound of chicken⟦ per⟧ person, so
+   a:  be the providers. But if any provide not for his⟦ own⟧, and specially
+   a:  25 minutes⏎Total Time 1 hour⏎Serv⟦ings⟧ 8 servings
+   b:  as mcapi⏎⏎import app⏎from app.core import db⟦,⟧ mc⏎⏎⏎#
+   b: ⏎⏎from sqlalchemy import UniqueConstraint, func⏎⏎from mhn⟦ import⟧ db⏎from
+   b: import pmh_record⏎from app import db⏎from app⟦ import⟧ logger⏎from
+
+L24 n14370+ act_top 5.88: groups 40/24 (31/14 distinct), coherence 2.0/2.3 z, across -0.7 z; peaks '           ' 10% / '旅程' 46%
+   a: .get('execution_date'))⏎⏎        session.add(log)⏎        session⟦.commit⟧()⏎⏎        return
+   a: ").show(truncate=False)⏎    # $example off$⏎⏎⟦   ⟧ spark.stop()⏎
+   a:  file or read data"⏎	else:⏎   		print fi.read()⏎⟦   	⟧	print "Written
+   b:  of his body and the beat of his heart.⏎⏎"I can⟦'t⟧ believe I met
+   b:  born in his house may eat of his food. 1⟦2⟧If a priest
+   b:  approximately 100 eggs, covers it with sand and⟦ then⟧ jazzes off
+
+L33 n522+ act_top 39.25: groups 47/17 (30/12 distinct), coherence 2.6/2.8 z, across -0.1 z; peaks ' =' 40% / '.' 18%
+   a: .s3 = boto.connect_s3()⏎        self.timestamp =⟦ str⟧(int(time.time
+   a:  node = self.nodes[0]⏎⏎        self.mocktime =⟦ int⟧(time.time())⏎⏎
+   a: ()⏎        self.bucket_name = 'bucket-%d' %⟦ int⟧(time.time())⏎
+   b: ine leaves or bracts). Calyculi 0⟦.⟧ Involuc
+   b: ： 位於最外層的一輪萼片，通常⟦為⟧綠色，
+   b:  each subtending 1 flower; bracteole absent⟦;⟧ flowers purpl
+
+L25 n648− act_top 6.69: groups 42/22 (21/19 distinct), coherence 3.0/2.1 z, across -0.5 z; peaks '、' 33% / ' =' 18%
+   a: 接待服務。⏎飯店客房經過精心設計，以舒適⟦、⟧方便為最高
+   a: 庭房。⏎飯店客房經過精心設計，以舒適⟦、⟧方便為最高
+   a: �啡店。⏎酒店客房经过精心设计，以舒适⟦、⟧便捷为最高
+   b: UMAN_MTIME_COL, TYPE_COL, PCS_FILE_COL)⟦ =⟧ list(⏎           
+   b: h⏎    """⏎    from_ts = int(time.time()⟦ *⟧ 10
+   b:  # print(r_data)⏎        status,fsize = r_data⟦.split⟧()⏎        f
+
+L31 n3476− act_top 49.25: groups 42/22 (23/18 distinct), coherence 2.7/2.6 z, across -0.1 z; peaks ' or' 26% / " '" 14%
+   a: izzle with soy sauce or tamari and serve with quinoa⟦ or⟧ brown rice.⏎⏎
+   a:  sliced green onions for garnish (optional)⏎Cooked rice⟦ or⟧ vegetables, for
+   a:  cook for an additional 2 minutes. Serve over brown rice⟦ or⟧ quinoa.
+   b: example on$⏎    # Load and parse the data⏎   ⟦ def⟧ parsePoint(line
+   b:  predictionAndLabel = test.map(lambda p: (model.predict⟦(p⟧.features), p
+   b: ⏎    predictions = model.predict(testData.map(lambda x:⟦ x⟧.features))⏎   
+
+L34 n10792+ act_top 22.00: groups 43/21 (33/17 distinct), coherence 2.1/2.1 z, across -0.6 z; peaks ',' 23% / '正在' 10%
+   a:  TeamcityReporter(TeamcityTestResult, Reporter):⏎⏎   ⟦ def⟧ __init__(
+   a:  setuptools.command.test import test⏎⏎⏎class Tox(test):⏎   ⟦ def⟧ finalize_options(self
+   a: libqtile.layout.stack.Stack(num_stacks=1)]⏎⟦   ⟧ floating_layout =
+   b: 案組，全力開展偵破工作。目前，案件⟦正在⟧偵破之中
+   b: 之病狀已日益惡化。目前，每年5⟦月⟧12日起
+   b: 本周聚首，暑期綜藝爭霸賽也開始⟦進入⟧白熱化
+
+L14 n15168+ act_top 6.19: groups 50/14 (28/9 distinct), coherence 2.4/2.6 z, across -0.2 z; peaks '_name' 28% / '\n' 36%
+   a: ('Real name', validators=[Length(0, 6⟦4⟧)])⏎    location
+   a: =self.get_api_headers('email', 'password'))⏎        self⟦.assertTrue⟧(response.status_code
+   a: (Permission.WRITE_ARTICLES) and \⏎            form.validate_on⟦_submit⟧():⏎        if
+   b: 877-662-6988⟦⏎⟧Aldebar
+   b: 877-662-6988⟦⏎⟧预订这家豪华
+   b: 里斯)，靠近海灘，月光海灘⟦及⟧公園、游
+
+L10 n17051− act_top 6.03: groups 37/27 (24/16 distinct), coherence 2.0/2.4 z, across -0.6 z; peaks ' paths' 32% / ' bone' 30%
+   a: HashField, ReadOnlyPasswordHashWidget)⏎from django.contrib.auth⟦.tests⟧.utils import skip
+   a: , Group, Permission, AnonymousUser⏎from django.contrib.auth⟦.tests⟧.utils import skip
+   a: .auth.models import AnonymousUser, User⏎from django.contrib.auth⟦.tests⟧.custom_user import
+   b:  to tell her that periodontal disease can also result in⟦ bone⟧ loss, and
+   b:  dental braces by remodeling the jawbone itself. Movement of teeth⟦ roots⟧ is not possible
+   b:  that hold your teeth in place. This also affects the surrounding⟦ bone⟧ and the teeth
+
+L31 n2587− act_top 32.50: groups 48/16 (33/11 distinct), coherence 2.3/2.7 z, across -0.4 z; peaks ' Image' 35% / ' cash' 12%
+   a: _RPC, RPC_TEMPLATE)⏎⏎⏎def get_template(name):⏎    return⟦ Template⟧(open(join(R
+   a:  not refer to _imaging⏎    # directly; import⟦ Image⟧ and use the
+   a: webclient_gateway')⏎⏎try:⏎    from PIL import Image,⟦ Image⟧Draw # see
+   b:  universal life) Date:  3/30/⟦2⟧013
+   b:  fixed-rate annuity. The balance is now $65⟦,⟧000
+   b:  Annuities Q Date: 9/29/⟦1⟧999
+
+L31 n4516− act_top 30.00: groups 32/32 (23/20 distinct), coherence 2.3/2.4 z, across -0.4 z; peaks ' ' 22% / ',' 19%
+   a: 9:17:53 AM - Reuters News⏎⏎⟦By⟧ Samia N
+   a:  children: 48 martyrs were reported in Damascus and⟦ its⟧ suburbs; 
+   a:  corridor and gain new ground.⏎⏎The battle for Aleppo, Syria⟦'s⟧ largest city and
+   b:  >> n⏎Sigma0 = lambda x: (S(x⟦,⟧ 28
+   b:     0xe49b69c1,⟦ ⟧0xefbe
+   b: [2] - a[1],⏎                                                          a[0⟦].⟧arg.__class
+
+L22 n2874+ act_top 3.59: groups 33/31 (12/9 distinct), coherence 3.7/4.0 z, across -0.5 z; peaks '飯店' 24% / 'entry' 68%
+   a: 维尔京海滩度假村都是来宿雾的理想下榻⟦酒店⟧。
+   a: 轩138酒店是来香港旅游的最佳留宿⟦酒店⟧，为您提供一站式
+   a: 爾德平飯店都是來清邁的理想下榻⟦飯店⟧。
+   b:  have further laws against movie piracy.⏎⏎Do I Need a Lawyer⟦?⏎⏎⟧The laws of
+   b: .addTest(unittest.makeSuite(FileSupportMixinTest))⏎    return⟦ suite⟧⏎
+   b: 10. Bask in your amazingness.⏎⏎⏎⏎⏎You're⟦ amazing⟧, Mom.
+
+L31 n11144+ act_top 62.25: groups 35/29 (9/12 distinct), coherence 4.8/3.9 z, across 0.2 z; peaks '<|im_end|>' 94% / '()\n' 21%
+   a: 8 or 448-8152.⟦<|im_end|>⟧⏎
+   a:  and cake shared with your favorite friends! Happy birthday!"<|im_end|>⟦⏎⟧
+   a: Honest Mistake' on February 28th.⟦<|im_end|>⟧⏎
+   b: ')⏎    op.drop_column('dag_run', 'end_date⟦')⏎⟧
+   b: .drop_index('sm_dag', table_name='sla_miss⟦')⏎⟧
+   b: _xcom_dag_task_date', table_name='xcom⟦')⏎⟧
+
+L10 n3047+ act_top 4.75: groups 42/22 (24/9 distinct), coherence 3.1/3.2 z, across -0.6 z; peaks 'Qt' 62% / ' Census' 82%
+   a: University of Cambridge ⟦>⟧ Talks
+   a:  hypothesis⏎import hypothesis.strategies as hst⏎from PyQt⟦5⟧.QtCore import
+   a: from icon_lib import icon_get⏎⏎#qt⏎from PyQt⟦5⟧.QtCore import
+   b:  play is one way we learn self-restraint.⏎⏎James McK⟦enna⟧’s
+   b: bullet CBSE⟦ >⟧ > Cb
+   b:  since 1790, the U.S. Federal⟦ Census⟧ can tell you
+
+L34 n7603+ act_top 20.88: groups 32/32 (14/9 distinct), coherence 4.0/4.8 z, across 0.4 z; peaks '\xa0' 75% / '       ' 78%
+   a: 额尼》( 1 / 42-4⟦3⟧ )中说
+   a: ( 6 / 167、 16⟦8⟧、 1
+   a:  JavaScript 141 15⏎⏎193⟦ contributions⟧ in the last
+   b: =Codec().encode,⏎        decode=Codec().decode,⏎⟦       ⟧ incrementalencoder=
+   b: =Codec().encode,⏎        decode=Codec().decode,⏎⟦       ⟧ incrementalencoder=
+   b: =Codec().encode,⏎        decode=Codec().decode,⏎⟦       ⟧ incrementalencoder=
+
+L16 n5782− act_top 4.75: groups 34/30 (14/13 distinct), coherence 3.5/3.3 z, across -0.2 z; peaks '酒吧' 35% / 'metrical' 60%
+   a: afmilucadecketerwalarafa.infoinfo by⟦:⟧ Michael Kamen
+   a: ，让您享用早餐、午餐和晚餐。您会发现⟦酒吧⟧/酒廊
+   a: 提供按摩/护理室、花园和洗衣机。这里还有⟦酒吧⟧/酒廊
+   b: _on('lapack')⏎    depends_on('mpi')⏎⏎   ⟦ parallel⟧ = False⏎⏎
+   b:  install(self, spec, prefix):⏎        make('install',⟦ parallel⟧=False)⏎
+   b: macfilterprofiles"⏎⏎    ⏎    ## Constants⏎    ⏎    CONST_ENTITY⟦_SCOPE⟧_GLOBAL = "
+
+L12 n7144+ act_top 3.67: groups 35/29 (13/15 distinct), coherence 3.6/3.5 z, across -0.0 z; peaks '。' 51% / '.ManyToManyField' 28%
+   a:  客人可享受酒店的一些服務：公共Wi-Fi⟦。⏎⟧酒店客房經過
+   a: 3 星级Weyarn家庭旅馆可提供花园⟦。⏎⟧住客可以
+   a: ，不僅為柏林增添風采也是旅客們的最佳選擇⟦。⟧ 這裡距離
+   b: ⏎import re  # noqa: F401⏎⏎⟦import⟧ six⏎⏎⏎class
+   b:  learn more about Step by step solutions and how to use it⟦.⟧ How to solve
+   b: ):⏎⏎    def forwards(self, orm):⏎⏎        # Removing unique⟦ constraint⟧ on 'Pending
+
+L17 n1331+ act_top 3.44: groups 46/18 (23/9 distinct), coherence 3.1/3.2 z, across -0.4 z; peaks 'revision' 78% / ' records' 78%
+   a: .loads(open(file_name).read())⏎⏎            yed = Y⟦edit⟧(filename=file_name
+   a:  if api_key and api_secret and api_url:⏎            self⟦.cs⟧ = CloudStack
+   a:  a git SHA1 when you do a git archive⏎⏎__⟦revision⟧__ = '$
+   b:  ×⏎⏎I've been thinking about ways to focus brute forcing⟦ dictionary⟧ attacks on passwords
+   b: Shopping? Check out our latest product⟦ comparisons⟧⏎⏎Cost-effective
+   b:  - 15 Records Found in the United States⏎People⟦ Search⟧ results for Col
+
+L23 n16829+ act_top 8.19: groups 44/20 (12/8 distinct), coherence 4.4/3.3 z, across -0.1 z; peaks '，' 66% / ' Whereas' 75%
+   a: (510) 865-5⟦0⟧88⏎
+   a:  房內保險箱等頂級設備。 除此之外⟦，⟧飯店各種娛樂
+   a: 免费）, 小厨房等顶级设备。 除此之外⟦，⟧酒店各种娱乐
+   b: CF-96B8-44455⟦3⟧540
+   b:  its amplitude.⏎⏎Waves - Sound⏎⏎This GCSE Physics⟦ quiz⟧ on waves looks
+   b:  toll free⏎1-877-255⟦-⟧133
+
+L22 n12980+ act_top 9.56: groups 45/19 (21/9 distinct), coherence 3.3/3.5 z, across -0.2 z; peaks ' minutes' 53% / ' self' 21%
+   a:  simmer for 1-1 1/2 hours or⟦ until⟧ the chickpe
+   a:  a warm, draft-free place for about an hour, or⟦ until⟧ it has doubled
+   a:  in well-greased bowl, cover, and let rise⟦ until⟧ doubled in size
+   b:             user = User.objects.get(username=username)⏎            if user⟦.check⟧_password(password):⏎
+   b:  'test@example.com', 'testpw')⏎        self.assertTrue⟦(u⟧.has_usable
+   b: external=True)⏎    return jsonify({⏎        'posts': [⟦post⟧.to_json()
+
+L20 n1140− act_top 13.12: groups 43/21 (15/12 distinct), coherence 3.9/3.1 z, across -0.4 z; peaks '電視' 60% / 'igma' 52%
+   a: 最舒適的體驗。⏎冰箱, 液晶⟦電視⟧/等離
+   a: /露台, 书桌, 液晶⟦电视⟧/等离子
+   a: 瓶装水, 吹风机, 液晶⟦电视⟧/等离子
+   b:  Components.config import config⏎from Renderer import Renderer⏎from en⟦igma⟧ import eLabel
+   b: from Components.VariableText import VariableText⏎from en⟦igma⟧ import eLabel
+   b: from Components.Converter.Converter import Converter⏎from en⟦igma⟧ import iService
