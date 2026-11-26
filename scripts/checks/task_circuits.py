@@ -1,4 +1,4 @@
-"""What Qwen3-8B computes on prompts of different kinds: relevance graphs over its neurons and heads (exploratory).
+"""What Qwen3-8B computes on prompts of different kinds: relevance graphs over its neurons and heads (findings §26; exploratory).
 
 A prompt (``task_circuits_prompts.json``: ten kinds of question, each with a one-token answer and a distractor) is
 traced from one number, ``T``: the answer's logit minus the distractor's at the last position. Under RelP's rules

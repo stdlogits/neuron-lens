@@ -1,0 +1,114 @@
+120 prompts, 119 with T > 0
+throughput by band (mean over a kind's correct prompts, as a share of T): MLP / attention
+kind                          sensory           association             workspace                 motor      n50      n80     PR
+recall              1.56 /   0.94       1.29 /   0.17       0.66 /   0.31       1.57 /   1.16      42622   199662   6312
+arithmetic          1.51 /   1.03       1.28 /   0.14       0.43 /   0.70       1.72 /   0.95      35129   193834   3887
+multihop            1.54 /   0.95       1.35 /   0.19       0.62 /   0.26       1.22 /   1.14      49090   216038   8250
+logic               1.52 /   1.00       1.15 /   0.16       0.52 /   0.63       1.23 /   1.02      47280   217404   5085
+theory_of_mind      1.54 /   0.97       1.20 /   0.14       0.45 /   0.69       1.20 /   1.04      63758   231292   9847
+self_knowledge      1.54 /   1.00       1.23 /   0.18       0.80 /   0.57       1.22 /   1.16      55446   212760  13048
+metacognition       1.50 /   0.99       1.16 /   0.15       0.32 /   0.77       0.91 /   0.93      54623   224131   9480
+ioi                 1.42 /   0.94       0.96 /   0.15       0.37 /   0.40       1.07 /   1.24      50188   221514   7052
+translation         1.56 /   0.95       1.23 /   0.16       0.46 /   0.43       1.77 /   1.05      34702   189908   6236
+sentiment           1.53 /   0.86       1.25 /   0.20       0.54 /   0.46       1.09 /   0.95      51418   223384   8557
+where the answer is written directly (share of T by band: embedding+units at the last position)
+recall             -0.00     0.00     0.00     0.99
+arithmetic         -0.00    -0.00     0.00     1.00
+multihop            0.00    -0.00     0.01     0.99
+logic               0.00    -0.00     0.01     0.99
+theory_of_mind     -0.00     0.00    -0.01     1.01
+self_knowledge     -0.00    -0.00     0.01     1.00
+metacognition       0.00     0.00     0.04     0.96
+ioi                -0.00    -0.00     0.01     1.00
+translation        -0.00     0.00     0.00     1.00
+sentiment           0.00     0.00     0.03     0.97
+share of T the residual holds at the prompt's start tokens, entering layer (36: after the last)
+kind                L0     L4     L9    L13    L17    L21    L25    L29    L33    L36
+recall            0.56   0.57   0.50   0.28   0.17   0.11   0.08   0.07   0.05   0.00
+arithmetic        0.69   0.67   0.60   0.38   0.23   0.13   0.11   0.09   0.04   0.00
+multihop          0.55   0.56   0.48   0.28   0.18   0.13   0.11   0.09   0.06   0.00
+logic             0.66   0.62   0.55   0.34   0.20   0.12   0.10   0.09   0.05   0.00
+theory_of_mind    0.62   0.62   0.57   0.35   0.23   0.16   0.14   0.13   0.08   0.00
+self_knowledge    0.74   0.73   0.65   0.44   0.31   0.23   0.21   0.19   0.13   0.00
+metacognition     0.63   0.62   0.57   0.37   0.23   0.13   0.12   0.10   0.07   0.00
+ioi               0.40   0.39   0.33   0.19   0.10   0.06   0.06   0.06   0.04   0.00
+translation       0.58   0.58   0.51   0.30   0.19   0.13   0.12   0.09   0.05   0.00
+sentiment         0.57   0.58   0.52   0.29   0.17   0.11   0.09   0.07   0.04   0.00
+share of T the residual holds at the prompt's content tokens, entering layer (36: after the last)
+kind                L0     L4     L9    L13    L17    L21    L25    L29    L33    L36
+recall            0.39   0.37   0.42   0.57   0.61   0.59   0.28   0.10   0.01   0.00
+arithmetic        0.21   0.22   0.25   0.38   0.40   0.34   0.04   0.01   0.00   0.00
+multihop          0.39   0.37   0.42   0.56   0.58   0.56   0.22   0.08   0.01   0.00
+logic             0.29   0.32   0.37   0.52   0.60   0.58   0.37   0.27   0.10   0.00
+theory_of_mind    0.30   0.28   0.31   0.46   0.53   0.46   0.21   0.12   0.02   0.00
+self_knowledge    0.18   0.18   0.22   0.36   0.41   0.31   0.11   0.04   0.02   0.00
+metacognition     0.32   0.31   0.35   0.50   0.54   0.38   0.10   0.03   0.05   0.00
+ioi               0.53   0.60   0.66   0.76   0.83   0.85   0.69   0.71   0.28   0.00
+translation       0.33   0.33   0.37   0.49   0.53   0.52   0.20  -0.01  -0.00   0.00
+sentiment         0.36   0.34   0.38   0.52   0.58   0.51   0.35   0.22   0.05   0.00
+share of T the residual holds at the prompt's instr tokens, entering layer (36: after the last)
+kind                L0     L4     L9    L13    L17    L21    L25    L29    L33    L36
+recall            0.02   0.01   0.02   0.05   0.05   0.02   0.00   0.00   0.00   0.00
+arithmetic        0.04   0.03   0.04   0.06   0.08   0.03   0.01   0.00   0.00   0.00
+multihop          0.02   0.02   0.03   0.04   0.05   0.02   0.00   0.00   0.00   0.00
+logic             0.02   0.02   0.03   0.04   0.05   0.02   0.01   0.00   0.00   0.00
+theory_of_mind    0.03   0.03   0.04   0.06   0.07   0.03   0.00  -0.00   0.00   0.00
+self_knowledge    0.05   0.04   0.05   0.08   0.08   0.04   0.00  -0.00   0.00   0.00
+metacognition     0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00
+ioi               0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00
+translation       0.04   0.03   0.04   0.07   0.07   0.02   0.00   0.00   0.00   0.00
+sentiment         0.04   0.03   0.05   0.08   0.10   0.06   0.01   0.01   0.00   0.00
+share of T the residual holds at the prompt's template tokens, entering layer (36: after the last)
+kind                L0     L4     L9    L13    L17    L21    L25    L29    L33    L36
+recall            0.03   0.03   0.03   0.07   0.10   0.12   0.23   0.27   0.15   0.00
+arithmetic        0.05   0.06   0.07   0.12   0.18   0.27   0.36   0.26   0.21   0.00
+multihop          0.03   0.04   0.04   0.07   0.10   0.10   0.20   0.24   0.15   0.00
+logic             0.03   0.04   0.04   0.06   0.08   0.11   0.12   0.11   0.07   0.00
+theory_of_mind    0.04   0.05   0.04   0.05   0.08   0.13   0.12   0.11   0.07   0.00
+self_knowledge    0.03   0.05   0.06   0.08   0.14   0.26   0.34   0.30   0.22   0.00
+metacognition     0.05   0.06   0.06   0.09   0.16   0.25   0.17   0.11   0.05   0.00
+ioi               0.07   0.01  -0.00   0.02   0.03   0.03   0.02   0.01   0.01   0.00
+translation       0.04   0.04   0.04   0.07   0.08   0.08   0.14   0.17   0.11   0.00
+sentiment         0.03   0.03   0.02   0.04   0.07   0.06   0.07   0.04   0.01   0.00
+share of T the residual holds at the prompt's last tokens, entering layer (36: after the last)
+kind                L0     L4     L9    L13    L17    L21    L25    L29    L33    L36
+recall            0.00   0.01   0.02   0.04   0.07   0.16   0.40   0.55   0.78   1.00
+arithmetic        0.01   0.03   0.04   0.06   0.11   0.22   0.49   0.63   0.74   1.00
+multihop          0.00   0.02   0.03   0.05   0.09   0.20   0.46   0.58   0.78   1.00
+logic             0.00   0.01   0.02   0.04   0.06   0.18   0.41   0.53   0.77   1.00
+theory_of_mind    0.00   0.02   0.04   0.06   0.08   0.23   0.53   0.64   0.83   1.00
+self_knowledge    0.00   0.01   0.02   0.04   0.06   0.16   0.34   0.47   0.63   1.00
+metacognition     0.00   0.01   0.02   0.04   0.07   0.24   0.61   0.76   0.83   1.00
+ioi               0.00   0.00   0.02   0.03   0.04   0.06   0.23   0.22   0.66   1.00
+translation       0.00   0.02   0.05   0.07   0.12   0.24   0.54   0.74   0.85   1.00
+sentiment         0.00   0.02   0.04   0.06   0.09   0.27   0.47   0.66   0.89   1.00
+cosine between prompts' units, workspace band (rows: kind; diagonal: within, off-diagonal pairs left out)
+                 recall arithme multiho   logic theory_ self_kn metacog     ioi transla sentime
+recall             0.16   -0.12    0.19   -0.09   -0.07   -0.05   -0.09   -0.06    0.02   -0.11
+arithmetic        -0.12    0.72   -0.19    0.13   -0.19   -0.24   -0.15   -0.14    0.04    0.08
+multihop           0.19   -0.19    0.26   -0.11   -0.05   -0.04   -0.12   -0.04    0.01   -0.14
+logic             -0.09    0.13   -0.11    0.11    0.01   -0.06   -0.01    0.03   -0.02    0.02
+theory_of_mind    -0.07   -0.19   -0.05    0.01    0.20    0.13    0.13    0.04   -0.14   -0.06
+self_knowledge    -0.05   -0.24   -0.04   -0.06    0.13    0.33    0.16   -0.03   -0.15   -0.14
+metacognition     -0.09   -0.15   -0.12   -0.01    0.13    0.16    0.41   -0.05   -0.18   -0.07
+ioi               -0.06   -0.14   -0.04    0.03    0.04   -0.03   -0.05    0.66   -0.04   -0.14
+translation        0.02    0.04    0.01   -0.02   -0.14   -0.15   -0.18   -0.04    0.54   -0.03
+sentiment         -0.11    0.08   -0.14    0.02   -0.06   -0.14   -0.07   -0.14   -0.03    0.70
+cosine between prompts' units, motor band (rows: kind; diagonal: within, off-diagonal pairs left out)
+                 recall arithme multiho   logic theory_ self_kn metacog     ioi transla sentime
+recall             0.18   -0.06    0.23   -0.05   -0.10   -0.10   -0.15   -0.03    0.02   -0.07
+arithmetic        -0.06    0.35   -0.09    0.06   -0.13   -0.13   -0.15   -0.08   -0.06   -0.09
+multihop           0.23   -0.09    0.28   -0.07   -0.10   -0.10   -0.16   -0.03    0.02   -0.08
+logic             -0.05    0.06   -0.07    0.03   -0.01   -0.02   -0.04    0.04   -0.06   -0.03
+theory_of_mind    -0.10   -0.13   -0.10   -0.01    0.22    0.22    0.15   -0.02   -0.07   -0.00
+self_knowledge    -0.10   -0.13   -0.10   -0.02    0.22    0.26    0.23   -0.07   -0.09   -0.03
+metacognition     -0.15   -0.15   -0.16   -0.04    0.15    0.23    0.56   -0.09   -0.13   -0.02
+ioi               -0.03   -0.08   -0.03    0.04   -0.02   -0.07   -0.09    0.29   -0.02    0.01
+translation        0.02   -0.06    0.02   -0.06   -0.07   -0.09   -0.13   -0.02    0.30    0.01
+sentiment         -0.07   -0.09   -0.08   -0.03   -0.00   -0.03   -0.02    0.01    0.01    0.64
+PCA variance [0.128, 0.097, 0.064]
+Yes/No prompts only (28: logic 2, theory_of_mind 6, self_knowledge 9, metacognition 11), centred over them; within a kind / between kinds, and within the same answer / opposite answers
+  sensory      same kind +0.24   other kind -0.14   | same answer +0.02   opposite -0.09   | same kind, opposite answer +0.12   other kind, same answer -0.10
+  association  same kind +0.04   other kind -0.06   | same answer +0.06   opposite -0.12   | same kind, opposite answer -0.09   other kind, same answer +0.01
+  workspace    same kind +0.17   other kind -0.11   | same answer +0.05   opposite -0.12   | same kind, opposite answer -0.01   other kind, same answer -0.06
+  motor        same kind +0.19   other kind -0.12   | same answer +0.42   opposite -0.47   | same kind, opposite answer -0.27   other kind, same answer +0.32

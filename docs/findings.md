@@ -3,7 +3,7 @@
 What the catalog shows about the neurons and attention heads of Qwen3-8B, Gemma 4 12B (in text, images and sound) and the
 rest of the Qwen3 family to 14B, and how far each way of reading them goes. Each section gives its setup, its results
 against controls, and its limits; the methods are in [design.md](design.md) and the overview in the
-[README](../README.md). The sections run in eight parts:
+[README](../README.md). The sections run in nine parts:
 
 | | § | in one line |
 |---|---|---|
@@ -32,6 +32,7 @@ against controls, and its limits; the methods are in [design.md](design.md) and 
 | **VIII. Mixed units** | [§23](#23-two-mixed-units-and-their-fossils-relict-generalization) | Qwen3-32B's Colorado neuron and its Tornado mode come from the 14B; one L11 unit joins Tornado code to high plateaus, and carries fossils of a MongoDB link it no longer uses. A baseball and blood-glucose unit is fed by a baseball unit that fires as hard on SSH, and their reads keep the senses between (credentials, yeast) with no working route |
 | | [§24](#24-secondary-modes-weights-propose-contexts-check) | 15-33% of Qwen3-8B's poles have a weight-wired input from an unrelated domain at a third of their peak, 2-4% at half; weights propose them, but only contexts and labels say which are unrelated |
 | | [§25](#25-secondary-modes-over-pythias-training-a-first-look) | a first look over Pythia's checkpoints (160M-6.9B): half of the confirmed inputs look unrelated at the end, and their histories run both ways with no net drift; noisy, needs manual review |
+| **IX. Circuits by task** | [§26](#26-circuits-by-task-ten-kinds-of-question-traced) | ten kinds of question traced whole: the middle layers sort them by kind, the late by answer; choices travel where the readout is blind and attention reads |
 
 Numbers are medians or means over a layer's poles unless stated. Each setup names its script: a pipeline stage
 (`scripts/NN_*.py`) or a check (`scripts/checks/`). Compact outputs are in `data/summary/`, and figures are drawn by
@@ -2412,6 +2413,89 @@ Outputs are in `data/summary/relict_{census,score,judge,judge_score}_pythia-*.lo
 `data/summary/secondary_modes_measure_pythia-*.log`. The top documents, matrices, embeddings and verdicts stay local
 (`data/relict/`, `data/secondary_modes/`).
 
+## IX. Circuits by task
+
+Prompts traced whole: what a model computes on questions of different kinds, and what the lenses do and don't read of it
+(§26). Exploratory.
+
+### §26. Circuits by task: ten kinds of question, traced
+
+**Setup** (`checks/task_circuits.py`, `checks/blind_subspace.py`; Qwen3-8B in fp32 on an M5 Max).
+- **Prompts** (`checks/task_circuits_prompts.json`): ten kinds of 10-14 questions each (recall, arithmetic, two-hop
+  recall, logic, theory of mind, self-knowledge, knowing what it knows, IOI, translation, sentiment), each with a
+  one-token answer and a distractor, in the chat template with thinking off and an `Answer:` prefill. 119 of 120 put the
+  answer above the distractor.
+- **Relevance.** `T`, the answer's logit minus the distractor's at the last position, is traced under RelP's rules with
+  every attention pattern held: a unit's relevance is its activation times `T`'s derivative, the residual's relevances
+  sum to `T` over positions at every layer (within 3·10⁻⁵ on every prompt), and flows split each unit's relevance
+  exactly over the units that write into it. Twelve prompts get graphs: the units past 1% of `T` outside the template's
+  first tokens.
+- **Where a head looks.** For the strongest heads at the last position, the score margin between the answer's and the
+  distractor's positions is split over the units that build the query and both keys, and traced back through the
+  network as its own target (`decide`: q/k norms held, the half rule on the bilinear score).
+- **Ablation** zeroes units in the real model (no RelP, patterns free), against as many random units at the same layers
+  and positions.
+
+**The graphs recover known circuits.** Recall: units read France at its own token from L0 to L24, heads at L24-L31 carry
+it to the last position (L31h3 alone 0.21 of `T`), and French and capital-city units write Paris there. Two-hop recall
+resolves the bridge at the landmark (L7 n7374 reads Eiffel and writes France and Paris), then runs recall's circuit unit
+for unit. IOI has name movers (L29h11, L31h6, L33h19) whose queries prefer Mary through an S-inhibition head (L24h28,
+attending to the repeated John), as in Wang et al. (2022); arithmetic is digit heuristics at the last position (Nikankin
+et al. 2024). Removing the 20-40 most relevant units flips or erases every answer (Paris to London, AI to Human, maison
+to an English house), while as many random units move `T` by about 2. One at a time, a unit's effect tracks its
+relevance at r 0.79-0.98 on eight graphs, 0.26-0.58 on recall and translation, and −0.36 on arithmetic, whose heuristics
+stand in for each other.
+
+**Kinds of question.**
+- **Workspace by kind, motor by answer.** Over each prompt's units (relevance per pole and head, centred), among 28
+  questions of four kinds that all answer yes or no: in the workspace band, same kind +0.17 against other kinds −0.11,
+  same answer +0.05 against opposite −0.12; in the motor band, same answer +0.42 against opposite −0.47. A prompt's
+  nearest neighbour in the workspace band is of its own kind for 89% of prompts.
+- **When the answer reaches the last position:** half of `T` by L24 for knowing what it knows, L25-L27 for most kinds,
+  L30 for self-knowledge (whose template tokens hold 0.26-0.34 of `T` at L21-L29) and L32 for IOI.
+- **Three shapes.** Retrieve and move (recall, two-hop, translation). Select an option named in the prompt (IOI, logic,
+  self-knowledge, sentiment): one set of heads builds the movers' queries in each (L30h7, L25h15 and L24h29 toward the
+  answer, L28h23 and L31h30 against). Yes or no by polarity units at the last position, shared by theory of mind and
+  knowing what it knows (L26 n9852 in its + pole before "No" and its − pole before "Yes", L31 n7245, L33 n912).
+- **Order, not recency.** 64 chain prompts (taller or shorter, older or younger, told in order or with the statements
+  swapped, asked for either end, four sets of names) are all answered right, including the swapped ones, where the last
+  name told is always the middle one. The movers attend to the answer's mention wherever it was told (0.17-0.29, against
+  0.02-0.04 for the other names). Traced, their choice comes from earlier heads (L23h26, L24h29, L24h31, L25h15) that
+  bring the name to the last position; one level down, L24h29 picks Tom for "tallest" and Ben for "shortest" on identical
+  statements, its query built by heads at the last position at L21-L23 and its keys by heads at the names at L15-L18.
+- **Free replies** (no instruction or prefill, greedy; the answer's first appearance outside sentences that restate the
+  question, six set by hand after reading every reply; 92 of 108 traced): a free trace's units match its own constrained
+  trace (0.71 in the workspace band, 0.78 in the motor band) far more than other questions of its kind (0.31, 0.22).
+  Where the model writes steps first, about half of `T` at L21 sits on its own words: logic 0.52, two-hop 0.48 (it writes
+  the bridge, "…Lima is Peru"), arithmetic 0.49.
+
+**What the output can't read.** `N` is the readout's weakest directions: the bottom 1-10% of the right-singular directions
+of `W_U diag(γ_f)` (as `null_share`), without the two massive dimensions (§9).
+- **Attention reads it.** Queries and keys put 2-12 times chance of their energy in the bottom 1% (layer medians; up to
+  0.29), values and MLP read rows chance or less. The heads whose choices were traced are among the heaviest (L29h11
+  0.15 and 0.17, L33h18 0.28 and 0.18).
+- **Choices are built there.** At the answer's token, the units that build a mover's key write into it far more than
+  those that carry the answer's identity (`null_share` z +1.94 against 0.00 within their layers), with equally confident
+  labels.
+- **Swapped, it moves the answer.** Swapping the bottom 5% between the answer's and the other end's mentions, at one
+  layer, makes the model answer the other end in 94% of the 64 prompts at L12, 83% at L16, 78% at L20 and 17% at L24;
+  random subspaces of its size, never. From L24 the swap redirects the late movers (attention on the other name from
+  0.02 to about 0.3) without flipping the answer, which earlier heads have already moved.
+- **At mid-depth it holds identity.** Asked to repeat a name, the model says another name in 93-95% of pairs when only
+  this 5% is patched in from that name's prompt at L12-L20, 50% at L24, and never for a random subspace.
+
+**What this means.** The labels and lens reads name the content of each step (entities, concepts, candidate answers), and
+the graphs recover known circuits without a replacement model. Which candidate wins is spread over heads and units whose
+labels name format and position, and much of it travels in directions the readout can't see but attention reads: a
+token's identity at mid-depth, the routing late. Reading a write by its effect on attention, as the R-lens reads it by
+its effect on the output, would name them.
+
+**Limits.** One model; 10-14 questions a kind and one graph each. Relevance holds the attention patterns, so a head's
+choice enters only through the splits and `decide`. The half rule gives the template's first tokens, where the sink
+is, a large and steady share. Labels describe a unit's top firings, not the firing traced. `N` is one fixed subspace of
+the final readout, not a layer's dark sector (§21); the swap and the patch use the 64 order prompts and 44 pairs of
+names.
+
 ## Open questions
 
 - What the dark sector's ablations remove, if not what two prompts differ in (the kind of document, position, the
@@ -2450,3 +2534,5 @@ Outputs are in `data/summary/relict_{census,score,judge,judge_score}_pythia-*.lo
   a related input from an unrelated one (§24 found none among twelve). Whether Pythia's share of unrelated inputs falls
   with size once the judge's rising floor is understood, and how much of it is inputs that feed a mixed target's minor
   mode (§25).
+- What the readout's weakest directions carry besides a token's identity and the late routing, and whether a read of a
+  write by its effect on later heads' queries and keys (an attention lens) names the units that build choices (§26).

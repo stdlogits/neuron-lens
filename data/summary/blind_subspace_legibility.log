@@ -1,0 +1,6 @@
+at the answer's token: 88 units carrying it (T traces), 48 building a mover's key on it (choice traces), 21 in both; z within layer (null_share: higher is darker)
+  fires_conf  identity -0.07   key +0.20   difference +0.27  (permutation p 0.142)
+  writes_conf identity -0.14   key +0.11   difference +0.25  (permutation p 0.202)
+  null_share  identity -0.00   key +1.94   difference +1.95  (permutation p 0.000)
+  kurtosis    identity -0.13   key -0.29   difference -0.16  (permutation p 0.036)
+  top_z       identity +0.15   key +0.05   difference -0.10  (permutation p 0.559)

@@ -1,0 +1,16 @@
+110 free replies, 92 traced
+kind            found  right  answer at token (median)  T free / constrained   on its own words L21 / L29   last L29
+recall             14/14    14           6              22.7 /  17.4               0.34 /  0.14      0.68
+arithmetic         14/14    14           7              24.5 /  17.3               0.49 /  0.29      0.59
+multihop           12/12    12          16              24.3 /  18.1               0.48 /  0.16      0.69
+logic               8/12     8          40              21.5 /  15.7               0.52 /  0.40      0.38
+theory_of_mind      7/10     7           0              19.7 /  10.9               0.05 /  0.04      0.59
+self_knowledge      6/12     6           2              16.0 /  13.0               0.07 /  0.03      0.71
+metacognition       7/12     7           0              15.0 /   7.6               0.00 /  0.00      0.76
+translation        14/14    14          10              22.0 /  19.8               0.33 /  0.08      0.80
+sentiment          10/10    10          15              21.1 /  13.9               0.23 /  0.17      0.58
+units, free against constrained (centred cosine): the same question / other questions of its kind / other kinds
+  sensory      +0.82 / +0.35 / -0.06   by kind (same, kind): recall +0.93 +0.08, arithm +0.95 +0.90, multih +0.75 +0.13, logic +0.83 +0.09, theory +0.88 +0.32, self_k +0.73 +0.28, metaco +0.22 +0.14, transl +0.86 +0.31, sentim +0.96 +0.70
+  association  +0.74 / +0.34 / -0.06   by kind (same, kind): recall +0.92 +0.04, arithm +0.98 +0.95, multih +0.72 +0.11, logic +0.68 +0.04, theory +0.84 +0.54, self_k +0.70 +0.22, metaco -0.04 -0.05, transl +0.65 +0.35, sentim +0.87 +0.63
+  workspace    +0.71 / +0.31 / -0.08   by kind (same, kind): recall +0.87 +0.14, arithm +0.73 +0.53, multih +0.77 +0.22, logic +0.69 +0.11, theory +0.79 +0.21, self_k +0.64 +0.25, metaco +0.47 +0.21, transl +0.59 +0.39, sentim +0.78 +0.57
+  motor        +0.78 / +0.22 / -0.04   by kind (same, kind): recall +0.83 +0.15, arithm +0.92 +0.30, multih +0.86 +0.24, logic +0.85 +0.03, theory +0.83 +0.18, self_k +0.76 +0.11, metaco +0.61 +0.33, transl +0.53 +0.15, sentim +0.82 +0.52

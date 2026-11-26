@@ -1,0 +1,189 @@
+
+=== order_00: why h31.7.35 looks at 'Tom' rather than ' Ben': margin +6.08, embedding sum +6.08
+   entering L 0: '<|im_start|>'@0 +0.55, 'Tom'@3 +0.26, '\n'@2 +0.14, 'user'@1 +0.09, ' Ben'@13 -0.06
+   entering L10: 'Tom'@3 +0.59, '<|im_start|>'@0 +0.39, ' Ben'@13 -0.19, ':'@35 +0.05, '\n'@2 +0.05
+   entering L15: 'Tom'@3 +0.81, ' Ben'@13 -0.27, '<|im_start|>'@0 +0.18, ':'@35 +0.08, 'user'@1 +0.05
+   entering L20: 'Tom'@3 +0.99, ' Ben'@13 -0.43, ':'@35 +0.15, '<|im_start|>'@0 +0.09, ' tallest'@18 +0.04
+   entering L31: 'Tom'@3 +1.22, ' Ben'@13 -0.72, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.349  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   +0.138  L28 n1611 −     @ 3 'Tom'        'God'/'Way' word-start fragments and tilde runs (God-, Way-, ~~~~)
+   +0.137  L18 n7219 +     @ 3 'Tom'        the space in dates before the year (e.g. 'September 6, 201')
+   -0.096  L16h27          @ 3 'Tom'        suppresses ellipsis and bracket-closing tokens; weak promotion of code
+   +0.086  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.076  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.075  L30h7           @35 ':'          Promotes markdown bold markers and string quoting tokens ('**', '""'),
+   +0.063  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   -0.061  L15h10          @ 3 'Tom'        Suppresses hedging adverbs and adjectives (sometimes, various, might, 
+   +0.055  L4 n8906 +      @ 3 'Tom'        tomato/tomatillo tokens (tom|at|illo) and soft-hyphen splits
+   +0.053  L25h15          @35 ':'          Copies women and family nouns (wives, mothers, women, queen) and suppr
+   +0.050  L24h29          @35 ':'          Copies single capital initials and short first names (D, B, N, H, Mich
+   +0.041  L24h31          @35 ':'          Copies single capital initials and first names (D, N, B, S, M, Dana, M
+   +0.040  L0h12           @ 0 '<|im_start|>' copies formal academic connective words such as Additionally, signific
+
+=== order_08: why h28.0.35 looks at ' Tom' rather than ' Ben': margin +4.65, embedding sum +4.65
+   entering L 0: '<|im_start|>'@0 +0.55, ' Tom'@9 +0.22, ' Ben'@7 -0.10, ' taller'@5 +0.06, '.'@8 +0.06
+   entering L 9: ' Tom'@9 +0.53, '<|im_start|>'@0 +0.47, ' Ben'@7 -0.30, '.'@8 +0.08, ' than'@6 +0.03
+   entering L14: ' Tom'@9 +0.95, ' Ben'@7 -0.48, '<|im_start|>'@0 +0.19, '.'@8 +0.13, ':'@35 +0.04
+   entering L18: ' Tom'@9 +1.37, ' Ben'@7 -0.81, '.'@8 +0.16, '.'@14 +0.08, '<|im_start|>'@0 +0.06
+   entering L28: ' Tom'@9 +1.84, ' Ben'@7 -1.34, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.380  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   +0.095  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.094  L24h31          @35 ':'          Copies single capital initials and first names (D, N, B, S, M, Dana, M
+   +0.082  L24h29          @35 ':'          Copies single capital initials and short first names (D, B, N, H, Mich
+   +0.073  L25h15          @35 ':'          Copies women and family nouns (wives, mothers, women, queen) and suppr
+   +0.072  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.071  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   +0.064  L23h26          @35 ':'          Promotes modern/traditional contrast words ('traditional', 'modern', '
+   -0.054  L17h12          @ 9 ' Tom'       suppresses function words like 'or', 'as', 'also', 'such', 'in'; promo
+   +0.054  L23h6           @ 9 ' Tom'       copies single capital letters that open identifiers after brackets
+   +0.052  L4 n8906 +      @ 9 ' Tom'       tomato/tomatillo tokens (tom|at|illo) and soft-hyphen splits
+   -0.051  L24h28          @35 ':'          Suppresses newline and ellipsis tokens; copies single capital initials
+   -0.049  L25h14          @35 ':'          Copies group nouns (companies, Americans, workers) and suppresses outd
+   +0.048  L17h21          @ 9 ' Tom'       Copies line-break runs and suffix tokens; suppresses fragments like '.
+
+=== order_12: why h28.0.35 looks at ' Ben' rather than ' Tom': margin +3.42, embedding sum +3.42
+   entering L 0: '<|im_start|>'@0 +0.66, ' Tom'@9 -0.24, ' Ben'@7 +0.21, ' taller'@5 +0.15, 'Sam'@3 +0.10
+   entering L 9: ' Ben'@7 +0.63, '<|im_start|>'@0 +0.56, ' Tom'@9 -0.55, ' than'@6 +0.17, ' is'@4 +0.06
+   entering L14: ' Ben'@7 +1.20, ' Tom'@9 -0.79, ' than'@6 +0.21, '<|im_start|>'@0 +0.19, '.'@8 -0.09
+   entering L18: ' Ben'@7 +1.76, ' Tom'@9 -1.13, ' than'@6 +0.17, '.'@8 -0.12, '<|im_start|>'@0 +0.06
+   entering L28: ' Ben'@7 +2.41, ' Tom'@9 -1.91, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.478  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   -0.156  L18h14          @ 7 ' Ben'       Suppresses closing markup tags and periodic words (weekly, yearly, eve
+   +0.113  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.098  L23h6           @ 7 ' Ben'       copies single capital letters that open identifiers after brackets
+   -0.090  L25h14          @35 ':'          Copies group nouns (companies, Americans, workers) and suppresses outd
+   -0.088  L17h7           @ 7 ' Ben'       Suppresses words meaning 'traditional' or 'slow' (Legacy, classic, 缓慢,
+   +0.086  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.083  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   +0.074  L25h15          @35 ':'          Copies women and family nouns (wives, mothers, women, queen) and suppr
+   +0.072  L24h28          @35 ':'          Suppresses newline and ellipsis tokens; copies single capital initials
+   +0.066  L3 n9789 −      @ 5 ' taller'    'tall' and 'height' words (tall, taller, stature)
+   +0.066  L18h14          @ 9 ' Tom'       Suppresses closing markup tags and periodic words (weekly, yearly, eve
+   +0.064  L26h26          @35 ':'          promotes domain adjectives (industrial, political, natural, 医疗); suppr
+   +0.063  L0 n10194 +     @ 7 ' Ben'       'Ben' as a name or word start (Big Ben, Ben Edwards)
+
+=== ioi_00: why h29.11.32 looks at ' Mary' rather than ' John': margin +6.07, embedding sum +6.07
+   entering L 0: '<|im_start|>'@0 +0.47, ' Mary'@20 +0.33, 'When'@19 +0.10, ' John'@28 -0.08, ' friends'@8 +0.06
+   entering L 9: ' Mary'@20 +0.64, '<|im_start|>'@0 +0.40, ' John'@28 -0.23, 'When'@19 +0.10, ','@27 -0.07
+   entering L14: ' Mary'@20 +0.86, ' John'@28 -0.32, '<|im_start|>'@0 +0.14, 'When'@19 +0.10, ' to'@32 +0.08
+   entering L19: ' Mary'@20 +1.10, ' John'@28 -0.42, ' to'@32 +0.13, 'When'@19 +0.13, ','@27 -0.09
+   entering L29: ' Mary'@20 +1.44, ' John'@28 -0.94, ' to'@32 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.329  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   +0.252  L24h28          @32 ' to'        Suppresses newline and ellipsis tokens; copies single capital initials
+   -0.159  L25h14          @32 ' to'        Copies group nouns (companies, Americans, workers) and suppresses outd
+   +0.120  L1 n1517 +      @20 ' Mary'      the name Mary (Mary, María, Maria, 玛丽)
+   +0.095  L25h15          @32 ' to'        Copies women and family nouns (wives, mothers, women, queen) and suppr
+   +0.092  L23h6           @28 ' John'      copies single capital letters that open identifiers after brackets
+   -0.090  L25h31          @32 ' to'        promotes museum, military, female and family-role words (parents, Mama
+   -0.083  L25h30          @32 ' to'        copies closing brackets and ellipsis-newline tokens; suppresses upperc
+   +0.082  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.081  L28h22          @20 ' Mary'      copies proper nouns such as place names and surnames (Texas, Obama, Vi
+   -0.079  L28h21          @20 ' Mary'      suppresses ellipsis and bracket tokens while copying a few code identi
+   +0.078  L23h6           @20 ' Mary'      copies single capital letters that open identifiers after brackets
+   -0.074  L18h14          @20 ' Mary'      Suppresses closing markup tags and periodic words (weekly, yearly, eve
+   +0.072  L27 n5664 +     @32 ' to'        girl and annotation/text words (女主角, girl, excerpt, annotation)
+
+=== logic_00: why h28.0.35 looks at ' Ben' rather than 'Tom': margin +5.69, embedding sum +5.69
+   entering L 0: '<|im_start|>'@0 +0.53, ' Ben'@13 +0.14, ' taller'@5 +0.11, 'Tom'@3 -0.09, ' taller'@11 +0.08
+   entering L 9: '<|im_start|>'@0 +0.49, ' Ben'@13 +0.37, 'Tom'@3 -0.36, ' than'@12 +0.11, ' Sam'@7 +0.07
+   entering L14: ' Ben'@13 +0.76, 'Tom'@3 -0.52, '<|im_start|>'@0 +0.17, ' than'@12 +0.14, ' Sam'@7 +0.06
+   entering L18: ' Ben'@13 +1.12, 'Tom'@3 -0.69, ' than'@12 +0.11, ':'@35 +0.08, '.'@8 +0.06
+   entering L28: ' Ben'@13 +1.44, 'Tom'@3 -0.94, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.396  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   -0.103  L25h14          @35 ':'          Copies group nouns (companies, Americans, workers) and suppresses outd
+   -0.102  L18h14          @13 ' Ben'       Suppresses closing markup tags and periodic words (weekly, yearly, eve
+   +0.099  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.094  L16h27          @ 3 'Tom'        suppresses ellipsis and bracket-closing tokens; weak promotion of code
+   +0.091  L25h15          @35 ':'          Copies women and family nouns (wives, mothers, women, queen) and suppr
+   +0.083  L23h26          @35 ':'          Promotes modern/traditional contrast words ('traditional', 'modern', '
+   -0.081  L18 n7219 +     @ 3 'Tom'        the space in dates before the year (e.g. 'September 6, 201')
+   +0.075  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   -0.070  L17h7           @13 ' Ben'       Suppresses words meaning 'traditional' or 'slow' (Legacy, classic, 缓慢,
+   +0.069  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.068  L23h6           @13 ' Ben'       copies single capital letters that open identifiers after brackets
+   +0.051  L21h11          @35 ':'          Suppresses dot-runs and long space padding; copies opening quotes and 
+   -0.050  L17h12          @13 ' Ben'       suppresses function words like 'or', 'as', 'also', 'such', 'in'; promo
+
+=== self_knowledge_00: why h33.18.26 looks at ' AI' rather than ' human': margin +4.03, embedding sum +4.03
+   entering L 0: '<|im_start|>'@0 +0.51, ' AI'@9 +0.19, ' human'@6 +0.05, ' an'@8 +0.04, 'Are'@3 +0.04
+   entering L11: ' AI'@9 +0.47, '<|im_start|>'@0 +0.35, ' or'@7 +0.10, ' human'@6 -0.07, ':'@26 +0.05
+   entering L16: ' AI'@9 +0.67, '<|im_start|>'@0 +0.19, ' human'@6 -0.17, ':'@26 +0.08, ' or'@7 +0.07
+   entering L22: ' AI'@9 +0.89, ' human'@6 -0.36, ':'@26 +0.18, '<|im_start|>'@0 +0.12, ' an'@8 +0.04
+   entering L33: ' AI'@9 +1.25, ' human'@6 -0.75, ':'@26 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.355  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   +0.091  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.083  L23h6           @ 9 ' AI'        copies single capital letters that open identifiers after brackets
+   +0.081  L27 n1269 +     @ 9 ' AI'        common prepositions and conjunctions like 'of', 'in', 'that'
+   +0.081  L4 n11571 −     @ 9 ' AI'        'AI' and 人工智能 (artificial intelligence)
+   +0.080  L24h31          @26 ':'          Copies single capital initials and first names (D, N, B, S, M, Dana, M
+   +0.078  L30h7           @26 ':'          Promotes markdown bold markers and string quoting tokens ('**', '""'),
+   +0.068  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.066  L0 n1674 −      @ 9 ' AI'        the token AI and artificial intelligence
+   +0.064  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   -0.059  L28h21          @ 9 ' AI'        suppresses ellipsis and bracket tokens while copying a few code identi
+   +0.051  L28h22          @ 9 ' AI'        copies proper nouns such as place names and surnames (Texas, Obama, Vi
+   +0.046  L24h29          @26 ':'          Copies single capital initials and short first names (D, B, N, H, Mich
+   +0.044  L22 n8836 +     @ 9 ' AI'        word-internal suffix fragments in names and loanwords ('-al', '-ary', 
+
+=== order_08@h24.29.35: why h24.29.35 looks at ' Tom' rather than ' Ben': margin +2.52, embedding sum +2.52
+   entering L 0: '<|im_start|>'@0 +0.66, ' Tom'@9 +0.17, ' Ben'@7 -0.09, ' taller'@5 +0.07, 'Sam'@3 +0.04
+   entering L 8: '<|im_start|>'@0 +0.65, ' Tom'@9 +0.35, ' Ben'@7 -0.27, '.'@8 +0.06, ' than'@6 +0.04
+   entering L12: ' Tom'@9 +0.67, ' Ben'@7 -0.44, '<|im_start|>'@0 +0.37, '.'@8 +0.18, ' word'@23 +0.04
+   entering L16: ' Tom'@9 +1.42, ' Ben'@7 -0.99, '<|im_start|>'@0 +0.15, '.'@8 +0.13, '.'@14 +0.07
+   entering L24: ' Tom'@9 +2.25, ' Ben'@7 -1.75, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.467  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   +0.225  L23h26          @35 ':'          Promotes modern/traditional contrast words ('traditional', 'modern', '
+   -0.141  L22h8           @35 ':'          Suppresses common words like 'costing', 'either', 'imagination'; copie
+   +0.114  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   -0.099  L17h12          @ 9 ' Tom'       suppresses function words like 'or', 'as', 'also', 'such', 'in'; promo
+   +0.087  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.085  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   +0.081  L17h21          @ 9 ' Tom'       Copies line-break runs and suffix tokens; suppresses fragments like '.
+   +0.079  L22h11          @35 ':'          Copies document and product nouns; suppresses Chinese political and mi
+   +0.073  L18h12          @ 9 ' Tom'       Promotes list-continuation and additive words (also, additionally, oth
+   -0.060  L23h28          @35 ':'          Suppresses gendered nouns (female, woman, girl, lady) and promotes quo
+   -0.060  L17h7           @ 9 ' Tom'       Suppresses words meaning 'traditional' or 'slow' (Legacy, classic, 缓慢,
+   +0.059  L15h30          @ 9 ' Tom'       Suppresses closing period-quote and period-paren tokens; weak promotio
+   +0.058  L21h18          @35 ':'          promotes adjectives 神秘, quickly, exquisite, mystery (copies manner/moo
+
+=== order_12@h24.29.35: why h24.29.35 looks at ' Ben' rather than ' Tom': margin +2.62, embedding sum +2.62
+   entering L 0: '<|im_start|>'@0 +0.64, ' taller'@5 +0.15, ' Tom'@9 -0.14, ' Ben'@7 +0.10, 'Sam'@3 +0.08
+   entering L 8: '<|im_start|>'@0 +0.62, ' Ben'@7 +0.33, ' Tom'@9 -0.32, ' than'@6 +0.11, ' taller'@5 +0.07
+   entering L12: ' Ben'@7 +0.73, ' Tom'@9 -0.56, ' than'@6 +0.29, '<|im_start|>'@0 +0.26, '.'@8 -0.09
+   entering L16: ' Ben'@7 +1.46, ' Tom'@9 -1.03, ' than'@6 +0.16, '<|im_start|>'@0 +0.09, ' shortest'@18 +0.08
+   entering L24: ' Ben'@7 +2.40, ' Tom'@9 -1.90, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   +0.460  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)
+   -0.134  L18h14          @ 7 ' Ben'       Suppresses closing markup tags and periodic words (weekly, yearly, eve
+   +0.112  L6 n8518 −      @ 0 '<|im_start|>' line breaks after punctuation and function-word starts in code
+   +0.110  L23h24          @35 ':'          Suppresses question marks and sentence-final punctuation before line b
+   -0.091  L17h12          @ 7 ' Ben'       suppresses function words like 'or', 'as', 'also', 'such', 'in'; promo
+   -0.090  L20h9           @35 ':'          suppresses function words like 'and', 'in', 'to', 'the' when they are 
+   +0.082  L1 n11629 +     @ 0 '<|im_start|>' spaces and the '://' in URLs and dates
+   +0.081  L6 n422 +       @ 0 '<|im_start|>' Chinese characters repeated in doubled form (遠⟦遠⟧, 謝⟦謝⟧, 爺⟦爺⟧)
+   -0.080  L17h21          @ 9 ' Tom'       Copies line-break runs and suffix tokens; suppresses fragments like '.
+   -0.078  L17h7           @ 7 ' Ben'       Suppresses words meaning 'traditional' or 'slow' (Legacy, classic, 缓慢,
+   +0.073  L21h11          @35 ':'          Suppresses dot-runs and long space padding; copies opening quotes and 
+   +0.069  L3 n9789 −      @ 5 ' taller'    'tall' and 'height' words (tall, taller, stature)
+   -0.068  L18h12          @ 9 ' Tom'       Promotes list-continuation and additive words (also, additionally, oth
+   -0.066  L23h28          @35 ':'          Suppresses gendered nouns (female, woman, girl, lady) and promotes quo
+
+=== order_00@h24.29.35: why h24.29.35 looks at 'Tom' rather than ' Ben': margin +0.82, embedding sum +0.82
+   entering L 0: 'Tom'@3 +0.78, '<|im_start|>'@0 +0.77, '\n'@2 +0.45, ' Ben'@13 -0.38, 'user'@1 +0.38
+   entering L 8: 'Tom'@3 +2.00, ' Ben'@13 -1.09, '<|im_start|>'@0 +0.38, ' Sam'@7 -0.27, '\n'@2 +0.22
+   entering L12: 'Tom'@3 +3.65, ' Ben'@13 -2.27, '\n'@2 +0.32, 'user'@1 +0.28, ':'@35 -0.19
+   entering L16: 'Tom'@3 +5.38, ' Ben'@13 -3.79, ' tallest'@18 +0.24, 'user'@1 +0.22, ':'@35 -0.21
+   entering L24: 'Tom'@3 +7.30, ' Ben'@13 -6.80, ':'@35 +0.50, '<|im_start|>'@0 +0.00, 'user'@1 +0.00
+   -1.347  L18 n7219 +     @ 3 'Tom'        the space in dates before the year (e.g. 'September 6, 201')
+   -0.950  L16h27          @ 3 'Tom'        suppresses ellipsis and bracket-closing tokens; weak promotion of code
+   +0.682  L14 n8636 −     @ 3 'Tom'        digits and punctuation in code, dates and regex patterns
+   -0.565  L22h8           @35 ':'          Suppresses common words like 'costing', 'either', 'imagination'; copie
+   -0.541  L18 n6797 +     @ 3 'Tom'        year-day date fragments (e.g. '22 September 200')
+   +0.468  L22h11          @35 ':'          Copies document and product nouns; suppresses Chinese political and mi
+   -0.421  L15h10          @ 3 'Tom'        Suppresses hedging adverbs and adjectives (sometimes, various, might, 
+   +0.400  L18h11          @18 ' tallest'   Suppresses determiners and function words (the, of, a, or, with) and p
+   +0.369  L14h30          @ 3 'Tom'        Promotes line-end punctuation and paragraph breaks (⏎, .⏎⏎, closing pa
+   -0.361  L18h12          @13 ' Ben'       Promotes list-continuation and additive words (also, additionally, oth
+   +0.358  L22h0           @35 ':'          Promotes gendered/person nouns (男生, 女生, female, 妹妹, 男性) and titles
+   +0.344  L12 n1216 −     @ 3 'Tom'        repeated 'When was the' questions and fragmented unicode
+   +0.339  L14 n9342 −     @ 3 'Tom'        digit '2' or '1' inside years and dates
+   +0.331  L6 n5723 +      @ 0 '<|im_start|>' repeated Chinese characters in doubled-word positions (遠遠, 爺爺, 查查)

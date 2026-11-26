@@ -1,0 +1,22 @@
+condition (answer's place among the names told)      right  middle  other end   mean T   T vs middle
+  told     top     (answer told first )                   16/16      0         0   +17.21   +14.18
+  told     bottom  (answer told last  )                   16/16      0         0   +20.19   +16.14
+  swapped  top     (answer told third )                   16/16      0         0   +19.28   +17.14
+  swapped  bottom  (answer told second)                   16/16      0         0   +18.62   +16.56
+  shorter  right 16/16
+  taller   right 16/16
+  older    right 16/16
+  younger  right 16/16
+
+the heads at the last position most relevant to T: attention to each name's mentions, by condition
+  told     top     answer 0.17  other end 0.04  middle 0.03   QK margin answer − other end +1.58
+  told     bottom  answer 0.29  other end 0.02  middle 0.03   QK margin answer − other end +2.68
+  swapped  top     answer 0.28  other end 0.03  middle 0.02   QK margin answer − other end +2.01
+  swapped  bottom  answer 0.27  other end 0.03  middle 0.02   QK margin answer − other end +2.10
+  most frequent: L35h25 ×57, L34h28 ×31, L33h18 ×29, L33h15 ×28, L34h29 ×21, L32h8 ×20, L28h0 ×18, L32h7 ×16, L33h13 ×16, L31h13 ×14
+
+what builds their queries' preference for the answer over the other end (summed over prompts and heads)
+  told     top     L30h7 +0.45, L28h23 -0.27, L31h30 -0.23, L25h15 +0.17, L27 n2904 − +0.17, L30h6 +0.11, L24h29 +0.10, L28 n9154 − +0.10
+  told     bottom  L30h7 +0.65, L31h30 -0.29, L25h15 +0.22, L28h23 -0.18, L25h14 -0.14, L30h6 +0.13, L27 n2904 + +0.11, L23h26 +0.08
+  swapped  top     L30h7 +0.38, L24h31 +0.26, L24h29 +0.20, L31h30 -0.15, L25h15 +0.12, L23h26 +0.07, L24h28 -0.07, L30h6 +0.05
+  swapped  bottom  L30h7 +0.46, L28h23 -0.27, L31h30 -0.22, L24h28 +0.16, L24h29 +0.13, L30h6 +0.13, L25h15 +0.06, L28 n4134 + +0.06

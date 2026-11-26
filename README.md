@@ -155,7 +155,7 @@ L20-L32, motor L33-L47).
 
 ## Findings
 
-Findings 1-14 and 21 are Qwen3-8B's, 15-18 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or
+Findings 1-14, 21 and 26 are Qwen3-8B's, 15-18 Gemma 4 12B's, and 19 and 20 compare Qwen3's sizes. Numbers are medians or
 means over a layer's poles unless stated. Each links to its findings section, with setup, controls and limits.
 
 ### I. The lenses and the corpus
@@ -446,6 +446,20 @@ that were related then are matched by inputs that became related later, so the c
 the target's job. A reading of the cards shows the verdicts are noisy, most of all early in training, so these numbers
 need manual review before they can support a conclusion
 ([§25](docs/findings.md#25-secondary-modes-over-pythias-training-a-first-look)).
+
+### IX. Circuits by task
+
+**26. Ten kinds of question, traced.** 120 questions of ten kinds (recall, arithmetic, two-hop recall, logic, theory of
+mind, self-knowledge, knowing what it knows, IOI, translation, sentiment) were traced from the answer's margin over a
+distractor back through Qwen3-8B's neurons and heads, exactly and without a replacement model. The graphs recover known
+circuits (IOI's name movers and S-inhibition head, two-hop recall resolving its bridge at the landmark), and removing
+their top units flips the answers where random units don't. The middle layers sort questions by kind and the late ones
+by their answer. A logic control shows the model tracks order, not recency, and free replies mostly reuse the constrained
+circuit while reading about half the margin off the steps they write. The choice among candidates travels largely in
+the directions the output readout can't see: attention's queries and keys read them at 2-12 times chance, and swapping
+that 5% of the residual between two names makes the model answer the other name, while a random 5% never does. At
+mid-depth it holds the token's identity, late the routing. Exploratory
+([§26](docs/findings.md#26-circuits-by-task-ten-kinds-of-question-traced)).
 
 ### Limits
 

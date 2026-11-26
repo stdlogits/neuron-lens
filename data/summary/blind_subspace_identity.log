@@ -1,0 +1,21 @@
+44 pairs: the model asked to repeat X, with Y's component patched in at X's token
+  N205            at L12: Y over X  +15.74, says Y 0.95
+  N205            at L16: Y over X  +15.25, says Y 0.95
+  N205            at L20: Y over X  +13.33, says Y 0.93
+  N205            at L24: Y over X   +1.13, says Y 0.50
+  N410            at L12: Y over X  +22.54, says Y 1.00
+  N410            at L16: Y over X  +22.46, says Y 1.00
+  N410            at L20: Y over X  +21.80, says Y 1.00
+  N410            at L24: Y over X  +11.93, says Y 0.98
+  R205            at L12: Y over X  -25.54, says Y 0.00
+  R205            at L16: Y over X  -25.56, says Y 0.00
+  R205            at L20: Y over X  -25.48, says Y 0.00
+  R205            at L24: Y over X  -25.34, says Y 0.00
+  R410            at L12: Y over X  -25.14, says Y 0.00
+  R410            at L16: Y over X  -25.17, says Y 0.00
+  R410            at L20: Y over X  -25.06, says Y 0.00
+  R410            at L24: Y over X  -24.68, says Y 0.00
+  whole residual  at L12: Y over X  +25.50, says Y 1.00
+  whole residual  at L16: Y over X  +25.44, says Y 1.00
+  whole residual  at L20: Y over X  +25.42, says Y 1.00
+  whole residual  at L24: Y over X  +23.38, says Y 1.00
