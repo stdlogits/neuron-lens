@@ -48,8 +48,9 @@ can have its cases traced back.
 - ``panel``, then ``probe <revs>...``, then ``live <revs>...``: whether a pole's later group was there below its top
   documents before its onset. A fixed panel per pole (its own *a* and *b* documents, held-out documents like each, random
   documents), each pole's peak on it at each revision (no ``tops`` needed, so the revisions can be dense:
-  download-bound), and per group the revision from which its held-out documents stay above ``LIVE`` of random
-  documents, against its onset in the top documents (``live``; the onsets from ``history`` over the same revisions).
+  download-bound), and per group the revision from which its held-out documents rank above ``LIVE`` of other poles'
+  held-out sets of its kind, against its onset in the top documents (``live``; the onsets from ``history`` over the
+  same revisions).
 
 Data in ``data/mixed_units/<model>/``, the summary in ``data/summary/mixed_units_<model>.log``.
 
@@ -90,7 +91,7 @@ CODE_HI, CODE_LO = 0.5, 0.2
 KINDS = ("topic", "code", "token")
 PAIRS, KMEANS_STEPS, RESTARTS = 200_000, 10, 8
 CONTROLS, TRANSIENT, RANDOM, FALSE_PASS = 4, 16, 4096, 0.01
-PANEL_OWN, PANEL_HELD, PANEL_RANDOM, PANEL_CONTROLS, LIVE = 12, 12, 1024, 400, 0.8
+PANEL_OWN, PANEL_HELD, PANEL_RANDOM, PANEL_CONTROLS, STRANGERS, LIVE = 12, 12, 1024, 400, 20, 0.9
 SETS = ("own_a", "own_b", "held_a", "held_b")
 WRITE_RANDOM = 32
 STAGE1, STAGE2 = 1_413_814, 47_684  # OLMo 3 7B's stage-1 and stage-2 steps, for ``step``
@@ -671,25 +672,38 @@ def step(rev: str) -> int:
 
 def live(revs: list[str]) -> None:
     """Whether a pole's later group was there below its top documents before its onset (two responses of unequal
-    strength from the start) or absent until it joined. Per pole, revision and panel set: the set's median peak as a
-    percentile of the pole's random documents' peaks. A group is *live* from the first revision from which its held-out
-    documents' percentile stays ``LIVE``+; its onset (``history``'s, over the same revisions) needs its documents in the
-    pole's top ``TOP``."""
+    strength from the start) or absent until it joined. Per pole, revision and panel set: the set's median peak ranked
+    among the pole's median peaks on ``STRANGERS`` other panel poles' held-out sets of the same kind (both groups each,
+    so documents of the same register and slice: against random documents, any English prose would pass for a prose
+    pole). A group is *live* from the first revision from which its held-out set's rank stays ``LIVE``+; its onset
+    (``history``'s, over the same revisions) needs its documents in the pole's top ``TOP``."""
     P = torch.load(OUT / "panel.pt")
     H = torch.load(OUT / "history.pt", weights_only=False)
     hrev = H["revs"]
     on = {(u["layer"], u["neuron"], u["pole"]): u for u in H["units"]}
-    revs = [r for r in hrev if r in revs]
-    K = len(revs)
-    pct = {s: torch.full((len(P["units"]), K), float("nan")) for s in SETS}
+    if set(revs) != set(hrev):
+        raise SystemExit(f"live needs the probe at history's revisions: {', '.join(hrev)}")
+    revs = hrev
+    K, U = len(revs), P["units"]
+    g = torch.Generator().manual_seed(3)
+    pool = collections.defaultdict(list)
+    for j, x in enumerate(U):
+        pool[x["kind"]].append(j)
+    strangers = []
+    for j, x in enumerate(U):
+        c = torch.tensor([i for i in pool[x["kind"]] if i != j])
+        strangers.append(c[torch.randperm(len(c), generator=g)[:STRANGERS]])
+    pct = {s: torch.full((len(U), K), float("nan")) for s in SETS}
     for k, rev in enumerate(revs):
         d = torch.load(OUT / f"probe-{rev}.pt")
         row = {x: j for j, x in enumerate(d["ids"])}
         pk = d["peak"].float()
-        rnd = pk[[row[x] for x in P["rand"]]].sort(0).values
-        for s in SETS:
-            med = torch.stack([pk[[row[q] for q in x[s]], j].median() for j, x in enumerate(P["units"])])
-            pct[s][:, k] = torch.searchsorted(rnd.T.contiguous(), med[:, None]).squeeze(1).float() / len(rnd)
+        held = torch.tensor([[[row[q] for q in x["held_" + side]] for side in "ab"] for x in U])  # [units, 2, PANEL_HELD]
+        for j, x in enumerate(U):
+            null = pk[:, j][held[strangers[j]]].median(-1).values.flatten().sort().values
+            for s in SETS:
+                m = pk[[row[q] for q in x[s]], j].median()
+                pct[s][j, k] = float(torch.searchsorted(null, m.reshape(1))) / len(null)
     rows = []
     for j, x in enumerate(P["units"]):
         u = on[(x["layer"], x["neuron"], x["pole"])]
@@ -701,13 +715,13 @@ def live(revs: list[str]) -> None:
         rows.append({"kind": x["kind"], "j": j, "rt": rt, "sc": sc, "on_rt": min(ia, ib), "on_sc": max(ia, ib),
                      "live_rt": first(pct["held_" + rt][j]), "live_sc": first(pct["held_" + sc][j]),
                      "form": revs.index(hrev[u["form"]])})
-    say(f"{MODEL}: {len(rows)} panel poles with ordered onsets over {K} revisions ({revs[0]} to {revs[-1]}); a set is "
-        f"live where its median peak passes {LIVE:.0%} of random documents' peaks")
+    say(f"{MODEL}: {len(rows)} panel poles with ordered onsets over {K} revisions ({revs[0]} to {revs[-1]}); a set's rank "
+        f"among {2 * STRANGERS} held-out sets of other poles of its kind (chance 0.5), live where {LIVE:.0%}+")
     for k_ in (*KINDS, "control"):
         rs = [r for r in rows if r["kind"] == k_]
         if not rs:
             continue
-        say(f"\n{k_} ({len(rs)} poles): mean percentile, aligned on the later group's onset (revision offsets)")
+        say(f"\n{k_} ({len(rs)} poles): mean rank, aligned on the later group's onset (revision offsets)")
         for name, s, side in (("later held", "held", "sc"), ("later own", "own", "sc"), ("earlier held", "held", "rt"),
                               ("earlier own", "own", "rt")):
             line = []
