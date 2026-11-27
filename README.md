@@ -14,7 +14,7 @@ public catalog, the lenses that produced it, and measurements of how far each wa
 - **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every neuron's and
   head's reads, activation statistics and token drivers; what the residual holds where each neuron fires, what drives it
   and how neurons are wired; labels in words; and for Gemma 4, what each neuron responds to in images and sound. Pythia
-  (14M to 6.9B) and OLMo 3 7B are catalogued too, without labels (OLMo 3 7B's activations, drivers, reads and edges).
+  (14M to 6.9B) and OLMo 3 7B are catalogued too, without labels.
 - **Browse it:** [neuron-lens.com](https://neuron-lens.com).
 - **Results:** [docs/findings.md](docs/findings.md). **Methods:** [docs/design.md](docs/design.md).
 

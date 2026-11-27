@@ -1,0 +1,17 @@
+neurons, allenai/Olmo-3-1025-7B: 704,512 poles; share of each band's poles (mean over layers) passing each test at a 5% false discovery rate; in brackets, the share past the 99% point of mismatched pairs net of theirs. Detectors: a third of top firings share a token.
+
+band             silent  token_detector   next_detector          read_R          read_S         write_R         write_S    write_orth_R    write_orth_S
+L0-7               0.00            0.18            0.08     0.00 [0.01]     0.95 [0.81]     0.00 [0.00]     0.33 [0.27]     0.00 [0.00]     0.03 [0.05]
+L8-15              0.00            0.08            0.05     0.00 [0.02]     0.29 [0.22]     0.00 [0.01]     0.06 [0.09]     0.00 [0.01]     0.01 [0.02]
+L16-23             0.00            0.17            0.08     0.04 [0.08]     0.18 [0.18]     0.10 [0.12]     0.10 [0.12]     0.03 [0.06]     0.02 [0.04]
+L24-31             0.00            0.12            0.07     0.02 [0.03]     0.00 [0.03]     0.08 [0.11]     0.00 [0.01]     0.04 [0.06]     0.00 [0.01]
+L0-31              0.00            0.14            0.07     0.02 [0.03]     0.35 [0.31]     0.05 [0.06]     0.12 [0.12]     0.02 [0.03]     0.01 [0.03]
+
+heads, allenai/Olmo-3-1025-7B: 1024 heads in 32 layers; share of each band's heads passing each test at a 5% false discovery rate (BH over all heads); detectors: a third of firings share a query or attended token; pattern: prev > 0.5, self > 0.5, induction > 0.3, duplicate > 0.3
+
+band          ov_R    ov_copy       ov_S       qk_S    cur_det    src_det       mode    pattern   ov_R_p05  ov_copy_p05   ov_S_p05   qk_S_p05
+L0-7          0.01       0.00       0.00       0.00       0.18       0.27       0.32       0.05       0.04       0.16       0.28       0.07
+L8-15         0.01       0.00       0.00       0.00       0.07       0.13       0.17       0.05       0.04       0.07       0.08       0.05
+L16-23        0.16       0.11       0.00       0.05       0.14       0.18       0.25       0.04       0.32       0.29       0.12       0.14
+L24-31        0.24       0.17       0.00       0.07       0.31       0.18       0.37       0.02       0.41       0.26       0.11       0.20
+L0-31         0.10       0.07       0.00       0.03       0.17       0.19       0.28       0.04       0.20       0.19       0.15       0.12

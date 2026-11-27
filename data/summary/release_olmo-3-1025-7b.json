@@ -49,6 +49,18 @@
    704512
   ],
   [
+   "olmo-3-1025-7b-neurons-firings",
+   "olmo-3-1025-7b/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   704512
+  ],
+  [
+   "olmo-3-1025-7b-neurons-sources",
+   "olmo-3-1025-7b/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   682496
+  ],
+  [
    "olmo-3-1025-7b-heads-acts",
    "olmo-3-1025-7b/heads/acts.parquet",
    "every head's output statistics, top firings and attention patterns",
@@ -64,6 +76,12 @@
    "olmo-3-1025-7b-heads-reads",
    "olmo-3-1025-7b/heads/reads.parquet",
    "every head's OV and QK circuits read per token",
+   1024
+  ],
+  [
+   "olmo-3-1025-7b-heads-sources",
+   "olmo-3-1025-7b/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
    1024
   ]
  ],

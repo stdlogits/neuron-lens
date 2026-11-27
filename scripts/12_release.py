@@ -843,8 +843,8 @@ def others_catalog_text(others: dict) -> str:
         tables = {side: [c.removeprefix(f"{x['dir']}-{side}-") for c, *_ in x["configs"] if c.startswith(f"{x['dir']}-{side}-")]
                   for side in ("neurons", "heads")}
         notes.append(f"- **OLMo 3 7B** has for neurons {', '.join(f'`{t}`' for t in tables['neurons'])}, for heads "
-                     f"{', '.join(f'`{t}`' for t in tables['heads'])}, and of the plain files `docs.parquet` and `token_counts.pt`; "
-                     "the other tables and the causal sample are not built yet. Its MLP is SwiGLU, two poles a neuron as in Qwen3, but it norms only its "
+                     f"{', '.join(f'`{t}`' for t in tables['heads'])}, and every plain file, its causal sample 32 random "
+                     "neurons a layer. Its MLP is SwiGLU, two poles a neuron as in Qwen3, but it norms only its "
                      "sublayers' outputs: a neuron reads the residual itself, through its raw gate and up rows, and its write "
                      "passes the post-feedforward norm's weight, as Gemma 4's does. `heads-reads` has two more column groups, "
                      "`beta_S` and `decay_S`, for Gated DeltaNet heads, empty here.")
