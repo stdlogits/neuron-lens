@@ -1413,6 +1413,9 @@ def main() -> None:
             print(f"{time.strftime('%H:%M:%S')} {stem} on https://huggingface.co/{REPO}", flush=True)
         return
     files = catalog_files(MODEL)
+    if not args.from_branch and (empty := [p for p in parts & {"neurons", "heads"} if not files[p]]):
+        raise SystemExit(f"{catalog_dir(MODEL)} has no {' or '.join(sorted(empty))} tables, and the release would delete "
+                         f"the Hub's: download the model's catalog folder there first, or release a branch with --from-branch")
     if args.from_branch:
         facts |= catalog_facts(MODEL, f"datasets/{DATASET}@{args.from_branch}/{stem}", HfFileSystem())
     else:
