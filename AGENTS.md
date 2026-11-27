@@ -13,8 +13,9 @@ the Qwen3 family to 14B, post-trained and base, the same way (labels for the pos
 from three sides: its weights through two lenses (the R-lens forward to the output, the S-lens back to the input
 embeddings), its activations over 15M positions, and its exact token drivers. `NEURON_LENS_MODEL` selects the model
 for every stage (Qwen3-8B by default). `scripts/12_release.py` releases the lenses (`stdlogits/rs-lenses`) and the
-catalog (`stdlogits/neuron-lens`) on the Hugging Face Hub, one card per repo covering every model; the models in its
-`LENS_ONLY` (the Pythia suite, Qwen3.5, Qwen3-30B-A3B, OLMo 3 7B) get lenses alone.
+catalog (`stdlogits/neuron-lens`) on the Hugging Face Hub, one card per repo covering every model: its `OTHERS` (the
+Pythia suite to 6.9B, OLMo 3 7B) have catalogs without labels, and its `LENS_ONLY` (Qwen3.5, Qwen3-30B-A3B) get
+lenses alone.
 
 Neurons and heads share the tables `acts`, `drivers`, `reads`, `labels` and `sources`; neurons add `firings` and
 `edges`, the pruned Qwen3 pairs `lineage`, Gemma 4 `image` and `audio`, and sparse models `experts/acts` and
@@ -208,7 +209,10 @@ model (Invariants). design.md has a section for each family beyond Qwen3. Labels
   stages; the box script's has the commands to copy the results back.
 - **Releasing:** a full `12_release.py --branch <b>`, then the same without `--branch` for `main`. It deletes what this
   machine's catalog lacks, so bring the catalog up to date and run `--dry-run` first, which lists the deletions. A
-  `LENS_ONLY` model takes `--parts lenses` (its scale included); its catalog goes to a branch with `--tables`.
+  `LENS_ONLY` model takes `--parts lenses` (its scale included); its catalog goes to a branch with `--tables`. A
+  catalog a GPU box sent to a branch (`--tables`) reaches `main` with `--parts neurons,heads,files --from-branch <b>`
+  (`--dry-run` first), a server-side copy of the model's folder; the card's numbers need the model's token counts here
+  (`data/token_counts-<model>.pt`, the folder's `token_counts.pt`).
 
 ## Recording results
 

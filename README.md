@@ -9,10 +9,12 @@ family up to 14B, post-trained and base, is catalogued the same way, to see what
 public catalog, the lenses that produced it, and measurements of how far each way of reading goes.
 
 - **Lenses:** [`stdlogits/rs-lenses`](https://huggingface.co/stdlogits/rs-lenses), the R-lens and S-lens for Qwen3 from
-  0.6B to 14B, post-trained and base, and for Gemma 4 12B in text, images and sound.
+  0.6B to 14B, post-trained and base, for Gemma 4 12B in text, images and sound, and for Pythia (14M to 6.9B), OLMo 3 7B
+  and Qwen3.5-0.8B.
 - **Catalog:** [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): every neuron's and
   head's reads, activation statistics and token drivers; what the residual holds where each neuron fires, what drives it
-  and how neurons are wired; labels in words; and for Gemma 4, what each neuron responds to in images and sound.
+  and how neurons are wired; labels in words; and for Gemma 4, what each neuron responds to in images and sound. Pythia
+  (14M to 6.9B) and OLMo 3 7B are catalogued too, without labels (OLMo 3 7B's activations, drivers, reads and edges).
 - **Browse it:** [neuron-lens.com](https://neuron-lens.com).
 - **Results:** [docs/findings.md](docs/findings.md). **Methods:** [docs/design.md](docs/design.md).
 

@@ -22,5 +22,70 @@
  "scale": {
   "docs": 1000,
   "split": "0.01-0.01"
- }
+ },
+ "configs": [
+  [
+   "pythia-410m-neurons-acts",
+   "pythia-410m/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   98304
+  ],
+  [
+   "pythia-410m-neurons-drivers",
+   "pythia-410m/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   98304
+  ],
+  [
+   "pythia-410m-neurons-reads",
+   "pythia-410m/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   98304
+  ],
+  [
+   "pythia-410m-neurons-edges",
+   "pythia-410m/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   98304
+  ],
+  [
+   "pythia-410m-neurons-firings",
+   "pythia-410m/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   98304
+  ],
+  [
+   "pythia-410m-neurons-sources",
+   "pythia-410m/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   94208
+  ],
+  [
+   "pythia-410m-heads-acts",
+   "pythia-410m/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   384
+  ],
+  [
+   "pythia-410m-heads-drivers",
+   "pythia-410m/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   384
+  ],
+  [
+   "pythia-410m-heads-reads",
+   "pythia-410m/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   384
+  ],
+  [
+   "pythia-410m-heads-sources",
+   "pythia-410m/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
+   384
+  ]
+ ],
+ "docs": 63992,
+ "positions": 15559828,
+ "kept": 48041
 }

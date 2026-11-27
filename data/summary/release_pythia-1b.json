@@ -22,5 +22,70 @@
  "scale": {
   "docs": 1000,
   "split": "0.01-0.01"
- }
+ },
+ "configs": [
+  [
+   "pythia-1b-neurons-acts",
+   "pythia-1b/neurons/acts/*.parquet",
+   "every pole's activation statistics and top firings",
+   131072
+  ],
+  [
+   "pythia-1b-neurons-drivers",
+   "pythia-1b/neurons/drivers/*.parquet",
+   "every pole's 64 token drivers in real contexts",
+   131072
+  ],
+  [
+   "pythia-1b-neurons-reads",
+   "pythia-1b/neurons/reads/*.parquet",
+   "every pole's weight-only reads through both lenses",
+   131072
+  ],
+  [
+   "pythia-1b-neurons-edges",
+   "pythia-1b/neurons/edges/*.parquet",
+   "every pole's strongest direct weight edges from earlier poles and to later ones",
+   131072
+  ],
+  [
+   "pythia-1b-neurons-firings",
+   "pythia-1b/neurons/firings/*.parquet",
+   "what the residual holds, what the MLP layer writes and what the model predicts at every pole's top firings",
+   131072
+  ],
+  [
+   "pythia-1b-neurons-sources",
+   "pythia-1b/neurons/sources/*.parquet",
+   "what drives every pole when it fires, and the poles that fire with it",
+   122880
+  ],
+  [
+   "pythia-1b-heads-acts",
+   "pythia-1b/heads/acts.parquet",
+   "every head's output statistics, top firings and attention patterns",
+   128
+  ],
+  [
+   "pythia-1b-heads-drivers",
+   "pythia-1b/heads/drivers.parquet",
+   "every head's 64 token drivers, as query and as key",
+   128
+  ],
+  [
+   "pythia-1b-heads-reads",
+   "pythia-1b/heads/reads.parquet",
+   "every head's OV and QK circuits read per token",
+   128
+  ],
+  [
+   "pythia-1b-heads-sources",
+   "pythia-1b/heads/sources.parquet",
+   "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
+   128
+  ]
+ ],
+ "docs": 63992,
+ "positions": 15559828,
+ "kept": 48041
 }

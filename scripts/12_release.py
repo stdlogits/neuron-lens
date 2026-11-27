@@ -37,8 +37,9 @@ whole model's folder with all of ``neurons``, ``heads`` and ``files``); ``--dry-
 ``--from-branch`` releases the catalog a branch of the dataset holds instead of this machine's (a GPU box's, sent with
 ``--tables``): the model's whole folder is copied on the Hub, the card's numbers read from its parquet files' footers, and
 what the target has in that folder and the branch lacks is deleted. The Qwen3 family's other sizes (``LADDER``) get a
-section of each card. The Pythia suite, Qwen3.5, Qwen3-30B-A3B and OLMo 3 7B (``LENS_ONLY``) have none yet: their ``lenses``
-and ``scale`` go up alone, the cards as they are, and their tables with ``--tables``.
+section of each card, and so do the other families' catalogued models (``OTHERS``: the Pythia suite and OLMo 3 7B).
+Qwen3.5 and Qwen3-30B-A3B (``LENS_ONLY``) have none yet: their ``lenses`` and ``scale`` go up alone, the cards as they
+are, and their tables with ``--tables``.
 
     NEURON_LENS_MODEL=... python scripts/12_release.py [--parts lenses,neurons,heads,files] [--branch b] [--dry-run]
     NEURON_LENS_MODEL=... python scripts/12_release.py --tables firings,sources --branch b
@@ -75,10 +76,12 @@ QWEN3 = ("Qwen/Qwen3-0.6B", "Qwen/Qwen3-0.6B-Base", "Qwen/Qwen3-1.7B", "Qwen/Qwe
          "Qwen/Qwen3-4B-Base", "Qwen/Qwen3-8B", "Qwen/Qwen3-8B-Base", "Qwen/Qwen3-14B", "Qwen/Qwen3-14B-Base", "Qwen/Qwen3-32B")
 LADDER = tuple(m for m in QWEN3 if m not in MODELS)
 PYTHIA = tuple(f"EleutherAI/pythia-{s}" for s in ("14m", "70m", "160m", "410m", "1b", "1.4b", "2.8b", "6.9b", "12b"))
-# Models whose lenses go up alone, the cards as they are, until the cards cover them: the Pythia suite, Qwen3.5,
-# Qwen3-30B-A3B and OLMo 3 7B
-LENS_ONLY = (PYTHIA + tuple(f"Qwen/Qwen3.5-{s}" for s in ("0.8B", "2B", "4B", "9B", "35B-A3B"))
-             + ("Qwen/Qwen3-30B-A3B", "allenai/Olmo-3-1025-7B"))
+OLMO = "allenai/Olmo-3-1025-7B"
+# Other families' models, in the cards' order, with lenses and catalogs without labels (labels need a reading plan,
+# arch.PLANS); each card has a section on those with a release record in data/summary/ (with ``configs``, a released catalog).
+OTHERS = PYTHIA + (OLMO,)
+# Models whose lenses go up alone, the cards as they are, until the cards cover them: Qwen3.5 and Qwen3-30B-A3B
+LENS_ONLY = tuple(f"Qwen/Qwen3.5-{s}" for s in ("0.8B", "2B", "4B", "9B", "35B-A3B")) + ("Qwen/Qwen3-30B-A3B",)
 PARTS = ("lenses", "scale", "neurons", "heads", "files")  # files: docs.parquet, token_counts.pt, the causal sample, media docs
 MEDIA = {"image": "coco", "audio": "esc50"}  # Gemma 4's media lenses and the corpus each is fitted on
 MEDIA_WHAT = {"image": ("COCO 2014 validation images", "image"), "audio": ("ESC-50 clips", "sound")}
@@ -401,13 +404,70 @@ differences by layer:
 """ + "\n".join(rows) + "\n"
 
 
-def model_card(f: dict, ladder: dict, date: str) -> str:
+def others_title(others: dict) -> str:
+    """The cards' heading for the other families' models (``OTHERS``) in ``others``: the Pythia suite, OLMo 3 7B, or both."""
+    names = (["Pythia"] if any(m in PYTHIA for m in others) else []) + (["OLMo 3 7B"] if OLMO in others else [])
+    return " and ".join(names)
+
+
+def others_anchor(others: dict) -> str:
+    return "#" + others_title(others).lower().replace(" ", "-")
+
+
+def others_text(others: dict) -> str:
+    """The model card's section on the other families' models (``OTHERS``) with lenses here."""
+    if not others:
+        return ""
+    rows = []
+    for m, x in others.items():
+        t = x["lenses"]["text"]
+        rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']}, {x['d_model']:,} | "
+                    f"{t['R']}, {t['R_mid']} | {t['S_mid']}, {t['S_out']} | {x['scale']['split']} |")
+    docs = sorted({x["lenses"]["text"]["R_docs"] for x in others.values()} | {x["lenses"]["text"]["S_docs"] for x in others.values()})
+    catalogued = [m for m in others if "configs" in others[m]]
+    catalogued = (f" Their neurons and heads are in the catalog, [`{DATASET}`](https://huggingface.co/datasets/{DATASET}), "
+                  "without labels." if len(catalogued) == len(others) else
+                  f" {', '.join(m.split('/')[-1] for m in catalogued)} {'has its' if len(catalogued) == 1 else 'have their'} "
+                  f"neurons and heads in the catalog, [`{DATASET}`](https://huggingface.co/datasets/{DATASET}), without labels."
+                  if catalogued else "")
+    pythia = [m.split("/")[-1].removeprefix("pythia-").upper() for m in others if m in PYTHIA]
+    intro = " and ".join(([f"the Pythia suite from {pythia[0]} to {pythia[-1]} (EleutherAI's GPT-NeoX models, every size "
+                           "trained on one data order)"] if pythia else [])
+                         + (["OLMo 3 7B (AI2's base model)"] if OLMO in others else []))
+    notes = []
+    if pythia:
+        notes.append("- **Pythia** runs attention and the MLP side by side on the layer's input, `h + attn(ln₁(h)) + "
+                     "mlp(ln₂(h))`, so its MLP input is the layer's input: `mid[L]` reads the point `out[L − 1]` reads (the "
+                     "R-lens's `mid[0]` reads the embeddings), and a head's write, which lands on the layer's output beside the "
+                     "MLP's, is read with `r-lens/lens.pt` and `s-lens/out.pt`. Its norms are LayerNorms, whose rsqrt the rules "
+                     "hold as for an RMSNorm, keeping the centring: centre a read row or a write (subtract its mean) before "
+                     "reading it, and centre `J_L h` before the final norm. Fitted in fp16, the dtype it was trained in.")
+    if OLMO in others:
+        notes.append("- **OLMo 3** norms only its sublayers' outputs, `h + norm(attn(h))`, so its MLP and heads read the "
+                     "residual itself: a read row becomes a vector as `v = σ ⊙ c` (`γ` is 1).")
+    return f"""
+## {others_title(others)}
+
+The same lenses for {intro}, fitted the same way on the same {' or '.join(f'{n:,}' for n in docs)} documents. Each folder
+holds the five text files above.{catalogued} Where they differ from the models above:
+
+""" + "\n".join(notes) + """
+
+Split-half differences by layer:
+
+| model | folder | layers, d | R-lens (from outputs, from MLP inputs) | S-lens (to MLP inputs, to outputs) | scale |
+|---|---|---|---|---|---|
+""" + "\n".join(rows) + "\n"
+
+
+def model_card(f: dict, ladder: dict, others: dict, date: str) -> str:
     q, g = f["Qwen/Qwen3-8B"], f["google/gemma-4-12B"]
     qt, gt = q["lenses"]["text"], g["lenses"]["text"]
     gi, ga = g["lenses"]["image"], g["lenses"]["audio"]
-    base_models = "\n".join(f"- {m}" for m in [*MODELS, *ladder])
+    base_models = "\n".join(f"- {m}" for m in [*MODELS, *ladder, *others])
     more = (" The same lenses for more of the Qwen3 family, post-trained and base, are under "
             "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
+    more += (f" Lenses for {others_title(others)} are under [{others_title(others)}]({others_anchor(others)}).") if others else ""
     return f"""---
 license: cc-by-4.0
 base_model:
@@ -474,7 +534,7 @@ coordinates where the residual barely moves (§15). A vector set against the S-l
 `write_S`, a head's output in `ov_S`, the residual at a pole's firings in `before_S`, `mlp_S`) meets them through the
 lens's nearest rotation: with `K = (K Kᵀ)^½ U`, the read is `w · U ē`, the footprints with the lens's stretch removed,
 which asks which input token would put the vector there (§15).
-{ladder_text(f, ladder)}
+{ladder_text(f, ladder)}{others_text(others)}
 ## Definition
 
 Both average a Jacobian of the residual stream over the corpus, summed over positions as in the
@@ -610,7 +670,7 @@ With [Drowse](https://github.com/stdlogits/drowse) (6.0 or later), the text lens
 
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The lenses are derived from
 [`Qwen/Qwen3-8B`](https://huggingface.co/Qwen/Qwen3-8B) and
-[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B){" and the other Qwen3 models above" if ladder else ""} (Apache 2.0) and fitted on
+[`google/gemma-4-12B`](https://huggingface.co/google/gemma-4-12B){" and the other models above" if ladder or others else ""} (Apache 2.0) and fitted on
 [`{qt['corpus']}`](https://huggingface.co/datasets/{qt['corpus']}) (CC BY 4.0), and Gemma 4's media
 lenses on [COCO 2014](https://cocodataset.org) images (CC BY 4.0, Flickr terms for the images) and
 [ESC-50](https://github.com/karolpiczak/ESC-50) (CC BY-NC 3.0). By [@_a9lim](https://x.com/_a9lim) and
@@ -744,18 +804,85 @@ near-silent; of the 0.6B's, 85.3%, 5.0%, 9.7% and none. `child_status` adds `cut
 """
 
 
-def dataset_card(f: dict, ladder: dict, lens_rev: str, date: str) -> str:
+def others_catalog_text(others: dict) -> str:
+    """The dataset card's section on the other families' catalogued models (``OTHERS``)."""
+    if not others:
+        return ""
+    rows = []
+    for m, x in others.items():
+        path = SUMMARY / f"causal_lens_{x['dir']}.json"
+        edge = "–"
+        if path.exists():
+            steer = json.loads(path.read_text())["targets"]["steer 1x"]
+            r = next(v for k, v in steer.items() if k not in ("logit", "J"))["r_med"]  # the model's own R-lens
+            edge = next((f"L{L}" for L in range(len(r)) if min(r[L:]) >= 0.35), "–")
+        poles = arch.n_poles(m) * x["layers"] * x["neurons"]
+        rows.append(f"| [`{m.split('/')[-1]}`](https://huggingface.co/{m}) | `{x['dir']}/` | {x['layers']} × {x['neurons']:,} | "
+                    f"{poles:,} | {x['layers']} × {x['heads']} | {x['kept']:,} | {edge} |")
+    docs = " or ".join(sorted({f"{x['docs']:,} documents ({x['positions']:,} positions)" for x in others.values()}))
+    pythia = [m for m in others if m in PYTHIA]
+    sizes = [m.split("/")[-1].removeprefix("pythia-").upper() for m in pythia]
+    intro = " and ".join(([f"The Pythia suite from {sizes[0]} to {sizes[-1]} (EleutherAI's GPT-NeoX models, every size trained "
+                           "on one data order)"] if pythia else []) + (["OLMo 3 7B (AI2's base model)"] if OLMO in others else []))
+    notes = []
+    if pythia:
+        tables = {side: list(dict.fromkeys(c.removeprefix(f"{others[m]['dir']}-{side}-") for m in pythia
+                                           for c, *_ in others[m]["configs"] if c.startswith(f"{others[m]['dir']}-{side}-")))
+                  for side in ("neurons", "heads")}
+        notes.append(f"- **Pythia** has for neurons {', '.join(f'`{t}`' for t in tables['neurons'])}, for heads "
+                     f"{', '.join(f'`{t}`' for t in tables['heads'])}, and every plain file, its causal sample 32 random neurons "
+                     "a layer. Its MLP is ungated, `W_out GELU(W_in x + b_in) + b_out`, so each neuron has one pole (`pole` is +1, a "
+                     "row per neuron), read through its input row in place of a gate row; `cos_gate_up` and `cos_write_up` are NaN. "
+                     "Its LayerNorms read the centred residual, so read rows and writes are centred. Attention and the MLP read "
+                     "the layer's input side by side, so a head's write is read at the layer's output, and a neuron's head "
+                     "sources are the earlier layers'. Its biases are a constant source: `const_share` in `neurons-sources` (`q_`, "
+                     "`k_`, `v_const_share` in `heads-sources`) is their share, so the shares still sum to 1. Its training "
+                     "checkpoints, which §25 reads, are not released.")
+    if OLMO in others:
+        x = others[OLMO]
+        tables = {side: [c.removeprefix(f"{x['dir']}-{side}-") for c, *_ in x["configs"] if c.startswith(f"{x['dir']}-{side}-")]
+                  for side in ("neurons", "heads")}
+        notes.append(f"- **OLMo 3 7B** has for neurons {', '.join(f'`{t}`' for t in tables['neurons'])}, for heads "
+                     f"{', '.join(f'`{t}`' for t in tables['heads'])}, and of the plain files `docs.parquet` and `token_counts.pt`; "
+                     "the other tables and the causal sample are not built yet. Its MLP is SwiGLU, two poles a neuron as in Qwen3, but it norms only its "
+                     "sublayers' outputs: a neuron reads the residual itself, through its raw gate and up rows, and its write "
+                     "passes the post-feedforward norm's weight, as Gemma 4's does. `heads-reads` has two more column groups, "
+                     "`beta_S` and `decay_S`, for Gated DeltaNet heads, empty here.")
+    return f"""
+## {others_title(others)}
+
+{intro}, catalogued as the Qwen3 sizes are, without labels (labels need a reading plan, which Qwen3 and Gemma 4 have).
+Each has its own lenses (in [`{REPO}`](https://huggingface.co/{REPO})) and the same {docs} of activation text, the chat
+slice as plain `User:` / `Assistant:` turns, since none has a chat template.
+Configs are named as above, `<folder>-neurons-<table>` and `<folder>-heads-<table>`.
+
+| model | folder | neurons | poles | heads | kept tokens | R-lens reads writes from |
+|---|---|---|---|---|---|---|
+""" + "\n".join(rows) + """
+
+The last column is as in [More sizes of Qwen3](#more-sizes-of-qwen3): the first layer from which the R-lens read of a write
+predicts steering at a median r of 0.35 or more (§3's protocol), where the causal sample is built.
+
+""" + "\n".join(notes) + "\n"
+
+
+def dataset_card(f: dict, ladder: dict, others: dict, lens_rev: str, date: str) -> str:
     q, g = f["Qwen/Qwen3-8B"], f["google/gemma-4-12B"]
     ladder = {m: ladder[m] for m in QWEN3 if m in ladder and "configs" in ladder[m]}  # those with a released catalog
+    others = {m: others[m] for m in OTHERS if m in others and "configs" in others[m]}
     configs = [c for x in f.values() for c in x["configs"]]
     yaml = "\n".join(f"- config_name: {c}\n  data_files: \"{glob}\"" + ("\n  default: true" if i == 0 else "")
-                     for i, (c, glob, _, _) in enumerate(configs + [c for x in ladder.values() for c in x["configs"]]))
+                     for i, (c, glob, _, _) in enumerate(configs + [c for x in (*ladder.values(), *others.values()) for c in x["configs"]]))
     more_sizes = (f"\n\nThe rest of the Qwen3 family, 0.6B to 14B, post-trained and base, is catalogued the same way, {ladder_labels(ladder)}: "
                   "[More sizes of Qwen3](#more-sizes-of-qwen3).") if ladder else ""
+    more_sizes += (f" So are {others_title(others)}, without labels: [{others_title(others)}]({others_anchor(others)}).") if others else ""
     ladder_folders = ", and those under [More sizes of Qwen3](#more-sizes-of-qwen3)" if ladder else ""
-    ladder_limit = f" (Qwen3's other sizes catalogued too, {ladder_labels(ladder)})" if ladder else ""
+    ladder_folders += f" and [{others_title(others)}]({others_anchor(others)})" if others else ""
+    ladder_limit = f" (Qwen3's other sizes catalogued too, {ladder_labels(ladder)}" if ladder else ""
+    ladder_limit += (f"{', and ' if ladder else ' ('}{others_title(others)} without labels" if others else "") + (")" if ladder or others else "")
     label_checks = label_check_text([m for m in QWEN3 + MODELS if m in f or m in ladder])
     ladder_license = (", and for [More sizes of Qwen3](#more-sizes-of-qwen3) the models listed there (Apache 2.0)") if ladder else ""
+    ladder_license += (f", and for [{others_title(others)}]({others_anchor(others)}) the models listed there (Apache 2.0)") if others else ""
     config_rows = "\n".join(f"| `{c}` | {rows:,} | {what} |" for c, _, what, rows in configs)
     ql, gl = summary("reads_at_firings_qwen3-8b.json"), summary("reads_at_firings_gemma-4-12b.json")
     neuron_cols = {"read_R": "`read_R`", "read_S": "`read_S`", "write_R": "`write_R`", "write_S": "`write_S`",
@@ -1175,7 +1302,7 @@ Per model folder (`qwen3-8b/`, `gemma-4-12b/`{ladder_folders}):
   `caption`, `ref` (JSON: the dataset, config, split and revision, the row's own identifiers, the media
   file's path and its bytes' SHA-1) and `link`. The images and sounds are not re-hosted;
   `data/corpus/media-<modality>.provenance.json` on GitHub lists every source with its license.
-{ladder_catalog_text(ladder)}
+{ladder_catalog_text(ladder)}{others_catalog_text(others)}
 ## Loading
 
 ```python
@@ -1257,8 +1384,8 @@ def main() -> None:
     parts = set(filter(None, args.parts.split(",")))
     if parts - set(PARTS):
         raise ValueError(f"unknown parts: {parts - set(PARTS)}")
-    if MODEL not in MODELS + LADDER + LENS_ONLY:
-        raise ValueError(f"{MODEL} is in none of MODELS, LADDER and LENS_ONLY")
+    if MODEL not in MODELS + LADDER + OTHERS + LENS_ONLY:
+        raise ValueError(f"{MODEL} is in none of MODELS, LADDER, OTHERS and LENS_ONLY")
     if MODEL in LENS_ONLY and parts - {"lenses", "scale"}:
         raise ValueError(f"{MODEL}'s catalog goes to a branch with --tables until the cards cover it")
     if args.from_branch and parts != {"neurons", "heads", "files"}:
@@ -1298,6 +1425,7 @@ def main() -> None:
     facts_path.write_text(json.dumps(facts, indent=1) + "\n")
     every = {m: json.loads((SUMMARY / f"release_{arch.stem(m)}.json").read_text()) for m in MODELS}
     ladder = {m: json.loads(p.read_text()) for m in LADDER if (p := SUMMARY / f"release_{arch.stem(m)}.json").exists()}
+    others = {m: json.loads(p.read_text()) for m in OTHERS if (p := SUMMARY / f"release_{arch.stem(m)}.json").exists()}
 
     # The cards, and the figures they show, for both repos.
     date = time.strftime("%Y-%m-%d")
@@ -1305,12 +1433,12 @@ def main() -> None:
         shutil.rmtree(root / "figures", ignore_errors=True)
         for name in names:
             link(FIGURES / name, root / "figures" / name)
-    (lens_root / "README.md").write_text(model_card(every, ladder, date))
+    (lens_root / "README.md").write_text(model_card(every, ladder, others, date))
     built = [] if args.from_branch else [f"{stem}/{rel}" for part in parts & set(files) for _, rel in files[part]]
     stale = ["figures/*", "*/README.md", "*/figures/*"] + ([] if args.from_branch else
         [f"{stem}/*", f"{stem}/**"] if parts >= {"neurons", "heads", "files"} else [f"{stem}/{p}/**" for p in parts & {"neurons", "heads"}])
     if args.dry_run:
-        (data_root / "README.md").write_text(dataset_card(every, ladder, "(dry run)", date))
+        (data_root / "README.md").write_text(dataset_card(every, ladder, others, "(dry run)", date))
         print(f"dry run: cards in {lens_root} and {data_root}")
         if args.from_branch:
             copy_branch(stem, args.from_branch, args.branch, dry_run=True)
@@ -1328,9 +1456,9 @@ def main() -> None:
                                       if lens_files else "Cards and figures"))
     lens_rev = api.repo_info(REPO, revision=args.branch).sha[:10]
     print(f"{time.strftime('%H:%M:%S')} model repo at {lens_rev}: https://huggingface.co/{REPO}", flush=True)
-    if MODEL in LADDER and not parts & set(files):  # its lenses alone: the dataset and its card stay as they are
+    if MODEL in LADDER + OTHERS and not parts & set(files):  # its lenses alone: the dataset and its card stay as they are
         return
-    (data_root / "README.md").write_text(dataset_card(every, ladder, lens_rev, date))
+    (data_root / "README.md").write_text(dataset_card(every, ladder, others, lens_rev, date))
     api.create_repo(DATASET, repo_type="dataset", private=True, exist_ok=True)
     if args.branch:
         api.create_branch(DATASET, repo_type="dataset", branch=args.branch, exist_ok=True)
