@@ -404,7 +404,10 @@ features are rotated, so single coordinates are not units. Where the R-lens's bl
 persistent core of 190-365 coordinates; removing it at L8-L12 adds 3 nats a token and dissolves the text into function
 words. Late, the prediction moves to the remaining coordinates and spreads over them. Per-coordinate scales set the
 layout (the residual's in Qwen, the norms' weights in Gemma): units read and write the sectors near chance, apart from
-a few sink, duplicate-token and spelling units
+a few sink, duplicate-token and spelling units. Swapped between the two models as in Plato's Key, a factual prompt's
+subject key transfers in 0.54-0.57 of swaps once the map is fitted in each model's metric frame (in raw coordinates it
+fails into Gemma). It rides on the coordinates outside the lenses' blocks, spread over most of them within a few
+hundred directions; the core carries it only for one-token subjects
 ([§22](docs/findings.md#22-coordinate-sectors-where-the-residual-keeps-what-the-lenses-read)).
 
 ### VIII. Mixed units

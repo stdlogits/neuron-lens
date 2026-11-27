@@ -1,0 +1,65 @@
+[     0s] recall: qwen 0.479, gemma 0.495, both 0.359; train 3265, val 783, test 1289
+[    94s] val L4: self 0.301, best x L18 0.211 6:0.12 8:0.15 10:0.21 12:0.11 14:0.16 16:0.18 18:0.21 20:0.18 22:0.19 24:0.14 26:0.16 28:0.18 30:0.18
+[   183s] val L6: self 0.457, best x L22 0.344 6:0.21 8:0.22 10:0.25 12:0.14 14:0.27 16:0.30 18:0.34 20:0.34 22:0.34 24:0.29 26:0.30 28:0.28 30:0.28
+[   274s] val L8: self 0.547, best x L18 0.469 6:0.21 8:0.20 10:0.27 12:0.17 14:0.30 16:0.39 18:0.47 20:0.47 22:0.46 24:0.40 26:0.39 28:0.45 30:0.40
+[   364s] val L10: self 0.625, best x L18 0.562 6:0.27 8:0.27 10:0.32 12:0.21 14:0.37 16:0.46 18:0.56 20:0.54 22:0.54 24:0.00 26:0.49 28:0.52 30:0.46
+[   455s] val L12: self 0.629, best x L18 0.566 6:0.33 8:0.31 10:0.34 12:0.27 14:0.40 16:0.48 18:0.57 20:0.55 22:0.57 24:0.49 26:0.50 28:0.52 30:0.48
+/Users/a9lim/.local/share/uv/python/cpython-3.13.18-macos-aarch64-none/lib/python3.13/multiprocessing/resource_tracker.py:479: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-eig88fsj'}
+  warnings.warn(
+[     0s] recall: qwen 0.479, gemma 0.495, both 0.359; train 3265, val 783, test 1289
+[     4s] val L4: self 0.301, best x L18 0.211 6:0.12 8:0.15 10:0.21 12:0.11 14:0.16 16:0.18 18:0.21 20:0.18 22:0.19 24:0.14 26:0.16 28:0.18 30:0.18
+[     4s] val L6: self 0.457, best x L22 0.344 6:0.21 8:0.22 10:0.25 12:0.14 14:0.27 16:0.30 18:0.34 20:0.34 22:0.34 24:0.29 26:0.30 28:0.28 30:0.28
+[     4s] val L8: self 0.547, best x L18 0.469 6:0.21 8:0.20 10:0.27 12:0.17 14:0.30 16:0.39 18:0.47 20:0.47 22:0.46 24:0.40 26:0.39 28:0.45 30:0.40
+[   133s] val L10: self 0.625, best x L18 0.562 6:0.27 8:0.27 10:0.32 12:0.21 14:0.37 16:0.46 18:0.56 20:0.54 22:0.54 24:0.47 26:0.49 28:0.52 30:0.46
+[   133s] val L12: self 0.629, best x L18 0.566 6:0.33 8:0.31 10:0.34 12:0.27 14:0.40 16:0.48 18:0.57 20:0.55 22:0.57 24:0.49 26:0.50 28:0.52 30:0.48
+[   221s] val L14: self 0.602, best x L18 0.551 6:0.32 8:0.34 10:0.36 12:0.24 14:0.40 16:0.49 18:0.55 20:0.52 22:0.54 24:0.48 26:0.51 28:0.49 30:0.47
+[   309s] val L16: self 0.582, best x L18 0.539 6:0.32 8:0.32 10:0.38 12:0.27 14:0.41 16:0.48 18:0.54 20:0.51 22:0.52 24:0.45 26:0.47 28:0.49 30:0.46
+[   516s] val L18: self 0.570, best x L18 0.520 6:0.33 8:0.31 10:0.36 12:0.26 14:0.40 16:0.50 18:0.52 20:0.50 22:0.50 24:0.45 26:0.47 28:0.47 30:0.45
+[   603s] val L20: self 0.562, best x L18 0.508 6:0.32 8:0.32 10:0.36 12:0.27 14:0.40 16:0.47 18:0.51 20:0.49 22:0.48 24:0.43 26:0.46 28:0.47 30:0.43
+[   698s] val L22: self 0.523, best x L18 0.457 6:0.30 8:0.30 10:0.34 12:0.25 14:0.36 16:0.42 18:0.46 20:0.41 22:0.43 24:0.40 26:0.43 28:0.43 30:0.42
+[   791s] val L24: self 0.047, best x L22 0.051 6:0.04 8:0.04 10:0.05 12:0.03 14:0.05 16:0.05 18:0.04 20:0.04 22:0.05 24:0.04 26:0.04 28:0.05 30:0.04
+[   791s] best pair: recipient L12, donor L18
+[   829s] test self_full      full 0.599 first 0.599 kept 0.266
+[   839s] test self_c_hyb     full 0.021 first 0.021 kept 0.909
+[   849s] test self_c_mean    full 0.234 first 0.234 kept 0.443
+[   859s] test self_d_hyb     full 0.210 first 0.210 kept 0.633
+[   869s] test self_d_mean    full 0.522 first 0.522 kept 0.290
+[   879s] test x_full         full 0.545 first 0.545 kept 0.280
+[   889s] test x_full_cin     full 0.099 first 0.099 kept 0.480
+[   900s] test x_full_din     full 0.397 first 0.397 kept 0.353
+[   910s] test self_rs_hyb    full 0.002 first 0.002 kept 0.961
+[   920s] test self_randc_hyb full 0.000 first 0.000 kept 0.972
+[   930s] test self_mean      full 0.051 first 0.051 kept 0.519
+[   940s] test self_own       full 0.000 first 0.000 kept 1.000
+[   950s] test x_full_rsin    full 0.283 first 0.283 kept 0.393
+[   960s] test x_rand         full 0.036 first 0.036 kept 0.511
+[   970s] test x_shuf         full 0.029 first 0.029 kept 0.427
+[   980s] test x_pc256        full 0.531 first 0.531 kept 0.291
+[   989s] test x_c_mean       full 0.181 first 0.181 kept 0.450
+[   998s] test x_c_hyb        full 0.013 first 0.013 kept 0.917
+[  1008s] test x_d_mean       full 0.452 first 0.452 kept 0.324
+[  1018s] test x_d_hyb        full 0.177 first 0.177 kept 0.656
+[  1028s] test x_crs_mean     full 0.328 first 0.328 kept 0.390
+[  1037s] test x_crs_hyb      full 0.091 first 0.091 kept 0.791
+[  1046s] test x_randc_mean   full 0.078 first 0.078 kept 0.479
+[  1055s] test x_randc_hyb    full 0.002 first 0.002 kept 0.964
+[  1065s] test x_dpc_mean     full 0.399 first 0.399 kept 0.335
+[  1147s] depth L4 (donor L18): self_full=0.26 self_c_hyb=0.00 self_c_mean=0.04 self_d_hyb=0.06 self_d_mean=0.10 x_full=0.16 x_full_cin=0.02 x_full_din=0.07
+[  1231s] depth L6 (donor L22): self_full=0.45 self_c_hyb=0.01 self_c_mean=0.04 self_d_hyb=0.24 self_d_mean=0.37 x_full=0.31 x_full_cin=0.01 x_full_din=0.23
+[  1312s] depth L8 (donor L18): self_full=0.50 self_c_hyb=0.01 self_c_mean=0.06 self_d_hyb=0.33 self_d_mean=0.48 x_full=0.47 x_full_cin=0.04 x_full_din=0.35
+[  1387s] depth L10 (donor L18): self_full=0.59 self_c_hyb=0.01 self_c_mean=0.13 self_d_hyb=0.33 self_d_mean=0.54 x_full=0.55 x_full_cin=0.07 x_full_din=0.37
+[  1469s] depth L12 (donor L18): self_full=0.60 self_c_hyb=0.02 self_c_mean=0.23 self_d_hyb=0.21 self_d_mean=0.52 x_full=0.55 x_full_cin=0.10 x_full_din=0.40
+[  1543s] depth L14 (donor L18): self_full=0.59 self_c_hyb=0.02 self_c_mean=0.26 self_d_hyb=0.13 self_d_mean=0.47 x_full=0.53 x_full_cin=0.10 x_full_din=0.41
+[  1617s] depth L16 (donor L18): self_full=0.58 self_c_hyb=0.01 self_c_mean=0.27 self_d_hyb=0.11 self_d_mean=0.47 x_full=0.51 x_full_cin=0.13 x_full_din=0.42
+[  1692s] depth L18 (donor L18): self_full=0.56 self_c_hyb=0.01 self_c_mean=0.26 self_d_hyb=0.09 self_d_mean=0.44 x_full=0.50 x_full_cin=0.13 x_full_din=0.42
+[  1772s] depth L20 (donor L18): self_full=0.53 self_c_hyb=0.01 self_c_mean=0.24 self_d_hyb=0.11 self_d_mean=0.45 x_full=0.48 x_full_cin=0.12 x_full_din=0.41
+[  1854s] depth L22 (donor L18): self_full=0.50 self_c_hyb=0.00 self_c_mean=0.18 self_d_hyb=0.15 self_d_mean=0.44 x_full=0.45 x_full_cin=0.11 x_full_din=0.38
+[  1933s] depth L24 (donor L22): self_full=0.07 self_c_hyb=0.00 self_c_mean=0.01 self_d_hyb=0.01 self_d_mean=0.05 x_full=0.06 x_full_cin=0.00 x_full_din=0.05
+[     0s] recall: qwen 0.479, gemma 0.495, both 0.359; train 3265, val 783, test 1289
+[   212s] val L6: self 0.145, best x L4 0.012 4:0.01 6:0.01 8:0.01 10:0.01 12:0.01 14:0.01 16:0.01 18:0.01 20:0.00 22:0.01 24:0.00
+[   301s] val L8: self 0.172, best x L18 0.027 4:0.02 6:0.02 8:0.01 10:0.02 12:0.02 14:0.02 16:0.01 18:0.03 20:0.01 22:0.03 24:0.02
+[   392s] val L10: self 0.223, best x L4 0.016 4:0.02 6:0.02 8:0.01 10:0.01 12:0.01 14:0.00 16:0.00 18:0.01 20:0.01 22:0.02 24:0.01
+[   477s] val L12: self 0.320, best x L22 0.023 4:0.02 6:0.01 8:0.01 10:0.01 12:0.02 14:0.01 16:0.02 18:0.00 20:0.02 22:0.02 24:0.00
+[   572s] val L14: self 0.586, best x L24 0.027 4:0.01 6:0.01 8:0.01 10:0.02 12:0.01 14:0.01 16:0.01 18:0.02 20:0.02 22:0.01 24:0.03
+/Users/a9lim/.local/share/uv/python/cpython-3.13.18-macos-aarch64-none/lib/python3.13/multiprocessing/resource_tracker.py:479: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-m7dg0wrb'}
+  warnings.warn(

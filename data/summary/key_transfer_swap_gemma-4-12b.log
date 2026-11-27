@@ -1,0 +1,66 @@
+[     0s] recall: qwen 0.479, gemma 0.495, both 0.359; train 3265, val 783, test 1289
+[    66s] val L6: self 0.145, best x L4 0.102 4:0.10 8:0.04 12:0.04 16:0.02 20:0.04 24:0.06
+[   125s] val L8: self 0.172, best x L4 0.117 4:0.12 8:0.05 12:0.04 16:0.03 20:0.04 24:0.07
+[   183s] val L10: self 0.223, best x L4 0.086 4:0.09 8:0.03 12:0.02 16:0.02 20:0.02 24:0.04
+[   241s] val L12: self 0.320, best x L24 0.211 4:0.17 8:0.11 12:0.18 16:0.16 20:0.18 24:0.21
+[   295s] val L14: self 0.586, best x L24 0.391 4:0.18 8:0.17 12:0.36 16:0.33 20:0.33 24:0.39
+[   345s] val L16: self 0.668, best x L24 0.480 4:0.26 8:0.20 12:0.42 16:0.41 20:0.42 24:0.48
+[   395s] val L18: self 0.684, best x L24 0.578 4:0.34 8:0.35 12:0.55 16:0.48 20:0.48 24:0.58
+[   445s] val L20: self 0.656, best x L24 0.570 4:0.36 8:0.38 12:0.55 16:0.51 20:0.52 24:0.57
+[   496s] val L22: self 0.590, best x L24 0.523 4:0.30 8:0.34 12:0.51 16:0.46 20:0.47 24:0.52
+[   545s] val L24: self 0.566, best x L12 0.516 4:0.33 8:0.37 12:0.52 16:0.47 20:0.48 24:0.52
+[   596s] val L26: self 0.520, best x L24 0.453 4:0.30 8:0.29 12:0.43 16:0.41 20:0.43 24:0.45
+[   646s] val L28: self 0.402, best x L24 0.387 4:0.22 8:0.23 12:0.37 16:0.34 20:0.35 24:0.39
+[   695s] val L30: self 0.387, best x L24 0.348 4:0.16 8:0.13 12:0.26 16:0.24 20:0.24 24:0.35
+[   695s] best pair: recipient L18, donor L24
+[   736s] test self_full      full 0.655 first 0.655 kept 0.225
+[   751s] test self_c_hyb     full 0.018 first 0.018 kept 0.933
+[   766s] test self_c_mean    full 0.190 first 0.190 kept 0.455
+[   782s] test self_d_hyb     full 0.188 first 0.188 kept 0.674
+[   797s] test self_d_mean    full 0.536 first 0.536 kept 0.284
+[   812s] test x_full         full 0.541 first 0.541 kept 0.291
+[   828s] test x_full_cin     full 0.103 first 0.103 kept 0.475
+[   844s] test x_full_din     full 0.490 first 0.490 kept 0.307
+[   859s] test self_rs_hyb    full 0.014 first 0.014 kept 0.933
+[   878s] test self_randc_hyb full 0.001 first 0.001 kept 0.977
+[   898s] test self_mean      full 0.068 first 0.068 kept 0.481
+[   919s] test self_own       full 0.000 first 0.000 kept 0.994
+[   940s] test x_full_rsin    full 0.176 first 0.176 kept 0.456
+[   961s] test x_rand         full 0.029 first 0.029 kept 0.515
+[   981s] test x_shuf         full 0.037 first 0.037 kept 0.454
+[  1003s] test x_pc256        full 0.502 first 0.502 kept 0.298
+[  1023s] test x_c_mean       full 0.118 first 0.118 kept 0.498
+[  1044s] test x_c_hyb        full 0.014 first 0.014 kept 0.942
+[  1065s] test x_d_mean       full 0.453 first 0.453 kept 0.313
+[  1086s] test x_d_hyb        full 0.127 first 0.127 kept 0.738
+[  1107s] test x_crs_mean     full 0.320 first 0.320 kept 0.407
+[  1125s] test x_crs_hyb      full 0.085 first 0.085 kept 0.798
+[  1141s] test x_randc_mean   full 0.074 first 0.074 kept 0.472
+[  1157s] test x_randc_hyb    full 0.000 first 0.000 kept 0.979
+[  1172s] test x_dpc_mean     full 0.416 first 0.416 kept 0.324
+[  1307s] depth L6 (donor L4): self_full=0.12 self_c_hyb=0.01 self_c_mean=0.03 self_d_hyb=0.08 self_d_mean=0.10 x_full=0.08 x_full_cin=0.03 x_full_din=0.03
+[  1469s] depth L8 (donor L4): self_full=0.18 self_c_hyb=0.01 self_c_mean=0.03 self_d_hyb=0.07 self_d_mean=0.14 x_full=0.08 x_full_cin=0.05 x_full_din=0.04
+[  1611s] depth L10 (donor L4): self_full=0.22 self_c_hyb=0.00 self_c_mean=0.02 self_d_hyb=0.05 self_d_mean=0.11 x_full=0.07 x_full_cin=0.03 x_full_din=0.02
+[  1732s] depth L12 (donor L24): self_full=0.32 self_c_hyb=0.01 self_c_mean=0.04 self_d_hyb=0.17 self_d_mean=0.28 x_full=0.20 x_full_cin=0.03 x_full_din=0.15
+[  1854s] depth L14 (donor L24): self_full=0.58 self_c_hyb=0.01 self_c_mean=0.09 self_d_hyb=0.35 self_d_mean=0.52 x_full=0.38 x_full_cin=0.06 x_full_din=0.32
+[  1974s] depth L16 (donor L24): self_full=0.63 self_c_hyb=0.01 self_c_mean=0.12 self_d_hyb=0.42 self_d_mean=0.61 x_full=0.45 x_full_cin=0.09 x_full_din=0.41
+[  2095s] depth L18 (donor L24): self_full=0.66 self_c_hyb=0.02 self_c_mean=0.19 self_d_hyb=0.19 self_d_mean=0.54 x_full=0.54 x_full_cin=0.10 x_full_din=0.49
+[  2217s] depth L20 (donor L24): self_full=0.65 self_c_hyb=0.02 self_c_mean=0.23 self_d_hyb=0.14 self_d_mean=0.53 x_full=0.58 x_full_cin=0.12 x_full_din=0.53
+[  2337s] depth L22 (donor L24): self_full=0.57 self_c_hyb=0.03 self_c_mean=0.19 self_d_hyb=0.02 self_d_mean=0.36 x_full=0.48 x_full_cin=0.09 x_full_din=0.43
+[  2458s] depth L24 (donor L12): self_full=0.56 self_c_hyb=0.03 self_c_mean=0.23 self_d_hyb=0.01 self_d_mean=0.29 x_full=0.49 x_full_cin=0.17 x_full_din=0.44
+[  2581s] depth L26 (donor L24): self_full=0.46 self_c_hyb=0.03 self_c_mean=0.23 self_d_hyb=0.01 self_d_mean=0.25 x_full=0.42 x_full_cin=0.09 x_full_din=0.38
+[  2706s] depth L28 (donor L24): self_full=0.37 self_c_hyb=0.02 self_c_mean=0.17 self_d_hyb=0.01 self_d_mean=0.25 x_full=0.34 x_full_cin=0.07 x_full_din=0.30
+[  2832s] depth L30 (donor L24): self_full=0.36 self_c_hyb=0.01 self_c_mean=0.13 self_d_hyb=0.06 self_d_mean=0.27 x_full=0.27 x_full_cin=0.06 x_full_din=0.22
+[    54s] split self_full    all 0.668  one-token 0.865 (n 52)  multi 0.660 (n 1237)
+[    74s] split self_c_mean  all 0.203  one-token 0.538 (n 52)  multi 0.189 (n 1237)
+[    94s] split self_d_mean  all 0.544  one-token 0.750 (n 52)  multi 0.535 (n 1237)
+[   114s] split self_c_hyb   all 0.018  one-token 0.077 (n 52)  multi 0.015 (n 1237)
+[   136s] split self_d_hyb   all 0.195  one-token 0.288 (n 52)  multi 0.191 (n 1237)
+[   155s] split self_mean    all 0.072  one-token 0.000 (n 52)  multi 0.075 (n 1237)
+[   177s] split x_full       all 0.556  one-token 0.769 (n 52)  multi 0.547 (n 1237)
+[   200s] split x_full_cin   all 0.110  one-token 0.173 (n 52)  multi 0.108 (n 1237)
+[   219s] split x_full_din   all 0.498  one-token 0.673 (n 52)  multi 0.491 (n 1237)
+[   238s] split x_full_rsin  all 0.179  one-token 0.154 (n 52)  multi 0.180 (n 1237)
+[   257s] split x_c_mean     all 0.123  one-token 0.212 (n 52)  multi 0.119 (n 1237)
+[   275s] split x_d_mean     all 0.462  one-token 0.615 (n 52)  multi 0.456 (n 1237)
+[   294s] split x_crs_mean   all 0.336  one-token 0.558 (n 52)  multi 0.327 (n 1237)

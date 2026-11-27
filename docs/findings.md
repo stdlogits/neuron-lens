@@ -2026,6 +2026,53 @@ what a row with equal weight on every coordinate would give, after the norm's we
   key head with 0.72 of its key on c, 2.7 times chance; Gemma's L16 h12-h13, 0.64, 2.2 times; duplicate scores up to
   0.74 and 0.89), and over the middle layers a head's key share on c follows its sink score (ρ 0.27-0.30).
 
+**Across models, a factual key rides on d** (`checks/key_transfer.py`: Qwen3-8B and Gemma 4 12B, each into the other).
+Plato's Key ([Cheng, Liu, Yau and Ré 2026](https://hazyresearch.stanford.edu/blog/2026-11-25-platos-key)) puts a donor
+model's residual at the last token of a factual prompt's subject, mapped by a rotation and one scale fitted on centred
+keys, into a recipient's prompt for another subject of the same relation, and counts how often the recipient then gives
+the donor subject's answer. Here on 5,337 CounterFact facts both models give (21 relations, a template each; every
+answer token the argmax): maps fitted on 3,265, layers chosen on 783, 1,000 pairs scored from the other 1,289. A sector
+is kept from the donor with the rest at the recipient's training mean (*only*) or left as the recipient's own state.
+
+- **The swap transfers, fitted in each model's metric frame** (`× 1/s` at the next norm). Into Qwen at L12 from
+  Gemma's L22, 0.57 of swaps give the donor's answer; into Gemma at L18 from Qwen's L24, 0.54; the recipient's own key
+  for the donor subject gives 0.60 and 0.66, a random rotation 0.02-0.03, the key at the mean 0.05-0.07, and the map in
+  the top 256 PCs keeps 92-93%. Fitted in raw coordinates the map fails into Gemma (0.03 or less on held-out facts at
+  L6-L14, 0.01-0.17 at four pairs from L14 to L26, where the metric frame gives 0.36-0.55): Gemma's next norm reads
+  some coordinates through gains up to 364 (Qwen's 0.76), where a raw fit's error swamps the key. Into Qwen the frame
+  changes little (0.55 raw); the next norm's gain alone, or the rms of every later gain, does worse.
+
+  | swapped in | into Qwen3-8B L12 | into Gemma 4 L18 |
+  |---|---|---|
+  | the recipient's own key for the donor subject | 0.60 | 0.66 |
+  | its d only / its c only | 0.52 / 0.23 | 0.54 / 0.19 |
+  | its d / its c, into the recipient's own state | 0.21 / 0.02 | 0.19 / 0.02 |
+  | the other model's key, mapped | 0.57 | 0.54 |
+  | its d / c / r∪s alone through that map | 0.49 / 0.07 / 0.20 | 0.49 / 0.10 / 0.18 |
+  | maps fitted d→d / c→c / c∪r∪s→c∪r∪s | 0.46 / 0.16 / 0.31 | 0.45 / 0.12 / 0.32 |
+  | d's top-\|c\| PCs, mapped / random coordinates of c's size, mapped | 0.39 / 0.09 | 0.42 / 0.07 |
+
+- **Depth.** Where the key forms the core carries none of it: c only is at the floor through Qwen's L8 and Gemma's L12,
+  while d only gives 0.48 of Qwen's 0.50 at L8 and 0.61 of Gemma's 0.63 at L16. From Qwen's L10 and Gemma's L14 the
+  core's part grows (0.27 at Qwen's L16, 0.19-0.23 at Gemma's L20-L26), and the recipient's own c, r and s hold its answer
+  ever harder against a swapped-in d (Qwen 0.33 at L8 to 0.09 at L18, Gemma 0.42 at L16 to 0.01 at L24). At Qwen's L24
+  every swap is at the floor, the answer having left the subject token, yet that state is Gemma's best donor.
+- **The core holds the key when the subject is one token.** With c only, a one-token subject's key gives 0.67 in Qwen
+  and 0.54 in Gemma (36 and 52 subjects; their own keys 0.92 and 0.87, the mean 0.00) against 0.23 and 0.19 for longer
+  subjects; d only gives 0.75 for one-token subjects in both, and two-token subjects already behave like longer ones
+  (c only 0.26 and 0.22).
+- **d's part is dense in coordinates and low-rank in directions** (the recipient's own key at the best layer, k of d's
+  coordinates from the donor, the rest at the mean). Ranked by attribution (gradient × change at the midpoint between the
+  mean and the key, of the donor answer's logit over the recipient's), 1,024 of d's coordinates give 0.33 of Qwen's
+  0.52 for all 3,548 and 0.40 of Gemma's 0.54 for all 3,215 (at random 0.16 and 0.20), and d without its top 512 still
+  gives 0.35 and 0.39. d's top 128 principal components give 0.41 in both models, 256 give 0.45-0.47. Over every
+  coordinate the top 512 by attribution give 0.39 and 0.47, led by the core (82 of Qwen's top 256 against its 9% of the
+  coordinates): the core holds more of the key per coordinate, d most of it in all (0.75 of Qwen's attribution, 0.82 of
+  Gemma's).
+- **Where the map sends the core.** Of the donor's core content the full map puts 0.17 of the energy on Qwen's core and
+  0.16 on Gemma's (a fit on shuffled pairs 0.08 and 0.06), most of the rest on d, and alike for subjects whose last
+  token is the same string in both tokenizers (four in five) and for the others.
+
 **What this suggests.** In both models the residual keeps its parts on separate coordinates while the units within each
 part are rotated. n holds the scale the norms divide out. The core holds what the current token is, persistent and
 shielded from the writes, and through mid-depth each position's own prediction rests on it. d is where the layers write
@@ -2039,14 +2086,22 @@ the R-bright sector is centred on it early), but the two cuts weigh d differentl
 1.7-13 times §21's doubly dark sector, whose cut leaves out the parts of d the lens reads, more of them with depth.
 Briggs's three blocks map onto these with one change: the core and Gemma 4's first group play his quiet and persistent
 blocks, but in Qwen the late shielded group carries forward-reading token features while the late prediction sits in d.
+The factual key bears the split out causally and across models: the entity the layers build at a subject's last token
+lies in d, spread over most of its coordinates within a few hundred directions, and the core holds it only where the
+token is the subject. What a map carries from one model to the other is mostly d, which the two models align, and the
+map needs each model's metric where a model reads quiet coordinates through large gains.
 
 **Limits.** Two models and one corpus: 96 DCLM documents of 128 tokens define the sectors, 64 give the means and 64 are
 scored. The 11% cuts are hard lines on graded measures (write shielding has valleys to cut the groups, the readout share
 none). The ablations, rollouts and late tests are Qwen3-8B's, one layer at a time and to the mean, with one greedy rollout
 a prompt. The S side is the current token's footprint, not the S-lens's reads of earlier tokens. The unit measures are
-from the weights. The ICA sources (96 in the block, 48 in the late group) are fitted on half the documents. Compact
-outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*` and
-`data/summary/sectors_{unions,depth,late}_qwen3-8b.*`.
+from the weights. The ICA sources (96 in the block, 48 in the late group) are fitted on half the documents. The key
+transfer has one dataset, a post-trained Qwen against a base Gemma, success under teacher forcing, donor layers every
+fourth, and few one-token subjects (36-52), of their own kind (countries, companies) and easier to transfer. Compact
+outputs are `data/summary/sectors_{profile,basis,units}_{qwen3-8b,gemma-4-12b}.*`,
+`data/summary/sectors_{unions,depth,late}_qwen3-8b.*` and
+`data/summary/key_transfer_{swap,split,landing,sparse,frames}_{qwen3-8b,gemma-4-12b}.*` (raw-frame fits:
+`key_transfer_*_raw_*`).
 
 ## VIII. Mixed units
 

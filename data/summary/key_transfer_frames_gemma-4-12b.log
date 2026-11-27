@@ -1,0 +1,7 @@
+[    64s] frames L14 <- L12: self 0.586 raw 0.012 gain 0.016 metric 0.363 read 0.023
+[   122s] frames L18 <- L12: self 0.684 raw 0.078 gain 0.547 metric 0.547 read 0.164
+[   186s] frames L22 <- L12: self 0.590 raw 0.160 gain 0.352 metric 0.508 read 0.250
+[   247s] frames L26 <- L14: self 0.520 raw 0.168 gain 0.285 metric 0.438 read 0.395
+[    59s] frames L12 <- L18: self 0.629 raw 0.566 gain 0.574 metric 0.559 read 0.430
+[   117s] frames L8 <- L18: self 0.547 raw 0.469 gain 0.016 metric 0.492 read 0.328
+FRAMES_DONE

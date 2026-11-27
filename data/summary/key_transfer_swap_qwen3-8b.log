@@ -1,0 +1,49 @@
+[     0s] recall: qwen 0.479, gemma 0.495, both 0.359; train 3265, val 783, test 1289
+[    58s] val L4: self 0.301 6:0.14 10:0.21 14:0.14 18:0.18 22:0.20 26:0.18 30:0.18
+[   108s] val L6: self 0.457 6:0.20 10:0.23 14:0.32 18:0.32 22:0.35 26:0.30 30:0.30
+[   157s] val L8: self 0.547 6:0.25 10:0.27 14:0.35 18:0.49 22:0.48 26:0.45 30:0.45
+[   206s] val L10: self 0.625 6:0.31 10:0.32 14:0.43 18:0.57 22:0.54 26:0.49 30:0.51
+[   256s] val L12: self 0.629 6:0.31 10:0.33 14:0.46 18:0.56 22:0.59 26:0.55 30:0.51
+[   304s] val L14: self 0.602 6:0.31 10:0.33 14:0.43 18:0.55 22:0.55 26:0.54 30:0.52
+[   352s] val L16: self 0.582 6:0.33 10:0.36 14:0.44 18:0.54 22:0.55 26:0.51 30:0.51
+[   401s] val L18: self 0.570 6:0.34 10:0.34 14:0.45 18:0.54 22:0.53 26:0.50 30:0.52
+[   449s] val L20: self 0.562 6:0.32 10:0.36 14:0.45 18:0.53 22:0.50 26:0.48 30:0.48
+[   497s] val L22: self 0.523 6:0.30 10:0.34 14:0.40 18:0.47 22:0.47 26:0.46 30:0.47
+[   544s] val L24: self 0.047 6:0.04 10:0.04 14:0.05 18:0.05 22:0.04 26:0.04 30:0.04
+[   544s] best pair: recipient L12, donor L22
+[   577s] test self_full      full 0.599 kept 0.266
+[   584s] test self_c_hyb     full 0.021 kept 0.909
+[   590s] test self_c_mean    full 0.234 kept 0.443
+[   597s] test self_d_hyb     full 0.210 kept 0.633
+[   604s] test self_d_mean    full 0.522 kept 0.290
+[   611s] test x_full         full 0.569 kept 0.274
+[   618s] test x_full_cin     full 0.069 kept 0.496
+[   624s] test x_full_din     full 0.486 kept 0.312
+[   631s] test self_rs_hyb    full 0.002 kept 0.961
+[   638s] test self_randc_hyb full 0.001 kept 0.964
+[   645s] test self_mean      full 0.051 kept 0.519
+[   652s] test self_own       full 0.000 kept 1.000
+[   659s] test x_full_rsin    full 0.201 kept 0.458
+[   665s] test x_rand         full 0.024 kept 0.499
+[   672s] test x_shuf         full 0.076 kept 0.448
+[   679s] test x_pc256        full 0.526 kept 0.287
+[   686s] test x_c_mean       full 0.164 kept 0.471
+[   693s] test x_c_hyb        full 0.009 kept 0.923
+[   700s] test x_d_mean       full 0.460 kept 0.324
+[   706s] test x_d_hyb        full 0.203 kept 0.652
+[   713s] test x_crs_mean     full 0.309 kept 0.410
+[   720s] test x_crs_hyb      full 0.070 kept 0.827
+[   727s] test x_randc_mean   full 0.091 kept 0.484
+[   734s] test x_randc_hyb    full 0.001 kept 0.968
+[   741s] test x_dpc_mean     full 0.394 kept 0.341
+[   805s] depth L4 (donor L10): self_full=0.26 self_c_hyb=0.00 self_c_mean=0.04 self_d_hyb=0.06 self_d_mean=0.10 x_full=0.16 x_full_cin=0.01 x_full_din=0.13
+[   867s] depth L6 (donor L22): self_full=0.45 self_c_hyb=0.01 self_c_mean=0.04 self_d_hyb=0.24 self_d_mean=0.37 x_full=0.31 x_full_cin=0.01 x_full_din=0.22
+[   929s] depth L8 (donor L18): self_full=0.50 self_c_hyb=0.01 self_c_mean=0.06 self_d_hyb=0.33 self_d_mean=0.48 x_full=0.44 x_full_cin=0.03 x_full_din=0.37
+[   991s] depth L10 (donor L18): self_full=0.59 self_c_hyb=0.01 self_c_mean=0.13 self_d_hyb=0.33 self_d_mean=0.54 x_full=0.53 x_full_cin=0.05 x_full_din=0.45
+[  1053s] depth L12 (donor L22): self_full=0.60 self_c_hyb=0.02 self_c_mean=0.23 self_d_hyb=0.21 self_d_mean=0.52 x_full=0.57 x_full_cin=0.07 x_full_din=0.49
+[  1116s] depth L14 (donor L18): self_full=0.59 self_c_hyb=0.02 self_c_mean=0.26 self_d_hyb=0.13 self_d_mean=0.47 x_full=0.53 x_full_cin=0.09 x_full_din=0.50
+[  1179s] depth L16 (donor L22): self_full=0.58 self_c_hyb=0.01 self_c_mean=0.27 self_d_hyb=0.11 self_d_mean=0.47 x_full=0.53 x_full_cin=0.10 x_full_din=0.49
+[  1243s] depth L18 (donor L18): self_full=0.56 self_c_hyb=0.01 self_c_mean=0.26 self_d_hyb=0.09 self_d_mean=0.44 x_full=0.53 x_full_cin=0.10 x_full_din=0.50
+[  1307s] depth L20 (donor L18): self_full=0.53 self_c_hyb=0.01 self_c_mean=0.24 self_d_hyb=0.11 self_d_mean=0.45 x_full=0.49 x_full_cin=0.10 x_full_din=0.47
+[  1371s] depth L22 (donor L18): self_full=0.50 self_c_hyb=0.00 self_c_mean=0.18 self_d_hyb=0.15 self_d_mean=0.44 x_full=0.46 x_full_cin=0.08 x_full_din=0.43
+[  1435s] depth L24 (donor L18): self_full=0.07 self_c_hyb=0.00 self_c_mean=0.01 self_d_hyb=0.01 self_d_mean=0.05 x_full=0.06 x_full_cin=0.00 x_full_din=0.04
