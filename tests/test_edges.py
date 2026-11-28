@@ -85,3 +85,14 @@ def test_cos_floor_exact_rank1_and_haar_calibration():
             exceed += 1
     # Expected ~0.0124 * 400 ~= 5 exceedances; allow generous Monte Carlo margin [0, 15]
     assert exceed <= 15
+
+
+def test_sym_sqrt_rank_deficient_repeated_zeros():
+    """Rank-deficient PSD Gram matrices with many exact zero eigenvalues (e.g. OLMo 3's zeroed q_norm dims)."""
+    g = torch.Generator().manual_seed(7)
+    X = torch.randn(4, 32, 64, generator=g)
+    X[:, ::2, :] = 0.0  # half the coordinates exactly zero -> 16 repeated zero eigenvalues
+    G = X @ X.mT
+    L = heads._sym_sqrt(G)
+    assert torch.isfinite(L).all()
+    assert torch.allclose(L @ L.mT, G, rtol=1e-4, atol=1e-4)

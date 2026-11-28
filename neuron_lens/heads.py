@@ -60,8 +60,12 @@ def norm_derivative(weight: torch.Tensor, r: torch.Tensor, m: torch.Tensor, n: t
 
 def _sym_sqrt(G: torch.Tensor) -> torch.Tensor:
     """Symmetric PSD square root ``L`` (``L @ L.mT == G``) for batched ``[..., r, r]`` matrices."""
-    evals, evecs = torch.linalg.eigh(G.float())
-    return (evecs * evals.clamp_min(0).sqrt().unsqueeze(-2)) @ evecs.mT
+    # CPU fp64 LAPACK dsyevd: cuSOLVER's batched fp32 Jacobi solver fails to converge on rank-deficient
+    # Gram matrices with repeated exact zero eigenvalues (e.g. OLMo 3's zeroed q_norm coordinates).
+    Gs = 0.5 * (G + G.mT)
+    evals, evecs = torch.linalg.eigh(Gs.cpu().double())
+    L = (evecs * evals.clamp_min(0).sqrt().unsqueeze(-2)) @ evecs.mT
+    return L.to(device=G.device, dtype=torch.float32)
 
 
 def operators(model_id: str, lay, st: dict | None, extra: dict | None, dev) -> dict[str, torch.Tensor]:
