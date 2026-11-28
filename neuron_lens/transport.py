@@ -131,39 +131,139 @@ def _blocks(k: int, dim_batch: int) -> list[tuple[int, int]]:
     return [(s, min(dim_batch, k - s)) for s in range(0, k, dim_batch)]
 
 
-def _sweeps(model, maps: list, order, blocks: list[tuple[int, int]], contract: bool):
-    """``(layer, its map, block index)`` in sweep order: each block through every layer in turn, or, with
-    ``contract``, each layer's map multiplied out once and every block through it. The multiplied-out
-    maps share one buffer, so a map holds until the sweep moves to the next layer. An offloaded stack
-    (``layers.offload``) streams each layer in once, so it needs the second order."""
-    from neuron_lens import layers
-    if not contract:
-        if getattr(model, "_offload", None) is not None:
-            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, dense MLPs)")
-        return ((layer, maps[layer], i) for i in range(len(blocks)) for layer in order)
-    buf = None
-
-    def at(l):
-        nonlocal buf
-        layers.resident(model, l)
-        m = layers.contract(maps[l], buf)
-        buf = m.mlp.m
-        return m
-    return ((layer, m, i) for layer, m in ((l, at(l)) for l in order) for i in range(len(blocks)))
-
-
 def _contracts(maps: list, tangents: int, d: int) -> bool:
-    """Whether a sweep of ``tangents`` directions should multiply its MLPs out (``layers.contract``)."""
+    """Whether a sweep of ``tangents`` directions should use the tiled contracted-MLP layer-major sweep."""
     from neuron_lens import layers
     return tangents == d and all(isinstance(m.mlp, layers.DenseMLP) for m in maps)
 
 
-def _seed(b: int, N: int, d: int, start: int, device) -> torch.Tensor:
+def _seed(b: int, N: int, d: int, start: int, device, dtype=torch.float32) -> torch.Tensor:
     """``[b, N, d]``: basis direction ``start + i`` at every valid position, in copy ``i``."""
-    x = torch.zeros(b, N, d, device=device)
+    x = torch.zeros(b, N, d, device=device, dtype=dtype)
     i = torch.arange(b, device=device)
     x[i, :, start + i] = 1
     return x
+
+
+def _tangent_dtype(maps: list) -> torch.dtype:
+    """Store inter-layer tangents/cotangents in bf16 when the model runs in bf16 (halves tangent VRAM and
+    bandwidth while keeping residual updates and accumulator sums in fp32)."""
+    from neuron_lens import layers
+    return torch.bfloat16 if layers._dtype(maps[0]) == torch.bfloat16 else torch.float32
+
+
+def _s_full_step(m, X, w):
+    from neuron_lens.layers import jvp
+    X, mid = jvp(m, X)
+    return X, *((t.mean(1) if w is None else (t * w).sum(1)) for t in (mid, X))
+
+
+def _s_mix_step(m, X, rw):
+    from neuron_lens.layers import mix_jvp
+    dt = X.dtype
+    xf = X.float()
+    mid = xf + mix_jvp(m, xf)
+    return mid.to(dt), (mid * rw[None, :, None]).sum(1)
+
+
+def _s_mix_par_step(m, X):
+    from neuron_lens.layers import mix_jvp
+    return mix_jvp(m, X.float()).to(X.dtype)
+
+
+def _s_mlp_step(c, Xc, rw):
+    from neuron_lens.layers import mlp_chunk_jvp
+    dt = Xc.dtype
+    xf = Xc.float()
+    out = xf + mlp_chunk_jvp(c, xf)
+    if c.s is not None:
+        out = out * c.s
+    return out.to(dt), (out * rw[None, :, None]).sum(1)
+
+
+def _s_mlp_par_step(c, Xc, Ac, rw):
+    from neuron_lens.layers import mlp_chunk_jvp
+    dt = Xc.dtype
+    xf = Xc.float()
+    out = xf + Ac.float() + mlp_chunk_jvp(c, xf)
+    if c.s is not None:
+        out = out * c.s
+    return out.to(dt), (out * rw[None, :, None]).sum(1)
+
+
+def _r_mlp_step(c, Gc, rw):
+    from neuron_lens.layers import mlp_chunk_vjp
+    dt = Gc.dtype
+    gf = Gc.float()
+    if c.s is not None:
+        gf = gf * c.s
+    G = gf + mlp_chunk_vjp(c, gf)
+    return G.to(dt), (G * rw[None, :, None]).sum(1)
+
+
+def _r_mlp_par_step(c, Gc):
+    from neuron_lens.layers import mlp_chunk_vjp
+    return mlp_chunk_vjp(c, Gc.float()).to(Gc.dtype)
+
+
+def _s_mlp_bmm_step(c, M, Xc, rw):
+    from neuron_lens.layers import mlp_bmm_jvp
+    dt = Xc.dtype
+    xf = Xc.float()
+    out = xf + mlp_bmm_jvp(c, M, xf)
+    if c.s is not None:
+        out = out * c.s
+    return out.to(dt), (out * rw[None, :, None]).sum(1)
+
+
+def _s_mlp_bmm_par_step(c, M, Xc, Ac, rw):
+    from neuron_lens.layers import mlp_bmm_jvp
+    dt = Xc.dtype
+    xf = Xc.float()
+    out = xf + Ac.float() + mlp_bmm_jvp(c, M, xf)
+    if c.s is not None:
+        out = out * c.s
+    return out.to(dt), (out * rw[None, :, None]).sum(1)
+
+
+def _r_mlp_bmm_step(c, M, Gc, rw):
+    from neuron_lens.layers import mlp_bmm_vjp
+    dt = Gc.dtype
+    gf = Gc.float()
+    if c.s is not None:
+        gf = gf * c.s
+    G = gf + mlp_bmm_vjp(c, M, gf)
+    return G.to(dt), (G * rw[None, :, None]).sum(1)
+
+
+def _r_mlp_bmm_par_step(c, M, Gc):
+    from neuron_lens.layers import mlp_bmm_vjp
+    return mlp_bmm_vjp(c, M, Gc.float()).to(Gc.dtype)
+
+
+def _r_mix_step(m, G, rw):
+    from neuron_lens.layers import mix_vjp
+    dt = G.dtype
+    gf = G.float()
+    G2 = gf + mix_vjp(m, gf)
+    return G2.to(dt), (G2 * rw[None, :, None]).sum(1)
+
+
+def _r_mix_par_step(m, G, Gm, rw):
+    from neuron_lens.layers import mix_vjp
+    dt = G.dtype
+    gf = G.float()
+    G2 = gf + Gm.float() + mix_vjp(m, gf)
+    return G2.to(dt), (G2 * rw[None, :, None]).sum(1)
+
+
+def _fp8_seed(model, device) -> torch.Tensor:
+    s = getattr(model, "_fp8_seed", None)
+    if s is None or s.device != device:
+        s = torch.tensor(1, dtype=torch.int32, device=device)
+        model._fp8_seed = s
+    s.add_(1000003)  # distinct stream per document
+    return s
 
 
 @torch.no_grad()
@@ -179,30 +279,92 @@ def s_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     ``basis`` (``[k, d]``, orthonormal rows) seeds only those embedding directions, so the sums
     hold ``K_L Bᵀ`` (``acc`` made with ``d_in=k``): exact for inputs in the span of ``B`` (audio
     frames reach a 640-dimensional subspace); ``linearize_kw`` goes to the model's ``linearize``."""
-    linearize, jvp, _ = _maps(model)
-    maps = linearize(model, ids, **linearize_kw)
+    from neuron_lens import layers
+    maps = layers.linearize(model, ids, **linearize_kw)
     N, d, dev = _rows(maps)
-
-    def step(m, X, w):  # the layer, and its tangents' means over the target rows (inside the compiled step)
-        X, mid = jvp(m, X)
-        return X, *((t.mean(1) if w is None else (t * w).sum(1)) for t in (mid, X))
-    step = _step(step, dev)
     kinds = {t for t, _ in acc.sums}
     k = d if basis is None else basis.shape[0]
     src = None if source_rows is None else source_rows.to(dev).float()[None, :, None]
     w = None if target_rows is None else (target_rows.to(dev).float() / target_rows.sum())[None, :, None]
     blocks = _blocks(k, dim_batch)
-    X = [_seed(b, N, d, start, dev) if basis is None else
-         basis[start:start + b].to(dev, torch.float32)[:, None].expand(b, N, d).contiguous() for start, b in blocks]
+    if not _contracts(maps, k, d):
+        if getattr(model, "_offload", None) is not None:
+            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, dense MLPs)")
+        step = _step(_s_full_step, dev)
+        X = [_seed(b, N, d, start, dev) if basis is None else
+             basis[start:start + b].to(dev, torch.float32)[:, None].expand(b, N, d).contiguous() for start, b in blocks]
+        if src is not None:
+            X = [x * src for x in X]
+        for i, (start, b) in enumerate(blocks):
+            for layer, m in enumerate(maps):
+                X[i], *ests = step(m, X[i], w)
+                for kind, e in zip(("mid", "out"), ests):
+                    if kind in kinds:
+                        s = acc.sums[(kind, half)]
+                        s[layer, :, start:start + b] += e.mT.to(s.device)
+        acc.n_docs[half] += 1
+        return
+
+    rw = torch.full((N,), 1.0 / N, device=dev) if target_rows is None else (target_rows.to(dev).float() / target_rows.sum())
+    tdt = _tangent_dtype(maps)
+    X = _seed(d, N, d, 0, dev, tdt) if basis is None else basis.to(dev, tdt)[:, None].expand(d, N, d).contiguous()
     if src is not None:
-        X = [x * src for x in X]
-    for layer, m, i in _sweeps(model, maps, range(len(maps)), blocks, _contracts(maps, k, d)):
-        X[i], *ests = step(m, X[i], w)
-        start, b = blocks[i]
-        for kind, e in zip(("mid", "out"), ests):
-            if kind in kinds:
-                s = acc.sums[(kind, half)]
-                s[layer, :, start:start + b] += e.mT.to(s.device)
+        X.mul_(src.to(tdt))
+    par = torch.empty_like(X) if any(m.parallel for m in maps) else None
+    mix_step = _step(_s_mix_step, dev)
+    mix_par = _step(_s_mix_par_step, dev)
+    mlp_step = _step(_s_mlp_bmm_step if bool(getattr(model, "_fp8", False)) else _s_mlp_step, dev)
+    mlp_par = _step(_s_mlp_bmm_par_step if bool(getattr(model, "_fp8", False)) else _s_mlp_par_step, dev)
+    chunk = layers.MLP_CHUNK
+    fp8 = bool(getattr(model, "_fp8", False))
+    seed = _fp8_seed(model, dev) if fp8 else None
+    for layer, m in enumerate(maps):
+        layers.resident(model, layer)
+        if layer + 1 < len(maps):
+            layers.prefetch(model, layer + 1)
+        wd8 = layers.kernels.sr_fp8(m.mlp.wd, seed) if fp8 else None
+        if m.parallel:
+            if "mid" in kinds:
+                s = acc.sums[("mid", half)]
+                s[layer] += (X.float() * rw[None, :, None]).sum(1).mT.to(s.device)
+            for start, b in blocks:
+                par[start:start + b] = mix_par(m, X[start:start + b])
+            out_acc = torch.zeros(d, d, device=dev) if "out" in kinds else None
+            for r0 in range(0, N, chunk):
+                r1 = min(r0 + chunk, N)
+                sub = layers.slice_mlp(m, r0, r1)
+                if fp8:
+                    M = layers.contract_chunk_fp8(sub, seed, wd8)
+                    out_c, est = mlp_par(sub, M, X[:, r0:r1, :], par[:, r0:r1, :], rw[r0:r1])
+                else:
+                    out_c, est = mlp_par(sub, X[:, r0:r1, :], par[:, r0:r1, :], rw[r0:r1])
+                X[:, r0:r1, :] = out_c
+                if out_acc is not None:
+                    out_acc += est
+            if out_acc is not None:
+                s = acc.sums[("out", half)]
+                s[layer] += out_acc.mT.to(s.device)
+        else:
+            for start, b in blocks:
+                X[start:start + b], est_mid = mix_step(m, X[start:start + b], rw)
+                if "mid" in kinds:
+                    s = acc.sums[("mid", half)]
+                    s[layer, :, start:start + b] += est_mid.mT.to(s.device)
+            out_acc = torch.zeros(d, d, device=dev) if "out" in kinds else None
+            for r0 in range(0, N, chunk):
+                r1 = min(r0 + chunk, N)
+                sub = layers.slice_mlp(m, r0, r1)
+                if fp8:
+                    M = layers.contract_chunk_fp8(sub, seed, wd8)
+                    out_c, est = mlp_step(sub, M, X[:, r0:r1, :], rw[r0:r1])
+                else:
+                    out_c, est = mlp_step(sub, X[:, r0:r1, :], rw[r0:r1])
+                X[:, r0:r1, :] = out_c
+                if out_acc is not None:
+                    out_acc += est
+            if out_acc is not None:
+                s = acc.sums[("out", half)]
+                s[layer] += out_acc.mT.to(s.device)
     acc.n_docs[half] += 1
 
 
@@ -218,25 +380,92 @@ def r_lens_doc(model, ids: torch.Tensor, acc: Accumulator, half: int, *,
     For documents with image or audio tokens: ``seed_rows`` (``[N]`` bool over the valid
     positions) restricts the target positions ``t'`` seeded, and ``read_rows`` the source
     positions ``t`` averaged; ``linearize_kw`` goes to the model's ``linearize``."""
-    linearize, _, vjp = _maps(model)
-    maps = linearize(model, ids, **linearize_kw)
+    from neuron_lens import layers
+    maps = layers.linearize(model, ids, **linearize_kw)
     N, d, dev = _rows(maps)
-    vjp = _step(vjp, dev)
     kinds = {t for t, _ in acc.sums}
     last = 0 if "mid" in kinds else 1  # layer 0's map matters only for its mid
     seeds = None if seed_rows is None else seed_rows.to(dev).float()[None, :, None]
     row_w = None if read_rows is None else read_rows.to(dev).float() / read_rows.sum()
     blocks = _blocks(d, dim_batch)
-    G = [_seed(b, N, d, start, dev) * (1 if seeds is None else seeds) for start, b in blocks]
-    for layer, m, i in _sweeps(model, maps, range(len(maps) - 1, last - 1, -1), blocks, _contracts(maps, d, d)):
-        G[i], mid, est = vjp(m, G[i], None, row_w)
-        start, b = blocks[i]
-        if "mid" in kinds:
-            s = acc.sums[("mid", half)]
-            s[layer, start:start + b] += mid.to(s.device)
-        if layer > 0 and "out" in kinds:
-            s = acc.sums[("out", half)]
-            s[layer - 1, start:start + b] += est.to(s.device)
+    order = list(range(len(maps) - 1, last - 1, -1))
+    if not _contracts(maps, d, d):
+        if getattr(model, "_offload", None) is not None:
+            raise ValueError("an offloaded stack needs the layer-major sweep (all d directions, dense MLPs)")
+        vjp = _step(layers.vjp, dev)
+        G = [_seed(b, N, d, start, dev) * (1 if seeds is None else seeds) for start, b in blocks]
+        for i, (start, b) in enumerate(blocks):
+            for layer in order:
+                G[i], mid, est = vjp(maps[layer], G[i], None, row_w)
+                if "mid" in kinds:
+                    s = acc.sums[("mid", half)]
+                    s[layer, start:start + b] += mid.to(s.device)
+                if layer > 0 and "out" in kinds:
+                    s = acc.sums[("out", half)]
+                    s[layer - 1, start:start + b] += est.to(s.device)
+        acc.n_docs[half] += 1
+        return
+
+    rw = torch.full((N,), 1.0 / N, device=dev) if row_w is None else row_w
+    tdt = _tangent_dtype(maps)
+    G = _seed(d, N, d, 0, dev, tdt)
+    if seeds is not None:
+        G.mul_(seeds.to(tdt))
+    par = torch.empty_like(G) if any(m.parallel for m in maps) else None
+    fp8 = bool(getattr(model, "_fp8", False))
+    mlp_step = _step(_r_mlp_bmm_step if fp8 else _r_mlp_step, dev)
+    mlp_par = _step(_r_mlp_bmm_par_step if fp8 else _r_mlp_par_step, dev)
+    mix_step = _step(_r_mix_step, dev)
+    mix_par = _step(_r_mix_par_step, dev)
+    chunk = layers.MLP_CHUNK
+    seed = _fp8_seed(model, dev) if fp8 else None
+    for idx, layer in enumerate(order):
+        layers.resident(model, layer)
+        if idx + 1 < len(order):
+            layers.prefetch(model, order[idx + 1])
+        m = maps[layer]
+        wd8 = layers.kernels.sr_fp8(m.mlp.wd, seed) if fp8 else None
+        if m.parallel:
+            if m.s is not None:
+                G = (G.float() * m.s).to(tdt)
+            for r0 in range(0, N, chunk):
+                r1 = min(r0 + chunk, N)
+                sub = layers.slice_mlp(m, r0, r1)
+                if fp8:
+                    M = layers.contract_chunk_fp8(sub, seed, wd8)
+                    par[:, r0:r1, :] = mlp_par(sub, M, G[:, r0:r1, :])
+                else:
+                    par[:, r0:r1, :] = mlp_par(sub, G[:, r0:r1, :])
+            for start, b in blocks:
+                G[start:start + b], est = mix_par(m, G[start:start + b], par[start:start + b], rw)
+                if "mid" in kinds:
+                    s = acc.sums[("mid", half)]
+                    s[layer, start:start + b] += est.to(s.device)
+                if layer > 0 and "out" in kinds:
+                    s = acc.sums[("out", half)]
+                    s[layer - 1, start:start + b] += est.to(s.device)
+        else:
+            mid_acc = torch.zeros(d, d, device=dev) if "mid" in kinds else None
+            for r0 in range(0, N, chunk):
+                r1 = min(r0 + chunk, N)
+                sub = layers.slice_mlp(m, r0, r1)
+                if fp8:
+                    M = layers.contract_chunk_fp8(sub, seed, wd8)
+                    g_c, est = mlp_step(sub, M, G[:, r0:r1, :], rw[r0:r1])
+                else:
+                    g_c, est = mlp_step(sub, G[:, r0:r1, :], rw[r0:r1])
+                G[:, r0:r1, :] = g_c
+                if mid_acc is not None:
+                    mid_acc += est
+            if mid_acc is not None:
+                s = acc.sums[("mid", half)]
+                s[layer] += mid_acc.to(s.device)
+            if layer > 0:  # layer 0's output isn't a target and its mid doesn't pass through layer 0's mixer
+                for start, b in blocks:
+                    G[start:start + b], est = mix_step(m, G[start:start + b], rw)
+                    if "out" in kinds:
+                        s = acc.sums[("out", half)]
+                        s[layer - 1, start:start + b] += est.to(s.device)
     acc.n_docs[half] += 1
 
 

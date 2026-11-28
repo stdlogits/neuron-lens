@@ -300,18 +300,33 @@ def edge_list(e: dict, side: str, k: int = 6, value: str = "push") -> str:
     return " | ".join(f"L{l} n{n} {'+' if p > 0 else '−'} {v:.2f}" for l, n, p, v in list(rows)[:k] if l >= 0)
 
 
+def head_edge_list(e: dict, side: str, k: int = 6, value: str = "push") -> str:
+    """A unit's first ``k`` related heads on one side (``in_head``, ``v_out_head``, ``driven_head``) as ``L12h3 1.23``."""
+    rows = zip(e[f"{side}_layer"], e[side], e[f"{side}_{value}"])
+    return " | ".join(f"L{l}h{h} {v:.2f}" for l, h, v in list(rows)[:k] if l >= 0)
+
+
 def show(e: dict) -> None:
+    skip_prefix = ("top_", "src_pos", "in_", "out_", "driven_", "with_", "v_in_", "q_in_", "k_in_", "v_out_", "q_out_", "k_out_")
     for k, v in e.items():
-        if k.endswith(("_ids", "_val")) or k.startswith(("top_", "src_pos", "in_", "out_", "driven_", "with_")):
+        if k.endswith(("_ids", "_val")) or k.startswith(skip_prefix):
             continue
         if k == "contexts":
             for c in str(v).split(" ‖ "):
                 print(f"  {'context':14s} {c}")
         else:
             print(f"  {k:14s} {v:.4g}" if isinstance(v, float) else f"  {k:14s} {v}")
-    for side, value, name in (("in", "push", "in edges"), ("out", "push", "out edges"), ("driven", "share", "driven by"), ("with", "lift", "fires with")):
+    for side, value, name in (("in", "push", "in edges"), ("out", "push", "out edges"),
+                              ("v_in", "push", "v in edges"), ("q_in", "push", "q in edges"), ("k_in", "push", "k in edges"),
+                              ("driven", "share", "driven by"), ("with", "lift", "fires with")):
         if f"{side}_layer" in e:
             print(f"  {name:14s} {edge_list(e, side, value=value)}")
+    for side, value, name in (("in_head", "push", "in head edges"), ("v_out_head", "push", "v out heads"),
+                              ("q_out_head", "push", "q out heads"), ("k_out_head", "push", "k out heads"),
+                              ("v_in_head", "push", "v in heads"), ("q_in_head", "push", "q in heads"),
+                              ("k_in_head", "push", "k in heads")):
+        if f"{side}_layer" in e:
+            print(f"  {name:14s} {head_edge_list(e, side, value=value)}")
 
 
 def main() -> None:

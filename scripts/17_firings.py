@@ -153,6 +153,7 @@ def collect(args, layers: list[int], docs: list[torch.Tensor]) -> tuple[Accumula
         src.locate(a, b, T)
         with torch.inference_mode():
             stack(input_ids=ids.to(args.device), attention_mask=mask.to(args.device))
+        acc.flush()
         src.split()
         tokens += int(mask.sum())
         last = i + 1 == len(batches)
@@ -192,10 +193,11 @@ def tables(acc: Accumulator, layers: list[int], dev) -> None:
     K_mid, K_out = arch.lens(MODEL, "S_mid", S_FIT), arch.lens(MODEL, "S_out", S_FIT)
     for l in layers:
         t0 = time.perf_counter()
-        fired = acc.count[l] > 0
+        cnt = acc.count[l].cpu()
+        fired = cnt > 0
         m = {k: v[fired].to(dev) for k, v in acc.means(l).items()}
         cols = neuron_keys(l, len(fired) // arch.n_poles(MODEL))
-        cols["n_firings"] = pa.array(acc.count[l].to(torch.int16).numpy())
+        cols["n_firings"] = pa.array(cnt.to(torch.int16).numpy())
         gains = acc.gains(l)
         cols["parallel"], cols["orthogonal"] = pa.array(gains[:, 0].numpy()), pa.array(gains[:, 1].numpy())
         add = lambda name, ids, val: put(cols, name, widen(keep[ids], fired, -1), widen(val, fired, float("nan")))
@@ -220,7 +222,8 @@ def source_tables(src: Sources, smoke: bool) -> None:
     for M in src.layers:
         d = src.dense[M]
         n = d["n"].sum().clamp_min(1)
-        summary[M] = {"firings": int(d["n"].sum()), "err": max(d["err"]) if d["err"] else float("nan"), "emb": float(d["emb"].sum() / n),
+        err = d["err"].item() if d["n"].sum() > 0 else float("nan")
+        summary[M] = {"firings": int(d["n"].sum()), "err": err, "emb": float(d["emb"].sum() / n),
                       "neurons": float(d["neurons"].sum() / n), "heads": float(d["heads"].sum() / n), "const": float(d["const"].sum() / n)}
         print(f"L{M}: {summary[M]}", flush=True)
         if not smoke:

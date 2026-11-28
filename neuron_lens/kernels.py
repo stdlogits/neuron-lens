@@ -497,6 +497,191 @@ def delta_jvp(m, dq, dk, dv, db, dg):
     return out
 
 
+@triton.jit
+def _build_rows_bf16(wg_ptr, wu_ptr, cg_ptr, cu_ptr, n2_ptr, out_ptr,
+                     F, N, D, HAS_U: tl.constexpr, HAS_N2: tl.constexpr,
+                     BF: tl.constexpr, BD: tl.constexpr):
+    """Build ``rows`` ``[F, N·D]`` (bf16) reading ``wg``/``wu`` once across all ``N`` rows (coalesced along ``D``)."""
+    od = tl.program_id(0) * BD + tl.arange(0, BD)
+    of = tl.program_id(1) * BF + tl.arange(0, BF)
+    dm, fm = od < D, of < F
+    mask = fm[:, None] & dm[None, :]
+    wg = tl.load(wg_ptr + of[:, None] * D + od[None, :], mask=mask, other=0.0).to(tl.float32)
+    if HAS_U:
+        wu = tl.load(wu_ptr + of[:, None] * D + od[None, :], mask=mask, other=0.0).to(tl.float32)
+    for r in range(N):
+        cg = tl.load(cg_ptr + r * F + of, mask=fm, other=0.0).to(tl.float32)
+        val = wg * cg[:, None]
+        if HAS_U:
+            cu = tl.load(cu_ptr + r * F + of, mask=fm, other=0.0).to(tl.float32)
+            val = val + wu * cu[:, None]
+        if HAS_N2:
+            n2 = tl.load(n2_ptr + r * D + od, mask=dm, other=0.0).to(tl.float32)
+            val = val * n2[None, :]
+        tl.store(out_ptr + (of[:, None] * N + r) * D + od[None, :], val.to(tl.bfloat16), mask=mask)
+
+
+def build_rows_bf16(wg: torch.Tensor, wu: torch.Tensor | None, cg: torch.Tensor,
+                    cu: torch.Tensor | None, n2_a: torch.Tensor | None) -> torch.Tensor:
+    """Coalesced CUDA kernel building ``[F, n·D]`` bf16 for ``layers._contract_rows``."""
+    n, (F, D) = cg.shape[0], wg.shape
+    out = torch.empty(F, n * D, device=wg.device, dtype=torch.bfloat16)
+    BD, BF = 64, 64
+    _build_rows_bf16[(triton.cdiv(D, BD), triton.cdiv(F, BF))](
+        wg, wu if wu is not None else wg, cg.contiguous(),
+        cu.contiguous() if cu is not None else cg,
+        n2_a.contiguous() if n2_a is not None else cg,
+        out, F, n, D, HAS_U=(wu is not None), HAS_N2=(n2_a is not None), BF=BF, BD=BD, num_warps=4)
+    return out
+
+
+@triton.jit
+def _sr_fp8_1d(x_ptr, y_ptr, inv_s_ptr, n_elements, seed_ptr, BLOCK: tl.constexpr):
+    """Unbiased stochastic rounding of fp32/bf16 values to float8_e4m3fn (normal + subnormal)."""
+    offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    mask = offs < n_elements
+    inv_s = tl.load(inv_s_ptr)
+    seed = tl.load(seed_ptr).to(tl.uint32)
+    x = tl.clamp(tl.load(x_ptr + offs, mask=mask, other=0.0).to(tl.float32) * inv_s, -448.0, 448.0)
+    sign = tl.where(x < 0.0, -1.0, 1.0)
+    ax = tl.abs(x)
+    h = ((offs.to(tl.uint32) * 2654435761) ^ seed) * 2246822519
+    h = (h ^ (h >> 16)) * 3266489917
+    rv = h & 0xFFFFF
+    bits = ax.to(tl.uint32, bitcast=True)
+    rn = ((bits + rv) & 0xFFF00000).to(tl.float32, bitcast=True)
+    u = rv.to(tl.float32) * (1.0 / 1048576.0)
+    rs = tl.floor(ax * 512.0 + u) * (1.0 / 512.0)
+    q = tl.minimum(tl.where(ax >= 0.015625, rn, rs), 448.0) * sign
+    tl.store(y_ptr + offs, q.to(tl.float8e4nv), mask=mask)
+
+
+@triton.jit
+def _build_rows_fp8_sr(wg_ptr, wu_ptr, cg_ptr, cu_ptr, n2_ptr, out_ptr, inv_s_ptr,
+                       F, N, D, HAS_U: tl.constexpr, HAS_N2: tl.constexpr, seed_ptr,
+                       BF: tl.constexpr, BD: tl.constexpr):
+    """Coalesced build + register transpose + unbiased stochastic FP8 rounding of ``rows`` directly
+    into ``[N·D, F]`` row-major float8_e4m3fn (so ``out.T`` is col-major for ``torch._scaled_mm``)."""
+    od = tl.program_id(0) * BD + tl.arange(0, BD)
+    of = tl.program_id(1) * BF + tl.arange(0, BF)
+    dm, fm = od < D, of < F
+    m_fd = fm[:, None] & dm[None, :]
+    m_df = dm[:, None] & fm[None, :]
+    inv_s = tl.load(inv_s_ptr)
+    seed = tl.load(seed_ptr).to(tl.uint32)
+    wg = tl.load(wg_ptr + of[:, None] * D + od[None, :], mask=m_fd, other=0.0).to(tl.float32)
+    if HAS_U:
+        wu = tl.load(wu_ptr + of[:, None] * D + od[None, :], mask=m_fd, other=0.0).to(tl.float32)
+    base_h = (of[:, None].to(tl.uint32) * 2654435761) ^ (od[None, :].to(tl.uint32) * 2246822519) ^ seed
+    for r in range(N):
+        cg = tl.load(cg_ptr + r * F + of, mask=fm, other=0.0).to(tl.float32)
+        val = wg * cg[:, None]
+        if HAS_U:
+            cu = tl.load(cu_ptr + r * F + of, mask=fm, other=0.0).to(tl.float32)
+            val = val + wu * cu[:, None]
+        if HAS_N2:
+            n2 = tl.load(n2_ptr + r * D + od, mask=dm, other=0.0).to(tl.float32)
+            val = val * n2[None, :]
+        x = tl.clamp(val * inv_s, -448.0, 448.0)
+        sign = tl.where(x < 0.0, -1.0, 1.0)
+        ax = tl.abs(x)
+        h = (base_h ^ (r.to(tl.uint32) * 3266489917)) * 2246822519
+        h = (h ^ (h >> 16)) * 3266489917
+        rv = h & 0xFFFFF
+        bits = ax.to(tl.uint32, bitcast=True)
+        rn = ((bits + rv) & 0xFFF00000).to(tl.float32, bitcast=True)
+        u = rv.to(tl.float32) * (1.0 / 1048576.0)
+        rs = tl.floor(ax * 512.0 + u) * (1.0 / 512.0)
+        q = tl.minimum(tl.where(ax >= 0.015625, rn, rs), 448.0) * sign
+        qt = tl.trans(q.to(tl.float8e4nv))
+        tl.store(out_ptr + (r * D + od[:, None]) * F + of[None, :], qt, mask=m_df)
+
+
+def sr_fp8(x: torch.Tensor, seed: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Stochastically round ``x`` to ``float8_e4m3fn`` with a per-tensor scale ``s`` (unbiased)."""
+    seed.add_(1)
+    xc = x.contiguous()
+    s = xc.abs().amax().float().clamp_min(1e-12) / 448.0
+    y = torch.empty(xc.shape, device=xc.device, dtype=torch.float8_e4m3fn)
+    _sr_fp8_1d[(triton.cdiv(xc.numel(), 1024),)](xc, y, 1.0 / s, xc.numel(), seed, BLOCK=1024)
+    return y, s
+
+
+def contract_fp8_sr(wg: torch.Tensor, wu: torch.Tensor | None, wd: torch.Tensor,
+                    cg: torch.Tensor, cu: torch.Tensor | None,
+                    n2_a: torch.Tensor | None, post2_a: torch.Tensor | None,
+                    seed: torch.Tensor, wd8: tuple[torch.Tensor, torch.Tensor] | None = None) -> torch.Tensor:
+    """Unbiased stochastically rounded FP8 ``layers._contract_rows`` (``use_fast_accum=False``)."""
+    n, (F, D) = cg.shape[0], wg.shape
+    s_row = cg.abs().amax().float() * wg.abs().amax().float()
+    if wu is not None:
+        s_row = s_row + cu.abs().amax().float() * wu.abs().amax().float()
+    if n2_a is not None:
+        s_row = s_row * n2_a.abs().amax().float()
+    s_row = (s_row * 0.5).clamp_min(1e-12) / 448.0
+    seed.add_(1)
+    rows8 = torch.empty(n * D, F, device=wd.device, dtype=torch.float8_e4m3fn)
+    BD, BF = 64, 64
+    _build_rows_fp8_sr[(triton.cdiv(D, BD), triton.cdiv(F, BF))](
+        wg, wu if wu is not None else wg, cg.contiguous(),
+        cu.contiguous() if cu is not None else cg,
+        n2_a.contiguous() if n2_a is not None else cg,
+        rows8, 1.0 / s_row, F, n, D, HAS_U=(wu is not None), HAS_N2=(n2_a is not None),
+        seed_ptr=seed, BF=BF, BD=BD, num_warps=4)
+    w8, sw = sr_fp8(wd, seed) if wd8 is None else wd8
+    M = torch._scaled_mm(w8, rows8.T, scale_a=sw, scale_b=s_row, out_dtype=wd.dtype, use_fast_accum=False)
+    M = M.unflatten(1, (n, D)).transpose(0, 1)
+    if post2_a is not None:
+        M = M * post2_a[:, :, None]
+    return M
+
+
+def linear_fp8_sr(x: torch.Tensor, w8: torch.Tensor, sw: torch.Tensor, seed: torch.Tensor,
+                  out_dtype=torch.bfloat16) -> torch.Tensor:
+    """``F.linear(x, w)`` using pre-quantized ``(w8, sw)`` (``[N, K]`` row-major) and unbiased SR-FP8 on ``x``."""
+    shape = x.shape[:-1]
+    x2 = x.reshape(-1, x.shape[-1])
+    x8, sx = sr_fp8(x2, seed)
+    return torch._scaled_mm(x8, w8.T, scale_a=sx, scale_b=sw, out_dtype=out_dtype, use_fast_accum=False).view(*shape, w8.shape[0])
+
+
+@triton.jit
+def _bf16_stats_hist(x_ptr, bins_ptr, sum_ptr, sumsq_ptr, cnt_ptr, P, N,
+                     BP: tl.constexpr, BN: tl.constexpr):
+    """One-pass bf16 column sum, sum-of-squares and lookup-table histogram over ``x`` ``[P, N]``."""
+    c0 = tl.program_id(0) * BN
+    col = c0 + tl.arange(0, BN)
+    cm = col < N
+    s = tl.zeros([BN], dtype=tl.float32)
+    sq = tl.zeros([BN], dtype=tl.float32)
+    po = tl.arange(0, BP)
+    for p0 in range(0, P, BP):
+        p = p0 + po
+        mask = (p[:, None] < P) & cm[None, :]
+        xv = tl.load(x_ptr + p[:, None] * N + col[None, :], mask=mask, other=0.0)
+        xf = xv.to(tl.float32)
+        s += tl.sum(xf, 0)
+        sq += tl.sum(xf * xf, 0)
+        bits = xv.to(tl.uint16, bitcast=True).to(tl.int32)
+        b = tl.load(bins_ptr + bits, mask=mask, other=0)
+        tl.atomic_add(cnt_ptr + b * N + col[None, :], 1, mask=mask)
+    tl.store(sum_ptr + col, tl.load(sum_ptr + col, mask=cm) + s, mask=cm)
+    tl.store(sumsq_ptr + col, tl.load(sumsq_ptr + col, mask=cm) + sq, mask=cm)
+
+
+def bf16_stats_and_hist(x: torch.Tensor, bins: torch.Tensor, sum_out: torch.Tensor,
+                        sumsq_out: torch.Tensor, cnt_out: torch.Tensor) -> None:
+    """Fused CUDA pass for ``06_activations.py``: add ``x`` ``[P, N]`` (bf16) into ``sum_out``, ``sumsq_out``
+    (``[N]`` fp32) and ``cnt_out`` (``[2, NB, N]`` int32) in a single HBM read of ``x``."""
+    x = x.contiguous()
+    P, N = x.shape
+    if P == 0:
+        return
+    BN = 32
+    _bf16_stats_hist[(triton.cdiv(N, BN),)](
+        x, bins, sum_out, sumsq_out, cnt_out.view(-1), P, N, BP=64, BN=BN, num_warps=4)
+
+
 def delta_vjp(m, go):
     """``layers._delta_core_vjp`` on CUDA."""
     go = _rows(go)

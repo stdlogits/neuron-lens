@@ -191,8 +191,11 @@ class Stream:
         gp, up = anatomy.module(lay, p.gate), anatomy.module(lay, p.up)
         return gp.weight[neuron] * gamma, None if up is None else up.weight[neuron] * gamma, gp
 
-    def sources(self, cap: dict, M: int, neuron: torch.Tensor, u: torch.Tensor) -> dict:
-        """``split`` for the firings ``u`` (indices into ``cap``'s positions) of ``neuron`` ``[N]`` in layer ``M``."""
+    def sources(self, cap: dict, M: int, neuron: torch.Tensor, u: torch.Tensor,
+                acts_raw: torch.Tensor | None = None) -> dict:
+        """``split`` for the firings ``u`` (indices into ``cap``'s positions) of ``neuron`` ``[N]`` in layer ``M``.
+        Pass ``acts_raw`` (``[N, M·f]`` unscaled activations) to avoid concatenating them twice when no post-MLP norm
+        or layer scalar rescales them."""
         lay, norm = self.layers[M], arch.mid_norm(self.layers[M])  # no norm: the MLP reads the residual itself (OLMo)
         x = cap["x", M][u]
         xc = x - x.mean(-1, keepdim=True) if self.centred else x
@@ -210,11 +213,20 @@ class Stream:
         end = self.head_end[nh - 1] if nh else 0
 
         def reaching(key: str, scale: str, l: int) -> torch.Tensor:
-            v = cap[key, l][u] * self.scalars[l:M].prod()
+            v = cap[key, l][u]
+            sc = self.scalars[l:M].prod()
+            if sc != 1.0:
+                v = v * sc
             return v * cap[scale, l][u][:, None] if (scale, l) in cap else v
+        if not M:
+            acts = x[:, :0]
+        elif acts_raw is not None and all(("mlp", l) not in cap for l in range(M)) and (self.scalars[:M] == 1.0).all():
+            acts = acts_raw
+        else:
+            acts = torch.cat([reaching("a", "mlp", l) for l in range(M)], 1)
         return split(rg, ru, x, inv, cap["emb"][u] * self.scalars[:M].prod(),
                      torch.cat([reaching("z", "attn", l) for l in range(nh)], 1) if nh else x[:, :0],
-                     torch.cat([reaching("a", "mlp", l) for l in range(M)], 1) if M else x[:, :0],
+                     acts,
                      lambda r: self.neuron_reads(r, M), self.all_heads[:, :end],
                      self.head_of[:end], nh * self.n_heads, mlp.experts.act_fn if p.sparse else mlp_act(mlp),
                      self.bias_mid[M], b0)
@@ -242,20 +254,21 @@ def split(rg: torch.Tensor, ru: torch.Tensor | None, x: torch.Tensor, inv: torch
     own. Returns ``g``, ``a`` ``[N]`` and the shares ``emb``, ``const`` ``[N]``, ``heads`` ``[N, n_heads]``, ``neurons``
     ``[N, M·f]``, which sum to 1 over the four. Ungated (``ru`` None): ``a = φ(g) g`` splits as ``g`` (rows centred
     where the norm centres)."""
-    per = lambda r: torch.zeros(len(rg), n_heads, device=z.device).index_add_(1, head_of, (r @ wos) * z) * inv
     if ru is None:
         g = (rg * x).sum(-1) * inv[:, 0] + b0
-        share = lambda gx: gx / g[:, None]
-        return {"g": g, "a": act(g), "emb": share((rg * emb).sum(-1, keepdim=True) * inv)[:, 0],
-                "const": share((rg @ bias)[:, None] * inv + b0[:, None])[:, 0], "heads": share(per(rg)),
-                "neurons": share(downs(rg) * acts * inv)}
+        r_eff = (inv / g[:, None]) * rg
+        heads = torch.zeros(len(rg), n_heads, device=z.device).index_add_(1, head_of, (r_eff @ wos) * z)
+        return {"g": g, "a": act(g), "emb": (r_eff * emb).sum(-1),
+                "const": r_eff @ bias + b0 / g, "heads": heads,
+                "neurons": downs(r_eff) * acts}
     g, u = (rg * x).sum(-1) * inv[:, 0], (ru * x).sum(-1) * inv[:, 0]
     a = act(g) * u
-    share = lambda gx, ux: 0.5 * (gx / g[:, None] + ux / u[:, None])  # ½ s (g u_X + u g_X) / (s g u)
-    e = share((rg * emb).sum(-1, keepdim=True) * inv, (ru * emb).sum(-1, keepdim=True) * inv)[:, 0]
-    c = share((rg @ bias)[:, None] * inv, (ru @ bias)[:, None] * inv)[:, 0]  # (no biases in the gated models: zero)
-    return {"g": g, "a": a, "emb": e, "const": c, "heads": share(per(rg), per(ru)),
-            "neurons": share(downs(rg) * acts * inv, downs(ru) * acts * inv)}
+    # By linearity, ½ (gx / g + ux / u) collapses into one effective read row r_eff = ½ inv (rg / g + ru / u),
+    # halving the large [N, d] @ [d, M·f] and [N, d] @ [d, C] GEMMs exactly.
+    r_eff = (0.5 * inv / g[:, None]) * rg + (0.5 * inv / u[:, None]) * ru
+    heads = torch.zeros(len(rg), n_heads, device=z.device).index_add_(1, head_of, (r_eff @ wos) * z)
+    return {"g": g, "a": a, "emb": (r_eff * emb).sum(-1), "const": r_eff @ bias, "heads": heads,
+            "neurons": downs(r_eff) * acts}
 
 
 def merged(rows: torch.Tensor, ids: torch.Tensor, vals: torch.Tensor, n_ids: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -334,8 +347,18 @@ class Sources:
         self.L, self.f, self.H = len(stack.layers), self.flow.f, self.flow.n_heads  # f: a sparse layer's experts' and shared
         # expert's neurons (the config's is a dense MLP's); heads on the grid
         self.P = arch.n_poles(MODEL)
-        self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev).flatten()
-        self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev).flatten()
+        self.act_top = torch.stack([acts_column(l, "act_top") for l in range(self.L)]).to(dev)  # [L, P·f]
+        self.rate = torch.stack([acts_column(l, "rate") for l in range(self.L)]).to(dev)  # [L, P·f]
+        # Pre-split per-pole thresholds and inverse rates by sign (avoids materializing [N, M·f] int64 pole ids).
+        at_p = self.act_top.view(self.L, self.P, self.f)
+        rt_p = self.rate.view(self.L, self.P, self.f).clamp_min(self.rate_floor)
+        self.thresh_pos = (FIRE * at_p[:, 0]).reshape(-1)
+        self.inv_rate_pos = (1.0 / rt_p[:, 0]).reshape(-1)
+        if self.P == 2:
+            self.thresh_neg = (FIRE * at_p[:, 1]).reshape(-1)
+            self.inv_rate_neg = (1.0 / rt_p[:, 1]).reshape(-1)
+        self.act_top = self.act_top.flatten()
+        self.rate = self.rate.flatten()
         self.plan = {}
         for l in layers:
             t = pq.read_table(neuron_table("acts", l), columns=["top_doc", "top_pos", "top_val"])
@@ -344,8 +367,14 @@ class Sources:
         self.cap = {}
         self.sparse = {l: {"driven": [], "with": []} for l in layers}  # per batch, on the CPU: (row, ids, vals); fires-with (row, id), flat
         rows, nh = self.P * self.f, lambda l: l + (not self.flow.parallel)  # a layer's poles; the layers whose heads reach its MLP
-        self.dense = {l: {"heads": torch.zeros(rows, nh(l) * self.H), "emb": torch.zeros(rows), "neurons": torch.zeros(rows),
-                          "const": torch.zeros(rows), "n": torch.zeros(rows), "err": []} for l in layers}
+        # Keep small dense accumulators on device; keep `heads` on device when total footprint fits comfortably.
+        heads_bytes = sum(rows * nh(l) * self.H * 4 for l in layers)
+        heads_dev = dev if (not self.flow.sparse and heads_bytes <= 4 * 2**30) else "cpu"
+        self.heads_dev = heads_dev
+        self.dense = {l: {"heads": torch.zeros(rows, nh(l) * self.H, device=heads_dev),
+                          "emb": torch.zeros(rows, device=dev), "neurons": torch.zeros(rows, device=dev),
+                          "const": torch.zeros(rows, device=dev), "n": torch.zeros(rows, device=dev),
+                          "err": torch.zeros((), device=dev)} for l in layers}
         self.at, self.pending = None, {}
 
     def hooks(self) -> list:
@@ -374,46 +403,71 @@ class Sources:
                 self.layer(M, row[i:i + step], u[i:i + step])
         self.cap.clear()
 
+    def _col_to_pid(self, col: torch.Tensor, neg: torch.Tensor | None) -> torch.Tensor:
+        f = self.f
+        pid = (col // f) * (self.P * f) + (col % f)
+        return pid + f * neg.long() if neg is not None else pid
+
     def layer(self, M: int, row: torch.Tensor, u: torch.Tensor) -> None:
         cap, f = self.cap, self.f
-        s = self.flow.sources(cap, M, row.long() % f, u)
+        acts = torch.cat([cap["a", l][u] for l in range(M)], 1) if M else None  # [N, M·f], reused by flow.sources
+        s = self.flow.sources(cap, M, row.long() % f, u, acts_raw=acts)
         d = self.dense[M]
-        r = row.long().cpu()
-        d["heads"].index_add_(0, r, s["heads"].cpu())
-        d["emb"].index_add_(0, r, s["emb"].cpu())
-        d["neurons"].index_add_(0, r, s["neurons"].sum(1).cpu())
-        d["const"].index_add_(0, r, s["const"].cpu())
-        d["n"].index_add_(0, r, torch.ones(len(r)))
-        d["err"].append((s["emb"] + s["const"] + s["heads"].sum(1) + s["neurons"].sum(1) - 1).abs().amax().item())
+        r_gpu = row.long()
+        d["heads"].index_add_(0, r_gpu if self.heads_dev == self.dev else r_gpu.cpu(),
+                              s["heads"] if self.heads_dev == self.dev else s["heads"].cpu())
+        nsum = s["neurons"].sum(1)
+        d["emb"].index_add_(0, r_gpu, s["emb"])
+        d["neurons"].index_add_(0, r_gpu, nsum)
+        d["const"].index_add_(0, r_gpu, s["const"])
+        d["n"].index_add_(0, r_gpu, torch.ones(len(r_gpu), device=self.dev))
+        d["err"] = torch.maximum(d["err"], (s["emb"] + s["const"] + s["heads"].sum(1) + nsum - 1).abs().amax())
         if M == 0:
             return
-        acts = torch.cat([cap["a", l][u] for l in range(M)], 1)  # [N, M·f]
-        pid, size = self.poles(acts, M)
-        top = s["neurons"].abs().topk(min(RANK, s["neurons"].shape[1]), dim=1).indices
-        self.sparse[M]["driven"].append((r, pid.gather(1, top).int().cpu(), s["neurons"].gather(1, top).cpu()))
-        fires = (size >= FIRE * self.act_top[pid]) & (self.act_top[pid] > 0)  # a silent pole doesn't fire at zero
-        lift = fires / self.rate[pid].clamp_min(self.rate_floor)
-        top = lift.topk(min(RANK_WITH, lift.shape[1]), dim=1).indices
-        n, k = fires.gather(1, top).nonzero(as_tuple=True)
-        self.sparse[M]["with"].append((r[n.cpu()].int(), pid.gather(1, top)[n, k].int().cpu()))
-
-    def poles(self, acts: torch.Tensor, M: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """For activations ``[..., M·f]`` of layers ``< M``: the pole ids they sit in (by their sign, where a neuron has two)
-        and their size there (an ungated neuron's dip below zero is no firing)."""
-        f = self.f
-        pid = (torch.arange(M, device=self.dev)[:, None] * self.P * f + torch.arange(f, device=self.dev)).flatten()
-        return (pid + f * (acts < 0), acts.abs()) if self.P == 2 else (pid.expand_as(acts), acts)
+        Mf = M * f
+        top = s["neurons"].abs().topk(min(RANK, Mf), dim=1).indices
+        if self.P == 2:
+            neg = acts < 0
+            top_pid = self._col_to_pid(top, neg.gather(1, top))
+            thresh = torch.where(neg, self.thresh_neg[:Mf], self.thresh_pos[:Mf])
+            fires = (acts.abs() >= thresh) & (thresh > 0)
+            inv_rate = torch.where(neg, self.inv_rate_neg[:Mf], self.inv_rate_pos[:Mf])
+        else:
+            neg = None
+            top_pid = top
+            thresh = self.thresh_pos[:Mf]
+            fires = (acts >= thresh) & (thresh > 0)
+            inv_rate = self.inv_rate_pos[:Mf]
+        r_cpu = r_gpu.cpu()
+        self.sparse[M]["driven"].append((r_cpu, top_pid.int().cpu(), s["neurons"].gather(1, top).cpu()))
+        # Sparse fires-with: when few columns fire per row (typical), filter via nonzero instead of dense topk over M·f.
+        lift = torch.where(fires, inv_rate, 0.0)
+        top_w = lift.topk(min(RANK_WITH, Mf), dim=1).indices
+        n, k = fires.gather(1, top_w).nonzero(as_tuple=True)
+        col_w = top_w[n, k]
+        pid_w = self._col_to_pid(col_w, neg[n, col_w] if neg is not None else None)
+        self.sparse[M]["with"].append((r_gpu[n].int().cpu(), pid_w.int().cpu()))
 
     def state(self) -> dict:
-        return {"dense": self.dense, "sparse": self.sparse}
+        dense = {l: {k: v.cpu() for k, v in d.items()} for l, d in self.dense.items()}
+        return {"dense": dense, "sparse": self.sparse}
 
     def load(self, state: dict) -> None:
-        self.dense, self.sparse = state["dense"], state["sparse"]
+        self.dense = {}
+        for l, d in state["dense"].items():
+            err = d["err"]
+            err = torch.tensor(max(err) if err else 0.0, device=self.dev) if isinstance(err, list) else err.to(self.dev)
+            self.dense[l] = {
+                "heads": d["heads"].to(self.heads_dev),
+                "emb": d["emb"].to(self.dev), "neurons": d["neurons"].to(self.dev),
+                "const": d["const"].to(self.dev), "n": d["n"].to(self.dev), "err": err,
+            }
+        self.sparse = state["sparse"]
 
     def table(self, M: int) -> dict:
         f, L, H = self.f, self.L, self.H
         Pf = self.P * f
-        d = self.dense[M]
+        d = {k: v.cpu() for k, v in self.dense[M].items()}
         n = d["n"].clamp_min(1)
         cols = neuron_keys(M, f) | {"n_contexts": pa.array(d["n"].numpy(), pa.int16())}
         for k in ("emb", "neurons", "const"):

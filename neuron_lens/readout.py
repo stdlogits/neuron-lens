@@ -38,16 +38,35 @@ def read(
     """Top-``k`` lens probabilities and token ids per column of ``vectors`` ``[d, n]``.
 
     The unembedding matmul runs in ``unembed``'s dtype, chunked over columns so the
-    ``[vocab, chunk]`` logits stay bounded. Returns CPU ``([n, k] probs, [n, k] ids)``.
+    ``[chunk, vocab]`` logits stay bounded and row-major for fast contiguous ``topk``.
+    Returns CPU ``([n, k] probs, [n, k] ids)``.
     """
     t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
     probs, ids = [], []
     for s in range(0, t.shape[1], chunk):
-        logits = (unembed @ t[:, s:s + chunk].to(unembed.dtype)).float()
-        top, idx = logits.topk(k, dim=0)
-        probs.append((top - logits.logsumexp(0, keepdim=True)).exp().T.cpu())
-        ids.append(idx.T.cpu())
+        logits = (t[:, s:s + chunk].T.to(unembed.dtype) @ unembed.T).float()
+        top, idx = logits.topk(k, dim=1)
+        probs.append((top - logits.logsumexp(1, keepdim=True)).exp().cpu())
+        ids.append(idx.cpu())
     return torch.cat(probs), torch.cat(ids)
+
+
+def _linear_stats(t: torch.Tensor, mat: torch.Tensor, vchunk: int = 16384, floor: float = 1e-8) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-row mean and std of ``mat @ t`` (``mat`` ``[V, d]``, ``t`` ``[d, n]``) using the ``[d, d]`` centred Gram
+    matrix of ``t``, avoiding an extra ``[V, n]`` matrix product and avoiding catastrophic cancellation."""
+    n = t.shape[1]
+    tf = t.float()
+    t_mean = tf.mean(1)
+    tc = tf - t_mean[:, None]
+    G = (tc @ tc.T) / n  # [d, d]
+    V = mat.shape[0]
+    mean = torch.empty(V, device=mat.device, dtype=torch.float32)
+    var = torch.empty(V, device=mat.device, dtype=torch.float32)
+    for s in range(0, V, vchunk):
+        u = mat[s:s + vchunk].float()
+        mean[s:s + vchunk] = u @ t_mean
+        var[s:s + vchunk] = ((u @ G) * u).sum(-1)
+    return mean, var.clamp_min(floor).sqrt()
 
 
 def layer_logit_stats(
@@ -62,15 +81,30 @@ def layer_logit_stats(
     """Per-token mean and std of the lens logit across a layer's columns, for z-scored
     (layer-contrastive) reads that remove what every neuron of the layer writes."""
     t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
-    total = torch.zeros(unembed.shape[0], device=unembed.device)
-    sq = torch.zeros_like(total)
+    return _linear_stats(t, unembed)
+
+
+def vocab_moments(
+    vectors: torch.Tensor,
+    unembed: torch.Tensor,
+    gamma: torch.Tensor,
+    *,
+    chunk: int = 2048,
+    softcap: float | None = None,
+    centre: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-column skew and kurtosis of ``W_U · norm(w)`` over the vocabulary (no z-stats or topk)."""
+    t = rms_norm_columns(vectors.float(), gamma.to(vectors.device, torch.float32), centre=centre)
+    skew, kurt = [], []
     for s in range(0, t.shape[1], chunk):
-        logits = (unembed @ t[:, s:s + chunk].to(unembed.dtype)).float()
-        total += logits.sum(1)
-        sq += logits.pow(2).sum(1)
-    n = t.shape[1]
-    mean = total / n
-    return mean, (sq / n - mean.pow(2)).clamp_min(1e-8).sqrt()
+        lg = (t[:, s:s + chunk].T.to(unembed.dtype) @ unembed.T).float()
+        if softcap:
+            lg = torch.tanh(lg / softcap) * softcap
+        c = lg - lg.mean(1, keepdim=True)
+        var = c.pow(2).mean(1)
+        skew.append((c.pow(3).mean(1) / var.pow(1.5)).cpu())
+        kurt.append((c.pow(4).mean(1) / var.pow(2)).cpu())
+    return torch.cat(skew), torch.cat(kurt)
 
 
 def read_z(
@@ -86,8 +120,8 @@ def read_z(
 ) -> torch.Tensor:
     """Top-``k`` token ids per column by lens logit z-scored against ``layer_logit_stats``."""
     t = rms_norm_columns(transport(vectors, jacobian), gamma.to(vectors.device, torch.float32), centre=centre)
-    logits = (unembed @ t.to(unembed.dtype)).float()
-    return ((logits - mean[:, None]) / std[:, None]).topk(k, dim=0).indices.T.cpu()
+    logits = (t.T.to(unembed.dtype) @ unembed.T).float()
+    return ((logits - mean) / std).topk(k, dim=1).indices.cpu()
 
 
 def layer_reads(
@@ -99,13 +133,13 @@ def layer_reads(
     signs: tuple[int, ...] = (1, -1),
     k: int = 10,
     kz: int = 8,
-    chunk: int = 1024,
+    chunk: int = 2048,
     softcap: float | None = None,
     renorm: bool = True,
     centre: bool = False,
 ) -> dict:
-    """Every column's read on each sign (pole), from one unembedding product kept whole (where it fits ``WHOLE``; else
-    made a chunk of columns at a time, once for the z statistics and once for the reads).
+    """Every column's read on each sign (pole), from row-major ``[chunk, vocab]`` unembedding blocks so
+    ``topk``, ``logsumexp`` and moments reduce along the contiguous dimension.
     With ``softcap`` (Gemma), the logits are the model's: ``softcap · tanh(logits / softcap)``.
     ``renorm=False`` keeps each column's size (columns already on the final norm's scale, before its weight, and
     centred where it centres).
@@ -120,42 +154,50 @@ def layer_reads(
     t = rms_norm_columns(transport(vectors, jacobian), gamma, centre=centre) if renorm else \
         transport(vectors, jacobian) * gamma[:, None]
     n = t.shape[1]
-    # the product kept whole where it fits WHOLE, else made a chunk at a time, twice (a sparse layer's 131,584 neurons
-    # against Qwen3.5's vocabulary would be a 30 GB product)
-    logits = unembed @ t.to(unembed.dtype) if unembed.shape[0] * n <= WHOLE else None
-    if softcap and logits is not None:  # in place, a chunk of columns at a time (a whole fp32 copy is 7 GB for Gemma 4)
-        for s in range(0, n, chunk):
-            logits[:, s:s + chunk] = (torch.tanh(logits[:, s:s + chunk].float() / softcap) * softcap).to(logits.dtype)
-
-    def block(s: int) -> torch.Tensor:
+    if softcap is None:
+        # Linear logits: exact per-token mean/std via the [d, d] centred Gram matrix of t, so each column chunk
+        # runs t.T @ unembed.T only once and no whole [n, V] logits matrix is materialized.
+        mean, std = _linear_stats(t, unembed)
+        def block(s: int) -> torch.Tensor:
+            return (t[:, s:s + chunk].T.to(unembed.dtype) @ unembed.T).float()
+    else:
+        # Softcap is nonlinear: keep the product whole where it fits WHOLE, else chunk twice.
+        logits = t.T.to(unembed.dtype) @ unembed.T if unembed.shape[0] * n <= WHOLE else None
         if logits is not None:
-            return logits[:, s:s + chunk].float()
-        lg = unembed @ t[:, s:s + chunk].to(unembed.dtype)
-        return (torch.tanh(lg.float() / softcap) * softcap).to(lg.dtype).float() if softcap else lg.float()
-    total = torch.zeros(unembed.shape[0], device=unembed.device)
-    sq = torch.zeros_like(total)
-    for s in range(0, n, chunk):
-        lg = block(s)
-        total += lg.sum(1)
-        sq += lg.pow(2).sum(1)
-    mean = total / n
-    std = (sq / n - mean.pow(2)).clamp_min(1e-8).sqrt()
+            for s in range(0, n, chunk):
+                logits[s:s + chunk] = (torch.tanh(logits[s:s + chunk].float() / softcap) * softcap).to(logits.dtype)
+
+        def block(s: int) -> torch.Tensor:
+            if logits is not None:
+                return logits[s:s + chunk].float()
+            lg = t[:, s:s + chunk].T.to(unembed.dtype) @ unembed.T
+            return (torch.tanh(lg.float() / softcap) * softcap).to(lg.dtype).float()
+        total = torch.zeros(unembed.shape[0], device=unembed.device)
+        sq = torch.zeros_like(total)
+        for s in range(0, n, chunk):
+            lg = block(s)
+            total += lg.sum(0)
+            sq += lg.pow(2).sum(0)
+        mean = total / n
+        std = (sq / n - mean.pow(2)).clamp_min(1e-8).sqrt()
     out = {"ids": {s: [] for s in signs}, "probs": {s: [] for s in signs},
            "zids": {s: [] for s in signs}, "z": {s: [] for s in signs}, "skew": [], "kurt": []}
     for s in range(0, n, chunk):
-        lg = block(s)
-        z = (lg - mean[:, None]) / std[:, None]
+        lg = block(s)  # [chunk, V] contiguous
+        z = (lg - mean) / std
         for sign in signs:
-            top, idx = (sign * lg).topk(k, dim=0)
-            out["probs"][sign].append((top - (sign * lg).logsumexp(0, keepdim=True)).exp().T.cpu())
-            out["ids"][sign].append(idx.T.cpu())
-            zt = (sign * z).topk(kz, dim=0)
-            out["zids"][sign].append(zt.indices.T.cpu())
-            out["z"][sign].append(zt.values.T.cpu())
-        c = lg - lg.mean(0, keepdim=True)
-        var = c.pow(2).mean(0)
-        out["skew"].append((c.pow(3).mean(0) / var.pow(1.5)).cpu())
-        out["kurt"].append((c.pow(4).mean(0) / var.pow(2)).cpu())
+            slg = lg if sign == 1 else -lg
+            top, idx = slg.topk(k, dim=1)
+            out["probs"][sign].append((top - slg.logsumexp(1, keepdim=True)).exp().cpu())
+            out["ids"][sign].append(idx.cpu())
+            sz = z if sign == 1 else -z
+            zt = sz.topk(kz, dim=1)
+            out["zids"][sign].append(zt.indices.cpu())
+            out["z"][sign].append(zt.values.cpu())
+        c = lg - lg.mean(1, keepdim=True)
+        var = c.pow(2).mean(1)
+        out["skew"].append((c.pow(3).mean(1) / var.pow(1.5)).cpu())
+        out["kurt"].append((c.pow(4).mean(1) / var.pow(2)).cpu())
     return {key: {s: torch.cat(v[s]) for s in signs} if isinstance(v, dict) else torch.cat(v)
             for key, v in out.items()}
 
@@ -163,14 +205,9 @@ def layer_reads(
 def s_tops(cov: torch.Tensor, emb: torch.Tensor, signs: tuple[int, ...], k: int, chunk: int = 2048) -> dict:
     """S-lens reads of unit covector rows ``cov`` ``[n, d]`` over the kept embeddings: per sign, the
     top raw scores and the top layer-contrastive z (each token's score z-scored across the rows)."""
-    n, dev = len(cov), cov.device
-    s1, s2 = torch.zeros(len(emb), device=dev), torch.zeros(len(emb), device=dev)
-    for s in range(0, n, chunk):
-        sc = (cov[s:s + chunk].half() @ emb.T).float()
-        s1 += sc.sum(0)
-        s2 += sc.pow(2).sum(0)
-    mean = s1 / n
-    std = (s2 / n - mean.pow(2)).clamp_min(1e-12).sqrt()
+    n = len(cov)
+    # Exact per-token mean/std from the [d, d] centred Gram of cov, halving the [n, V] GEMMs.
+    mean, std = _linear_stats(cov.T, emb, floor=1e-12)
     out = {(kind, sign): [] for kind in ("raw", "z") for sign in signs}
     for s in range(0, n, chunk):
         sc = (cov[s:s + chunk].half() @ emb.T).float()

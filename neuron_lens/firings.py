@@ -105,36 +105,48 @@ def _sparse_weights(lay, p) -> dict:
 
 class Accumulator:
     """Running sums ``[rows, d]`` per site and layer (``rows`` a layer's poles, ``P·f``), on the CPU; ``hooks`` adds to them
-    during a forward pass. Between ``begin`` and the end of each batch, documents ``a..b`` are rows ``0..`` of the batch."""
+    during a forward pass. Between ``begin`` and ``flush``, documents ``a..b`` are rows ``0..`` of the batch."""
 
     def __init__(self, plan: dict[int, tuple], rows: int, d: int, device):
         self.plan = {l: tuple(t.to(device) for t in p) for l, p in plan.items()}
         self.layers = sorted(plan)
-        self.dev = device
+        self.dev = torch.device(device)
         self.sum = {site: {l: torch.zeros(rows, d) for l in self.layers} for site in SITES}
-        self.count = {l: torch.zeros(rows) for l in self.layers}
-        self.gain = {l: torch.zeros(rows, 2) for l in self.layers}  # parallel, orthogonal, summed
-        self.scale, self.weights, self.map = {}, {}, {}
+        self.count = {l: torch.zeros(rows, device=self.dev) for l in self.layers}
+        self.gain = {l: torch.zeros(rows, 2, device=self.dev) for l in self.layers}  # parallel, orthogonal, summed
+        self.scale, self.weights, self.map, self.batch = {}, {}, {}, {}
+        self._buf: list[tuple[str, int, torch.Tensor, torch.Tensor]] = []
         self.a = self.b = 0
 
     def begin(self, a: int, b: int) -> None:
         self.a, self.b = a, b
+        self.batch = {}
+        self._buf = []
+        for l in self.layers:
+            doc, pos, row = self.plan[l]
+            lo, hi = torch.searchsorted(doc, a), torch.searchsorted(doc, b)
+            self.batch[l] = (doc[lo:hi] - a, pos[lo:hi], row[lo:hi].long())
 
-    def _firings(self, l: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        doc, pos, row = self.plan[l]
-        lo, hi = torch.searchsorted(doc, self.a), torch.searchsorted(doc, self.b)
-        return doc[lo:hi] - self.a, pos[lo:hi], row[lo:hi]
+    def flush(self) -> None:
+        """Transfer a batch's buffered site contributions to CPU once, avoiding mid-pass GPU→CPU syncs."""
+        if not self._buf:
+            return
+        for site, l, r, v in self._buf:
+            self.sum[site][l].index_add_(0, r.cpu(), v.cpu())
+        self._buf.clear()
 
     def before(self, l: int, x: torch.Tensor) -> None:
-        bi, p, r = self._firings(l)
+        bi, p, r = self.batch[l]
+        if not len(r):
+            self.scale[l] = self.map[l] = None
+            return
         v = x[bi, p].float()
         if self.weights[l]["centred"]:
             v = v - v.mean(-1, keepdim=True)
         self.scale[l] = torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))
-        self.map[l] = self.self_map(l, v, r.long(), self.scale[l][:, 0])
-        r = r.long().cpu()
-        self.sum["before"][l].index_add_(0, r, (v * self.scale[l]).cpu())
-        self.count[l].index_add_(0, r, torch.ones(len(r)))
+        self.map[l] = self.self_map(l, v, r, self.scale[l][:, 0])
+        self._buf.append(("before", l, r, v * self.scale[l]))
+        self.count[l].index_add_(0, r, torch.ones(len(r), device=r.device))
 
     def self_map(self, l: int, x: torch.Tensor, row: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
         """``[n, 2]``: at firings of poles ``row`` with residual ``x`` and norm scale ``k``, ``parallel`` and ``orthogonal``."""
@@ -157,21 +169,26 @@ class Accumulator:
         return torch.stack([par, (size2 - par.square()).clamp_min(0).sqrt()], 1)
 
     def mlp(self, l: int, out: torch.Tensor, scalar, post) -> None:
-        bi, p, r = self._firings(l)
+        bi, p, r = self.batch[l]
+        if not len(r):
+            return
         v = out[bi, p].float() * (1 if scalar is None else scalar.float().reshape(()))
         if self.weights[l]["centred"]:
             v = v - v.mean(-1, keepdim=True)
-        r = r.long().cpu()
-        self.sum["mlp"][l].index_add_(0, r, (v * self.scale[l]).cpu())
-        self.gain[l].index_add_(0, r, (self.map[l] if post is None else self.map[l] * post[bi, p].float()[:, None]).cpu())
+        self._buf.append(("mlp", l, r, v * self.scale[l]))
+        self.gain[l].index_add_(0, r, self.map[l] if post is None else self.map[l] * post[bi, p].float()[:, None])
 
     def pred(self, x: torch.Tensor) -> None:
+        # Normalize the final residual once per batch rather than once per layer.
+        xf = x.float()
+        if self.layers and self.weights[self.layers[0]]["centred"]:
+            xf = xf - xf.mean(-1, keepdim=True)
+        xf = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))
         for l in self.layers:
-            bi, p, r = self._firings(l)
-            v = x[bi, p].float()
-            if self.weights[l]["centred"]:
-                v = v - v.mean(-1, keepdim=True)
-            self.sum["pred"][l].index_add_(0, r.long().cpu(), (v * torch.rsqrt(v.pow(2).mean(-1, keepdim=True).clamp_min(1e-12))).cpu())
+            bi, p, r = self.batch[l]
+            if not len(r):
+                continue
+            self._buf.append(("pred", l, r, xf[bi, p]))
 
     def hooks(self, stack) -> list:
         out = []
@@ -186,15 +203,19 @@ class Accumulator:
 
     def means(self, l: int) -> dict[str, torch.Tensor]:
         """The layer's means ``[P·f, d]`` (zero rows for poles without a firing)."""
-        n = self.count[l].clamp_min(1)[:, None]
+        n = self.count[l].cpu().clamp_min(1)[:, None]
         return {site: self.sum[site][l] / n for site in SITES}
 
     def gains(self, l: int) -> torch.Tensor:
         """``[P·f, 2]``: the layer's ``parallel`` and ``orthogonal``, each pole's mean over its firings (NaN without any)."""
-        return torch.where(self.count[l] > 0, self.gain[l].T / self.count[l].clamp_min(1), torch.tensor(float("nan"))).T
+        cnt, g = self.count[l].cpu(), self.gain[l].cpu()
+        return torch.where(cnt > 0, g.T / cnt.clamp_min(1), torch.tensor(float("nan"))).T
 
     def state(self) -> dict:
-        return {"sum": self.sum, "count": self.count, "gain": self.gain}
+        return {"sum": self.sum, "count": {l: v.cpu() for l, v in self.count.items()},
+                "gain": {l: v.cpu() for l, v in self.gain.items()}}
 
     def load(self, state: dict) -> None:
-        self.sum, self.count, self.gain = state["sum"], state["count"], state["gain"]
+        self.sum = state["sum"]
+        self.count = {l: v.to(self.dev) for l, v in state["count"].items()}
+        self.gain = {l: v.to(self.dev) for l, v in state["gain"].items()}

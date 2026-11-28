@@ -113,3 +113,64 @@ def test_moe_up_matches_reference(jvp):
         gp = torch.nn.functional.grouped_mm(rows, w, offs=offs * b).view(-1, b, I)
         want = torch.cat((cg[:, None] * gp, cu[:, None] * gp), -1).reshape(-1, 2 * I)
     assert rel(kernels.moe_up(pos, offs, cg, cu, x, w, jvp).float(), want.float()) < 1e-2
+
+
+def test_build_rows_bf16_matches_reference():
+    torch.manual_seed(0)
+    N, F, D = 12, 192, 128
+    wg = torch.randn(F, D, device="cuda", dtype=torch.bfloat16)
+    wu = torch.randn(F, D, device="cuda", dtype=torch.bfloat16)
+    cg = torch.randn(N, F, device="cuda", dtype=torch.bfloat16)
+    cu = torch.randn(N, F, device="cuda", dtype=torch.bfloat16)
+    n2 = torch.randn(N, D, device="cuda", dtype=torch.bfloat16)
+    got = kernels.build_rows_bf16(wg, wu, cg, cu, n2)
+    want = (cg[:, :, None].float() * wg[None].float() + cu[:, :, None].float() * wu[None].float()) * n2[:, None, :].float()
+    want = want.to(torch.bfloat16).permute(1, 0, 2).reshape(F, N * D)
+    assert rel(got.float(), want.float()) < 1e-3
+    # Ungated without norm scale
+    got_ug = kernels.build_rows_bf16(wg, None, cg, None, None)
+    want_ug = (cg[:, :, None].float() * wg[None].float()).to(torch.bfloat16).permute(1, 0, 2).reshape(F, N * D)
+    assert rel(got_ug.float(), want_ug.float()) < 1e-3
+
+
+def test_contract_fp8_sr_unbiased():
+    if torch.cuda.get_device_capability()[0] < 9 and torch.cuda.get_device_capability() < (8, 9):
+        pytest.skip("FP8 scaled_mm requires compute capability >= 8.9")
+    torch.manual_seed(0)
+    N, F, D = 8, 256, 128
+    wg = torch.randn(F, D, device="cuda", dtype=torch.bfloat16)
+    wu = torch.randn(F, D, device="cuda", dtype=torch.bfloat16)
+    wd = torch.randn(D, F, device="cuda", dtype=torch.bfloat16)
+    cg = torch.randn(N, F, device="cuda", dtype=torch.bfloat16)
+    cu = torch.randn(N, F, device="cuda", dtype=torch.bfloat16)
+    n2 = torch.randn(N, D, device="cuda", dtype=torch.bfloat16)
+    post2 = torch.randn(N, D, device="cuda", dtype=torch.bfloat16)
+    rows = (cg[:, :, None].float() * wg[None].float() + cu[:, :, None].float() * wu[None].float()) * n2[:, None, :].float()
+    want = torch.einsum("df,nfd->nd", wd.float(), rows)  # check full matrix via matmul
+    want = (wd.float() @ rows.transpose(1, 2).reshape(N * D, F).T).unflatten(1, (N, D)).transpose(0, 1) * post2[:, :, None].float()
+    seed = torch.tensor(42, device="cuda", dtype=torch.int64)
+    acc = torch.zeros_like(want)
+    draws = 64
+    for _ in range(draws):
+        acc += kernels.contract_fp8_sr(wg, wu, wd, cg, cu, n2, post2, seed).float()
+    # Unbiased stochastic rounding converges at O(1/sqrt(draws)): ~0.008 at 64 draws, well under 0.02
+    assert rel(acc / draws, want) < 2e-2
+
+
+def test_bf16_stats_and_hist_exact():
+    torch.manual_seed(0)
+    P, N, NB = 513, 257, 82
+    x = torch.randn(P, N, device="cuda", dtype=torch.bfloat16) * 4.0
+    bins = torch.randint(0, 2 * NB, (65536,), device="cuda", dtype=torch.int32)
+    s_got = torch.zeros(N, device="cuda", dtype=torch.float32)
+    sq_got = torch.zeros(N, device="cuda", dtype=torch.float32)
+    cnt_got = torch.zeros(2, NB, N, device="cuda", dtype=torch.int32)
+    kernels.bf16_stats_and_hist(x, bins, s_got, sq_got, cnt_got)
+    xf = x.float()
+    assert rel(s_got, xf.sum(0)) < 1e-5
+    assert rel(sq_got, xf.pow(2).sum(0)) < 1e-5
+    bits = x.view(torch.uint16).to(torch.int64)
+    b = bins[bits].to(torch.int64)
+    cnt_want = torch.zeros(2 * NB, N, device="cuda", dtype=torch.int32)
+    cnt_want.scatter_add_(0, b, torch.ones_like(b, dtype=torch.int32))
+    assert torch.equal(cnt_got.view(2 * NB, N), cnt_want)

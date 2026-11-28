@@ -118,6 +118,7 @@ except ImportError:  # no Triton (macOS): the cores run in torch
     kernels = None
 
 CHUNK = 32  # DeltaNet's chunk length (positions) for the derivative's chunked passes
+MLP_CHUNK = 16  # rows per tiled contracted-MLP chunk (keeps [chunk, d, d] small and BMMs compute-bound)
 
 
 class Norm(NamedTuple):
@@ -231,9 +232,13 @@ class DenseMLP(NamedTuple):
     cu: torch.Tensor | None  # [N, d_ff]: the up projection's factor (β·act(g); or act(g))
 
 
-class Contracted(NamedTuple):
-    """A dense MLP's map as one matrix per row, ``[N, d, d]`` (``contract``)."""
-    m: torch.Tensor
+class MLPChunk(NamedTuple):
+    """A slice of rows of a layer's dense MLP and its surrounding norms (for tiled contracted sweeps)."""
+    mlp: DenseMLP
+    n2: Norm | None
+    post2: Norm | None
+    s: torch.Tensor | None
+    fp8: bool = False
 
 
 class Layer(NamedTuple):
@@ -241,10 +246,11 @@ class Layer(NamedTuple):
     mix: Attention | DeltaNet
     post1: Norm | None
     n2: Norm | None
-    mlp: DenseMLP | MoE | Contracted
+    mlp: DenseMLP | MoE
     post2: Norm | None
     s: torch.Tensor | None  # []: the layer scalar
     parallel: bool  # both sublayers read the layer's input (GPT-NeoX)
+    fp8: bool = False  # unbiased stochastic-rounded FP8 on Hopper+ GPUs (use_fast_accum=False)
 
 
 # ------------------------------------------------------------------------------------ primal
@@ -702,6 +708,8 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
     maps = []
     for i, layer in enumerate(model.layers):
         resident(model, i)
+        if i + 1 < len(model.layers):
+            prefetch(model, i + 1)
         p = anatomy.parts(layer)
         n1, post1, n2, post2 = (anatomy.module(layer, n) for n in (p.n1, p.post1, p.n2, p.post2))
         parallel = p.parallel
@@ -753,7 +761,8 @@ def _run(model, ids: torch.Tensor, embeds=None, block=None, first=None, rules: s
             post1=None if post1 is None else _norm_map(post1, a_in, rp1, S, exact),
             n2=_norm_map(n2, h_mid, r2, S, exact), mlp=mlp,
             post2=None if post2 is None else _norm_map(post2, z_in, rp2, S, exact),
-            s=None if scalar is None else scalar.float().reshape(()), parallel=parallel))
+            s=None if scalar is None else scalar.float().reshape(()), parallel=parallel,
+            fp8=bool(getattr(model, "_fp8", False))))
         h = h_out
     return maps, h
 
@@ -785,44 +794,74 @@ class _Offload:
     keep: int
     host: dict  # layer → [(parameter or buffer, its pinned host storage)]
     on: int | None = None  # the streamed layer on the GPU now
+    stream: torch.cuda.Stream | None = None  # side stream overlapping H2D copies with compute
+    prefetched: int | None = None  # next layer prefetched on GPU
+    prefetched_ts: list | None = None
+    ready: torch.cuda.Event | None = None
 
 
 def offload(model, device, keep: int):
     """Place a decoder stack loaded on the CPU: everything on ``device`` except layers ``keep..``,
-    which stay in pinned host memory and move to the GPU one at a time (``resident``). For a model
-    whose weights don't fit on one GPU beside a fit's working set (Qwen3-32B: 62 GB of layers, and
-    about 50 GB of sums, tangents and contracted MLPs). The maps hold the layers' parameters, whose
-    storage moves under them, so every pass calls ``resident`` before it uses a layer: the primal
-    (``_run``), and the fits' sweeps, which take each layer once per document (layer-major,
-    ``transport._sweeps``); a streamed layer crosses to the GPU twice a document. Returns the stack."""
+    which stay in pinned host memory and move to the GPU one at a time (``resident``, overlapped via
+    ``prefetch`` on a side CUDA stream). For a model whose weights don't fit on one GPU beside a
+    fit's working set (Qwen3-32B: 62 GB of layers, and about 45 GB of sums and tangents). The maps
+    hold the layers' parameters, whose storage moves under them, so every pass calls ``resident``
+    before it uses a layer: the primal (``_run``), and the fits' sweeps, which take each layer once
+    per document (layer-major, ``transport``); a streamed layer crosses to the GPU twice a document.
+    Returns the stack."""
+    dev = torch.device(device)
     for child in model.children():
         if child is not model.layers:
-            child.to(device)
+            child.to(dev)
     host = {}
     for i, layer in enumerate(model.layers):
         if i < keep:
-            layer.to(device)
+            layer.to(dev)
             continue
         ts = [*layer.parameters(), *layer.buffers()]
         for t in ts:
             t.data = t.data.pin_memory()
         host[i] = [(t, t.data) for t in ts]
-    model._offload = _Offload(torch.device(device), keep, host)
+    stream = torch.cuda.Stream(dev) if dev.type == "cuda" else None
+    model._offload = _Offload(dev, keep, host, stream=stream)
     return model
+
+
+def prefetch(model, i: int) -> None:
+    """Copy offloaded layer ``i`` onto the GPU asynchronously on the offload copy stream so it
+    overlaps with the current layer's compute."""
+    o = getattr(model, "_offload", None)
+    if o is None or o.stream is None or i < o.keep or i not in o.host or o.on == i or o.prefetched == i:
+        return
+    if o.prefetched is not None:
+        o.prefetched = o.prefetched_ts = o.ready = None
+    ev = torch.cuda.Event()
+    o.stream.wait_stream(torch.cuda.current_stream(o.device))
+    with torch.cuda.stream(o.stream):
+        ts = [h.to(o.device, non_blocking=True) for _, h in o.host[i]]
+        ev.record(o.stream)
+    o.prefetched, o.prefetched_ts, o.ready = i, ts, ev
 
 
 def resident(model, i: int) -> None:
     """Layer ``i`` on the GPU, if the stack is offloaded (``offload``); the streamed layer before it
-    goes back to host memory. Everything runs on one stream, so the copy waits for the work queued
-    before it, and a dropped layer's memory is reused only by work queued after."""
+    goes back to host memory. Consumes a ``prefetch`` when available."""
     o = getattr(model, "_offload", None)
     if o is None or i < o.keep or o.on == i:
         return
     if o.on is not None:
         for t, h in o.host[o.on]:
             t.data = h
-    for t, h in o.host[i]:
-        t.data = h.to(o.device, non_blocking=True)
+    if o.prefetched == i:
+        cur = torch.cuda.current_stream(o.device)
+        cur.wait_event(o.ready)
+        for (t, _), g in zip(o.host[i], o.prefetched_ts):
+            g.record_stream(cur)
+            t.data = g
+        o.prefetched = o.prefetched_ts = o.ready = None
+    else:
+        for t, h in o.host[i]:
+            t.data = h.to(o.device, non_blocking=True)
     o.on = i
 
 
@@ -1063,47 +1102,130 @@ def _delta_vjp(m: DeltaNet, G: torch.Tensor) -> torch.Tensor:
 
 # --------------------------------------------------------------------------------- the MLPs
 
-def contract(m: Layer, out: torch.Tensor | None = None, budget: int = 2**30) -> Layer:
-    """The layer with its dense MLP's map multiplied out, one ``[d, d]`` matrix per row:
-    ``W_d (diag(cg) W_g + diag(cu) W_u)`` (``W_d diag(cg) W_g`` ungated). Building them is one matrix
-    product over the rows and each tangent then costs one ``d × d`` product where a gated map costs
-    three through ``d_ff``, so the whole map costs ``N d² (2 d_ff + 2 d)`` for all ``d`` tangents
-    against ``6 N d² d_ff``: it pays from about ``3 d / 8`` tangents (ungated, two products through
-    ``d_ff`` against ``N d² (2 d_ff + 2 d)``, from about ``d / 2``). Rows are built a few at a time, as many as keep each
-    ``[d_ff, n, d]`` product under ``budget`` bytes, into ``out`` (``[N, d, d]``) when it is given:
-    a sweep reuses one buffer for all its layers (Qwen3-32B: 5.5 GiB a layer)."""
+def _slice_norm(n: Norm | None, s: int, e: int) -> Norm | None:
+    if n is None:
+        return None
+    return Norm(n.a[s:e], None if n.x is None else n.x[s:e], None if n.r is None else n.r[s:e], n.c)
+
+
+def slice_mlp(m: Layer, s: int, e: int) -> MLPChunk:
+    """Views of a dense MLP's per-row constants and surrounding norms for rows ``s:e``."""
     g = m.mlp
-    if not isinstance(g, DenseMLP):
-        return m
-    N, (f, d) = g.cg.shape[0], g.wg.shape
-    chunk = max(1, budget // (f * d * g.wg.element_size()))
-    if out is None:
-        out = torch.empty(N, d, d, dtype=g.wd.dtype, device=g.wd.device)
-    for s in range(0, N, chunk):
-        cg = g.cg[s:s + chunk].T  # [f, n]
-        rows = cg[..., None] * g.wg[:, None]
+    sub = DenseMLP(g.wg, g.wu, g.wd, g.cg[s:e], None if g.cu is None else g.cu[s:e])
+    return MLPChunk(sub, _slice_norm(m.n2, s, e), _slice_norm(m.post2, s, e), m.s, m.fp8)
+
+
+def _contract_rows(g: DenseMLP, n2_a: torch.Tensor | None = None, post2_a: torch.Tensor | None = None) -> torch.Tensor:
+    """Multiply out a dense MLP's map for its ``n`` rows: ``[n, d_out, d_in]``, ``W_d (diag(cg) W_g + diag(cu) W_u)``,
+    optionally folding pure-scale input/output norms ``n2_a`` and ``post2_a`` (``[n, d]``) right into the matrix."""
+    n, d = g.cg.shape[0], g.wg.shape[1]
+    if kernels is not None and g.wd.is_cuda and g.wd.dtype == torch.bfloat16:
+        rows = kernels.build_rows_bf16(g.wg, g.wu, g.cg, g.cu, n2_a)
+    else:
+        rows = g.cg.T[..., None] * g.wg[:, None]  # [f, n, d]
         if g.wu is not None:
-            rows = rows + g.cu[s:s + chunk].T[..., None] * g.wu[:, None]
-        rows = rows.flatten(1)  # [f, n·d]
-        out[s:s + cg.shape[1]] = (g.wd @ rows).unflatten(1, (cg.shape[1], d)).transpose(0, 1)  # [n, d, d]
-    return m._replace(mlp=Contracted(out))
+            rows = rows + g.cu.T[..., None] * g.wu[:, None]
+        if n2_a is not None:
+            rows = rows * n2_a[None]
+        rows = rows.flatten(1)
+    M = (g.wd @ rows).unflatten(1, (n, d)).transpose(0, 1)  # [n, d, d]
+    if post2_a is not None:
+        M = M * post2_a[:, :, None]
+    return M
 
 
-def _mlp_jvp(m: DenseMLP | Contracted, xn):
-    if isinstance(m, Contracted):
-        return (xn.transpose(0, 1) @ m.m.mT).transpose(0, 1).float()
+def contract_chunk_fp8(c: MLPChunk, seed: torch.Tensor, wd8: tuple) -> torch.Tensor:
+    """Build ``M`` ``[n, d, d]`` (bf16) for ``c`` via unbiased stochastic-rounded FP8 (``use_fast_accum=False``)."""
+    dt = c.mlp.wd.dtype
+    fold_in, fold_out = _pure_scale(c.n2, False), _pure_scale(c.post2, False)
+    return kernels.contract_fp8_sr(
+        c.mlp.wg, c.mlp.wu, c.mlp.wd, c.mlp.cg, c.mlp.cu,
+        c.n2.a.to(dt) if fold_in else None, c.post2.a.to(dt) if fold_out else None,
+        seed, wd8=wd8)
+
+
+def mlp_bmm_jvp(c: MLPChunk, M: torch.Tensor, Xc: torch.Tensor) -> torch.Tensor:
+    """Apply pre-contracted ``M`` ``[n, d, d]`` in JVP mode (compiled with residual add & reduction)."""
+    dt = M.dtype
+    rescale = dt == torch.float16
+    fold_in, fold_out = _pure_scale(c.n2, rescale), _pure_scale(c.post2, rescale)
+    xm = Xc if fold_in else _nj(c.n2, Xc)
+    xt = xm.transpose(0, 1)
+    if rescale:
+        sc = xt.abs().amax(dim=(0, 2), keepdim=True).clamp_min(1e-30)
+        z = torch.bmm((xt / sc).to(dt), M.mT).float() * sc
+    else:
+        z = torch.bmm(xt.to(dt), M.mT).float()
+    z = z.transpose(0, 1)
+    return z if fold_out else _nj(c.post2, z)
+
+
+def mlp_bmm_vjp(c: MLPChunk, M: torch.Tensor, Gc: torch.Tensor) -> torch.Tensor:
+    """Apply pre-contracted ``M`` ``[n, d, d]`` in VJP mode (compiled with residual add & reduction)."""
+    dt = M.dtype
+    rescale = dt == torch.float16
+    fold_in, fold_out = _pure_scale(c.n2, rescale), _pure_scale(c.post2, rescale)
+    gz = Gc if fold_out else _nt(c.post2, Gc)
+    gt = gz.transpose(0, 1)
+    if rescale:
+        sc = gt.abs().amax(dim=(0, 2), keepdim=True).clamp_min(1e-30)
+        gm = torch.bmm((gt / sc).to(dt), M).float() * sc
+    else:
+        gm = torch.bmm(gt.to(dt), M).float()
+    gm = gm.transpose(0, 1)
+    return gm if fold_in else _nt(c.n2, gm)
+
+
+def _mlp_jvp(m: DenseMLP, xn):
     h = m.cg * F.linear(xn, m.wg)
     if m.wu is not None:
         h = h + m.cu * F.linear(xn, m.wu)
     return F.linear(h, m.wd).float()
 
 
-def _mlp_vjp(m: DenseMLP | Contracted, G):
-    if isinstance(m, Contracted):
-        return (G.to(m.m.dtype).transpose(0, 1) @ m.m).transpose(0, 1).float()
+def _mlp_vjp(m: DenseMLP, G):
     gp = G.to(m.wd.dtype) @ m.wd
     gx = (m.cg * gp) @ m.wg
     return (gx if m.wu is None else gx + (m.cu * gp) @ m.wu).float()
+
+
+def _pure_scale(n: Norm | None, rescale: bool) -> bool:
+    return n is not None and n.x is None and not n.c and not rescale
+
+
+def mlp_chunk_jvp(c: MLPChunk, Xc: torch.Tensor) -> torch.Tensor:
+    """Tiled contracted MLP JVP over all ``d`` tangents on ``n`` rows (``Xc``: ``[d, n, d]`` fp32).
+    Builds ``M`` ``[n, d, d]`` once and runs one compute-bound ``[n, d, d] @ [n, d, d]`` BMM."""
+    dt = c.mlp.wd.dtype
+    rescale = dt == torch.float16
+    fold_in, fold_out = _pure_scale(c.n2, rescale), _pure_scale(c.post2, rescale)
+    M = _contract_rows(c.mlp, c.n2.a.to(dt) if fold_in else None, c.post2.a.to(dt) if fold_out else None)
+    xm = Xc if fold_in else _nj(c.n2, Xc)
+    xt = xm.transpose(0, 1)  # [n, d, d]
+    if rescale:
+        sc = xt.abs().amax(dim=(0, 2), keepdim=True).clamp_min(1e-30)
+        z = torch.bmm((xt / sc).to(dt), M.mT).float() * sc
+    else:
+        z = torch.bmm(xt.to(dt), M.mT).float()
+    z = z.transpose(0, 1)
+    return z if fold_out else _nj(c.post2, z)
+
+
+def mlp_chunk_vjp(c: MLPChunk, Gc: torch.Tensor) -> torch.Tensor:
+    """Tiled contracted MLP VJP over all ``d`` cotangents on ``n`` rows (``Gc``: ``[d, n, d]`` fp32)."""
+    dt = c.mlp.wd.dtype
+    rescale = dt == torch.float16
+    fold_in, fold_out = _pure_scale(c.n2, rescale), _pure_scale(c.post2, rescale)
+    M = _contract_rows(c.mlp, c.n2.a.to(dt) if fold_in else None, c.post2.a.to(dt) if fold_out else None)
+    gz = Gc if fold_out else _nt(c.post2, Gc)
+    gt = gz.transpose(0, 1)  # [n, d, d]
+    if rescale:
+        sc = gt.abs().amax(dim=(0, 2), keepdim=True).clamp_min(1e-30)
+        gm = torch.bmm((gt / sc).to(dt), M).float() * sc
+    else:
+        gm = torch.bmm(gt.to(dt), M).float()
+    gm = gm.transpose(0, 1)
+    return gm if fold_in else _nt(c.n2, gm)
 
 
 def _experts_fwd(m: MoE, x: torch.Tensor) -> torch.Tensor:
@@ -1207,26 +1329,50 @@ def _dtype(m: Layer) -> torch.dtype:
     return (m.mix.wo if isinstance(m.mix, Attention) else m.mix.w_qkv).dtype
 
 
-def _scaled(f, x: torch.Tensor, dt: torch.dtype | None = None) -> torch.Tensor:
-    """``f(x)`` for a linear ``f``: each tangent ``x[i]`` enters at unit maximum (cast to ``dt`` if given; the transposes
-    cast their own) and its output is scaled back, so a half dtype's range holds whatever the tangents' size (fp16's
-    ends at 65,504)."""
+def _scaled(f, x: torch.Tensor, dt: torch.dtype | None = None, *, rescale: bool = True) -> torch.Tensor:
+    """``f(x)`` for a linear ``f``: when ``rescale`` (fp16, whose range ends at 65,504), each tangent
+    ``x[i]`` enters at unit maximum (cast to ``dt`` if given; the transposes cast their own) and its
+    output is scaled back. Skipped on bf16/fp32, which share fp32's exponent range."""
+    if not rescale:
+        return f(x if dt is None else x.to(dt))
     s = x.abs().amax(dim=tuple(range(1, x.dim())), keepdim=True).clamp_min(1e-30)
     x = x / s
     return f(x if dt is None else x.to(dt)) * s
+
+
+def mix_jvp(m: Layer, X: torch.Tensor) -> torch.Tensor:
+    """Push tangents ``X`` (``[b, N, d]``, fp32) through a layer's mixer (``n1``, mixer, ``post1``)."""
+    dt = _dtype(m)
+    rescale = dt == torch.float16
+    xn = _nj(m.n1, X)
+    if isinstance(m.mix, Attention) and m.mix.rx is not None:  # x · dx / d for the scores' input norm, x centred
+        xn = torch.cat((xn, (m.mix.rx * X).mean(-1, keepdim=True)), -1)
+    a = _scaled(lambda x: _attn_jvp(m.mix, x) if isinstance(m.mix, Attention) else _delta_jvp(m.mix, x),
+                xn, dt, rescale=rescale)
+    return a if m.post1 is None else _nj(m.post1, a)
+
+
+def mix_vjp(m: Layer, G: torch.Tensor) -> torch.Tensor:
+    """Pull cotangents ``G`` (``[b, N, d]``, fp32) back through a layer's mixer (``post1``, mixer, ``n1``)."""
+    rescale = _dtype(m) == torch.float16
+    g = G if m.post1 is None else _nt(m.post1, G)
+    if not isinstance(m.mix, Attention):
+        return _nt(m.n1, _scaled(lambda x: _delta_vjp(m.mix, x), g, rescale=rescale))
+    gx = _scaled(lambda x: _attn_vjp(m.mix, x), g, rescale=rescale)
+    if m.mix.rx is None:
+        return _nt(m.n1, gx)
+    return _nt(m.n1, gx[..., :-1]) + gx[..., -1:] * m.mix.rx / m.mix.rx.shape[-1]
 
 
 def jvp(m: Layer, X: torch.Tensor):
     """Push tangents ``X`` (``[b, N, d]``, fp32) at a layer's input through its map; return
     them at its output and at the MLP's input (``mid``: the layer's input in a parallel block)."""
     dt = _dtype(m)
-    xn = _nj(m.n1, X)
-    if isinstance(m.mix, Attention) and m.mix.rx is not None:  # x · dx / d for the scores' input norm, x centred
-        xn = torch.cat((xn, (m.mix.rx * X).mean(-1, keepdim=True)), -1)
-    a = _scaled(lambda x: _attn_jvp(m.mix, x) if isinstance(m.mix, Attention) else _delta_jvp(m.mix, x), xn, dt)
-    a = a if m.post1 is None else _nj(m.post1, a)
+    rescale = dt == torch.float16
+    a = mix_jvp(m, X)
     mid = X if m.parallel else X + a
-    z = _scaled(lambda x: _moe_jvp(m.mlp, x) if isinstance(m.mlp, MoE) else _mlp_jvp(m.mlp, x), _nj(m.n2, mid), dt)
+    z = _scaled(lambda x: _moe_jvp(m.mlp, x) if isinstance(m.mlp, MoE) else _mlp_jvp(m.mlp, x),
+                _nj(m.n2, mid), dt, rescale=rescale)
     out = mid + (z if m.post2 is None else _nj(m.post2, z))
     if m.parallel:
         out = out + a
@@ -1238,20 +1384,15 @@ def vjp(m: Layer, G: torch.Tensor, mid_seed: torch.Tensor | None = None, row_w: 
     return them at its input, and their means over positions at the MLP's input (``mid``) and
     at the layer's input (weighted by ``row_w``, ``[N]`` summing to 1, if given). ``mid_seed``
     (``[b, N, d]``) joins the cotangents at the MLP's input (in a parallel block, the layer's input)."""
+    rescale = _dtype(m) == torch.float16
     mean = lambda t: t.mean(1) if row_w is None else (t * row_w[:, None]).sum(1)
-    def attn(g):
-        if not isinstance(m.mix, Attention):
-            return _nt(m.n1, _scaled(lambda x: _delta_vjp(m.mix, x), g))
-        gx = _scaled(lambda x: _attn_vjp(m.mix, x), g)
-        if m.mix.rx is None:
-            return _nt(m.n1, gx)
-        return _nt(m.n1, gx[..., :-1]) + gx[..., -1:] * m.mix.rx / m.mix.rx.shape[-1]
     if m.s is not None:
         G = G * m.s
     gz = G if m.post2 is None else _nt(m.post2, G)
-    gm = _nt(m.n2, _scaled(lambda x: _moe_vjp(m.mlp, x) if isinstance(m.mlp, MoE) else _mlp_vjp(m.mlp, x), gz))
+    gm = _nt(m.n2, _scaled(lambda x: _moe_vjp(m.mlp, x) if isinstance(m.mlp, MoE) else _mlp_vjp(m.mlp, x),
+                           gz, rescale=rescale))
     if m.parallel:  # both sublayers read the layer's input, from the output's cotangents
-        G = G + gm + attn(G if m.post1 is None else _nt(m.post1, G))
+        G = G + gm + mix_vjp(m, G)
         if mid_seed is not None:
             G = G + mid_seed
         est = mean(G)
@@ -1260,5 +1401,5 @@ def vjp(m: Layer, G: torch.Tensor, mid_seed: torch.Tensor | None = None, row_w: 
     if mid_seed is not None:
         G = G + mid_seed
     mid = mean(G)
-    G = G + attn(G if m.post1 is None else _nt(m.post1, G))
+    G = G + mix_vjp(m, G)
     return G, mid, mean(G)

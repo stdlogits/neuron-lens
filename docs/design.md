@@ -319,6 +319,17 @@ at its top firings over the embedding, every head and every upstream neuron (Rel
 scale and the activation's ratio held, the half rule over gate and up), which shows how far the edges name what
 drives it (§12).
 
+`16_edges.py` also catalogues direct weight edges involving attention heads (`attn -> MLP`, `MLP -> attn`, and
+`attn -> attn` per receiving channel `v, q, k`) in `neurons/edges/L<layer>.parquet` (`in_head_*`, `{v,q,k}_out_head_*`)
+and `heads/edges.parquet` (`{v,q,k}_in_*`, `out_*`, `{v,q,k}_in_head_*`, `{v,q,k}_out_head_*`). Each head is
+represented by gauge-invariant, GQA-distinct factored operators (`neuron_lens.heads.operators`) — folding the
+orthogonal half-gram square roots `(V S_in² Vᵀ)^½`, `(Oᵀ S_w⁻² O)^½`, `(K S_in² Kᵀ)^½`, `(Q S_in² Qᵀ)^½`, plus
+activation-averaged q/k/v norm derivatives, per-head RoPE offset rotations and output/SiLU gates where `acts.pt`
+is present. Edges involving heads use the unsigned Frobenius composition cosine `cos = ‖B A‖_F / (‖B‖_F ‖A‖_F)`
+in the receiving site's metric (`mid` for MLPs, `in` for heads), filtered by a Haar-rotation tail-matched floor
+matching the `5σ` upper-tail probability for each pair's effective ranks (`cos_floor`), and ranked by modeled RMS
+`push = cos · a_t · gain / rms_t`.
+
 ## Labels
 
 `10_labels.py` writes an evidence card per neuron (both poles) or per head and has Claude Haiku 5.5 label each through

@@ -30,17 +30,20 @@ run() {
     fi
 }
 UPLOAD="${UPLOAD-}"
+VRAM_GB="$(python -c 'import torch; print(int(torch.cuda.get_device_properties(0).total_memory // 2**30) if torch.cuda.is_available() else 0)' 2>/dev/null || echo 0)"
+ACTS_BATCH="${ACTS_BATCH:-$([ "$VRAM_GB" -ge 48 ] && echo 64 || echo 32)}"
+DRIVERS_BATCH="${DRIVERS_BATCH:-$([ "$VRAM_GB" -ge 48 ] && echo 128 || echo 64)}"
 up() {  # up <stage> <model> <tables>
     [ -n "$UPLOAD" ] && run "upload_$1" "$2" python scripts/12_release.py --tables "$3" --branch "$UPLOAD" &
 }
 [ $# -gt 0 ] || set -- Qwen/Qwen3-8B google/gemma-4-12B
 for m in "$@"; do
     s="$(tr '[:upper:]' '[:lower:]' <<< "${m##*/}")"
-    echo "$(date '+%F %T') model $m"
+    echo "$(date '+%F %T') model $m (acts batch $ACTS_BATCH, drivers batch $DRIVERS_BATCH)"
     hf download "$m" > /dev/null || { echo "$(date '+%F %T') FAILED download $m"; continue; }
-    run "acts_$s" "$m" python scripts/06_activations.py && up "acts_$s" "$m" acts,docs &&
+    run "acts_$s" "$m" python scripts/06_activations.py --batch-docs "$ACTS_BATCH" && up "acts_$s" "$m" acts,docs &&
         run "firings_$s" "$m" python scripts/17_firings.py --save-minutes "${FIRINGS_SAVE_MINUTES:-30}" && up "firings_$s" "$m" firings,sources &&
-        run "drivers_$s" "$m" python scripts/07_drivers.py && up "drivers_$s" "$m" drivers || continue
+        run "drivers_$s" "$m" python scripts/07_drivers.py --batch "$DRIVERS_BATCH" && up "drivers_$s" "$m" drivers || continue
     run "reads_$s" "$m" python scripts/08_reads.py && up "reads_$s" "$m" reads
     run "reads_at_firings_$s" "$m" python scripts/checks/reads_at_firings.py
     run "edges_$s" "$m" python scripts/16_edges.py && up "edges_$s" "$m" edges

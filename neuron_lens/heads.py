@@ -58,6 +58,74 @@ def norm_derivative(weight: torch.Tensor, r: torch.Tensor, m: torch.Tensor, n: t
     return weight[..., :, None] * (r[:, None, None] * eye - m / (width or hd)) / n
 
 
+def _sym_sqrt(G: torch.Tensor) -> torch.Tensor:
+    """Symmetric PSD square root ``L`` (``L @ L.mT == G``) for batched ``[..., r, r]`` matrices."""
+    evals, evecs = torch.linalg.eigh(G.float())
+    return (evecs * evals.clamp_min(0).sqrt().unsqueeze(-2)) @ evecs.mT
+
+
+def operators(model_id: str, lay, st: dict | None, extra: dict | None, dev) -> dict[str, torch.Tensor]:
+    """Effective factored head operators for layer ``lay``, all gauge-invariant and GQA-distinct:
+
+    - ``src`` ``[H, d, hd]``: head write factor ``O_h (V_h S_in^2 V_hᵀ)^½`` (residual vector coords);
+    - ``v`` ``[H, hd, d]``: value-receiver factor ``(O_hᵀ S_w^-2 O_h)^½ V_h`` (residual covector coords);
+    - ``q`` ``[H, kd, d]``: query-receiver factor ``(K_h S_in^2 K_hᵀ)^½ Q_h`` (residual covector coords);
+    - ``k`` ``[H, kd, d]``: key-receiver factor ``(Q_h S_in^2 Q_hᵀ)^½ K_h`` (residual covector coords).
+
+    With ``st`` and ``extra`` from ``06_activations.py``, includes ``v_norm`` / ``q_norm`` / ``k_norm``
+    true derivatives (or GPT-NeoX's input-norm derivative), average RoPE rotation, gated-attention
+    output gates, and DeltaNet SiLU ratios. Without ``st``, falls back to pure checkpoint weights."""
+    from neuron_lens import arch, metric
+    Hl, kvh, hd, kd = lay.q_heads, lay.kv_heads, lay.head_dim, lay.kd
+    if st is not None:
+        qk = weights(model_id, lay, st, dev)
+        n_q, n_k = float(st["n_q"]), float(st["n_k"])
+    else:
+        qk = arch.qk(model_id, lay, dev)
+        qk["Wv"], qk["Wo"] = arch.ov(model_id, lay, dev)
+        n_q = n_k = None
+    s_in = metric.s2(model_id, "in", lay.index, dev).sqrt()
+    s_w = metric.s2(model_id, "out" if arch.parallel(model_id) else "mid", lay.index, dev).sqrt()
+    Wv = qk["Wv"].view(lay.v_heads, hd, -1)
+    if st is not None and "v_r" in st and float(st["v_r"][lay.index, :kvh].abs().sum()) > 0:
+        Av = norm_derivative(torch.ones(hd, device=dev), st["v_r"][lay.index, :kvh].float().to(dev),
+                             st["v_m"][lay.index, :kvh, :hd, :hd].float().to(dev), n_k)
+        Wv = torch.einsum("gij,gjd->gid", Av, Wv)
+    V = Wv.repeat_interleave(Hl // lay.v_heads, dim=0)  # [H, hd, d]
+    O = qk["Wo"].view(-1, Hl, hd).permute(1, 0, 2)  # [H, d, hd]
+    Vs = V * s_in[None, None, :]
+    src = O @ _sym_sqrt(Vs @ Vs.mT)
+    Os = O / s_w[None, :, None]
+    R_v = _sym_sqrt(Os.mT @ Os) @ V
+    Wq, Wk = qk["Wq"].view(Hl, kd, -1), qk["Wk"].view(kvh, kd, -1)
+    if st is not None:
+        if qk["q_norm"] is None:
+            d = Wq.shape[-1]
+            An = torch.eye(d, device=dev) - st["in_m"][lay.index].float().to(dev) / (d * float(st["in_r"][lay.index]))
+            Q = Wq @ An
+            K = (Wk @ An).repeat_interleave(Hl // kvh, dim=0)
+        else:
+            Aq = norm_derivative(qk["q_norm"], st["q_r"][lay.index, :Hl].float().to(dev),
+                                 st["q_m"][lay.index, :Hl, :kd, :kd].float().to(dev), n_q, qk["q_width"])
+            Ak = norm_derivative(qk["k_norm"], st["k_r"][lay.index, :kvh].float().to(dev),
+                                 st["k_m"][lay.index, :kvh, :kd, :kd].float().to(dev), n_k, qk["k_width"])
+            Q = torch.einsum("hij,hjd->hid", Aq, Wq)
+            K = torch.einsum("gij,gjd->gid", Ak, Wk).repeat_interleave(Hl // kvh, dim=0)
+        inv = arch.layer_inv_freq(extra["inv_freq"], model_id, lay.index) if extra is not None else None
+        if inv is not None:
+            off = st["offset"][lay.index, :Hl].float().to(dev)
+            Rbar = rope_mean(off / off.sum(-1, keepdim=True), inv.to(dev), kd)
+            K = torch.einsum("hij,hjd->hid", Rbar, K)
+    else:
+        Q = Wq
+        K = Wk.repeat_interleave(Hl // kvh, dim=0)
+    Ks = K * s_in[None, None, :]
+    Qs = Q * s_in[None, None, :]
+    R_q = _sym_sqrt(Ks @ Ks.mT) @ Q
+    R_k = _sym_sqrt(Qs @ Qs.mT) @ K
+    return {"src": src, "v": R_v, "q": R_q, "k": R_k}
+
+
 def weights(model_id: str, lay, st: dict, dev) -> dict:
     """A layer's head circuits' weights as the reads take them: ``arch.qk``'s (``Wq``, ``Wk``, ``bq``, the q/k norms) and
     ``arch.ov``'s (``Wv``, ``Wo``), with the factors ``06_activations.py``'s sums ``st`` give, averaged over positions: a

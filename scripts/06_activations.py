@@ -91,6 +91,10 @@ import torch
 
 from neuron_lens import anatomy, arch, experts
 from neuron_lens.layers import delta_pattern
+try:
+    from neuron_lens import kernels
+except ImportError:
+    kernels = None
 from neuron_lens.catalog import (
     MODEL,
     N_CONTEXTS,
@@ -126,6 +130,7 @@ NEURON_FROM, HEAD_FROM = 1, SKIP_FIRST
 EDGES = torch.tensor([0.0] + [2.0 ** (k / 4) for k in range(-40, 41)])  # counts of |x| past each
 NB = len(EDGES) + 1  # bins: 0 is x = 0, i is (EDGES[i-1], EDGES[i]], the last past 2¹⁰
 FLUSH = 50  # batches between moving the device's running sums into the float64 totals
+MERGE_EVERY = 4  # batches buffered before merging neuron top-k (cuts GPU→CPU .nonzero() syncs 4×)
 CHUNK = 2048  # positions per counting step
 REP_SEQS, REP_LEN = 64, 64
 FIRST_K = 3
@@ -207,9 +212,10 @@ class Collector:
                       "first_chat": torch.zeros(nl, f), "induction": torch.zeros(L, H), "duplicate": torch.zeros(L, H)}
         self.layers = model.layers
         self.wo = [arch.head_write(layer).view(d, g.q_heads, g.head_dim) for layer, g in zip(model.layers, self.geo)] if heads else []
-        self.gram = [torch.einsum("dhi,dhj->hij", w, w) for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
+        self.gram = [torch.einsum("dhi,dhj->hij", w, w).float() for w in self.wo]  # |W_O^h z|² = zᵀ G_h z
         self.first_pos = 0  # the token's position in the first-position and repeated passes (1 after <bos>)
         self.edges, self.bins = EDGES.to(device), bf16_bins().to(device)
+        self.pending_top: dict[tuple[int, int], list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]] = {}
         self.ctx, self.stash = {}, {}
         self.mode = "main"
 
@@ -253,26 +259,49 @@ class Collector:
 
     def first(self, li: int, x: torch.Tensor) -> None:
         """The first-position pass: ``x`` ``[B, f]``, each token's activations (NaN: a routed neuron whose expert isn't
-        chosen, no entry)."""
-        ids = self.ctx["ids"]
+        chosen, no entry). Runs along contiguous ``dim=1`` on GPU-resident ``first_val``/``first_tok`` buffers."""
+        ids = self.ctx["ids"].int()[None, :].expand(x.shape[1], -1)  # [f, B]
+        xt = x.T.contiguous()  # [f, B]
+        nan = xt.isnan()
+        fv, ft = self._first_val, self._first_tok
         for p, sign in enumerate(self.signs):
-            sx = torch.where(x.isnan(), -torch.inf, sign * x)
-            v, i = torch.cat([self.extra["first_val"][li, p].to(x.device), sx]).topk(FIRST_K, 0)
-            cand = torch.cat([self.extra["first_tok"][li, p].to(x.device), ids[:, None].expand_as(x).int()])
-            self.extra["first_val"][li, p], self.extra["first_tok"][li, p] = v.cpu(), cand.gather(0, i).cpu()
+            sx = torch.where(nan, -torch.inf, xt if sign == 1 else -xt)
+            v, i = torch.cat([fv[li, p], sx], dim=1).topk(FIRST_K, dim=1)
+            cand = torch.cat([ft[li, p], ids], dim=1)
+            fv[li, p], ft[li, p] = v, cand.gather(1, i)
 
-    def merge_top(self, li: int, p: int, ext: torch.Tensor, pos: torch.Tensor, gate) -> None:
-        """A batch's extremes ``ext`` ``[B, f]`` (pole ``p``, its sign applied), at ``pos``, into the pole's top documents;
-        ``gate(cols, at)``: the gate's pre-activation there."""
-        cols = (ext.amax(0) > self.top["val"][li, p, -1]).nonzero().squeeze(1)  # only a neuron with a new entry needs its list redone
+    def _merge_now(self, li: int, p: int, ext: torch.Tensor, pos: torch.Tensor, gate_at: torch.Tensor,
+                   doc: torch.Tensor) -> None:
+        """Merge buffered extremes ``ext`` ``[B, f]``, ``pos`` ``[B, f]``, ``gate_at`` ``[B, f]`` and ``doc`` ``[B]``
+        into ``self.top`` for ``(li, p)``."""
+        cols = (ext.amax(0) > self.top["val"][li, p, -1]).nonzero().squeeze(1)
         if not len(cols):
             return
         v, i = torch.cat([self.top["val"][li, p][:, cols], ext[:, cols]]).topk(TOP, dim=0)
         self.top["val"][li, p][:, cols] = v
-        at = pos[:, cols]
-        new = {"gate": gate(cols, at).half(), "doc": self.ctx["doc"][:, None].expand(-1, len(cols)), "pos": at.to(torch.int16)}
+        new = {"gate": gate_at[:, cols].half(), "doc": doc[:, None].expand(-1, len(cols)), "pos": pos[:, cols].to(torch.int16)}
         for k, x in new.items():
             self.top[k][li, p][:, cols] = torch.cat([self.top[k][li, p][:, cols], x]).gather(0, i)
+
+    def queue_top(self, li: int, p: int, ext: torch.Tensor, pos: torch.Tensor, gate_at: torch.Tensor) -> None:
+        """Buffer a batch's extremes and merge every ``MERGE_EVERY`` batches to amortize ``.nonzero()`` syncs."""
+        buf = self.pending_top.setdefault((li, p), [])
+        buf.append((ext, pos, gate_at, self.ctx["doc"]))
+        if len(buf) >= MERGE_EVERY:
+            self.flush_top((li, p))
+
+    def flush_top(self, key: tuple[int, int] | None = None) -> None:
+        keys = [key] if key is not None else list(self.pending_top)
+        for k in keys:
+            buf = self.pending_top.get(k)
+            if not buf:
+                continue
+            ext = torch.cat([x[0] for x in buf], 0)
+            pos = torch.cat([x[1] for x in buf], 0)
+            gate_at = torch.cat([x[2] for x in buf], 0)
+            doc = torch.cat([x[3] for x in buf], 0)
+            buf.clear()
+            self._merge_now(k[0], k[1], ext, pos, gate_at, doc)
 
     def neuron(self, l: int, a: torch.Tensor) -> None:  # a: [B, T, f]
         li = self.nl[l]
@@ -287,17 +316,24 @@ class Collector:
             return
         m = self.ctx["n_mask"]
         xb = a[m]  # [P, f]
-        for s in range(0, len(xb), CHUNK):
-            xc = xb[s:s + CHUNK].float()
-            self.seg["sum"][li] += xc.sum(0)
-            self.seg["sumsq"][li] += xc.pow(2).sum(0)
-        self.count(self.seg["count"][li], xb)
+        if kernels is not None and xb.is_cuda and xb.dtype == torch.bfloat16:
+            kernels.bf16_stats_and_hist(xb, self.bins, self.seg["sum"][li], self.seg["sumsq"][li], self.seg["count"][li])
+        else:
+            for s in range(0, len(xb), CHUNK):
+                xc = xb[s:s + CHUNK].float()
+                self.seg["sum"][li] += xc.sum(0)
+                self.seg["sumsq"][li] += xc.pow(2).sum(0)
+            self.count(self.seg["count"][li], xb)
         gate = self.stash.pop(("gate", l))  # [B, T, f]: the gate's pre-activation (GPT-NeoX: dense_h_to_4h's output)
-        B = a.shape[0]
+        nm = ~m[..., None]
         for p, sign in enumerate(self.signs):
-            ext, pos = (a * sign).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, f]
-            self.merge_top(li, p, ext.float(), pos,
-                           lambda cols, at: gate[torch.arange(B, device=a.device)[:, None], at, cols[None, :]])
+            if sign > 0:
+                ext, pos = a.masked_fill(nm, -torch.inf).max(1)
+            else:
+                ext, pos = a.masked_fill(nm, torch.inf).min(1)
+                ext = -ext
+            gate_at = gate.gather(1, pos[:, None, :]).squeeze(1)
+            self.queue_top(li, p, ext.float(), pos, gate_at)
 
     def sparse_neuron(self, l: int, r: experts.Routed) -> None:
         """``neuron`` for a sparse MLP's pass (``experts.Routed``): its routed pairs counted, summed and ranked where they
@@ -327,7 +363,7 @@ class Collector:
         cnt = self.seg["count"][li]
         self.count_at(cnt, act, cols)
         routed_e = torch.bincount(e, minlength=E)
-        cnt[0, 0, :E * I] += (int(valid.sum()) - routed_e).repeat_interleave(I).to(cnt.dtype)  # the unrouted positions: 0
+        cnt[0, 0, :E * I] += (valid.sum() - routed_e).repeat_interleave(I).to(cnt.dtype)  # the unrouted positions: 0
         sh = None if r.shared is None else r.shared.view(B, T, -1)
         if sh is not None:
             sv = sh[m]  # [P, Is]
@@ -366,7 +402,7 @@ class Collector:
                 se, sp = (sign * sh).masked_fill(~m[..., None], -torch.inf).max(1)  # [B, Is]
                 ext[:, E * I:], pos[:, E * I:] = se, sp
                 g_at[:, E * I:] = r.shared_gate.view(B, T, -1).gather(1, sp[:, None]).squeeze(1)
-            self.merge_top(li, p, ext, pos, lambda cols, at, g_at=g_at: g_at[:, cols])
+            self._merge_now(li, p, ext, pos, g_at, self.ctx["doc"])
 
     def no_input_norm(self, x: torch.Tensor) -> None:
         if self.mode == "main":
@@ -474,7 +510,8 @@ class Collector:
         scale = arch.attn_scale(self.layers[l], attn_out)  # Gemma 4: the post-attention norm's scale
         if scale is not None:
             zh = zh * scale[..., None, None]
-        norm = torch.einsum("bthi,hij,bthj->bth", zh, self.gram[l].to(zh), zh).clamp_min(0).sqrt()
+        zh_bmm = zh.permute(2, 0, 1, 3).reshape(H, B * T, hd)
+        norm = (torch.bmm(zh_bmm, self.gram[l]) * zh_bmm).sum(-1).clamp_min(0).sqrt().view(H, B, T).permute(1, 2, 0)
         nv = norm[hm]  # [P, H]
         self.seg["h_sum"][l, :H] += nv.sum(0)
         self.seg["h_sumsq"][l, :H] += nv.pow(2).sum(0)
@@ -553,7 +590,7 @@ class Collector:
         real = mask.bool()
         self.ctx.update(ids=ids, doc=docs, n_mask=real & (ar >= NEURON_FROM), h_mask=real & (ar >= HEAD_FROM),
                         qv=(real & (ar >= HEAD_FROM)).float(), kv=(real & (ar >= 1)).float())
-        self.seg["n"] += int(self.ctx["n_mask"].sum())
+        self.seg["n"] += self.ctx["n_mask"].sum().to(torch.int32)
         if not self.heads:
             return
         if "delta" not in self.ctx:
@@ -564,17 +601,22 @@ class Collector:
         self.seg["occ"].index_add_(0, ids.flatten(), (pairs > 0).float().flatten())
         self.seg["n_q"] += self.ctx["qv"].sum()
         self.seg["n_k"] += self.ctx["kv"].sum()
-        self.seg["h_n"] += int(self.ctx["h_mask"].sum())
+        self.seg["h_n"] += self.ctx["h_mask"].sum().to(torch.int32)
 
 
-def plan_batches(slice_of: list[int], batch_docs: int) -> list[tuple[int, int]]:
-    """Runs of consecutive documents of one slice, ``batch_docs`` at a time."""
-    out, start = [], 0
+def plan_batches(slice_of: list[int], lengths: list[int], batch_docs: int) -> list[tuple[int, list[int]]]:
+    """Batches of document indices within each slice, sorted by length to minimize padding waste.
+    Returns ``(slice_id, [doc_idx, ...])``; document ids and ``docs.parquet`` order stay unchanged."""
+    out = []
+    start = 0
     while start < len(slice_of):
         end = start
-        while end < len(slice_of) and end - start < batch_docs and slice_of[end] == slice_of[start]:
+        s = slice_of[start]
+        while end < len(slice_of) and slice_of[end] == s:
             end += 1
-        out.append((start, end))
+        order = sorted(range(start, end), key=lambda idx: lengths[idx], reverse=True)
+        for i in range(0, len(order), batch_docs):
+            out.append((s, order[i:i + batch_docs]))
         start = end
     return out
 
@@ -598,18 +640,20 @@ def group_path(lo: int, hi: int, n_layers: int):
 def collect(args, docs: list) -> dict:
     device = args.device
     tok = tokenizer()
-    lm, model = arch.load_model(MODEL, device)  # in its half dtype, eager attention; the decoder stack
+    L = arch.text_config(MODEL).num_hidden_layers
+    lo, hi = (0, L - 1) if args.layers is None else map(int, args.layers.split("-"))
+    heads, path = lo == 0, group_path(lo, hi, L)
+    if str(device).startswith("cuda"):
+        torch.set_float32_matmul_precision("high")
+    lm, model = arch.load_model(MODEL, device, eager=heads)  # eager attention only when collecting heads
     rows = [r for _, _, r in docs]
     slice_of = [s for s, _, _ in docs]
     meta = {"model": MODEL, "slices": list(ACT_SLICES), "docs": len(rows), "seq_len": SEQ,
             "neuron_from": NEURON_FROM, "head_from": HEAD_FROM, "edges": EDGES.tolist(), "top_docs": TOP,
             "batch_docs": args.batch_docs, "dtype": str(lm.dtype).removeprefix("torch."),
             "attention": lm.config._attn_implementation}
-    L = len(model.layers)
-    lo, hi = (0, L - 1) if args.layers is None else map(int, args.layers.split("-"))
     if (lo, hi) != (0, L - 1):
         meta["layers"] = [lo, hi]
-    heads, path = lo == 0, group_path(lo, hi, L)
     col = Collector(model, len(ACT_SLICES), device, list(range(lo, hi + 1)), heads)
     def halt(*_):
         raise _Stop
@@ -620,7 +664,8 @@ def collect(args, docs: list) -> dict:
             model(**kw)
         except _Stop:
             pass
-    plan = plan_batches(slice_of, args.batch_docs)
+    lengths_list = [len(r) for r in rows]
+    plan = plan_batches(slice_of, lengths_list, args.batch_docs)
     next_batch, stage = 0, "main"
     if path.exists():
         saved = torch.load(path, weights_only=False, map_location="cpu")
@@ -630,11 +675,12 @@ def collect(args, docs: list) -> dict:
         next_batch, stage = saved["next_batch"], saved["stage"]
         if stage == "done":
             return saved
-    lengths = torch.tensor([len(r) for r in rows])
+    lengths = torch.tensor(lengths_list)
     flat = torch.cat([torch.tensor(r, dtype=torch.int32) for r in rows])
     start = torch.cat([torch.zeros(1, dtype=torch.int64), lengths.cumsum(0)])
 
     def save(stage: str) -> dict:
+        col.flush_top()
         out = {"meta": meta, "state": col.state(), "next_batch": next_batch, "stage": stage, "tokens": flat,
                "doc_start": start, "slice_of": torch.tensor(slice_of, dtype=torch.int8),
                "line_of": torch.tensor([ln for _, ln, _ in docs], dtype=torch.int32)}
@@ -647,29 +693,31 @@ def collect(args, docs: list) -> dict:
     hooks = col.hooks(model)
     saved_at, t0, done = time.monotonic(), time.perf_counter(), 0
     for bi in range(next_batch, len(plan)):
-        a, b = plan[bi]
-        T = int(lengths[a:b].max())
-        ids = torch.zeros(b - a, T, dtype=torch.long)
-        mask = torch.zeros(b - a, T, dtype=torch.long)
-        for j, r in enumerate(rows[a:b]):
+        sl, idxs = plan[bi]
+        T = max(lengths_list[idx] for idx in idxs)
+        ids = torch.zeros(len(idxs), T, dtype=torch.long)
+        mask = torch.zeros(len(idxs), T, dtype=torch.long)
+        for j, idx in enumerate(idxs):
+            r = rows[idx]
             ids[j, :len(r)] = torch.tensor(r)
             mask[j, :len(r)] = 1
-        ids, mask = ids.to(device), mask.to(device)
-        col.batch(ids, mask, torch.arange(a, b, dtype=torch.int32, device=device))
+        ids, mask = ids.to(device, non_blocking=True), mask.to(device, non_blocking=True)
+        col.batch(ids, mask, torch.tensor(idxs, dtype=torch.int32, device=device))
         with torch.inference_mode():
             run(input_ids=ids, attention_mask=mask)
-        done += int(mask.sum())
+        done += sum(lengths_list[idx] for idx in idxs)
         next_batch = bi + 1
         last = next_batch == len(plan)
-        if last or bi % FLUSH == FLUSH - 1 or slice_of[plan[min(next_batch, len(plan) - 1)][0]] != slice_of[a]:
-            col.flush(slice_of[a])
+        if last or bi % FLUSH == FLUSH - 1 or plan[min(next_batch, len(plan) - 1)][0] != sl:
+            col.flush(sl)
         if last or time.monotonic() - saved_at > 60 * args.save_minutes:
-            col.flush(slice_of[a])
+            col.flush(sl)
             save("main")
             saved_at = time.monotonic()
         if bi % 20 == 0 or last:
-            print(f"{time.strftime('%H:%M:%S')} batch {bi + 1}/{len(plan)} ({ACT_SLICES[slice_of[a]]}), "
+            print(f"{time.strftime('%H:%M:%S')} batch {bi + 1}/{len(plan)} ({ACT_SLICES[sl]}), "
                   f"{done / (time.perf_counter() - t0):.0f} tokens/s", flush=True)
+    col.flush_top()
 
     # Every kept token alone: the first position.
     col.mode = "first"
@@ -677,6 +725,9 @@ def collect(args, docs: list) -> dict:
     pre = arch.bos(tok)  # Gemma's documents open with <bos>: the token comes after it
     col.first_pos = len(pre)
     with_pre = lambda x: torch.cat([torch.tensor(pre, dtype=x.dtype, device=x.device).expand(len(x), -1), x], 1)  # noqa: E731
+    # Keep first_val / first_tok on GPU as [nl, P, f, FIRST_K] so topk runs on contiguous dim=1 with zero CPU syncs.
+    col._first_val = col.extra["first_val"].transpose(-2, -1).contiguous().to(device)
+    col._first_tok = col.extra["first_tok"].transpose(-2, -1).contiguous().to(device)
     with torch.inference_mode():
         col.ctx.update(chat=True)
         run(input_ids=with_pre(torch.tensor([[arch.chat_open(MODEL, tok)]], device=device)))
@@ -684,6 +735,9 @@ def collect(args, docs: list) -> dict:
         for s in range(0, len(vocab_ids), 1024):
             col.ctx["ids"] = vocab_ids[s:s + 1024].to(device)
             run(input_ids=with_pre(col.ctx["ids"][:, None]))
+        col.extra["first_val"] = col._first_val.transpose(-2, -1).contiguous().cpu()
+        col.extra["first_tok"] = col._first_tok.transpose(-2, -1).contiguous().cpu()
+        del col._first_val, col._first_tok
         if heads:  # Repeated random tokens, for induction and duplicate-token scores.
             col.mode = "rep"
             special = set(tok.all_special_ids)

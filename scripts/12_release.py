@@ -105,6 +105,7 @@ TABLES = {"neurons": {"acts": "every pole's activation statistics and top firing
                     "drivers": "every head's 64 token drivers, as query and as key",
                     "reads": "every head's OV and QK circuits read per token",
                     "labels": "every head's labels, by Claude Haiku 5.5",
+                    "edges": "every head's strongest direct weight edges with earlier and later poles and heads",
                     "sources": "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
                     "image": "every head in image contexts",
                     "audio": "every head in audio contexts"}}
@@ -933,8 +934,8 @@ Neurons and heads get the same tables, one row per pole or per head:
 | `drivers` | the tokens that drive each pole hardest | the tokens that drive each head, as query and as key |
 | `labels` | Claude Haiku's labels: where it fires, what it writes | where it fires, what it attends to, what it writes |
 | `firings` | what the residual holds, what the MLP layer writes and what the model predicts at the pole's top firings | |
-| `edges` | the earlier poles whose writes push it most, and the later poles it pushes most | |
-| `sources` | what drives the pole when it fires, and the poles that fire with it | |
+| `edges` | the earlier poles and heads whose writes push it most, and the later poles and heads it pushes most | the earlier poles and heads pushing its value, query and key channels, and the later poles and heads it pushes most |
+| `sources` | what drives the pole when it fires, and the poles that fire with it | what drives the head when it fires, through its value, query and key, and the poles that fire with it |
 | `lineage` (Qwen3-4B, 0.6B, their parents and bases) | the pole's parent in the model it was pruned from, or its child in the model pruned from it | |
 | `image`, `audio` (Gemma 4) | the patch or sound it reads, its write in media contexts, the images or sounds that drive it, and whether its media label is its text concept too | how each head attends in those contexts, and which carry what an image or sound shows |
 
@@ -1131,7 +1132,9 @@ Edges rank by |push| among those with |cos| ≥ 5/√d = 0.078; `−1` and NaN f
 Edges are wiring, not traffic: on Qwen3-8B, a pole's push ranks every upstream neuron's effect when it fires at
 Spearman 0.88, but its in-edges are a tenth of the 16 units that contribute most there, which are mostly
 units firing with it (§12). At L1-L3, where most top firings ride SiLU's negative lobe, a pole is read
-by its up row (§7).
+by its up row (§7). Each pole also lists its {TOP} strongest head in-edges (`in_head_*`, from earlier or
+same-layer heads in sequential blocks) and head out-edges per receiving channel (`{{v,q,k}}_out_head_*`),
+scored as in `heads-edges` below.
 
 ### `gemma-4-12b-neurons-image`, `gemma-4-12b-neurons-audio`: images and sound
 
@@ -1253,6 +1256,16 @@ chance):
 
 {band_table(gl["heads"]["bands"], {"ov_R_p05": "`ov_R`", "ov_copy_p05": "`ov_copy`", "ov_S_p05": "`ov_S`",
                                      "qk_S_p05": "`qk_S`", "pattern": "pattern"}, "L0-47", "google/gemma-4-12B")}
+
+### `<model>-heads-edges`: direct weight edges
+
+Every head's {TOP} strongest direct weight edges with earlier and later poles and heads (`16_edges.py`, §12):
+`{{v,q,k}}_in_*` (earlier poles into the head's value, query or key channel), `out_*` (same- or later-layer
+poles pushed by the head), and `{{v,q,k}}_in_head_*`, `{{v,q,k}}_out_head_*` (earlier and later heads per
+channel). Each head is represented by gauge-invariant, GQA-distinct factored operators (`neuron_lens.heads.operators`,
+incorporating q/k/v norm derivatives, average RoPE rotations and gates where `acts.pt` is present); edges score
+by unsigned Frobenius composition `cos = ‖B A‖_F / (‖B‖_F ‖A‖_F)` in the receiving residual metric above a
+Haar-rotation tail-matched significance floor matching `5σ` at rank 1, ranked by modeled RMS `push`.
 
 ### `<model>-heads-labels`: a label for every head
 

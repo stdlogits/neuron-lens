@@ -132,7 +132,7 @@ from neuron_lens.neurons import (
     write_cosines,
 )
 from neuron_lens.paths import DATA, SUMMARY
-from neuron_lens.readout import layer_reads, s_tops
+from neuron_lens.readout import layer_reads, s_tops, vocab_moments
 from neuron_lens.stats import auroc, spearman
 from neuron_lens.weights import tensors
 
@@ -154,16 +154,22 @@ def by_sign(x: dict) -> torch.Tensor:
 
 
 def neurons(layers: list[int], dev) -> None:
+    if torch.device(dev).type == "cuda":
+        torch.set_float32_matmul_precision("high")
     keep = kept()
     nm = arch.names(MODEL)
     head = tensors(MODEL, sorted(set(nm.values())))
     unembed = head[nm["unembed"]][keep].to(dev, torch.float16)
     gamma = arch.final_scale(MODEL, dev)
     # Euclidean, as the final norm's rms takes a write's size (an entropy neuron works through it); a LayerNorm's
-    # readout is W_U diag(γ) P, the constant direction in its null space
-    wu = arch.centre(head[nm["unembed"]].float() * arch.final_scale(MODEL), MODEL)
-    null = torch.linalg.eigh(wu.T @ wu)[1][:, :max(1, int(NULL_SHARE * wu.shape[1]))].to(dev)  # ascending
-    del wu
+    # readout is W_U diag(γ) P, the constant direction in its null space. Chunked on dev to avoid a slow CPU GEMM.
+    u_full = head[nm["unembed"]]
+    gram = torch.zeros(u_full.shape[1], u_full.shape[1], device=dev, dtype=torch.float32)
+    for s in range(0, u_full.shape[0], 16384):
+        uc = arch.centre(u_full[s:s + 16384].to(dev, torch.float32) * gamma, MODEL)
+        gram.addmm_(uc.T, uc)
+    null = torch.linalg.eigh(gram)[1][:, :max(1, int(NULL_SHARE * u_full.shape[1]))]  # ascending
+    del gram, u_full
     emb = head[nm["embed"]][keep].float() * arch.embed_scale(MODEL)  # the residual's input (Gemma: × √d)
     emb = (emb - emb.mean(0)).to(dev, torch.float16)
     J_out, J_mid = arch.lens(MODEL, "R_out", R_FIT), arch.lens(MODEL, "R_mid", R_FIT)  # [L−1, d, d] (no Jacobian at the last layer), [L, d, d]
@@ -183,11 +189,14 @@ def neurons(layers: list[int], dev) -> None:
         cols["cos_gate_up"] = pa.array(torch.cat([cos_gate_up] * P).numpy())
         cols["cos_write_gate"], cols["cos_write_up"] = pa.array(cos_gate.numpy()), pa.array(cos_up.numpy())
         cols["null_share"] = pa.array(torch.cat([((null.T @ wd).pow(2).sum(0) / wd.pow(2).sum(0)).cpu()] * P).numpy())
-        logit = layer_reads(wd, unembed, gamma, None, signs=(1,), k=1, kz=1, softcap=CAP, centre=CENTRE)
-        cols["vocab_skew"] = pa.array(torch.cat([s * logit["skew"] for s in SIGNS]).numpy())
-        cols["vocab_kurt"] = pa.array(torch.cat([logit["kurt"]] * P).numpy())
         r = layer_reads(wd, unembed, gamma, J_out[layer] if layer < len(J_out) else None, signs=SIGNS, k=TOP, kz=TOP,
                         softcap=CAP, centre=CENTRE)
+        if layer < len(J_out):
+            skew, kurt = vocab_moments(wd, unembed, gamma, softcap=CAP, centre=CENTRE)
+        else:
+            skew, kurt = r["skew"], r["kurt"]
+        cols["vocab_skew"] = pa.array(torch.cat([s * skew for s in SIGNS]).numpy())
+        cols["vocab_kurt"] = pa.array(torch.cat([kurt] * P).numpy())
         put(cols, "write_R", keep[by_sign(r["ids"])], by_sign(r["probs"]))
         put(cols, "write_R_z", keep[by_sign(r["zids"])], by_sign(r["z"]))
         K = K_out[layer].to(dev)
@@ -220,10 +229,12 @@ def neurons(layers: list[int], dev) -> None:
         print(f"{time.strftime('%H:%M:%S')} neurons L{layer}: {len(SIGNS) * f} poles in {time.perf_counter() - t0:.0f}s", flush=True)
 
 
-def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool = True) -> None:
+def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool = True, dev=None) -> None:
     """A head read's token lists from its per-token z ``[L, H, V]`` (the grid of heads): the top tokens by z, by z
     z-scored across the layer's heads (``_z``), and with ``neg`` the bottom ones (``_neg``). A row without the read
     (NaN: L0's ``qk_self_R``, an attention head's β, a place in the grid with no head) gets empty lists."""
+    if dev is not None:
+        z = z.to(dev)
     has = ~z.isnan().all(-1)  # [L, H]
     zc = (z - z.mean(1, keepdim=True)) / z.std(1, keepdim=True).clamp_min(1e-6)
     part = has.any(1) & ~has.all(1)  # layers where some places lack the read: z across those that have it
@@ -234,15 +245,18 @@ def lists(cols: dict, name: str, z: torch.Tensor, keep: torch.Tensor, neg: bool 
         mu = (zm * w).sum(1, keepdim=True) / n
         sd = ((zm - mu).pow(2) * w).sum(1, keepdim=True).div((n - 1).clamp_min(1)).sqrt()
         zc[part] = (z[part] - mu) / sd.clamp_min(1e-6)
+    has_flat = has.flatten().cpu()
     for suffix, x in (("", z), ("_z", zc)):
         for sign, tag in ((1, ""), (-1, "_neg")) if neg else ((1, ""),):
             v, i = (sign * x).flatten(0, 1).nan_to_num(0.0).topk(TOP, dim=-1)
-            ids, v = keep[i], sign * v
-            ids[~has.flatten()], v[~has.flatten()] = -1, float("nan")
+            ids, v = keep[i.cpu()], (sign * v).cpu()
+            ids[~has_flat], v[~has_flat] = -1, float("nan")
             put(cols, f"{name}{tag}{suffix}", ids, v)
 
 
 def heads(dev) -> None:
+    if torch.device(dev).type == "cuda":
+        torch.set_float32_matmul_precision("high")
     geo = arch.layout(MODEL)
     L, H = len(geo), arch.max_heads(MODEL)  # a grid of heads, each layer's first (Qwen3.5's DeltaNet layers have more)
     grid = arch.head_grid(MODEL)
@@ -362,9 +376,9 @@ def heads(dev) -> None:
     cols["qk_ctx_rho"] = pa.array(ctx.flatten().numpy())
     cols["qk_ov_rho"] = pa.array(align.flatten().numpy())
     for name in ("ov_R", "ov_S", "qk_S", "beta_S", "decay_S"):
-        lists(cols, name, z[name].float(), keep)
-    lists(cols, "qk_self_S", z["qk_self_S"].float(), keep, neg=False)
-    lists(cols, "qk_self_R", z["qk_self_R"].float(), keep, neg=False)  # L0 has no R-lens input
+        lists(cols, name, z[name].float(), keep, dev=dev)
+    lists(cols, "qk_self_S", z["qk_self_S"].float(), keep, neg=False, dev=dev)
+    lists(cols, "qk_self_R", z["qk_self_R"].float(), keep, neg=False, dev=dev)  # L0 has no R-lens input
     write_heads(cols, head_table("reads"))
 
     dup = extra["duplicate"][grid]  # the heads that exist, layer-major
@@ -470,7 +484,7 @@ def experts_reads(layers: list[int], dev) -> None:
                 del A
             del B, Wd
         for k in reads:
-            lists(cols, k, z[k][None].float(), keep)
+            lists(cols, k, z[k][None].float(), keep, dev=dev)
             cols[f"{k}_copy"] = pa.array(score[k].numpy())
         out.append(pa.table(cols))
         print(f"{time.strftime('%H:%M:%S')} experts L{layer}: {n_exp} in {time.perf_counter() - t0:.0f}s", flush=True)
@@ -490,6 +504,8 @@ def main() -> None:
     ap.add_argument("--layers", default=None, help="neuron and expert layers, a-b (default all)")
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cuda")
     args = ap.parse_args()
+    if args.device == "cuda":
+        torch.set_float32_matmul_precision("high")
     parts = set(args.parts.split(","))
     n = arch.text_config(MODEL).num_hidden_layers
     lo, hi = (0, n - 1) if args.layers is None else map(int, args.layers.split("-"))

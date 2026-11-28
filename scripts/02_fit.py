@@ -82,7 +82,11 @@ def load_model(args):
         device = "cuda" if torch.cuda.is_available() else "cpu"
     config = AutoConfig.from_pretrained(args.model, revision=args.revision)
     dtype = {"auto": torch.float32 if device == "cpu" else half_dtype(config),
-             "fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[args.dtype]
+             "fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16,
+             "fp8": torch.bfloat16}[args.dtype]
+    use_fp8 = args.dtype == "fp8"
+    if use_fp8 and (device != "cuda" or torch.cuda.get_device_capability() < (8, 9)):
+        raise SystemExit("--dtype fp8 requires a CUDA GPU with FP8 support (compute capability >= 8.9)")
     if device == "cuda" and dtype != torch.float32:
         # fp32 products in the sweeps (DeltaNet's chunked ones) in TF32, which keeps more precision than the
         # model's half products every tangent passes through; the primal sets full fp32 for itself
@@ -96,10 +100,17 @@ def load_model(args):
                                               revision=args.revision).eval().requires_grad_(False)
     if args.modality == "text":  # the decoder stack alone
         if args.offload is not None and args.lens != "scale":  # the scale's forward pass is the model's own
-            return offload(decoder_stack(lm), device, args.offload), device, dtype
-        return decoder_stack(lm).to(device), device, dtype
+            stack = offload(decoder_stack(lm), device, args.offload)
+        else:
+            stack = decoder_stack(lm).to(device)
+        if use_fp8:
+            stack._fp8 = True
+        return stack, device, "fp8" if use_fp8 else dtype
     args.lm = lm.to(device)  # image and audio documents need the whole model's embedders
-    return decoder_stack(lm), device, dtype
+    stack = decoder_stack(lm)
+    if use_fp8:
+        stack._fp8 = True
+    return stack, device, "fp8" if use_fp8 else dtype
 
 
 def media_docs(args, proc) -> list[dict]:
@@ -234,8 +245,9 @@ def main() -> None:
     ap.add_argument("--dim-batch", type=int, default=DIM_BATCH)
     ap.add_argument("--targets", default=None, help="targets (default: out,mid for R, mid,out for S)")
     ap.add_argument("--device", default="auto", help="auto (cuda, else cpu), cuda, mps, cpu")
-    ap.add_argument("--dtype", default="auto", choices=("auto", "fp32", "bf16", "fp16"),
-                    help="auto: fp32 on the CPU, else the checkpoint's half dtype (bf16; Pythia's fp16)")
+    ap.add_argument("--dtype", default="auto", choices=("auto", "fp32", "bf16", "fp16", "fp8"),
+                    help="auto: fp32 on the CPU, else the checkpoint's half dtype (bf16; Pythia's fp16); "
+                         "fp8: unbiased stochastic-rounded FP8 on Hopper+ GPUs (use_fast_accum=False)")
     ap.add_argument("--acc-device", default="auto", help="where the sums live (auto: the model's)")
     ap.add_argument("--offload", type=int, default=None,
                     help="keep the first N decoder layers on the GPU and stream the rest from host memory")

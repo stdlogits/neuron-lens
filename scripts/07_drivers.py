@@ -85,6 +85,31 @@ def repeat(cache, n: int) -> None:
             layer.batch_repeat_interleave(n)
 
 
+def snapshot_cache(cache) -> list:
+    """Save pre-expanded prefix KV references (and cloned copies of mutable DeltaNet states) so full
+    batches reuse one cache without ``copy.deepcopy`` or ``repeat_interleave`` per iteration."""
+    snap = []
+    for layer in cache.layers:
+        if hasattr(layer, "recurrent_states"):
+            snap.append(("rec",
+                         [None if s is None else s.clone() for s in layer.conv_states],
+                         [None if s is None else s.clone() for s in layer.recurrent_states]))
+        else:
+            snap.append(("kv", layer.keys, layer.values))
+    return snap
+
+
+def restore_cache(cache, snap: list) -> None:
+    """Reset ``cache`` back to its pre-expanded prefix state."""
+    for layer, entry in zip(cache.layers, snap):
+        if entry[0] == "rec":
+            for i, (c, r) in enumerate(zip(entry[1], entry[2])):
+                layer.conv_states[i] = None if c is None else c.clone()
+                layer.recurrent_states[i] = None if r is None else r.clone()
+        else:
+            layer.keys, layer.values = entry[1], entry[2]
+
+
 def pole_drivers(a: torch.Tensor) -> dict[str, torch.Tensor]:
     """A pass's neuron activations from the token on, ``[D, B, 1 + AFTER, f]``, reduced as the drivers
     rank them and averaged over the documents: at the token, and summed over it and the 16 after."""
@@ -118,17 +143,21 @@ def main() -> None:
     dev = args.device
     docs = documents(dev)
     D = len(docs)
-    _, model = arch.load_model(MODEL, dev)  # in its half dtype, eager attention
-    cfg = model.config
-    P, signs = arch.n_poles(MODEL), arch.signs(MODEL)
-    L, f, H, d = cfg.num_hidden_layers, experts.stack_width(model), arch.max_heads(MODEL), cfg.hidden_size
+    L = arch.text_config(MODEL).num_hidden_layers
     lo, hi = (0, L - 1) if args.layers is None else map(int, args.layers.split("-"))
     layers, heads = list(range(lo, hi + 1)), lo == 0
+    _, model = arch.load_model(MODEL, dev, eager=heads)  # eager attention only when collecting heads
+    cfg = model.config
+    P, signs = arch.n_poles(MODEL), arch.signs(MODEL)
+    f, H, d = experts.stack_width(model), arch.max_heads(MODEL), cfg.hidden_size
     nl = {l: i for i, l in enumerate(layers)}
     geo = arch.layout(MODEL)  # heads: a grid of H a layer, each layer's first
-    wo = [arch.head_write(m).view(d, g.q_heads, g.head_dim) for m, g in zip(model.layers, geo)]  # as the residual sees it
-    gram = [torch.einsum("dhi,dhj->hij", w, w) for w in wo]  # |W_O^h z|² = zᵀ G_h z
-    del wo
+    if heads:
+        wo = [arch.head_write(m).view(d, g.q_heads, g.head_dim) for m, g in zip(model.layers, geo)]  # as the residual sees it
+        gram = [torch.einsum("dhi,dhj->hij", w, w) for w in wo]  # |W_O^h z|² = zᵀ G_h z
+        del wo
+    else:
+        gram = []
     best = {k: torch.full(shape, -torch.inf, device=dev) for k, shape in
             (("at", (len(layers), P, f, TOP)), ("sum", (len(layers), P, f, TOP)), ("h_out", (L, H, TOP)), ("h_key", (L, H, TOP)))}
     best_ids = {k: torch.zeros(v.shape, dtype=torch.int32, device=dev) for k, v in best.items()}
@@ -196,15 +225,24 @@ def main() -> None:
                 anatomy.module(m, p.out).register_forward_pre_hook(lambda mod, x, l=l: stash.__setitem__(l, x[0]))
             if heads and not p.deltanet:
                 attention(m).register_forward_hook(attention_hook(l))
+        full_cache = copy.deepcopy(prefix)
+        repeat(full_cache, args.batch)
+        snap = snapshot_cache(full_cache)
+        batch_full = docs[:, None, AT:].repeat(1, args.batch, 1)  # [D, B, 1 + AFTER]
         for i in range(0, len(order), args.batch):
             ids = order[i:i + args.batch].to(dev)
             cur["ids"] = ids
-            batch = docs[:, None, AT:].repeat(1, len(ids), 1)  # [D, B, 1 + AFTER]
-            batch[:, :, 0] = ids
-            cache = copy.deepcopy(prefix)
-            repeat(cache, len(ids))  # document-major, as the batch is flattened
-            model(input_ids=batch.flatten(0, 1), past_key_values=cache, use_cache=True)
-            del cache
+            if len(ids) == args.batch:
+                batch_full[:, :, 0] = ids
+                restore_cache(full_cache, snap)
+                model(input_ids=batch_full.flatten(0, 1), past_key_values=full_cache, use_cache=True)
+            else:
+                batch = docs[:, None, AT:].repeat(1, len(ids), 1)
+                batch[:, :, 0] = ids
+                cache = copy.deepcopy(prefix)
+                repeat(cache, len(ids))  # document-major, as the batch is flattened
+                model(input_ids=batch.flatten(0, 1), past_key_values=cache, use_cache=True)
+                del cache
             if (i // args.batch) % 100 == 0:
                 print(f"{time.strftime('%H:%M:%S')} {i + len(ids)}/{len(order)} tokens, {time.time() - t0:.0f}s", flush=True)
 

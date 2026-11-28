@@ -103,6 +103,7 @@ def main() -> None:
     ap.add_argument("--models", default="Qwen/Qwen3-0.6B")
     ap.add_argument("--dim-batch", default="256")
     ap.add_argument("--lenses", default="R,S")
+    ap.add_argument("--fp8", action="store_true", help="benchmark unbiased stochastic-rounded FP8 on Hopper+ GPUs")
     ap.add_argument("--compare-fp32", action="store_true")
     ap.add_argument("--seq-len", type=int, default=128, help="one document of exactly this many tokens")
     ap.add_argument("--acc-device", default=None, help="where the sums live (default: the model's)")
@@ -117,6 +118,8 @@ def main() -> None:
         row = lens_docs(CORPUS_DIR / "dclm.jsonl", tok, 1, args.seq_len, SKIP_FIRST + 2, full=True)[0]
         ids = torch.tensor(row)
         model = load(model_id, dtype, args.device, args.offload)
+        if args.fp8:
+            model._fp8 = True
         print(f"one document of {len(row)} tokens", flush=True)
         print(f"\n{model_id}: {len(model.layers)} layers, d {model.config.hidden_size}", flush=True)
         est = {}
@@ -125,21 +128,26 @@ def main() -> None:
                 fit_one(lens, model, ids, args.device, b, args.acc_device)  # warm-up
                 if args.device == "cuda":
                     torch.cuda.reset_peak_memory_stats()
-                est[lens], t = fit_one(lens, model, ids, args.device, b, args.acc_device)
+                acc_l, t = fit_one(lens, model, ids, args.device, b, args.acc_device)
+                est[lens] = {k: acc_l.mean(k).cpu() for k in sorted({t for t, _ in acc_l.sums})}
+                del acc_l
                 mem = f", peak {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB" \
                     if args.device == "cuda" else ""
                 print(f"  {lens}-lens, dim_batch {b}: {t:.2f} s per document, "
                       f"{flops(model, len(row), lens) / t / 1e12:.0f} TFLOP/s{mem}", flush=True)
         if args.compare_fp32 and dtype != torch.float32:
             del model
+            if args.device == "cuda":
+                torch.cuda.empty_cache()
             model = load(model_id, torch.float32, args.device)
-            for lens, acc in est.items():
-                ref, _ = fit_one(lens, model, ids, args.device, int(args.dim_batch.split(",")[0]))
-                for target in sorted({t for t, _ in ref.sums}):
-                    errs = [rel(acc.mean(target)[l], ref.mean(target)[l])
-                            for l in range(ref.sums[(target, 0)].shape[0])]
-                    print(f"  {lens}-lens {target} bf16 vs fp32 rel err: median "
+            for lens, means in est.items():
+                ref, _ = fit_one(lens, model, ids, args.device, int(args.dim_batch.split(",")[0]), acc_device="cpu")
+                for target, m_est in means.items():
+                    m_ref = ref.mean(target)
+                    errs = [rel(m_est[l], m_ref[l]) for l in range(m_ref.shape[0])]
+                    print(f"  {lens}-lens {target} {'fp8' if args.fp8 else 'bf16'} vs fp32 rel err: median "
                           f"{sorted(errs)[len(errs) // 2]:.1e}, max {max(errs):.1e}", flush=True)
+                del ref
         del model, est
         if args.device == "cuda":
             torch.cuda.empty_cache()

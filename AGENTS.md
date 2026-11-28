@@ -17,9 +17,9 @@ catalog (`stdlogits/neuron-lens`) on the Hugging Face Hub, one card per repo cov
 Pythia suite to 6.9B, OLMo 3 7B) have catalogs without labels, and its `LENS_ONLY` (Qwen3.5, Qwen3-30B-A3B) get
 lenses alone.
 
-Neurons and heads share the tables `acts`, `drivers`, `reads`, `labels` and `sources`; neurons add `firings` and
-`edges`, the pruned Qwen3 pairs `lineage`, Gemma 4 `image` and `audio`, and sparse models `experts/acts` and
-`experts/reads`. The dataset card documents every column.
+Neurons and heads share the tables `acts`, `drivers`, `reads`, `labels`, `edges` and `sources`; neurons add `firings`,
+the pruned Qwen3 pairs `lineage`, Gemma 4 `image` and `audio`, and sparse models `experts/acts` and `experts/reads`.
+The dataset card documents every column.
 
 ## Layout
 
