@@ -79,6 +79,12 @@
    24
   ],
   [
+   "pythia-14m-heads-edges",
+   "pythia-14m/heads/edges.parquet",
+   "every head's strongest direct weight edges with earlier and later poles and heads",
+   24
+  ],
+  [
    "pythia-14m-heads-sources",
    "pythia-14m/heads/sources.parquet",
    "what drives every head when it fires, through its value, query and key, and the poles that fire with it",

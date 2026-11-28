@@ -93,6 +93,12 @@
    1152
   ],
   [
+   "qwen3-8b-heads-edges",
+   "qwen3-8b/heads/edges.parquet",
+   "every head's strongest direct weight edges with earlier and later poles and heads",
+   1152
+  ],
+  [
    "qwen3-8b-heads-sources",
    "qwen3-8b/heads/sources.parquet",
    "what drives every head when it fires, through its value, query and key, and the poles that fire with it",
